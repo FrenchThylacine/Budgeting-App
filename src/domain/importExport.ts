@@ -283,7 +283,7 @@ function categoryForActivity(name: string): string {
   if (lower.includes("alpha") || lower.includes("ogero")) return "cat-utilities";
   if (lower.includes("nebula")) return "cat-software";
   if (lower.includes("pc")) return "cat-tech";
-  return defaultCategories[0].id;
+  return defaultCategories.find((category) => category.id === "cat-other")?.id ?? defaultCategories[0].id;
 }
 
 function activityExport(activity: Activity, snapshot: BudgetSnapshot): Record<string, unknown> {

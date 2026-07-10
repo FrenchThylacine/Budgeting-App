@@ -1,11 +1,13 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import {
   Activity as ActivityIcon,
   AlertTriangle,
-  ArrowDown,
-  ArrowUp,
+  Archive,
   BarChart3,
   CalendarDays,
+  CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
   Copy,
   Database,
   Download,
@@ -14,7 +16,9 @@ import {
   FileJson,
   FileSpreadsheet,
   History,
+  Menu,
   Moon,
+  Pencil,
   Plane,
   Plus,
   Redo2,
@@ -23,6 +27,8 @@ import {
   Search,
   Settings as SettingsIcon,
   ShoppingBag,
+  SlidersHorizontal,
+  StickyNote,
   Sun,
   Trash2,
   Undo2,
@@ -37,6 +43,7 @@ import {
   BarChart,
   CartesianGrid,
   Cell,
+  ComposedChart,
   Legend,
   Line,
   LineChart,
@@ -47,7 +54,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { calculateYear } from "./domain/calculations";
+import { calculateYear, monthlyEstimateNative, yearlyEstimateNative } from "./domain/calculations";
 import { CURRENCY_OPTIONS, formatMoney, normalizeAmount, parseAmount } from "./domain/currency";
 import {
   dateInputValue,
@@ -68,10 +75,21 @@ import {
   importBudgetWorkbook,
   importJsonBackup,
 } from "./domain/importExport";
-import type { Activity, BudgetSnapshot, CurrencyCode, RecurrenceType, SpendingEntry, WalletEntry, WishlistItem } from "./domain/types";
+import type {
+  Activity,
+  BudgetSnapshot,
+  CurrencyCode,
+  RecurrenceType,
+  Settings,
+  SpendingEntry,
+  WalletEntry,
+  WishlistItem,
+} from "./domain/types";
 import { useBudgetStore } from "./store/budgetStore";
 
 type TabKey = "activities" | "spending" | "wishlist" | "wallet" | "analytics" | "history" | "settings";
+type BudgetCalculation = ReturnType<typeof calculateYear>;
+type WishlistView = "active" | "purchased" | "archived" | "all";
 
 interface Filters {
   query: string;
@@ -81,17 +99,45 @@ interface Filters {
   historyQuery: string;
 }
 
+interface ActivityDraft {
+  name: string;
+  categoryId: string;
+  currency: CurrencyCode;
+  recurrenceType: RecurrenceType;
+  recurrenceInterval: number;
+  pricePerSession: string;
+  pricePerPurchase: string;
+  pricePerMonth: string;
+  yearlyEstimate: string;
+  seasonalTag: string;
+  active: boolean;
+  visible: boolean;
+  notes: string;
+}
+
+interface WishlistDraft {
+  name: string;
+  actualPrice: string;
+  currency: CurrencyCode;
+  priority: WishlistItem["priority"];
+  bought: boolean;
+  inWishlist: boolean;
+  active: boolean;
+  notes: string;
+}
+
 const tabs: Array<{ key: TabKey; label: string; icon: typeof ActivityIcon }> = [
   { key: "activities", label: "Activities", icon: ActivityIcon },
   { key: "spending", label: "Spending", icon: CalendarDays },
   { key: "wishlist", label: "Wishlist", icon: ShoppingBag },
   { key: "wallet", label: "Wallet", icon: Wallet },
-  { key: "analytics", label: "Analytics", icon: BarChart3 },
+  { key: "analytics", label: "Analysis", icon: BarChart3 },
   { key: "history", label: "History", icon: History },
   { key: "settings", label: "Settings", icon: SettingsIcon },
 ];
 
 const recurrenceTypes: RecurrenceType[] = ["none", "weekly", "monthly", "yearly", "session", "purchase", "custom"];
+const SIDEBAR_PREF_KEY = "premium-budget.sidebar-collapsed";
 
 export default function App() {
   const store = useBudgetStore();
@@ -99,6 +145,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<TabKey>("activities");
   const [notice, setNotice] = useState<string>("");
   const [rolloverOpen, setRolloverOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem(SIDEBAR_PREF_KEY) === "true");
   const [filters, setFilters] = useState<Filters>({
     query: "",
     categoryId: "all",
@@ -112,19 +159,28 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    localStorage.setItem(SIDEBAR_PREF_KEY, String(sidebarCollapsed));
+  }, [sidebarCollapsed]);
+
+  useEffect(() => {
     document.documentElement.classList.toggle("dark", snapshot.settings.darkMode);
   }, [snapshot.settings.darkMode]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (!(event.ctrlKey || event.metaKey)) return;
-      if (event.key.toLowerCase() === "z") {
+      const key = event.key.toLowerCase();
+      if (key === "z") {
         event.preventDefault();
         store.undo();
       }
-      if (event.key.toLowerCase() === "y") {
+      if (key === "y") {
         event.preventDefault();
         store.redo();
+      }
+      if (key === "k") {
+        event.preventDefault();
+        document.getElementById("global-search")?.focus();
       }
     };
     window.addEventListener("keydown", onKeyDown);
@@ -138,14 +194,23 @@ export default function App() {
     return (
       <main className="loading-screen">
         <Database size={34} />
-        <span>Loading your local budget vault...</span>
+        <strong>Loading Budget OS</strong>
+        <span>Restoring your local budget data...</span>
       </main>
     );
   }
 
   return (
-    <div className="app-shell">
-      <Sidebar filters={filters} setFilters={setFilters} setNotice={setNotice} />
+    <div className={sidebarCollapsed ? "app-shell sidebar-collapsed" : "app-shell"}>
+      <Sidebar
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        collapsed={sidebarCollapsed}
+        setCollapsed={setSidebarCollapsed}
+        filters={filters}
+        setFilters={setFilters}
+        setNotice={setNotice}
+      />
       <main className="main-area">
         <Header calculation={calculation} setRolloverOpen={setRolloverOpen} />
         {notice && (
@@ -157,17 +222,6 @@ export default function App() {
           </div>
         )}
         <SummaryCards calculation={calculation} />
-        <nav className="tab-strip" aria-label="Budget workspace tabs">
-          {tabs.map((tab) => {
-            const Icon = tab.icon;
-            return (
-              <button key={tab.key} className={activeTab === tab.key ? "tab active" : "tab"} onClick={() => setActiveTab(tab.key)}>
-                <Icon size={17} />
-                {tab.label}
-              </button>
-            );
-          })}
-        </nav>
         <section className="workspace">
           {activeTab === "activities" && <ActivityPanel filters={filters} calculation={calculation} />}
           {activeTab === "spending" && <SpendingPanel filters={filters} calculation={calculation} />}
@@ -184,35 +238,36 @@ export default function App() {
 }
 
 function Sidebar({
+  activeTab,
+  setActiveTab,
+  collapsed,
+  setCollapsed,
   filters,
   setFilters,
   setNotice,
 }: {
+  activeTab: TabKey;
+  setActiveTab: (tab: TabKey) => void;
+  collapsed: boolean;
+  setCollapsed: (collapsed: boolean) => void;
   filters: Filters;
   setFilters: (filters: Filters) => void;
   setNotice: (notice: string) => void;
 }) {
   const snapshot = useBudgetStore((state) => state.snapshot);
-  const selectYear = useBudgetStore((state) => state.selectYear);
-  const updateSettings = useBudgetStore((state) => state.updateSettings);
   const applySeasonalPreset = useBudgetStore((state) => state.applySeasonalPreset);
   const applyScenarioPreset = useBudgetStore((state) => state.applyScenarioPreset);
   const importSnapshot = useBudgetStore((state) => state.importSnapshot);
   const resetToSeed = useBudgetStore((state) => state.resetToSeed);
   const workbookInput = useRef<HTMLInputElement>(null);
   const jsonInput = useRef<HTMLInputElement>(null);
-  const currentYear = snapshot.settings.selectedYear;
-  const yearOptions = Array.from(new Set([2026, 2027, 2028, 2029, 2030, currentYear - 1, currentYear, currentYear + 1, ...Object.keys(snapshot.years).map(Number)])).sort(
-    (a, b) => a - b,
-  );
-  const weeks = weeksInIsoYear(currentYear);
 
   async function handleWorkbookImport(file: File | undefined) {
     if (!file) return;
     try {
       const imported = await importBudgetWorkbook(file);
       importSnapshot(imported, `Imported ${file.name}.`);
-      setNotice(`Imported ${file.name} into the local app model.`);
+      setNotice(`Imported ${file.name} into the app model.`);
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "Workbook import failed.");
     }
@@ -230,28 +285,212 @@ function Sidebar({
   }
 
   return (
-    <aside className="sidebar">
+    <aside className="sidebar" aria-label="Primary navigation">
       <div className="brand-block">
         <div className="brand-mark">
-          <Plane size={23} />
+          <Plane size={22} />
         </div>
-        <div>
-          <strong>Budget OS</strong>
-          <span>Local-first finance cockpit</span>
+        {!collapsed && (
+          <div className="brand-copy">
+            <strong>Budget OS</strong>
+            <span>Personal finance cockpit</span>
+          </div>
+        )}
+        <button className="icon-button collapse-button" title={collapsed ? "Expand sidebar" : "Collapse sidebar"} onClick={() => setCollapsed(!collapsed)}>
+          <Menu size={17} />
+        </button>
+      </div>
+
+      <nav className="side-nav">
+        {tabs.map((tab) => {
+          const Icon = tab.icon;
+          return (
+            <button
+              key={tab.key}
+              className={activeTab === tab.key ? "side-nav-item active" : "side-nav-item"}
+              onClick={() => setActiveTab(tab.key)}
+              title={tab.label}
+            >
+              <Icon size={19} />
+              {!collapsed && <span>{tab.label}</span>}
+            </button>
+          );
+        })}
+      </nav>
+
+      {!collapsed && (
+        <>
+          <section className="sidebar-section">
+            <div className="section-title">
+              <Search size={15} />
+              Find & Filter
+            </div>
+            <label>
+              Search
+              <input id="global-search" value={filters.query} onChange={(event) => setFilters({ ...filters, query: event.target.value })} placeholder="Ctrl+K to search" />
+            </label>
+            <div className="filter-grid">
+              <label>
+                Category
+                <select value={filters.categoryId} onChange={(event) => setFilters({ ...filters, categoryId: event.target.value })}>
+                  <option value="all">All</option>
+                  {snapshot.categories.map((category) => (
+                    <option key={category.id} value={category.id}>
+                      {category.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Currency
+                <select value={filters.currency} onChange={(event) => setFilters({ ...filters, currency: event.target.value })}>
+                  <option value="all">All</option>
+                  {CURRENCY_OPTIONS.map((currency) => (
+                    <option key={currency} value={currency}>
+                      {currency}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            <label>
+              Season
+              <select value={filters.season} onChange={(event) => setFilters({ ...filters, season: event.target.value })}>
+                <option value="all">All seasons</option>
+                <option value="normal">Normal</option>
+                <option value="summer">Summer</option>
+                <option value="school-term">School term</option>
+                <option value="travel">Travel</option>
+              </select>
+            </label>
+          </section>
+
+          <section className="sidebar-section">
+            <div className="section-title">
+              <SlidersHorizontal size={15} />
+              Presets
+            </div>
+            <div className="pill-grid">
+              {snapshot.seasonalPresets.map((preset) => (
+                <button key={preset.id} className="soft-button" onClick={() => applySeasonalPreset(preset.id)} title={preset.notes}>
+                  {preset.name}
+                </button>
+              ))}
+            </div>
+            <div className="pill-grid">
+              {snapshot.scenarioPresets.map((preset) => (
+                <button key={preset.id} className="soft-button" onClick={() => applyScenarioPreset(preset.id)} title={preset.notes}>
+                  {preset.name}
+                </button>
+              ))}
+            </div>
+          </section>
+
+          <section className="sidebar-section">
+            <div className="section-title">
+              <Database size={15} />
+              Data
+            </div>
+            <input ref={workbookInput} className="hidden-input" type="file" accept=".xlsx,.xls" onChange={(event) => void handleWorkbookImport(event.target.files?.[0])} />
+            <input ref={jsonInput} className="hidden-input" type="file" accept=".json" onChange={(event) => void handleJsonImport(event.target.files?.[0])} />
+            <div className="data-actions">
+              <button className="command-button" onClick={() => workbookInput.current?.click()}>
+                <Upload size={16} />
+                Import
+              </button>
+              <button className="command-button" onClick={() => jsonInput.current?.click()}>
+                <FileJson size={16} />
+                Restore
+              </button>
+              <button className="command-button" onClick={() => exportCurrentYearToExcel(snapshot)}>
+                <FileSpreadsheet size={16} />
+                Year
+              </button>
+              <button className="command-button" onClick={() => exportAllYearsToExcel(snapshot)}>
+                <Download size={16} />
+                All
+              </button>
+              <button className="command-button" onClick={() => exportJson(snapshot)}>
+                <FileJson size={16} />
+                JSON
+              </button>
+            </div>
+            <button
+              className="danger-soft"
+              onClick={() => {
+                if (window.confirm("Reset local data back to the imported seed budget?")) void resetToSeed();
+              }}
+            >
+              <RefreshCw size={15} />
+              Reset seed
+            </button>
+          </section>
+        </>
+      )}
+    </aside>
+  );
+}
+
+function Header({ calculation, setRolloverOpen }: { calculation: BudgetCalculation; setRolloverOpen: (value: boolean) => void }) {
+  const snapshot = useBudgetStore((state) => state.snapshot);
+  const updateSettings = useBudgetStore((state) => state.updateSettings);
+  const selectYear = useBudgetStore((state) => state.selectYear);
+  const undo = useBudgetStore((state) => state.undo);
+  const redo = useBudgetStore((state) => state.redo);
+  const currentYear = snapshot.settings.selectedYear;
+  const maxWeeks = weeksInIsoYear(currentYear);
+  const yearOptions = Array.from(new Set([currentYear - 1, currentYear, currentYear + 1, 2026, 2027, 2028, 2029, 2030, ...Object.keys(snapshot.years).map(Number)])).sort(
+    (a, b) => a - b,
+  );
+
+  function moveMonth(delta: number) {
+    let nextMonth = snapshot.settings.selectedMonth + delta;
+    let nextYear = currentYear;
+    if (nextMonth < 1) {
+      nextMonth = 12;
+      nextYear -= 1;
+    }
+    if (nextMonth > 12) {
+      nextMonth = 1;
+      nextYear += 1;
+    }
+    if (nextYear !== currentYear) selectYear(nextYear);
+    updateSettings({ selectedMonth: nextMonth });
+  }
+
+  function moveWeek(delta: number) {
+    let nextWeek = snapshot.settings.selectedWeek + delta;
+    let nextYear = currentYear;
+    if (nextWeek < 1) {
+      nextYear -= 1;
+      nextWeek = weeksInIsoYear(nextYear);
+    }
+    if (nextWeek > maxWeeks) {
+      nextYear += 1;
+      nextWeek = 1;
+    }
+    if (nextYear !== currentYear) selectYear(nextYear);
+    updateSettings({ selectedWeek: nextWeek });
+  }
+
+  return (
+    <header className="top-header">
+      <div className="header-title">
+        <p className="eyebrow">Current period</p>
+        <h1>
+          {monthName(calculation.month)} {calculation.year}
+        </h1>
+        <div className="period-meta">
+          <Badge tone={calculation.selectedMonthSpend.status === "nan" ? "danger" : "neutral"}>{statusLabel(calculation.selectedMonthSpend.status)}</Badge>
+          <span>Week {calculation.week}</span>
+          <span>{snapshot.settings.selectedSeason}</span>
         </div>
       </div>
 
-      <section className="sidebar-section">
-        <label>
-          Year
-          <select value={currentYear} onChange={(event) => selectYear(Number(event.target.value))}>
-            {yearOptions.map((year) => (
-              <option key={year} value={year}>
-                {year}
-              </option>
-            ))}
-          </select>
-        </label>
+      <div className="period-control-bar" aria-label="Period controls">
+        <button className="icon-button" title="Previous month" onClick={() => moveMonth(-1)}>
+          <ChevronLeft size={17} />
+        </button>
         <label>
           Month
           <select value={snapshot.settings.selectedMonth} onChange={(event) => updateSettings({ selectedMonth: Number(event.target.value) })}>
@@ -265,167 +504,52 @@ function Sidebar({
         <label>
           Week
           <select value={snapshot.settings.selectedWeek} onChange={(event) => updateSettings({ selectedWeek: Number(event.target.value) })}>
-            {Array.from({ length: weeks }, (_, index) => index + 1).map((week) => (
+            {Array.from({ length: maxWeeks }, (_, index) => index + 1).map((week) => (
               <option key={week} value={week}>
                 Week {week}
               </option>
             ))}
           </select>
         </label>
-      </section>
-
-      <section className="sidebar-section">
-        <div className="section-title">
-          <Search size={15} />
-          Filters
-        </div>
         <label>
-          Search
-          <input value={filters.query} onChange={(event) => setFilters({ ...filters, query: event.target.value })} placeholder="Activity, note, item..." />
-        </label>
-        <label>
-          Category
-          <select value={filters.categoryId} onChange={(event) => setFilters({ ...filters, categoryId: event.target.value })}>
-            <option value="all">All categories</option>
-            {snapshot.categories.map((category) => (
-              <option key={category.id} value={category.id}>
-                {category.name}
+          Year
+          <select value={currentYear} onChange={(event) => selectYear(Number(event.target.value))}>
+            {yearOptions.map((year) => (
+              <option key={year} value={year}>
+                {year}
               </option>
             ))}
           </select>
         </label>
-        <label>
-          Currency
-          <select value={filters.currency} onChange={(event) => setFilters({ ...filters, currency: event.target.value })}>
-            <option value="all">All currencies</option>
-            {CURRENCY_OPTIONS.map((currency) => (
-              <option key={currency} value={currency}>
-                {currency}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          Season
-          <select value={filters.season} onChange={(event) => setFilters({ ...filters, season: event.target.value })}>
-            <option value="all">All seasons</option>
-            <option value="normal">Normal</option>
-            <option value="summer">Summer</option>
-            <option value="school-term">School term</option>
-            <option value="travel">Travel</option>
-          </select>
-        </label>
-      </section>
-
-      <section className="sidebar-section">
-        <div className="section-title">
-          <ActivityIcon size={15} />
-          Seasonal Presets
-        </div>
-        <div className="button-grid">
-          {snapshot.seasonalPresets.map((preset) => (
-            <button key={preset.id} className="soft-button" onClick={() => applySeasonalPreset(preset.id)} title={preset.notes}>
-              {preset.name}
-            </button>
-          ))}
-        </div>
-      </section>
-
-      <section className="sidebar-section">
-        <div className="section-title">
-          <SettingsIcon size={15} />
-          Scenarios
-        </div>
-        <div className="button-grid">
-          {snapshot.scenarioPresets.map((preset) => (
-            <button key={preset.id} className="soft-button" onClick={() => applyScenarioPreset(preset.id)} title={preset.notes}>
-              {preset.name}
-            </button>
-          ))}
-        </div>
-      </section>
-
-      <section className="sidebar-section">
-        <div className="section-title">
-          <Database size={15} />
-          Import / Export
-        </div>
-        <input ref={workbookInput} className="hidden-input" type="file" accept=".xlsx,.xls" onChange={(event) => void handleWorkbookImport(event.target.files?.[0])} />
-        <input ref={jsonInput} className="hidden-input" type="file" accept=".json" onChange={(event) => void handleJsonImport(event.target.files?.[0])} />
-        <button className="command-button" onClick={() => workbookInput.current?.click()}>
-          <Upload size={16} />
-          Import Excel
+        <button className="icon-button" title="Next month" onClick={() => moveMonth(1)}>
+          <ChevronRight size={17} />
         </button>
-        <button className="command-button" onClick={() => jsonInput.current?.click()}>
-          <FileJson size={16} />
-          Restore JSON
+        <button className="soft-button compact" onClick={() => moveWeek(-1)}>
+          <ChevronLeft size={15} />
+          Week
         </button>
-        <button className="command-button" onClick={() => exportCurrentYearToExcel(snapshot)}>
-          <FileSpreadsheet size={16} />
-          Export Year
+        <button className="soft-button compact" onClick={() => moveWeek(1)}>
+          Week
+          <ChevronRight size={15} />
         </button>
-        <button className="command-button" onClick={() => exportAllYearsToExcel(snapshot)}>
-          <Download size={16} />
-          Export All
-        </button>
-        <button className="command-button" onClick={() => exportJson(snapshot)}>
-          <FileJson size={16} />
-          Backup JSON
-        </button>
-      </section>
-
-      <section className="sidebar-section compact-toggles">
-        <label className="check-row">
-          <input type="checkbox" checked={snapshot.settings.pilotIncludedInBudget} onChange={(event) => updateSettings({ pilotIncludedInBudget: event.target.checked })} />
-          Include pilots in full budget
-        </label>
-        <label className="check-row">
-          <input type="checkbox" checked={snapshot.settings.promptBeforeMonthClose} onChange={(event) => updateSettings({ promptBeforeMonthClose: event.target.checked })} />
-          Prompt before rollover
-        </label>
-        <label className="check-row">
-          <input type="checkbox" checked={snapshot.settings.darkMode} onChange={(event) => updateSettings({ darkMode: event.target.checked })} />
-          {snapshot.settings.darkMode ? <Moon size={15} /> : <Sun size={15} />}
-          Dark mode
-        </label>
-        <button className="danger-soft" onClick={() => void resetToSeed()}>
-          <RefreshCw size={15} />
-          Reset seed
-        </button>
-      </section>
-    </aside>
-  );
-}
-
-function Header({ calculation, setRolloverOpen }: { calculation: ReturnType<typeof calculateYear>; setRolloverOpen: (value: boolean) => void }) {
-  const snapshot = useBudgetStore((state) => state.snapshot);
-  const updateSettings = useBudgetStore((state) => state.updateSettings);
-  const undo = useBudgetStore((state) => state.undo);
-  const redo = useBudgetStore((state) => state.redo);
-  return (
-    <header className="top-header">
-      <div>
-        <p className="eyebrow">{monthName(calculation.month)} workspace</p>
-        <h1>{calculation.year} Budget Command Center</h1>
       </div>
+
       <div className="header-actions">
         <LiveClock />
         <div className="timestamp">
           <span>Last updated</span>
           <strong>{formatDateTime(snapshot.settings.lastUpdated)}</strong>
         </div>
-        <select
-          className="currency-pill"
-          value={snapshot.settings.baseCurrency}
-          onChange={(event) => updateSettings({ baseCurrency: event.target.value as CurrencyCode })}
-          title="Base currency"
-        >
+        <select className="currency-pill" value={snapshot.settings.baseCurrency} onChange={(event) => updateSettings({ baseCurrency: event.target.value as CurrencyCode })} title="Base currency">
           {CURRENCY_OPTIONS.map((currency) => (
             <option key={currency} value={currency}>
               {currency}
             </option>
           ))}
         </select>
+        <button className="icon-button" title={snapshot.settings.darkMode ? "Light mode" : "Dark mode"} onClick={() => updateSettings({ darkMode: !snapshot.settings.darkMode })}>
+          {snapshot.settings.darkMode ? <Sun size={17} /> : <Moon size={17} />}
+        </button>
         <button className="icon-button" title="Undo (Ctrl+Z)" onClick={undo}>
           <Undo2 size={17} />
         </button>
@@ -458,26 +582,23 @@ function LiveClock() {
       <CalendarDays size={17} />
       <div>
         <span>{now.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })}</span>
-        <strong>{enabled ? now.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", second: "2-digit" }) : "Clock off"}</strong>
+        <strong>{enabled ? now.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" }) : "Clock off"}</strong>
       </div>
     </div>
   );
 }
 
-function SummaryCards({ calculation }: { calculation: ReturnType<typeof calculateYear> }) {
+function SummaryCards({ calculation }: { calculation: BudgetCalculation }) {
   const settings = useBudgetStore((state) => state.snapshot.settings);
   const cards = [
-    { label: "General Budget", value: calculation.generalBudget, accent: "green", detail: "Recurring non-piloting plan" },
-    { label: "Piloting Budget", value: calculation.pilotingBudget, accent: "amber", detail: "Separated flight stack" },
-    { label: "Included Budget", value: calculation.includedBudget, accent: "blue", detail: settings.pilotIncludedInBudget ? "General + piloting" : "General only" },
-    { label: "Month Spend", value: calculation.selectedMonthSpend.total, accent: "rose", detail: statusLabel(calculation.selectedMonthSpend.status) },
+    { label: "Planned", value: calculation.includedBudget, accent: "blue", detail: settings.pilotIncludedInBudget ? "General + piloting" : "General only" },
+    { label: "Spent", value: calculation.selectedMonthSpend.total, accent: "rose", detail: statusLabel(calculation.selectedMonthSpend.status) },
     { label: "Delta", value: calculation.delta, accent: calculation.delta != null && calculation.delta < 0 ? "rose" : "green", detail: "Budget minus spend" },
-    { label: "Wallet", value: calculation.wallet.personalWalletTotal, accent: "cyan", detail: "Personal wallet only" },
-    { label: "Wishlist Left", value: calculation.wishlist.activeTotal, accent: "pink", detail: `${calculation.wishlist.activeCount} active items` },
-    { label: "Rounded Monthly", value: calculation.roundedMonthlyValue, accent: "violet", detail: settings.roundingRule },
+    { label: "Wallet", value: calculation.wallet.personalWalletTotal, accent: "cyan", detail: "Personal wallet" },
+    { label: "Wishlist", value: calculation.wishlist.activeTotal, accent: "pink", detail: `${calculation.wishlist.activeCount} active` },
   ];
   return (
-    <section className="summary-grid">
+    <section className="summary-grid compact-summary">
       {cards.map((card) => (
         <article key={card.label} className={`summary-card ${card.accent}`}>
           <span>{card.label}</span>
@@ -485,11 +606,22 @@ function SummaryCards({ calculation }: { calculation: ReturnType<typeof calculat
           <small>{card.detail}</small>
         </article>
       ))}
+      <article className="summary-card split-card">
+        <span>Budget split</span>
+        <div className="split-row">
+          <strong>{formatMoney(calculation.generalBudget, settings.baseCurrency, settings.currencyDisplayMode)}</strong>
+          <small>General</small>
+        </div>
+        <div className="split-row">
+          <strong>{formatMoney(calculation.pilotingBudget, settings.baseCurrency, settings.currencyDisplayMode)}</strong>
+          <small>Piloting</small>
+        </div>
+      </article>
     </section>
   );
 }
 
-function ActivityPanel({ filters, calculation }: { filters: Filters; calculation: ReturnType<typeof calculateYear> }) {
+function ActivityPanel({ filters, calculation }: { filters: Filters; calculation: BudgetCalculation }) {
   const snapshot = useBudgetStore((state) => state.snapshot);
   const record = snapshot.years[String(snapshot.settings.selectedYear)];
   const addActivity = useBudgetStore((state) => state.addActivity);
@@ -497,199 +629,241 @@ function ActivityPanel({ filters, calculation }: { filters: Filters; calculation
   const removeActivity = useBudgetStore((state) => state.removeActivity);
   const duplicateActivity = useBudgetStore((state) => state.duplicateActivity);
   const moveActivity = useBudgetStore((state) => state.moveActivity);
-  const reorderActivity = useBudgetStore((state) => state.reorderActivity);
-  const [draggingId, setDraggingId] = useState<string>("");
-  const [draft, setDraft] = useState({
-    name: "",
-    categoryId: snapshot.categories[0]?.id ?? "cat-health",
-    currency: snapshot.settings.baseCurrency,
-    recurrenceType: "monthly" as RecurrenceType,
-    recurrenceInterval: 1,
-    pricePerSession: "",
-    pricePerMonth: "",
-    pricePerPurchase: "",
-    yearlyEstimate: "",
-    seasonalTag: snapshot.settings.selectedSeason,
-    notes: "",
-  });
+  const [editorActivity, setEditorActivity] = useState<Activity | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [showArchived, setShowArchived] = useState(false);
+  const [sortBy, setSortBy] = useState<"order" | "name" | "cost">("order");
   const estimateMap = new Map(calculation.activityEstimates.map((item) => [item.activity.id, item]));
   const activities = record.activities
-    .filter((activity) => matchesFilters(activity, filters))
-    .sort((a, b) => a.order - b.order);
+    .filter((activity) => matchesActivityFilters(activity, filters))
+    .filter((activity) => (showArchived ? !activity.active || !activity.visible : activity.active && activity.visible))
+    .sort((a, b) => sortActivities(a, b, sortBy, estimateMap));
 
-  function submitDraft(event: React.FormEvent) {
-    event.preventDefault();
-    if (!draft.name.trim()) return;
-    const perMonth = parseAmount(draft.pricePerMonth);
-    const perSession = parseAmount(draft.pricePerSession);
-    const perPurchase = parseAmount(draft.pricePerPurchase);
-    const yearly = parseAmount(draft.yearlyEstimate);
-    addActivity({
-      name: draft.name.trim(),
-      categoryId: draft.categoryId,
-      currency: draft.currency as CurrencyCode,
-      recurrenceType: draft.recurrenceType,
-      recurrenceInterval: Math.max(1, Number(draft.recurrenceInterval) || 1),
-      pricePerSession: perSession,
-      pricePerPurchase: perPurchase,
-      pricePerMonth: perMonth,
-      estimatedCost: perMonth ?? perPurchase ?? perSession ?? yearly,
-      yearlyEstimate: yearly,
-      active: true,
-      visible: true,
-      seasonalTag: draft.seasonalTag || "normal",
-      notes: draft.notes,
-    });
-    setDraft({ ...draft, name: "", pricePerSession: "", pricePerMonth: "", pricePerPurchase: "", yearlyEstimate: "", notes: "" });
+  function saveDraft(draft: ActivityDraft, existing?: Activity) {
+    const payload = activityPayloadFromDraft(draft);
+    if (existing) {
+      updateActivity(existing.id, payload);
+    } else {
+      addActivity(payload);
+    }
+    setEditorActivity(null);
+    setCreating(false);
   }
 
   return (
     <div className="panel-stack">
-      <form className="quick-add" onSubmit={submitDraft}>
-        <input value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} placeholder="New activity" />
-        <select value={draft.categoryId} onChange={(event) => setDraft({ ...draft, categoryId: event.target.value })}>
-          {snapshot.categories.map((category) => (
-            <option key={category.id} value={category.id}>
-              {category.name}
-            </option>
-          ))}
-        </select>
-        <select value={draft.currency} onChange={(event) => setDraft({ ...draft, currency: event.target.value as CurrencyCode })}>
-          {CURRENCY_OPTIONS.map((currency) => (
-            <option key={currency} value={currency}>
-              {currency}
-            </option>
-          ))}
-        </select>
-        <select value={draft.recurrenceType} onChange={(event) => setDraft({ ...draft, recurrenceType: event.target.value as RecurrenceType })}>
-          {recurrenceTypes.map((type) => (
-            <option key={type} value={type}>
-              {type}
-            </option>
-          ))}
-        </select>
-        <input type="number" min="1" value={draft.recurrenceInterval} onChange={(event) => setDraft({ ...draft, recurrenceInterval: Number(event.target.value) })} title="Recurrence interval" />
-        <input inputMode="decimal" value={draft.pricePerMonth} onChange={(event) => setDraft({ ...draft, pricePerMonth: event.target.value })} placeholder="Per month" />
-        <input inputMode="decimal" value={draft.pricePerSession} onChange={(event) => setDraft({ ...draft, pricePerSession: event.target.value })} placeholder="Per session" />
-        <button className="primary-button" type="submit">
-          <Plus size={17} />
-          Add
-        </button>
-      </form>
+      <div className="section-toolbar">
+        <div>
+          <p className="eyebrow">Activity plan</p>
+          <h2>Recurring costs without the spreadsheet fog</h2>
+        </div>
+        <div className="toolbar-actions">
+          <select value={sortBy} onChange={(event) => setSortBy(event.target.value as typeof sortBy)}>
+            <option value="order">Manual order</option>
+            <option value="name">Name</option>
+            <option value="cost">Monthly cost</option>
+          </select>
+          <button className={showArchived ? "soft-button active compact" : "soft-button compact"} onClick={() => setShowArchived(!showArchived)}>
+            <Archive size={16} />
+            {showArchived ? "Archived" : "Active"}
+          </button>
+          <button className="primary-button" onClick={() => setCreating(true)}>
+            <Plus size={17} />
+            Create activity
+          </button>
+        </div>
+      </div>
 
-      <div className="table-shell">
-        <table className="data-table activity-table">
-          <thead>
-            <tr>
-              <th>Activity</th>
-              <th>Currency</th>
-              <th>Prices</th>
-              <th>Recurrence</th>
-              <th>Category</th>
-              <th>Season</th>
-              <th>State</th>
-              <th>Monthly</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {activities.map((activity) => {
-              const estimate = estimateMap.get(activity.id);
-              return (
-                <tr
-                  key={activity.id}
-                  draggable
-                  onDragStart={() => setDraggingId(activity.id)}
-                  onDragOver={(event) => event.preventDefault()}
-                  onDrop={() => {
-                    if (draggingId && draggingId !== activity.id) reorderActivity(draggingId, activity.id);
-                    setDraggingId("");
+      <div className="activity-grid">
+        {activities.map((activity) => {
+          const estimate = estimateMap.get(activity.id);
+          const category = snapshot.categories.find((item) => item.id === activity.categoryId);
+          const archived = !activity.active || !activity.visible;
+          return (
+            <article key={activity.id} className={archived ? "activity-card archived" : "activity-card"}>
+              <div className="card-topline">
+                <div>
+                  <h3>{activity.name}</h3>
+                  <div className="card-meta">
+                    <Badge tone={category?.bucket === "piloting" ? "info" : "neutral"}>{category?.name ?? "Other"}</Badge>
+                    <Badge tone={archived ? "danger" : "success"}>{archived ? "Archived" : "Active"}</Badge>
+                  </div>
+                </div>
+                <NoteButton value={activity.notes} onSave={(notes) => updateActivity(activity.id, { notes })} />
+              </div>
+              <div className="activity-cost">
+                <span>{activityPrimaryCostLabel(activity)}</span>
+                <strong>{activityPrimaryCost(activity, snapshot)}</strong>
+              </div>
+              <div className="impact-grid">
+                <div>
+                  <span>Monthly impact</span>
+                  <strong>{formatMoney(estimate?.monthlyBase ?? 0, snapshot.settings.baseCurrency, snapshot.settings.currencyDisplayMode)}</strong>
+                </div>
+                <div>
+                  <span>Yearly impact</span>
+                  <strong>{formatMoney(estimate?.yearlyBase ?? 0, snapshot.settings.baseCurrency, snapshot.settings.currencyDisplayMode)}</strong>
+                </div>
+              </div>
+              <div className="card-meta">
+                <Badge tone="neutral">{activity.recurrenceType}</Badge>
+                <Badge tone="neutral">Every {activity.recurrenceInterval}</Badge>
+                <Badge tone="neutral">{activity.seasonalTag}</Badge>
+              </div>
+              <div className="card-actions">
+                <button className="icon-button" title="Move up" onClick={() => moveActivity(activity.id, -1)}>
+                  <ChevronLeft size={15} />
+                </button>
+                <button className="icon-button" title="Move down" onClick={() => moveActivity(activity.id, 1)}>
+                  <ChevronRight size={15} />
+                </button>
+                <button className="icon-button" title="Duplicate" onClick={() => duplicateActivity(activity.id)}>
+                  <Copy size={15} />
+                </button>
+                <button className="icon-button" title="Edit" onClick={() => setEditorActivity(activity)}>
+                  <Pencil size={15} />
+                </button>
+                <button className="icon-button" title={archived ? "Restore" : "Archive"} onClick={() => updateActivity(activity.id, archived ? { active: true, visible: true } : { active: false, visible: false })}>
+                  {archived ? <Eye size={15} /> : <Archive size={15} />}
+                </button>
+                <button
+                  className="icon-button danger"
+                  title="Delete permanently"
+                  onClick={() => {
+                    if (window.confirm(`Delete ${activity.name} permanently? Use Archive if you only want to hide it.`)) removeActivity(activity.id);
                   }}
                 >
-                  <td>
-                    <input value={activity.name} onChange={(event) => updateActivity(activity.id, { name: event.target.value })} />
-                    <textarea value={activity.notes} onChange={(event) => updateActivity(activity.id, { notes: event.target.value })} placeholder="Notes" />
-                  </td>
-                  <td>
-                    <select value={activity.currency} onChange={(event) => updateActivity(activity.id, { currency: event.target.value as CurrencyCode })}>
-                      {CURRENCY_OPTIONS.map((currency) => (
-                        <option key={currency} value={currency}>
-                          {currency}
-                        </option>
-                      ))}
-                    </select>
-                  </td>
-                  <td className="price-grid">
-                    <LabeledNumber label="Session" value={activity.pricePerSession} onChange={(value) => updateActivity(activity.id, { pricePerSession: value })} />
-                    <LabeledNumber label="Month" value={activity.pricePerMonth} onChange={(value) => updateActivity(activity.id, { pricePerMonth: value })} />
-                    <LabeledNumber label="Purchase" value={activity.pricePerPurchase} onChange={(value) => updateActivity(activity.id, { pricePerPurchase: value })} />
-                    <LabeledNumber label="Year" value={activity.yearlyEstimate} onChange={(value) => updateActivity(activity.id, { yearlyEstimate: value })} />
-                  </td>
-                  <td>
-                    <select value={activity.recurrenceType} onChange={(event) => updateActivity(activity.id, { recurrenceType: event.target.value as RecurrenceType })}>
-                      {recurrenceTypes.map((type) => (
-                        <option key={type} value={type}>
-                          {type}
-                        </option>
-                      ))}
-                    </select>
-                    <input type="number" min="1" value={activity.recurrenceInterval} onChange={(event) => updateActivity(activity.id, { recurrenceInterval: Number(event.target.value) || 1 })} />
-                  </td>
-                  <td>
-                    <select value={activity.categoryId} onChange={(event) => updateActivity(activity.id, { categoryId: event.target.value })}>
-                      {snapshot.categories.map((category) => (
-                        <option key={category.id} value={category.id}>
-                          {category.name}
-                        </option>
-                      ))}
-                    </select>
-                  </td>
-                  <td>
-                    <input value={activity.seasonalTag} onChange={(event) => updateActivity(activity.id, { seasonalTag: event.target.value })} />
-                  </td>
-                  <td>
-                    <label className="check-row">
-                      <input type="checkbox" checked={activity.active} onChange={(event) => updateActivity(activity.id, { active: event.target.checked })} />
-                      Active
-                    </label>
-                    <label className="check-row">
-                      <input type="checkbox" checked={activity.visible} onChange={(event) => updateActivity(activity.id, { visible: event.target.checked })} />
-                      {activity.visible ? <Eye size={15} /> : <EyeOff size={15} />}
-                      Visible
-                    </label>
-                  </td>
-                  <td>
-                    <strong>{formatMoney(estimate?.monthlyBase ?? 0, snapshot.settings.baseCurrency, snapshot.settings.currencyDisplayMode)}</strong>
-                    <small>{estimate?.bucket}</small>
-                  </td>
-                  <td>
-                    <div className="row-actions">
-                      <button className="icon-button" title="Move up" onClick={() => moveActivity(activity.id, -1)}>
-                        <ArrowUp size={15} />
-                      </button>
-                      <button className="icon-button" title="Move down" onClick={() => moveActivity(activity.id, 1)}>
-                        <ArrowDown size={15} />
-                      </button>
-                      <button className="icon-button" title="Duplicate" onClick={() => duplicateActivity(activity.id)}>
-                        <Copy size={15} />
-                      </button>
-                      <button className="icon-button danger" title="Delete" onClick={() => removeActivity(activity.id)}>
-                        <Trash2 size={15} />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-        {activities.length === 0 && <EmptyState title="No activities match the filters." />}
+                  <Trash2 size={15} />
+                </button>
+              </div>
+            </article>
+          );
+        })}
       </div>
+      {activities.length === 0 && <EmptyState title={showArchived ? "No archived activities." : "No active activities match this view."} detail="Use Create activity or loosen the filters." />}
+      {(creating || editorActivity) && <ActivityEditorModal activity={editorActivity} onClose={() => { setCreating(false); setEditorActivity(null); }} onSave={saveDraft} />}
     </div>
   );
 }
 
-function SpendingPanel({ filters, calculation }: { filters: Filters; calculation: ReturnType<typeof calculateYear> }) {
+function ActivityEditorModal({ activity, onClose, onSave }: { activity: Activity | null; onClose: () => void; onSave: (draft: ActivityDraft, existing?: Activity) => void }) {
+  const snapshot = useBudgetStore((state) => state.snapshot);
+  const [draft, setDraft] = useState<ActivityDraft>(() => activityToDraft(activity, snapshot));
+  const previewActivity = { ...activityPayloadFromDraft(draft), id: activity?.id ?? "preview", order: activity?.order ?? 0 };
+  const monthlyNative = monthlyEstimateNative(previewActivity);
+  const yearlyNative = yearlyEstimateNative(previewActivity, monthlyNative);
+  const monthlyBase = normalizeAmount(monthlyNative, draft.currency, snapshot.settings);
+  const yearlyBase = normalizeAmount(yearlyNative, draft.currency, snapshot.settings);
+
+  return (
+    <Modal title={activity ? "Edit activity" : "Create activity"} onClose={onClose}>
+      <form
+        className="editor-form"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (!draft.name.trim()) return;
+          onSave(draft, activity ?? undefined);
+        }}
+      >
+        <label className="wide-field">
+          Name
+          <input value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} placeholder="Activity name" />
+        </label>
+        <label>
+          Category
+          <select value={draft.categoryId} onChange={(event) => setDraft({ ...draft, categoryId: event.target.value })}>
+            {snapshot.categories
+              .filter((category) => category.bucket !== "wallet")
+              .map((category) => (
+                <option key={category.id} value={category.id}>
+                  {category.name}
+                </option>
+              ))}
+          </select>
+        </label>
+        <label>
+          Currency
+          <select value={draft.currency} onChange={(event) => setDraft({ ...draft, currency: event.target.value as CurrencyCode })}>
+            {CURRENCY_OPTIONS.map((currency) => (
+              <option key={currency} value={currency}>
+                {currency}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Recurrence
+          <select value={draft.recurrenceType} onChange={(event) => setDraft({ ...draft, recurrenceType: event.target.value as RecurrenceType })}>
+            {recurrenceTypes.map((type) => (
+              <option key={type} value={type}>
+                {type}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Frequency
+          <input type="number" min="1" value={draft.recurrenceInterval} onChange={(event) => setDraft({ ...draft, recurrenceInterval: Number(event.target.value) || 1 })} />
+        </label>
+        <label>
+          Per session
+          <input inputMode="decimal" value={draft.pricePerSession} onChange={(event) => setDraft({ ...draft, pricePerSession: event.target.value })} />
+        </label>
+        <label>
+          Per month
+          <input inputMode="decimal" value={draft.pricePerMonth} onChange={(event) => setDraft({ ...draft, pricePerMonth: event.target.value })} />
+        </label>
+        <label>
+          Per purchase
+          <input inputMode="decimal" value={draft.pricePerPurchase} onChange={(event) => setDraft({ ...draft, pricePerPurchase: event.target.value })} />
+        </label>
+        <label>
+          Per year
+          <input inputMode="decimal" value={draft.yearlyEstimate} onChange={(event) => setDraft({ ...draft, yearlyEstimate: event.target.value })} />
+        </label>
+        <label>
+          Season
+          <input value={draft.seasonalTag} onChange={(event) => setDraft({ ...draft, seasonalTag: event.target.value })} />
+        </label>
+        <div className="check-cluster">
+          <label className="check-row">
+            <input type="checkbox" checked={draft.active} onChange={(event) => setDraft({ ...draft, active: event.target.checked })} />
+            Active
+          </label>
+          <label className="check-row">
+            <input type="checkbox" checked={draft.visible} onChange={(event) => setDraft({ ...draft, visible: event.target.checked })} />
+            Visible
+          </label>
+        </div>
+        <label className="wide-field">
+          Notes
+          <textarea value={draft.notes} onChange={(event) => setDraft({ ...draft, notes: event.target.value })} placeholder="Optional private note" />
+        </label>
+        <div className="equivalent-panel">
+          <div>
+            <span>Monthly equivalent</span>
+            <strong>{formatMoney(monthlyBase, snapshot.settings.baseCurrency, snapshot.settings.currencyDisplayMode)}</strong>
+          </div>
+          <div>
+            <span>Yearly equivalent</span>
+            <strong>{formatMoney(yearlyBase, snapshot.settings.baseCurrency, snapshot.settings.currencyDisplayMode)}</strong>
+          </div>
+        </div>
+        <div className="modal-actions wide-field">
+          <button type="button" className="soft-button compact" onClick={onClose}>
+            Cancel
+          </button>
+          <button type="submit" className="primary-button">
+            <Save size={17} />
+            Save activity
+          </button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+function SpendingPanel({ filters, calculation }: { filters: Filters; calculation: BudgetCalculation }) {
   const snapshot = useBudgetStore((state) => state.snapshot);
   const record = snapshot.years[String(snapshot.settings.selectedYear)];
   const addSpendingEntry = useBudgetStore((state) => state.addSpendingEntry);
@@ -709,7 +883,7 @@ function SpendingPanel({ filters, calculation }: { filters: Filters; calculation
     .filter((entry) => matchesEntryFilters(entry, filters))
     .sort((a, b) => a.date.localeCompare(b.date));
 
-  function submitDraft(event: React.FormEvent) {
+  function submitDraft(event: FormEvent) {
     event.preventDefault();
     const amount = parseAmount(draft.amount);
     if (amount == null) return;
@@ -747,13 +921,18 @@ function SpendingPanel({ filters, calculation }: { filters: Filters; calculation
 
   return (
     <div className="panel-stack">
-      <div className="period-strip">
-        <Badge tone={calculation.selectedWeekSpend.status === "nan" ? "danger" : "neutral"}>Selected week: {statusLabel(calculation.selectedWeekSpend.status)}</Badge>
-        <Badge tone={calculation.selectedMonthSpend.status === "nan" ? "danger" : "neutral"}>Selected month: {statusLabel(calculation.selectedMonthSpend.status)}</Badge>
-        <button className="soft-button inline" onClick={markSelectedWeekZero}>
-          <Plus size={15} />
-          Mark Week 0
-        </button>
+      <div className="section-toolbar">
+        <div>
+          <p className="eyebrow">Spending</p>
+          <h2>Quick entries for {monthName(snapshot.settings.selectedMonth)}</h2>
+        </div>
+        <div className="toolbar-actions">
+          <Badge tone={calculation.selectedWeekSpend.status === "nan" ? "danger" : "neutral"}>Week: {statusLabel(calculation.selectedWeekSpend.status)}</Badge>
+          <button className="soft-button compact" onClick={markSelectedWeekZero}>
+            <Plus size={15} />
+            Mark week 0
+          </button>
+        </div>
       </div>
       <form className="quick-add spending-add" onSubmit={submitDraft}>
         <input type="date" value={draft.date} onChange={(event) => setDraft({ ...draft, date: event.target.value })} />
@@ -790,15 +969,15 @@ function SpendingPanel({ filters, calculation }: { filters: Filters; calculation
           <input type="checkbox" checked={draft.isPiloting} onChange={(event) => setDraft({ ...draft, isPiloting: event.target.checked })} />
           Pilot
         </label>
-        <input value={draft.note} onChange={(event) => setDraft({ ...draft, note: event.target.value })} placeholder="Note" />
+        <NoteButton value={draft.note} onSave={(note) => setDraft({ ...draft, note })} />
         <button className="primary-button" type="submit">
           <Plus size={17} />
           Add
         </button>
       </form>
 
-      <div className="table-shell">
-        <table className="data-table">
+      <div className="table-shell clean-table-shell">
+        <table className="data-table compact-table">
           <thead>
             <tr>
               <th>Date</th>
@@ -808,7 +987,7 @@ function SpendingPanel({ filters, calculation }: { filters: Filters; calculation
               <th>Amount</th>
               <th>Pilot</th>
               <th>Note</th>
-              <th>Actions</th>
+              <th />
             </tr>
           </thead>
           <tbody>
@@ -853,10 +1032,16 @@ function SpendingPanel({ filters, calculation }: { filters: Filters; calculation
                   <input type="checkbox" checked={entry.isPiloting} onChange={(event) => updateSpendingEntry(entry.id, { isPiloting: event.target.checked })} />
                 </td>
                 <td>
-                  <input value={entry.note} onChange={(event) => updateSpendingEntry(entry.id, { note: event.target.value })} />
+                  <NoteButton value={entry.note} onSave={(note) => updateSpendingEntry(entry.id, { note })} />
                 </td>
                 <td>
-                  <button className="icon-button danger" title="Delete" onClick={() => removeSpendingEntry(entry.id)}>
+                  <button
+                    className="icon-button danger"
+                    title="Delete"
+                    onClick={() => {
+                      if (window.confirm("Delete this spending entry?")) removeSpendingEntry(entry.id);
+                    }}
+                  >
                     <Trash2 size={15} />
                   </button>
                 </td>
@@ -864,7 +1049,7 @@ function SpendingPanel({ filters, calculation }: { filters: Filters; calculation
             ))}
           </tbody>
         </table>
-        {entries.length === 0 && <EmptyState title="No spending entries in this month." detail="A closed empty month will display NaN; use Mark Week 0 when the real value is zero." />}
+        {entries.length === 0 && <EmptyState title="No spending entries in this month." detail="A closed empty month will show NaN. Use Mark week 0 only when the real value is zero." />}
       </div>
     </div>
   );
@@ -876,137 +1061,212 @@ function WishlistPanel({ filters }: { filters: Filters }) {
   const addWishlistItem = useBudgetStore((state) => state.addWishlistItem);
   const updateWishlistItem = useBudgetStore((state) => state.updateWishlistItem);
   const removeWishlistItem = useBudgetStore((state) => state.removeWishlistItem);
-  const [draft, setDraft] = useState({ name: "", actualPrice: "", currency: snapshot.settings.baseCurrency, priority: "medium" as WishlistItem["priority"], notes: "" });
+  const [view, setView] = useState<WishlistView>("active");
+  const [editing, setEditing] = useState<WishlistItem | null>(null);
+  const [creating, setCreating] = useState(false);
   const items = record.wishlistItems
     .filter((item) => matchesWishlistFilters(item, filters))
-    .sort((a, b) => Number(a.bought) - Number(b.bought) || Number(b.inWishlist) - Number(a.inWishlist));
+    .filter((item) => wishlistViewMatches(item, view))
+    .sort((a, b) => priorityRank(b.priority) - priorityRank(a.priority) || Number(a.bought) - Number(b.bought));
 
-  function submitDraft(event: React.FormEvent) {
-    event.preventDefault();
-    if (!draft.name.trim()) return;
+  function saveDraft(draft: WishlistDraft, existing?: WishlistItem) {
     const actualPrice = parseAmount(draft.actualPrice);
-    addWishlistItem({
+    const payload = {
       name: draft.name.trim(),
       categoryId: "cat-wishlist",
       actualPrice,
-      effectiveValue: actualPrice,
-      currency: draft.currency as CurrencyCode,
-      bought: false,
-      inWishlist: true,
+      effectiveValue: draft.active && draft.inWishlist && !draft.bought && actualPrice != null ? actualPrice : 0,
+      currency: draft.currency,
+      bought: draft.bought,
+      inWishlist: draft.bought ? false : draft.inWishlist,
       priority: draft.priority,
       notes: draft.notes,
-      active: true,
-    });
-    setDraft({ ...draft, name: "", actualPrice: "", notes: "" });
+      active: draft.active,
+    };
+    if (existing) {
+      updateWishlistItem(existing.id, payload);
+    } else {
+      addWishlistItem(payload);
+    }
+    setEditing(null);
+    setCreating(false);
   }
 
   return (
     <div className="panel-stack">
-      <form className="quick-add" onSubmit={submitDraft}>
-        <input value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} placeholder="Wishlist item" />
-        <input inputMode="decimal" value={draft.actualPrice} onChange={(event) => setDraft({ ...draft, actualPrice: event.target.value })} placeholder="Price" />
-        <select value={draft.currency} onChange={(event) => setDraft({ ...draft, currency: event.target.value as CurrencyCode })}>
-          {CURRENCY_OPTIONS.map((currency) => (
-            <option key={currency} value={currency}>
-              {currency}
-            </option>
-          ))}
-        </select>
-        <select value={draft.priority} onChange={(event) => setDraft({ ...draft, priority: event.target.value as WishlistItem["priority"] })}>
-          <option value="low">Low</option>
-          <option value="medium">Medium</option>
-          <option value="high">High</option>
-          <option value="dream">Dream</option>
-        </select>
-        <input value={draft.notes} onChange={(event) => setDraft({ ...draft, notes: event.target.value })} placeholder="Notes" />
-        <button className="primary-button" type="submit">
-          <Plus size={17} />
-          Add
-        </button>
-      </form>
-
-      <div className="table-shell">
-        <table className="data-table">
-          <thead>
-            <tr>
-              <th>Item</th>
-              <th>Price</th>
-              <th>Effective</th>
-              <th>Priority</th>
-              <th>Status</th>
-              <th>Dates</th>
-              <th>Notes</th>
-              <th>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {items.map((item) => (
-              <tr key={item.id}>
-                <td>
-                  <input value={item.name} onChange={(event) => updateWishlistItem(item.id, { name: event.target.value })} />
-                </td>
-                <td className="money-edit">
-                  <input inputMode="decimal" value={item.actualPrice ?? ""} onChange={(event) => updateWishlistItem(item.id, { actualPrice: parseAmount(event.target.value) })} />
-                  <select value={item.currency} onChange={(event) => updateWishlistItem(item.id, { currency: event.target.value as CurrencyCode })}>
-                    {CURRENCY_OPTIONS.map((currency) => (
-                      <option key={currency} value={currency}>
-                        {currency}
-                      </option>
-                    ))}
-                  </select>
-                </td>
-                <td>
-                  {formatMoney(
-                    normalizeAmount(item.effectiveValue, item.currency, snapshot.settings),
-                    snapshot.settings.baseCurrency,
-                    snapshot.settings.currencyDisplayMode,
-                  )}
-                </td>
-                <td>
-                  <select value={item.priority} onChange={(event) => updateWishlistItem(item.id, { priority: event.target.value as WishlistItem["priority"] })}>
-                    <option value="low">Low</option>
-                    <option value="medium">Medium</option>
-                    <option value="high">High</option>
-                    <option value="dream">Dream</option>
-                  </select>
-                </td>
-                <td>
-                  <label className="check-row">
-                    <input type="checkbox" checked={item.bought} onChange={(event) => updateWishlistItem(item.id, { bought: event.target.checked })} />
-                    Bought
-                  </label>
-                  <label className="check-row">
-                    <input type="checkbox" checked={item.inWishlist} onChange={(event) => updateWishlistItem(item.id, { inWishlist: event.target.checked })} />
-                    Wishlist
-                  </label>
-                  <label className="check-row">
-                    <input type="checkbox" checked={item.active} onChange={(event) => updateWishlistItem(item.id, { active: event.target.checked })} />
-                    Active
-                  </label>
-                </td>
-                <td>
-                  <small>Added {formatDateTime(item.dateAdded)}</small>
-                  {item.datePurchased && <small>Bought {formatDateTime(item.datePurchased)}</small>}
-                </td>
-                <td>
-                  <input value={item.notes} onChange={(event) => updateWishlistItem(item.id, { notes: event.target.value })} />
-                </td>
-                <td>
-                  <button className="icon-button danger" title="Delete" onClick={() => removeWishlistItem(item.id)}>
-                    <Trash2 size={15} />
-                  </button>
-                </td>
-              </tr>
+      <div className="section-toolbar">
+        <div>
+          <p className="eyebrow">Wishlist</p>
+          <h2>Active wants, purchases, and history</h2>
+        </div>
+        <div className="toolbar-actions">
+          <div className="segmented-control">
+            {(["active", "purchased", "archived", "all"] as WishlistView[]).map((item) => (
+              <button key={item} className={view === item ? "active" : ""} onClick={() => setView(item)}>
+                {item}
+              </button>
             ))}
-          </tbody>
-        </table>
-        {items.length === 0 && <EmptyState title="Your active wishlist is clean." detail="Bought items stay in history and flush from active lists when a new year is created." />}
+          </div>
+          <button className="primary-button" onClick={() => setCreating(true)}>
+            <Plus size={17} />
+            Add item
+          </button>
+        </div>
       </div>
+
+      <div className="wishlist-grid">
+        {items.map((item) => (
+          <article key={item.id} className={!item.active ? "wishlist-card archived" : "wishlist-card"}>
+            <div className="card-topline">
+              <div>
+                <h3>{item.name}</h3>
+                <div className="card-meta">
+                  <Badge tone={item.bought ? "success" : item.inWishlist ? "info" : "neutral"}>{item.bought ? "Purchased" : item.inWishlist ? "Wishlist" : "History"}</Badge>
+                  <Badge tone="neutral">{item.priority}</Badge>
+                </div>
+              </div>
+              <NoteButton value={item.notes} onSave={(notes) => updateWishlistItem(item.id, { notes })} />
+            </div>
+            <div className="activity-cost">
+              <span>Actual price</span>
+              <strong>{formatMoney(normalizeAmount(item.actualPrice, item.currency, snapshot.settings), snapshot.settings.baseCurrency, snapshot.settings.currencyDisplayMode)}</strong>
+            </div>
+            <div className="impact-grid">
+              <div>
+                <span>Effective</span>
+                <strong>{formatMoney(normalizeAmount(item.effectiveValue, item.currency, snapshot.settings), snapshot.settings.baseCurrency, snapshot.settings.currencyDisplayMode)}</strong>
+              </div>
+              <div>
+                <span>Added</span>
+                <strong>{formatDateTime(item.dateAdded)}</strong>
+              </div>
+            </div>
+            <div className="check-cluster inline">
+              <label className="check-row">
+                <input
+                  type="checkbox"
+                  checked={item.bought}
+                  onChange={(event) => updateWishlistItem(item.id, { bought: event.target.checked, inWishlist: event.target.checked ? false : item.inWishlist })}
+                />
+                Bought
+              </label>
+              <label className="check-row">
+                <input type="checkbox" checked={item.inWishlist} onChange={(event) => updateWishlistItem(item.id, { inWishlist: event.target.checked })} />
+                Active list
+              </label>
+            </div>
+            <div className="card-actions">
+              <button className="icon-button" title="Edit" onClick={() => setEditing(item)}>
+                <Pencil size={15} />
+              </button>
+              <button className="icon-button" title={item.active ? "Archive" : "Restore"} onClick={() => updateWishlistItem(item.id, item.active ? { active: false, inWishlist: false } : { active: true })}>
+                {item.active ? <Archive size={15} /> : <Eye size={15} />}
+              </button>
+              <button
+                className="icon-button danger"
+                title="Delete permanently"
+                onClick={() => {
+                  if (window.confirm(`Delete ${item.name} permanently? Archiving keeps history.`)) removeWishlistItem(item.id);
+                }}
+              >
+                <Trash2 size={15} />
+              </button>
+            </div>
+          </article>
+        ))}
+      </div>
+      {items.length === 0 && <EmptyState title="Nothing in this wishlist view." detail="Purchased items stay searchable and are flushed from the active list when a new year is created." />}
+      {(creating || editing) && <WishlistEditorModal item={editing} onClose={() => { setCreating(false); setEditing(null); }} onSave={saveDraft} />}
     </div>
   );
 }
 
-function WalletPanel({ calculation, openRollover }: { calculation: ReturnType<typeof calculateYear>; openRollover: () => void }) {
+function WishlistEditorModal({ item, onClose, onSave }: { item: WishlistItem | null; onClose: () => void; onSave: (draft: WishlistDraft, existing?: WishlistItem) => void }) {
+  const snapshot = useBudgetStore((state) => state.snapshot);
+  const [draft, setDraft] = useState<WishlistDraft>(() => wishlistToDraft(item, snapshot));
+  const actualPrice = parseAmount(draft.actualPrice);
+  const effective = draft.active && draft.inWishlist && !draft.bought ? actualPrice : 0;
+
+  return (
+    <Modal title={item ? "Edit wishlist item" : "Add wishlist item"} onClose={onClose}>
+      <form
+        className="editor-form"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (!draft.name.trim()) return;
+          onSave(draft, item ?? undefined);
+        }}
+      >
+        <label className="wide-field">
+          Name
+          <input value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} />
+        </label>
+        <label>
+          Price
+          <input inputMode="decimal" value={draft.actualPrice} onChange={(event) => setDraft({ ...draft, actualPrice: event.target.value })} />
+        </label>
+        <label>
+          Currency
+          <select value={draft.currency} onChange={(event) => setDraft({ ...draft, currency: event.target.value as CurrencyCode })}>
+            {CURRENCY_OPTIONS.map((currency) => (
+              <option key={currency} value={currency}>
+                {currency}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          Priority
+          <select value={draft.priority} onChange={(event) => setDraft({ ...draft, priority: event.target.value as WishlistItem["priority"] })}>
+            <option value="low">Low</option>
+            <option value="medium">Medium</option>
+            <option value="high">High</option>
+            <option value="dream">Dream</option>
+          </select>
+        </label>
+        <div className="check-cluster">
+          <label className="check-row">
+            <input type="checkbox" checked={draft.bought} onChange={(event) => setDraft({ ...draft, bought: event.target.checked, inWishlist: event.target.checked ? false : draft.inWishlist })} />
+            Bought
+          </label>
+          <label className="check-row">
+            <input type="checkbox" checked={draft.inWishlist} onChange={(event) => setDraft({ ...draft, inWishlist: event.target.checked })} />
+            In wishlist
+          </label>
+          <label className="check-row">
+            <input type="checkbox" checked={draft.active} onChange={(event) => setDraft({ ...draft, active: event.target.checked })} />
+            Active
+          </label>
+        </div>
+        <label className="wide-field">
+          Notes
+          <textarea value={draft.notes} onChange={(event) => setDraft({ ...draft, notes: event.target.value })} />
+        </label>
+        <div className="equivalent-panel wide-field">
+          <div>
+            <span>Effective value</span>
+            <strong>{formatMoney(normalizeAmount(effective, draft.currency, snapshot.settings), snapshot.settings.baseCurrency, snapshot.settings.currencyDisplayMode)}</strong>
+          </div>
+          <div>
+            <span>Status</span>
+            <strong>{draft.bought ? "Purchased" : draft.inWishlist ? "Active wishlist" : "History"}</strong>
+          </div>
+        </div>
+        <div className="modal-actions wide-field">
+          <button type="button" className="soft-button compact" onClick={onClose}>
+            Cancel
+          </button>
+          <button type="submit" className="primary-button">
+            <Save size={17} />
+            Save item
+          </button>
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
+function WalletPanel({ calculation, openRollover }: { calculation: BudgetCalculation; openRollover: () => void }) {
   const snapshot = useBudgetStore((state) => state.snapshot);
   const record = snapshot.years[String(snapshot.settings.selectedYear)];
   const addWalletEntry = useBudgetStore((state) => state.addWalletEntry);
@@ -1014,7 +1274,7 @@ function WalletPanel({ calculation, openRollover }: { calculation: ReturnType<ty
   const removeWalletEntry = useBudgetStore((state) => state.removeWalletEntry);
   const [draft, setDraft] = useState({ amount: "", currency: snapshot.settings.baseCurrency, source: "", type: "personal" as WalletEntry["type"], note: "" });
 
-  function submitDraft(event: React.FormEvent) {
+  function submitDraft(event: FormEvent) {
     event.preventDefault();
     const amount = parseAmount(draft.amount);
     if (amount == null) return;
@@ -1038,7 +1298,7 @@ function WalletPanel({ calculation, openRollover }: { calculation: ReturnType<ty
         <SummaryMini label="Rollover total" value={calculation.wallet.rolloverTotal} />
         <button className="primary-button warn" onClick={openRollover}>
           <Wallet size={17} />
-          Month Close
+          Month close
         </button>
       </div>
       <form className="quick-add" onSubmit={submitDraft}>
@@ -1057,14 +1317,14 @@ function WalletPanel({ calculation, openRollover }: { calculation: ReturnType<ty
           <option value="adjustment">Adjustment</option>
         </select>
         <input value={draft.source} onChange={(event) => setDraft({ ...draft, source: event.target.value })} placeholder="Source" />
-        <input value={draft.note} onChange={(event) => setDraft({ ...draft, note: event.target.value })} placeholder="Note" />
+        <NoteButton value={draft.note} onSave={(note) => setDraft({ ...draft, note })} />
         <button className="primary-button" type="submit">
           <Plus size={17} />
           Add
         </button>
       </form>
-      <div className="table-shell">
-        <table className="data-table">
+      <div className="table-shell clean-table-shell">
+        <table className="data-table compact-table">
           <thead>
             <tr>
               <th>Month</th>
@@ -1073,7 +1333,7 @@ function WalletPanel({ calculation, openRollover }: { calculation: ReturnType<ty
               <th>Type</th>
               <th>Note</th>
               <th>Created</th>
-              <th>Actions</th>
+              <th />
             </tr>
           </thead>
           <tbody>
@@ -1111,11 +1371,17 @@ function WalletPanel({ calculation, openRollover }: { calculation: ReturnType<ty
                   </select>
                 </td>
                 <td>
-                  <input value={entry.note} onChange={(event) => updateWalletEntry(entry.id, { note: event.target.value })} />
+                  <NoteButton value={entry.note} onSave={(note) => updateWalletEntry(entry.id, { note })} />
                 </td>
                 <td>{formatDateTime(entry.createdAt)}</td>
                 <td>
-                  <button className="icon-button danger" title="Delete" onClick={() => removeWalletEntry(entry.id)}>
+                  <button
+                    className="icon-button danger"
+                    title="Delete"
+                    onClick={() => {
+                      if (window.confirm("Delete this wallet entry?")) removeWalletEntry(entry.id);
+                    }}
+                  >
                     <Trash2 size={15} />
                   </button>
                 </td>
@@ -1128,15 +1394,23 @@ function WalletPanel({ calculation, openRollover }: { calculation: ReturnType<ty
   );
 }
 
-function AnalyticsPanel({ calculation }: { calculation: ReturnType<typeof calculateYear> }) {
+function AnalyticsPanel({ calculation }: { calculation: BudgetCalculation }) {
   const snapshot = useBudgetStore((state) => state.snapshot);
   const record = snapshot.years[String(snapshot.settings.selectedYear)];
+  const selected = calculation.selectedMonthSpend.total ?? null;
+  const previous = calculation.month > 1 ? calculation.monthlyTrend[calculation.month - 2] : null;
+  const previousValue = previous?.total ?? null;
+  const change = selected != null && previousValue != null ? selected - previousValue : null;
+  const pilotShare = calculation.combinedBudget > 0 ? calculation.pilotingBudget / calculation.combinedBudget : 0;
   const monthlyData = calculation.monthlyTrend.map((summary) => ({
     name: summary.label.slice(0, 3),
     total: summary.status === "value" || summary.status === "zero" ? summary.total : null,
-    general: summary.generalTotal,
-    piloting: summary.pilotingTotal,
+    budget: calculation.monthlyBudgetBase,
     status: summary.status,
+  }));
+  const weeklyData = calculation.weeklyTrend.slice(0, Math.max(calculation.week, 12)).map((summary) => ({
+    name: `W${summary.week}`,
+    total: summary.status === "value" || summary.status === "zero" ? summary.total : null,
   }));
   const categoryData = calculation.categoryTotals.map((item) => ({ ...item, name: item.categoryName }));
   const budgetData = [
@@ -1153,58 +1427,171 @@ function AnalyticsPanel({ calculation }: { calculation: ReturnType<typeof calcul
     });
 
   return (
-    <div className="analytics-grid">
-      <ChartPanel title="Monthly Spend Trend">
-        <ResponsiveContainer width="100%" height={260}>
-          <AreaChart data={monthlyData}>
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="name" />
-            <YAxis />
-            <Tooltip formatter={(value) => formatMoney(Number(value), snapshot.settings.baseCurrency, snapshot.settings.currencyDisplayMode)} />
-            <Area type="monotone" dataKey="total" stroke="#2563EB" fill="#DBEAFE" connectNulls={false} />
-          </AreaChart>
-        </ResponsiveContainer>
-      </ChartPanel>
-      <ChartPanel title="Category Breakdown">
-        <ResponsiveContainer width="100%" height={260}>
-          <BarChart data={categoryData}>
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="name" />
-            <YAxis />
-            <Tooltip formatter={(value) => formatMoney(Number(value), snapshot.settings.baseCurrency, snapshot.settings.currencyDisplayMode)} />
-            <Bar dataKey="total">
-              {categoryData.map((entry) => (
-                <Cell key={entry.categoryId} fill={entry.color} />
-              ))}
-            </Bar>
-          </BarChart>
-        </ResponsiveContainer>
-      </ChartPanel>
-      <ChartPanel title="Wallet Trend">
-        <ResponsiveContainer width="100%" height={260}>
-          <LineChart data={walletData}>
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="name" />
-            <YAxis />
-            <Tooltip formatter={(value) => formatMoney(Number(value), snapshot.settings.baseCurrency, snapshot.settings.currencyDisplayMode)} />
-            <Line type="monotone" dataKey="total" stroke="#0891B2" strokeWidth={3} dot />
-          </LineChart>
-        </ResponsiveContainer>
-      </ChartPanel>
-      <ChartPanel title="Piloting Share">
-        <ResponsiveContainer width="100%" height={260}>
-          <PieChart>
-            <Pie data={budgetData} dataKey="value" nameKey="name" innerRadius={54} outerRadius={88} paddingAngle={4}>
-              {budgetData.map((entry) => (
-                <Cell key={entry.name} fill={entry.color} />
-              ))}
-            </Pie>
-            <Tooltip formatter={(value) => formatMoney(Number(value), snapshot.settings.baseCurrency, snapshot.settings.currencyDisplayMode)} />
-            <Legend />
-          </PieChart>
-        </ResponsiveContainer>
-      </ChartPanel>
+    <div className="panel-stack">
+      <div className="insight-grid">
+        <InsightCard label="Month vs previous" value={change == null ? "Pending" : formatMoney(change, snapshot.settings.baseCurrency, snapshot.settings.currencyDisplayMode, { showSign: true })} detail={previous ? `Compared with ${previous.label}` : "No previous month in this year"} tone={change != null && change > 0 ? "danger" : "success"} />
+        <InsightCard label="Piloting share" value={`${Math.round(pilotShare * 100)}%`} detail="Share of planned recurring budget" tone="info" />
+        <InsightCard label="YTD spend" value={formatMoney(calculation.ytdTotal, snapshot.settings.baseCurrency, snapshot.settings.currencyDisplayMode)} detail="Selected year through current month" tone="neutral" />
+        <InsightCard label="Wishlist pressure" value={formatMoney(calculation.wishlist.activeTotal, snapshot.settings.baseCurrency, snapshot.settings.currencyDisplayMode)} detail={`${calculation.wishlist.activeCount} open items`} tone="neutral" />
+      </div>
+
+      <ScenarioLab />
+
+      <div className="analytics-grid">
+        <ChartPanel title="Monthly spend vs budget">
+          <ResponsiveContainer width="100%" height={270}>
+            <ComposedChart data={monthlyData}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="name" />
+              <YAxis />
+              <Tooltip formatter={(value) => formatMoney(Number(value), snapshot.settings.baseCurrency, snapshot.settings.currencyDisplayMode)} />
+              <Legend />
+              <Area type="monotone" dataKey="total" name="Spend" stroke="#2563EB" fill="#BFDBFE" connectNulls={false} />
+              <Line type="monotone" dataKey="budget" name="Budget" stroke="#16A34A" strokeWidth={2} dot={false} />
+            </ComposedChart>
+          </ResponsiveContainer>
+        </ChartPanel>
+        <ChartPanel title="Category breakdown">
+          <ResponsiveContainer width="100%" height={270}>
+            <BarChart data={categoryData}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="name" />
+              <YAxis />
+              <Tooltip formatter={(value) => formatMoney(Number(value), snapshot.settings.baseCurrency, snapshot.settings.currencyDisplayMode)} />
+              <Bar dataKey="total" radius={[6, 6, 0, 0]}>
+                {categoryData.map((entry) => (
+                  <Cell key={entry.categoryId} fill={entry.color} />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </ChartPanel>
+        <ChartPanel title="Weekly burn">
+          <ResponsiveContainer width="100%" height={270}>
+            <LineChart data={weeklyData}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="name" />
+              <YAxis />
+              <Tooltip formatter={(value) => formatMoney(Number(value), snapshot.settings.baseCurrency, snapshot.settings.currencyDisplayMode)} />
+              <Line type="monotone" dataKey="total" stroke="#DB2777" strokeWidth={3} dot={false} connectNulls={false} />
+            </LineChart>
+          </ResponsiveContainer>
+        </ChartPanel>
+        <ChartPanel title="Budget composition">
+          <ResponsiveContainer width="100%" height={270}>
+            <PieChart>
+              <Pie data={budgetData} dataKey="value" nameKey="name" innerRadius={58} outerRadius={92} paddingAngle={4}>
+                {budgetData.map((entry) => (
+                  <Cell key={entry.name} fill={entry.color} />
+                ))}
+              </Pie>
+              <Tooltip formatter={(value) => formatMoney(Number(value), snapshot.settings.baseCurrency, snapshot.settings.currencyDisplayMode)} />
+              <Legend />
+            </PieChart>
+          </ResponsiveContainer>
+        </ChartPanel>
+        <ChartPanel title="Wallet trajectory">
+          <ResponsiveContainer width="100%" height={270}>
+            <LineChart data={walletData}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="name" />
+              <YAxis />
+              <Tooltip formatter={(value) => formatMoney(Number(value), snapshot.settings.baseCurrency, snapshot.settings.currencyDisplayMode)} />
+              <Line type="monotone" dataKey="total" stroke="#0891B2" strokeWidth={3} dot />
+            </LineChart>
+          </ResponsiveContainer>
+        </ChartPanel>
+      </div>
     </div>
+  );
+}
+
+function ScenarioLab() {
+  const snapshot = useBudgetStore((state) => state.snapshot);
+  const addActivity = useBudgetStore((state) => state.addActivity);
+  const [draft, setDraft] = useState({
+    name: "Future plan",
+    amount: "",
+    currency: snapshot.settings.baseCurrency,
+    recurrenceType: "monthly" as RecurrenceType,
+    recurrenceInterval: 1,
+    categoryId: "cat-other",
+  });
+  const amount = parseAmount(draft.amount);
+  const scenario = activityPayloadFromDraft({
+    name: draft.name,
+    categoryId: draft.categoryId,
+    currency: draft.currency as CurrencyCode,
+    recurrenceType: draft.recurrenceType,
+    recurrenceInterval: draft.recurrenceInterval,
+    pricePerSession: draft.recurrenceType === "session" || draft.recurrenceType === "weekly" ? draft.amount : "",
+    pricePerPurchase: draft.recurrenceType === "purchase" ? draft.amount : "",
+    pricePerMonth: draft.recurrenceType === "monthly" || draft.recurrenceType === "custom" ? draft.amount : "",
+    yearlyEstimate: draft.recurrenceType === "yearly" ? draft.amount : "",
+    seasonalTag: snapshot.settings.selectedSeason,
+    active: true,
+    visible: true,
+    notes: "Created from Scenario Lab.",
+  });
+  const monthly = amount == null ? null : normalizeAmount(monthlyEstimateNative({ ...scenario, id: "scenario", order: 0 }), scenario.currency, snapshot.settings);
+  const yearly = amount == null ? null : normalizeAmount(yearlyEstimateNative({ ...scenario, id: "scenario", order: 0 }), scenario.currency, snapshot.settings);
+
+  return (
+    <section className="scenario-lab">
+      <div>
+        <p className="eyebrow">Scenario lab</p>
+        <h2>Try a hypothetical expense before it touches the real budget</h2>
+      </div>
+      <div className="scenario-form">
+        <input value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} placeholder="Scenario name" />
+        <input inputMode="decimal" value={draft.amount} onChange={(event) => setDraft({ ...draft, amount: event.target.value })} placeholder="Amount" />
+        <select value={draft.currency} onChange={(event) => setDraft({ ...draft, currency: event.target.value as CurrencyCode })}>
+          {CURRENCY_OPTIONS.map((currency) => (
+            <option key={currency} value={currency}>
+              {currency}
+            </option>
+          ))}
+        </select>
+        <select value={draft.recurrenceType} onChange={(event) => setDraft({ ...draft, recurrenceType: event.target.value as RecurrenceType })}>
+          {recurrenceTypes.map((type) => (
+            <option key={type} value={type}>
+              {type}
+            </option>
+          ))}
+        </select>
+        <input type="number" min="1" value={draft.recurrenceInterval} onChange={(event) => setDraft({ ...draft, recurrenceInterval: Number(event.target.value) || 1 })} />
+        <select value={draft.categoryId} onChange={(event) => setDraft({ ...draft, categoryId: event.target.value })}>
+          {snapshot.categories
+            .filter((category) => category.bucket !== "wallet")
+            .map((category) => (
+              <option key={category.id} value={category.id}>
+                {category.name}
+              </option>
+            ))}
+        </select>
+        <button
+          className="primary-button"
+          disabled={amount == null || !draft.name.trim()}
+          onClick={() => {
+            addActivity(scenario);
+            setDraft({ ...draft, amount: "" });
+          }}
+        >
+          <CheckCircle2 size={17} />
+          Confirm as activity
+        </button>
+      </div>
+      <div className="scenario-results">
+        <div>
+          <span>Monthly impact</span>
+          <strong>{formatMoney(monthly, snapshot.settings.baseCurrency, snapshot.settings.currencyDisplayMode)}</strong>
+        </div>
+        <div>
+          <span>Yearly impact</span>
+          <strong>{formatMoney(yearly, snapshot.settings.baseCurrency, snapshot.settings.currencyDisplayMode)}</strong>
+        </div>
+      </div>
+    </section>
   );
 }
 
@@ -1214,21 +1601,26 @@ function HistoryPanel({ filters, setFilters }: { filters: Filters; setFilters: (
   const history = snapshot.auditLog.filter((entry) => `${entry.summary} ${entry.type}`.toLowerCase().includes(filters.historyQuery.toLowerCase()));
   return (
     <div className="panel-stack">
-      <div className="quick-add history-search">
-        <Search size={17} />
-        <input value={filters.historyQuery} onChange={(event) => setFilters({ ...filters, historyQuery: event.target.value })} placeholder="Search audit log" />
-        <button className="command-button" onClick={() => exportWishlistCsv(snapshot)}>
-          <Download size={16} />
-          Wishlist CSV
-        </button>
-        <button className="command-button" onClick={() => exportWalletCsv(snapshot)}>
-          <Download size={16} />
-          Wallet CSV
-        </button>
+      <div className="section-toolbar">
+        <div>
+          <p className="eyebrow">History</p>
+          <h2>Rollovers, changes, and exports</h2>
+        </div>
+        <div className="toolbar-actions">
+          <input value={filters.historyQuery} onChange={(event) => setFilters({ ...filters, historyQuery: event.target.value })} placeholder="Search history" />
+          <button className="command-button compact" onClick={() => exportWishlistCsv(snapshot)}>
+            <Download size={16} />
+            Wishlist CSV
+          </button>
+          <button className="command-button compact" onClick={() => exportWalletCsv(snapshot)}>
+            <Download size={16} />
+            Wallet CSV
+          </button>
+        </div>
       </div>
       <div className="history-grid">
         <section className="history-card">
-          <h3>Rollover History</h3>
+          <h3>Rollover history</h3>
           {record.closedMonths.length === 0 && <EmptyState title="No closed months yet." />}
           {record.closedMonths.map((item) => (
             <div key={item.id} className="timeline-row">
@@ -1240,7 +1632,7 @@ function HistoryPanel({ filters, setFilters }: { filters: Filters; setFilters: (
           ))}
         </section>
         <section className="history-card">
-          <h3>Audit Log</h3>
+          <h3>Audit log</h3>
           {history.map((item) => (
             <div key={item.id} className="timeline-row">
               <Badge tone="neutral">{item.type}</Badge>
@@ -1260,7 +1652,7 @@ function SettingsPanel() {
   return (
     <div className="settings-grid">
       <section className="settings-card">
-        <h3>Budget Settings</h3>
+        <h3>Budget settings</h3>
         <label>
           Monthly budget
           <input type="number" value={snapshot.settings.monthlyBudget} onChange={(event) => updateSettings({ monthlyBudget: Number(event.target.value) })} />
@@ -1277,7 +1669,7 @@ function SettingsPanel() {
         </label>
         <label>
           Rounding rule
-          <select value={snapshot.settings.roundingRule} onChange={(event) => updateSettings({ roundingRule: event.target.value as BudgetSnapshot["settings"]["roundingRule"] })}>
+          <select value={snapshot.settings.roundingRule} onChange={(event) => updateSettings({ roundingRule: event.target.value as Settings["roundingRule"] })}>
             <option value="none">None</option>
             <option value="nearest-1">Nearest 1</option>
             <option value="nearest-5">Nearest 5</option>
@@ -1287,7 +1679,7 @@ function SettingsPanel() {
         </label>
         <label>
           Currency display
-          <select value={snapshot.settings.currencyDisplayMode} onChange={(event) => updateSettings({ currencyDisplayMode: event.target.value as BudgetSnapshot["settings"]["currencyDisplayMode"] })}>
+          <select value={snapshot.settings.currencyDisplayMode} onChange={(event) => updateSettings({ currencyDisplayMode: event.target.value as Settings["currencyDisplayMode"] })}>
             <option value="both">Symbol + code</option>
             <option value="symbol">Symbol</option>
             <option value="code">Code</option>
@@ -1295,30 +1687,14 @@ function SettingsPanel() {
         </label>
       </section>
       <section className="settings-card">
-        <h3>Exchange Rates</h3>
+        <h3>Exchange rates</h3>
         <label>
           EUR/USD
-          <input
-            type="number"
-            value={snapshot.settings.exchangeRates.eurUsd}
-            onChange={(event) =>
-              updateSettings({
-                exchangeRates: { ...snapshot.settings.exchangeRates, eurUsd: Number(event.target.value) },
-              })
-            }
-          />
+          <input type="number" value={snapshot.settings.exchangeRates.eurUsd} onChange={(event) => updateSettings({ exchangeRates: { ...snapshot.settings.exchangeRates, eurUsd: Number(event.target.value) } })} />
         </label>
         <label>
           USD/L.L.
-          <input
-            type="number"
-            value={snapshot.settings.exchangeRates.usdLbp}
-            onChange={(event) =>
-              updateSettings({
-                exchangeRates: { ...snapshot.settings.exchangeRates, usdLbp: Number(event.target.value) },
-              })
-            }
-          />
+          <input type="number" value={snapshot.settings.exchangeRates.usdLbp} onChange={(event) => updateSettings({ exchangeRates: { ...snapshot.settings.exchangeRates, usdLbp: Number(event.target.value) } })} />
         </label>
       </section>
       <section className="settings-card">
@@ -1330,6 +1706,14 @@ function SettingsPanel() {
         <label className="check-row">
           <input type="checkbox" checked={snapshot.settings.autoWishlistFlushEnabled} onChange={(event) => updateSettings({ autoWishlistFlushEnabled: event.target.checked })} />
           Flush bought wishlist items on new year
+        </label>
+        <label className="check-row">
+          <input type="checkbox" checked={snapshot.settings.pilotIncludedInBudget} onChange={(event) => updateSettings({ pilotIncludedInBudget: event.target.checked })} />
+          Include pilots in full budget
+        </label>
+        <label className="check-row">
+          <input type="checkbox" checked={snapshot.settings.promptBeforeMonthClose} onChange={(event) => updateSettings({ promptBeforeMonthClose: event.target.checked })} />
+          Prompt before rollover
         </label>
         <label className="check-row">
           <input type="checkbox" checked={snapshot.settings.liveClockEnabled} onChange={(event) => updateSettings({ liveClockEnabled: event.target.checked })} />
@@ -1344,7 +1728,7 @@ function SettingsPanel() {
   );
 }
 
-function RolloverDialog({ calculation, onClose }: { calculation: ReturnType<typeof calculateYear>; onClose: () => void }) {
+function RolloverDialog({ calculation, onClose }: { calculation: BudgetCalculation; onClose: () => void }) {
   const snapshot = useBudgetStore((state) => state.snapshot);
   const closeMonth = useBudgetStore((state) => state.closeMonth);
   const month = snapshot.settings.selectedMonth;
@@ -1357,40 +1741,72 @@ function RolloverDialog({ calculation, onClose }: { calculation: ReturnType<type
   }
 
   return (
+    <Modal title={`Close ${monthName(month)}`} onClose={onClose}>
+      <div className="modal-summary">
+        <div className="modal-icon">{blocked || (delta ?? 0) < 0 ? <AlertTriangle size={24} /> : <Wallet size={24} />}</div>
+        <p>
+          Spend is <strong>{formatMoney(calculation.selectedMonthSpend.total, snapshot.settings.baseCurrency, snapshot.settings.currencyDisplayMode)}</strong>. Rollover delta is{" "}
+          <strong>{formatMoney(delta, snapshot.settings.baseCurrency, snapshot.settings.currencyDisplayMode, { showSign: true })}</strong>.
+        </p>
+      </div>
+      {blocked && <p className="warning-text">This month is pending or explicitly NaN, so rollover is blocked unless you add an entry or mark a real zero.</p>}
+      {delta != null && delta < 0 && <p className="warning-text">Negative delta will reduce the wallet and will be logged visibly.</p>}
+      <div className="modal-actions">
+        <button className="soft-button compact" onClick={() => close(false)}>
+          Close without rollover
+        </button>
+        <button className="primary-button warn" disabled={blocked} onClick={() => close(true)}>
+          Apply rollover
+        </button>
+      </div>
+    </Modal>
+  );
+}
+
+function Modal({ title, children, onClose }: { title: string; children: ReactNode; onClose: () => void }) {
+  return (
     <div className="modal-backdrop" role="dialog" aria-modal="true">
       <section className="modal">
         <button className="icon-button modal-close" onClick={onClose} title="Close">
           <X size={17} />
         </button>
-        <div className="modal-icon">
-          {blocked || (delta ?? 0) < 0 ? <AlertTriangle size={24} /> : <Wallet size={24} />}
-        </div>
-        <h2>Close {monthName(month)}</h2>
-        <p>
-          Month spend is <strong>{formatMoney(calculation.selectedMonthSpend.total, snapshot.settings.baseCurrency, snapshot.settings.currencyDisplayMode)}</strong>.
-          Rollover delta is <strong>{formatMoney(delta, snapshot.settings.baseCurrency, snapshot.settings.currencyDisplayMode, { showSign: true })}</strong>.
-        </p>
-        {blocked && <p className="warning-text">This month is pending or explicitly NaN, so rollover is blocked unless you add an entry or mark a real zero.</p>}
-        {delta != null && delta < 0 && <p className="warning-text">Negative delta will reduce the wallet and will be logged visibly.</p>}
-        <div className="modal-actions">
-          <button className="soft-button" onClick={() => close(false)}>
-            Close Without Rollover
-          </button>
-          <button className="primary-button warn" disabled={blocked} onClick={() => close(true)}>
-            Apply Rollover
-          </button>
-        </div>
+        <h2>{title}</h2>
+        {children}
       </section>
     </div>
   );
 }
 
-function LabeledNumber({ label, value, onChange }: { label: string; value: number | null; onChange: (value: number | null) => void }) {
+function NoteButton({ value, onSave }: { value: string; onSave: (value: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState(value);
+  useEffect(() => setDraft(value), [value]);
   return (
-    <label className="mini-field">
-      <span>{label}</span>
-      <input inputMode="decimal" value={value ?? ""} onChange={(event) => onChange(parseAmount(event.target.value))} />
-    </label>
+    <div className="note-popover">
+      <button className={value ? "icon-button note-trigger active" : "icon-button note-trigger"} title={value ? "View note" : "Add note"} onClick={() => setOpen(!open)} type="button">
+        <StickyNote size={15} />
+      </button>
+      {open && (
+        <div className="note-card">
+          <textarea value={draft} onChange={(event) => setDraft(event.target.value)} placeholder="Add a note..." />
+          <div className="note-actions">
+            <button className="soft-button compact" onClick={() => setOpen(false)} type="button">
+              Cancel
+            </button>
+            <button
+              className="primary-button"
+              onClick={() => {
+                onSave(draft);
+                setOpen(false);
+              }}
+              type="button"
+            >
+              Save
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -1404,7 +1820,7 @@ function SummaryMini({ label, value }: { label: string; value: number }) {
   );
 }
 
-function ChartPanel({ title, children }: { title: string; children: React.ReactNode }) {
+function ChartPanel({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section className="chart-panel">
       <h3>{title}</h3>
@@ -1413,7 +1829,17 @@ function ChartPanel({ title, children }: { title: string; children: React.ReactN
   );
 }
 
-function Badge({ children, tone }: { children: React.ReactNode; tone: "neutral" | "info" | "success" | "danger" }) {
+function InsightCard({ label, value, detail, tone }: { label: string; value: string; detail: string; tone: "neutral" | "info" | "success" | "danger" }) {
+  return (
+    <article className={`insight-card ${tone}`}>
+      <span>{label}</span>
+      <strong>{value}</strong>
+      <small>{detail}</small>
+    </article>
+  );
+}
+
+function Badge({ children, tone }: { children: ReactNode; tone: "neutral" | "info" | "success" | "danger" }) {
   return <span className={`badge ${tone}`}>{children}</span>;
 }
 
@@ -1434,7 +1860,78 @@ function statusLabel(status: string): string {
   return "Value entered";
 }
 
-function matchesFilters(activity: Activity, filters: Filters): boolean {
+function activityToDraft(activity: Activity | null, snapshot: BudgetSnapshot): ActivityDraft {
+  return {
+    name: activity?.name ?? "",
+    categoryId: activity?.categoryId ?? snapshot.categories.find((category) => category.id === "cat-other")?.id ?? snapshot.categories[0]?.id ?? "cat-other",
+    currency: activity?.currency ?? snapshot.settings.baseCurrency,
+    recurrenceType: activity?.recurrenceType ?? "monthly",
+    recurrenceInterval: activity?.recurrenceInterval ?? 1,
+    pricePerSession: valueToInput(activity?.pricePerSession),
+    pricePerPurchase: valueToInput(activity?.pricePerPurchase),
+    pricePerMonth: valueToInput(activity?.pricePerMonth),
+    yearlyEstimate: valueToInput(activity?.yearlyEstimate),
+    seasonalTag: activity?.seasonalTag ?? snapshot.settings.selectedSeason,
+    active: activity?.active ?? true,
+    visible: activity?.visible ?? true,
+    notes: activity?.notes ?? "",
+  };
+}
+
+function activityPayloadFromDraft(draft: ActivityDraft): Omit<Activity, "id" | "order"> {
+  const pricePerSession = parseAmount(draft.pricePerSession);
+  const pricePerPurchase = parseAmount(draft.pricePerPurchase);
+  const pricePerMonth = parseAmount(draft.pricePerMonth);
+  const yearlyEstimate = parseAmount(draft.yearlyEstimate);
+  return {
+    name: draft.name.trim(),
+    categoryId: draft.categoryId,
+    currency: draft.currency,
+    recurrenceType: draft.recurrenceType,
+    recurrenceInterval: Math.max(1, Number(draft.recurrenceInterval) || 1),
+    pricePerSession,
+    pricePerPurchase,
+    pricePerMonth,
+    estimatedCost: pricePerMonth ?? pricePerPurchase ?? pricePerSession ?? yearlyEstimate,
+    yearlyEstimate,
+    active: draft.active,
+    visible: draft.visible,
+    seasonalTag: draft.seasonalTag || "normal",
+    notes: draft.notes,
+  };
+}
+
+function wishlistToDraft(item: WishlistItem | null, snapshot: BudgetSnapshot): WishlistDraft {
+  return {
+    name: item?.name ?? "",
+    actualPrice: valueToInput(item?.actualPrice),
+    currency: item?.currency ?? snapshot.settings.baseCurrency,
+    priority: item?.priority ?? "medium",
+    bought: item?.bought ?? false,
+    inWishlist: item?.inWishlist ?? true,
+    active: item?.active ?? true,
+    notes: item?.notes ?? "",
+  };
+}
+
+function valueToInput(value: number | null | undefined): string {
+  return value == null ? "" : String(value);
+}
+
+function activityPrimaryCostLabel(activity: Activity): string {
+  if (activity.pricePerMonth != null) return "Per month";
+  if (activity.yearlyEstimate != null && activity.recurrenceType === "yearly") return "Per year";
+  if (activity.pricePerSession != null) return activity.recurrenceType === "weekly" ? "Per week" : "Per session";
+  if (activity.pricePerPurchase != null) return "Per purchase";
+  return "Cost";
+}
+
+function activityPrimaryCost(activity: Activity, snapshot: BudgetSnapshot): string {
+  const amount = activity.pricePerMonth ?? (activity.recurrenceType === "yearly" ? activity.yearlyEstimate : null) ?? activity.pricePerSession ?? activity.pricePerPurchase ?? activity.estimatedCost;
+  return formatMoney(amount, activity.currency, snapshot.settings.currencyDisplayMode);
+}
+
+function matchesActivityFilters(activity: Activity, filters: Filters): boolean {
   const text = `${activity.name} ${activity.notes}`.toLowerCase();
   return (
     text.includes(filters.query.toLowerCase()) &&
@@ -1446,14 +1943,32 @@ function matchesFilters(activity: Activity, filters: Filters): boolean {
 
 function matchesEntryFilters(entry: SpendingEntry, filters: Filters): boolean {
   const text = `${entry.note}`.toLowerCase();
-  return (
-    text.includes(filters.query.toLowerCase()) &&
-    (filters.categoryId === "all" || entry.categoryId === filters.categoryId) &&
-    (filters.currency === "all" || entry.currency === filters.currency)
-  );
+  return text.includes(filters.query.toLowerCase()) && (filters.categoryId === "all" || entry.categoryId === filters.categoryId) && (filters.currency === "all" || entry.currency === filters.currency);
 }
 
 function matchesWishlistFilters(item: WishlistItem, filters: Filters): boolean {
   const text = `${item.name} ${item.notes}`.toLowerCase();
   return text.includes(filters.query.toLowerCase()) && (filters.currency === "all" || item.currency === filters.currency);
+}
+
+function wishlistViewMatches(item: WishlistItem, view: WishlistView): boolean {
+  if (view === "active") return item.active && item.inWishlist && !item.bought;
+  if (view === "purchased") return item.bought;
+  if (view === "archived") return !item.active;
+  return true;
+}
+
+function priorityRank(priority: WishlistItem["priority"]): number {
+  return { low: 1, medium: 2, high: 3, dream: 4 }[priority];
+}
+
+function sortActivities(
+  a: Activity,
+  b: Activity,
+  sortBy: "order" | "name" | "cost",
+  estimateMap: Map<string, BudgetCalculation["activityEstimates"][number]>,
+): number {
+  if (sortBy === "name") return a.name.localeCompare(b.name);
+  if (sortBy === "cost") return (estimateMap.get(b.id)?.monthlyBase ?? 0) - (estimateMap.get(a.id)?.monthlyBase ?? 0);
+  return a.order - b.order;
 }

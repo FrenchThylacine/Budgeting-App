@@ -14,6 +14,7 @@ import type {
   YearRecord,
 } from "../domain/types";
 import { createSeedBudgetSnapshot } from "../data/seedBudget";
+import { defaultCategories } from "../data/seedBudget";
 import { deleteSnapshot, loadSnapshot, saveSnapshot } from "../storage/idb";
 
 type ActivityInput = Omit<Activity, "id" | "order"> & Partial<Pick<Activity, "id" | "order">>;
@@ -62,9 +63,9 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
   hydrate: async () => {
     try {
       const loaded = await loadSnapshot();
-      set({ snapshot: loaded ?? createSeedBudgetSnapshot(), hydrated: true });
+      set({ snapshot: normalizeSnapshot(loaded ?? createSeedBudgetSnapshot()), hydrated: true });
     } catch {
-      set({ snapshot: createSeedBudgetSnapshot(), hydrated: true });
+      set({ snapshot: normalizeSnapshot(createSeedBudgetSnapshot()), hydrated: true });
     }
   },
 
@@ -76,7 +77,7 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
   },
 
   importSnapshot: (snapshot, summary = "Imported budget data.") => {
-    commit(set, get, () => snapshot, "import", summary);
+    commit(set, get, () => normalizeSnapshot(snapshot), "import", summary);
   },
 
   updateSettings: (patch) => {
@@ -570,4 +571,13 @@ function isBudgetSnapshot(value: unknown): value is BudgetSnapshot {
 
 export function currenciesForStore(): CurrencyCode[] {
   return ["EUR", "USD", "LBP", "GBP", "CAD", "AUD", "JPY", "TRY", "SAR", "AED"];
+}
+
+function normalizeSnapshot(snapshot: BudgetSnapshot): BudgetSnapshot {
+  const existingCategories = new Set(snapshot.categories.map((category) => category.id));
+  const missingCategories = defaultCategories.filter((category) => !existingCategories.has(category.id));
+  if (missingCategories.length > 0) {
+    snapshot.categories = [...snapshot.categories, ...missingCategories];
+  }
+  return snapshot;
 }

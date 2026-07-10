@@ -13,6 +13,10 @@ dist/
 build/
 out/
 
+# Local source/reference files
+Budget Full.xlsx
+Prompt.txt
+
 # VS Code
 .vscode/
 

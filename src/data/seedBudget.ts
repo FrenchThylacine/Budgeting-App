@@ -20,6 +20,7 @@ export const defaultCategories: BudgetCategory[] = [
   { id: "cat-utilities", name: "Utilities", bucket: "general", color: "#0D9488" },
   { id: "cat-software", name: "Software", bucket: "general", color: "#7C3AED" },
   { id: "cat-tech", name: "Tech & Gear", bucket: "personal", color: "#E11D48" },
+  { id: "cat-other", name: "Other", bucket: "general", color: "#64748B" },
   { id: "cat-spending", name: "Imported Spending", bucket: "general", color: "#475569" },
   { id: "cat-wallet", name: "Wallet", bucket: "wallet", color: "#0891B2" },
   { id: "cat-wishlist", name: "Wishlist", bucket: "personal", color: "#DB2777" },
