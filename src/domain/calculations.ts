@@ -199,6 +199,22 @@ export function calculateRolloverDelta(snapshot: BudgetSnapshot, year: number, m
   return monthlyBudgetBase - (summary.total ?? 0);
 }
 
+export function calculateSuggestedMonthlyBudget(snapshot: BudgetSnapshot): { recurringTotal: number; suggestedAmount: number } {
+  const record = snapshot.years[String(snapshot.settings.selectedYear)] ?? emptyYearRecord(snapshot.settings.selectedYear);
+  const categoryMap = new Map(snapshot.categories.map((category) => [category.id, category]));
+  const recurringTotal = sum(
+    record.activities
+      .filter((activity) => activity.active && activity.visible)
+      .filter((activity) => activity.recurrenceType !== "none" && activity.recurrenceType !== "purchase")
+      .filter((activity) => categoryMap.get(activity.categoryId)?.bucket !== "piloting")
+      .map((activity) => estimateActivity(activity, snapshot).monthlyBase),
+  );
+  return {
+    recurringTotal,
+    suggestedAmount: Math.ceil(recurringTotal / 100) * 100,
+  };
+}
+
 export function createNextYearRecord(snapshot: BudgetSnapshot, targetYear: number, now = new Date()): YearRecord {
   const timestamp = now.toISOString();
   const sourceYear = Math.max(

@@ -134,6 +134,7 @@ export function createSeedBudgetSnapshot(now = new Date()): BudgetSnapshot {
     },
     seasonalPresets: createSeasonalPresets(),
     scenarioPresets: createScenarioPresets(),
+    budgetApprovals: [],
     auditLog: [
       {
         id: "audit-initial-import",

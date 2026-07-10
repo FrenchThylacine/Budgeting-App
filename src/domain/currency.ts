@@ -40,6 +40,13 @@ export function normalizeAmount(amount: number | null | undefined, currency: Cur
   return amount * rateToBase(currency, settings.baseCurrency, settings.exchangeRates);
 }
 
+export function convertAmount(amount: number | null | undefined, fromCurrency: CurrencyCode, toCurrency: CurrencyCode, rates: ExchangeRates): number | null {
+  if (amount == null || Number.isNaN(amount)) return null;
+  if (fromCurrency === toCurrency) return amount;
+  const eurValue = amount * rateToBase(fromCurrency, "EUR", rates);
+  return eurValue / rateToBase(toCurrency, "EUR", rates);
+}
+
 export function roundAmount(amount: number, rule: RoundingRule): number {
   switch (rule) {
     case "nearest-1":

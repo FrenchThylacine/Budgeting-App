@@ -4,6 +4,7 @@ import { monthFromDateInput, weekFromDateInput } from "../domain/dates";
 import type {
   Activity,
   AuditType,
+  BudgetApproval,
   BudgetSnapshot,
   CurrencyCode,
   MonthCloseRecord,
@@ -48,6 +49,7 @@ interface BudgetStore {
   updateWalletEntry: (id: string, patch: Partial<WalletEntry>) => void;
   removeWalletEntry: (id: string) => void;
   closeMonth: (year: number, month: number, applyRollover: boolean) => void;
+  recordBudgetApproval: (approval: Omit<BudgetApproval, "id" | "createdAt" | "decidedAt">) => void;
   applySeasonalPreset: (presetId: string) => void;
   applyScenarioPreset: (presetId: string) => void;
   undo: () => void;
@@ -434,6 +436,30 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
     );
   },
 
+  recordBudgetApproval: (approval) => {
+    commit(
+      set,
+      get,
+      (snapshot) => {
+        const timestamp = new Date().toISOString();
+        snapshot.budgetApprovals.unshift({
+          ...approval,
+          id: id("budget-approval"),
+          createdAt: timestamp,
+          decidedAt: timestamp,
+        });
+        snapshot.budgetApprovals = snapshot.budgetApprovals.slice(0, 120);
+        if (approval.status === "approved" && approval.approvedAmount != null) {
+          snapshot.settings.monthlyBudget = approval.approvedAmount;
+          snapshot.settings.monthlyBudgetCurrency = approval.currency;
+        }
+      },
+      "settings",
+      approval.status === "approved" ? "Approved suggested monthly budget." : "Rejected suggested monthly budget.",
+      approval,
+    );
+  },
+
   applySeasonalPreset: (presetId) => {
     commit(
       set,
@@ -579,5 +605,6 @@ function normalizeSnapshot(snapshot: BudgetSnapshot): BudgetSnapshot {
   if (missingCategories.length > 0) {
     snapshot.categories = [...snapshot.categories, ...missingCategories];
   }
+  snapshot.budgetApprovals ??= [];
   return snapshot;
 }

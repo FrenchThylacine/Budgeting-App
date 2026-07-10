@@ -181,6 +181,20 @@ export interface AuditLog {
   metadata?: Record<string, unknown>;
 }
 
+export interface BudgetApproval {
+  id: string;
+  year: number;
+  month: number;
+  suggestedAmount: number;
+  approvedAmount: number | null;
+  currency: CurrencyCode;
+  status: "approved" | "rejected";
+  recurringTotal: number;
+  createdAt: string;
+  decidedAt: string;
+  note: string;
+}
+
 export interface MonthlyNote {
   month: number;
   note: string;
@@ -206,6 +220,7 @@ export interface BudgetSnapshot {
   years: Record<string, YearRecord>;
   seasonalPresets: SeasonalPreset[];
   scenarioPresets: ScenarioPreset[];
+  budgetApprovals: BudgetApproval[];
   auditLog: AuditLog[];
 }
 
