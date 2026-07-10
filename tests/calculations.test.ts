@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { calculateRolloverDelta, calculateYear, createNextYearRecord, summarizeWeek } from "../src/domain/calculations";
+import { calculateRolloverDelta, calculateSuggestedMonthlyBudget, calculateYear, createNextYearRecord, summarizeWeek } from "../src/domain/calculations";
 import { createSeedBudgetSnapshot } from "../src/data/seedBudget";
-import type { SpendingEntry } from "../src/domain/types";
+import type { Activity, SpendingEntry } from "../src/domain/types";
 
 const NOW = new Date("2026-07-09T12:00:00+03:00");
 
@@ -20,6 +20,28 @@ function zeroEntry(overrides: Partial<SpendingEntry> = {}): SpendingEntry {
     note: "Explicit zero",
     createdAt: NOW.toISOString(),
     updatedAt: NOW.toISOString(),
+    ...overrides,
+  };
+}
+
+function recurringActivity(overrides: Partial<Activity>): Activity {
+  return {
+    id: "test-activity",
+    name: "Test recurring",
+    categoryId: "cat-other",
+    currency: "EUR",
+    recurrenceType: "monthly",
+    recurrenceInterval: 1,
+    pricePerSession: null,
+    pricePerPurchase: null,
+    pricePerMonth: 1234,
+    estimatedCost: 1234,
+    yearlyEstimate: null,
+    active: true,
+    visible: true,
+    seasonalTag: "normal",
+    order: 0,
+    notes: "",
     ...overrides,
   };
 }
@@ -88,5 +110,20 @@ describe("budget calculations", () => {
     expect(next.wishlistItems.every((item) => !item.bought)).toBe(true);
     expect(next.wishlistItems.some((item) => item.name === "BATC")).toBe(false);
     expect(JSON.stringify(snapshot.years["2026"].wishlistItems)).toBe(previousWishlist);
+  });
+
+  it("suggests monthly budget from active recurring costs excluding piloting", () => {
+    const snapshot = createSeedBudgetSnapshot(NOW);
+    snapshot.settings.baseCurrency = "EUR";
+    snapshot.years["2026"].activities = [
+      recurringActivity({ id: "normal-recurring", categoryId: "cat-other", pricePerMonth: 1234, estimatedCost: 1234 }),
+      recurringActivity({ id: "pilot-recurring", categoryId: "cat-piloting", pricePerMonth: 9999, estimatedCost: 9999 }),
+      recurringActivity({ id: "inactive-recurring", active: false, pricePerMonth: 500, estimatedCost: 500 }),
+    ];
+
+    const suggestion = calculateSuggestedMonthlyBudget(snapshot);
+
+    expect(suggestion.recurringTotal).toBe(1234);
+    expect(suggestion.suggestedAmount).toBe(1300);
   });
 });

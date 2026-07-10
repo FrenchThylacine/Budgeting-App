@@ -54,11 +54,12 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { calculateYear, monthlyEstimateNative, yearlyEstimateNative } from "./domain/calculations";
-import { CURRENCY_OPTIONS, formatMoney, normalizeAmount, parseAmount } from "./domain/currency";
+import { calculateSuggestedMonthlyBudget, calculateYear, monthlyEstimateNative, yearlyEstimateNative } from "./domain/calculations";
+import { convertAmount, CURRENCY_OPTIONS, formatMoney, normalizeAmount, parseAmount } from "./domain/currency";
 import {
   dateInputValue,
   formatDateTime,
+  getIsoWeek,
   monthFromDateInput,
   monthName,
   MONTH_NAMES,
@@ -189,6 +190,7 @@ export default function App() {
 
   const calculation = useMemo(() => calculateYear(snapshot), [snapshot]);
   const record = snapshot.years[String(snapshot.settings.selectedYear)];
+  const historical = isViewingHistoricalPeriod(snapshot.settings);
 
   if (!hydrated || !record) {
     return (
@@ -211,7 +213,8 @@ export default function App() {
         setFilters={setFilters}
         setNotice={setNotice}
       />
-      <main className="main-area">
+      <main className={historical ? "main-area historical-period" : "main-area"}>
+        {historical && <div className="historical-label">Historical data</div>}
         <Header calculation={calculation} setRolloverOpen={setRolloverOpen} />
         {notice && (
           <div className="notice" role="status">
@@ -222,6 +225,7 @@ export default function App() {
           </div>
         )}
         <SummaryCards calculation={calculation} />
+        <BudgetSuggestionPanel />
         <section className="workspace">
           {activeTab === "activities" && <ActivityPanel filters={filters} calculation={calculation} />}
           {activeTab === "spending" && <SpendingPanel filters={filters} calculation={calculation} />}
@@ -590,33 +594,132 @@ function LiveClock() {
 
 function SummaryCards({ calculation }: { calculation: BudgetCalculation }) {
   const settings = useBudgetStore((state) => state.snapshot.settings);
+  const spent = calculation.selectedMonthSpend.total;
+  const progress = spent != null && calculation.monthlyBudgetBase > 0 ? Math.min(100, Math.max(0, (spent / calculation.monthlyBudgetBase) * 100)) : null;
   const cards = [
-    { label: "Planned", value: calculation.includedBudget, accent: "blue", detail: settings.pilotIncludedInBudget ? "General + piloting" : "General only" },
-    { label: "Spent", value: calculation.selectedMonthSpend.total, accent: "rose", detail: statusLabel(calculation.selectedMonthSpend.status) },
-    { label: "Delta", value: calculation.delta, accent: calculation.delta != null && calculation.delta < 0 ? "rose" : "green", detail: "Budget minus spend" },
+    { label: "Current budget", value: calculation.monthlyBudgetBase, accent: "blue", detail: "Approved monthly budget" },
+    { label: "Remaining", value: calculation.delta, accent: calculation.delta != null && calculation.delta < 0 ? "rose" : "green", detail: "Budget minus spending" },
+    { label: "Monthly spending", value: spent, accent: "rose", detail: statusLabel(calculation.selectedMonthSpend.status) },
+    { label: "Recurring expenses", value: calculation.generalBudget, accent: "amber", detail: "Active recurring, no piloting" },
     { label: "Wallet", value: calculation.wallet.personalWalletTotal, accent: "cyan", detail: "Personal wallet" },
-    { label: "Wishlist", value: calculation.wishlist.activeTotal, accent: "pink", detail: `${calculation.wishlist.activeCount} active` },
+    { label: "Budget progress", value: progress, accent: "violet", detail: progress == null ? "Pending" : `${Math.round(progress)}% used`, progress: true },
   ];
   return (
     <section className="summary-grid compact-summary">
       {cards.map((card) => (
         <article key={card.label} className={`summary-card ${card.accent}`}>
           <span>{card.label}</span>
-          <strong>{formatMoney(card.value, settings.baseCurrency, settings.currencyDisplayMode, { showSign: card.label === "Delta" })}</strong>
+          <strong>
+            {card.progress
+              ? card.value == null
+                ? "Pending"
+                : `${Math.round(card.value)}%`
+              : formatDualMoney(card.value, settings, { showSign: card.label === "Remaining" })}
+          </strong>
+          {card.progress && card.value != null && (
+            <div className="progress-track">
+              <div style={{ width: `${card.value}%` }} />
+            </div>
+          )}
           <small>{card.detail}</small>
         </article>
       ))}
       <article className="summary-card split-card">
         <span>Budget split</span>
         <div className="split-row">
-          <strong>{formatMoney(calculation.generalBudget, settings.baseCurrency, settings.currencyDisplayMode)}</strong>
+          <strong>{formatDualMoney(calculation.generalBudget, settings)}</strong>
           <small>General</small>
         </div>
         <div className="split-row">
-          <strong>{formatMoney(calculation.pilotingBudget, settings.baseCurrency, settings.currencyDisplayMode)}</strong>
+          <strong>{formatDualMoney(calculation.pilotingBudget, settings)}</strong>
           <small>Piloting</small>
         </div>
       </article>
+    </section>
+  );
+}
+
+function BudgetSuggestionPanel() {
+  const snapshot = useBudgetStore((state) => state.snapshot);
+  const recordBudgetApproval = useBudgetStore((state) => state.recordBudgetApproval);
+  const suggestion = useMemo(() => calculateSuggestedMonthlyBudget(snapshot), [snapshot]);
+  const existing = snapshot.budgetApprovals.find(
+    (approval) => approval.year === snapshot.settings.selectedYear && approval.month === snapshot.settings.selectedMonth,
+  );
+  const [editedAmount, setEditedAmount] = useState(String(suggestion.suggestedAmount));
+
+  useEffect(() => {
+    setEditedAmount(String(suggestion.suggestedAmount));
+  }, [suggestion.suggestedAmount, snapshot.settings.selectedYear, snapshot.settings.selectedMonth]);
+
+  if (existing || !isViewingCurrentMonth(snapshot.settings)) {
+    return existing ? (
+      <section className={`budget-suggestion ${existing.status}`}>
+        <div>
+          <p className="eyebrow">Monthly budget approval</p>
+          <h2>{existing.status === "approved" ? "Budget approved" : "Suggestion rejected"}</h2>
+          <span>
+            {monthName(existing.month)} {existing.year} · {formatDualMoney(existing.approvedAmount ?? existing.suggestedAmount, snapshot.settings)}
+          </span>
+        </div>
+        <Badge tone={existing.status === "approved" ? "success" : "neutral"}>{existing.status}</Badge>
+      </section>
+    ) : null;
+  }
+
+  const approvedAmount = parseAmount(editedAmount);
+
+  return (
+    <section className="budget-suggestion">
+      <div>
+        <p className="eyebrow">Monthly budget approval</p>
+        <h2>Suggested budget for {monthName(snapshot.settings.selectedMonth)}</h2>
+        <span>
+          Based on active recurring expenses excluding piloting: {formatDualMoney(suggestion.recurringTotal, snapshot.settings)}. Rounded up to{" "}
+          <strong>{formatDualMoney(suggestion.suggestedAmount, snapshot.settings)}</strong>.
+        </span>
+      </div>
+      <div className="suggestion-controls">
+        <label>
+          Edit suggestion
+          <input inputMode="decimal" value={editedAmount} onChange={(event) => setEditedAmount(event.target.value)} />
+        </label>
+        <button
+          className="primary-button"
+          disabled={approvedAmount == null}
+          onClick={() =>
+            recordBudgetApproval({
+              year: snapshot.settings.selectedYear,
+              month: snapshot.settings.selectedMonth,
+              suggestedAmount: suggestion.suggestedAmount,
+              approvedAmount,
+              currency: snapshot.settings.baseCurrency,
+              status: "approved",
+              recurringTotal: suggestion.recurringTotal,
+              note: "Approved from dashboard suggestion.",
+            })
+          }
+        >
+          Approve
+        </button>
+        <button
+          className="soft-button compact"
+          onClick={() =>
+            recordBudgetApproval({
+              year: snapshot.settings.selectedYear,
+              month: snapshot.settings.selectedMonth,
+              suggestedAmount: suggestion.suggestedAmount,
+              approvedAmount: null,
+              currency: snapshot.settings.baseCurrency,
+              status: "rejected",
+              recurringTotal: suggestion.recurringTotal,
+              note: "Rejected from dashboard suggestion.",
+            })
+          }
+        >
+          Reject
+        </button>
+      </div>
     </section>
   );
 }
@@ -1401,7 +1504,6 @@ function AnalyticsPanel({ calculation }: { calculation: BudgetCalculation }) {
   const previous = calculation.month > 1 ? calculation.monthlyTrend[calculation.month - 2] : null;
   const previousValue = previous?.total ?? null;
   const change = selected != null && previousValue != null ? selected - previousValue : null;
-  const pilotShare = calculation.combinedBudget > 0 ? calculation.pilotingBudget / calculation.combinedBudget : 0;
   const monthlyData = calculation.monthlyTrend.map((summary) => ({
     name: summary.label.slice(0, 3),
     total: summary.status === "value" || summary.status === "zero" ? summary.total : null,
@@ -1413,9 +1515,11 @@ function AnalyticsPanel({ calculation }: { calculation: BudgetCalculation }) {
     total: summary.status === "value" || summary.status === "zero" ? summary.total : null,
   }));
   const categoryData = calculation.categoryTotals.map((item) => ({ ...item, name: item.categoryName }));
-  const budgetData = [
-    { name: "General", value: calculation.generalBudget, color: "#16A34A" },
-    { name: "Piloting", value: calculation.pilotingBudget, color: "#F59E0B" },
+  const normalCategoryData = categoryData.filter((item) => item.bucket !== "piloting");
+  const normalCategoryTotal = normalCategoryData.reduce((total, item) => total + item.total, 0);
+  const recurringVsActualData = [
+    { name: "Recurring", value: calculation.generalBudget, color: "#2563EB" },
+    { name: "Non-recurring", value: Math.max(0, (calculation.selectedMonthSpend.total ?? 0) - calculation.generalBudget), color: "#DB2777" },
   ];
   let walletRunning = 0;
   const walletData = record.walletEntries
@@ -1430,7 +1534,7 @@ function AnalyticsPanel({ calculation }: { calculation: BudgetCalculation }) {
     <div className="panel-stack">
       <div className="insight-grid">
         <InsightCard label="Month vs previous" value={change == null ? "Pending" : formatMoney(change, snapshot.settings.baseCurrency, snapshot.settings.currencyDisplayMode, { showSign: true })} detail={previous ? `Compared with ${previous.label}` : "No previous month in this year"} tone={change != null && change > 0 ? "danger" : "success"} />
-        <InsightCard label="Piloting share" value={`${Math.round(pilotShare * 100)}%`} detail="Share of planned recurring budget" tone="info" />
+        <InsightCard label="Normal categories" value={`${normalCategoryData.length}`} detail="Piloting excluded from category share" tone="info" />
         <InsightCard label="YTD spend" value={formatMoney(calculation.ytdTotal, snapshot.settings.baseCurrency, snapshot.settings.currencyDisplayMode)} detail="Selected year through current month" tone="neutral" />
         <InsightCard label="Wishlist pressure" value={formatMoney(calculation.wishlist.activeTotal, snapshot.settings.baseCurrency, snapshot.settings.currencyDisplayMode)} detail={`${calculation.wishlist.activeCount} open items`} tone="neutral" />
       </div>
@@ -1477,17 +1581,38 @@ function AnalyticsPanel({ calculation }: { calculation: BudgetCalculation }) {
             </LineChart>
           </ResponsiveContainer>
         </ChartPanel>
-        <ChartPanel title="Budget composition">
+        <ChartPanel title="Normal category share">
           <ResponsiveContainer width="100%" height={270}>
             <PieChart>
-              <Pie data={budgetData} dataKey="value" nameKey="name" innerRadius={58} outerRadius={92} paddingAngle={4}>
-                {budgetData.map((entry) => (
-                  <Cell key={entry.name} fill={entry.color} />
+              <Pie data={normalCategoryData} dataKey="total" nameKey="name" innerRadius={58} outerRadius={92} paddingAngle={4}>
+                {normalCategoryData.map((entry) => (
+                  <Cell key={entry.categoryId} fill={entry.color} />
                 ))}
               </Pie>
-              <Tooltip formatter={(value) => formatMoney(Number(value), snapshot.settings.baseCurrency, snapshot.settings.currencyDisplayMode)} />
+              <Tooltip
+                formatter={(value) => {
+                  const numeric = Number(value);
+                  const share = normalCategoryTotal > 0 ? ` (${Math.round((numeric / normalCategoryTotal) * 100)}%)` : "";
+                  return `${formatMoney(numeric, snapshot.settings.baseCurrency, snapshot.settings.currencyDisplayMode)}${share}`;
+                }}
+              />
               <Legend />
             </PieChart>
+          </ResponsiveContainer>
+        </ChartPanel>
+        <ChartPanel title="Recurring vs non-recurring">
+          <ResponsiveContainer width="100%" height={270}>
+            <BarChart data={recurringVsActualData}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="name" />
+              <YAxis />
+              <Tooltip formatter={(value) => formatMoney(Number(value), snapshot.settings.baseCurrency, snapshot.settings.currencyDisplayMode)} />
+              <Bar dataKey="value" radius={[6, 6, 0, 0]}>
+                {recurringVsActualData.map((entry) => (
+                  <Cell key={entry.name} fill={entry.color} />
+                ))}
+              </Bar>
+            </BarChart>
           </ResponsiveContainer>
         </ChartPanel>
         <ChartPanel title="Wallet trajectory">
@@ -1619,6 +1744,20 @@ function HistoryPanel({ filters, setFilters }: { filters: Filters; setFilters: (
         </div>
       </div>
       <div className="history-grid">
+        <section className="history-card">
+          <h3>Budget approvals</h3>
+          {snapshot.budgetApprovals.length === 0 && <EmptyState title="No budget approvals yet." />}
+          {snapshot.budgetApprovals.map((item) => (
+            <div key={item.id} className="timeline-row">
+              <Badge tone={item.status === "approved" ? "success" : "neutral"}>{item.status}</Badge>
+              <strong>
+                {monthName(item.month)} {item.year}
+              </strong>
+              <span>{formatDualMoney(item.approvedAmount ?? item.suggestedAmount, snapshot.settings)}</span>
+              <small>{formatDateTime(item.decidedAt)}</small>
+            </div>
+          ))}
+        </section>
         <section className="history-card">
           <h3>Rollover history</h3>
           {record.closedMonths.length === 0 && <EmptyState title="No closed months yet." />}
@@ -1858,6 +1997,25 @@ function statusLabel(status: string): string {
   if (status === "pending") return "Pending";
   if (status === "zero") return "0 entered";
   return "Value entered";
+}
+
+function formatDualMoney(amount: number | null | undefined, settings: Settings, options: { showSign?: boolean } = {}): string {
+  const selected = formatMoney(amount, settings.baseCurrency, settings.currencyDisplayMode, options);
+  if (settings.baseCurrency === "EUR" || amount == null || Number.isNaN(amount)) return selected;
+  const eurValue = convertAmount(amount, settings.baseCurrency, "EUR", settings.exchangeRates);
+  return `${selected} · ${formatMoney(eurValue, "EUR", settings.currencyDisplayMode, options)}`;
+}
+
+function isViewingCurrentMonth(settings: Settings, now = new Date()): boolean {
+  return settings.selectedYear === now.getFullYear() && settings.selectedMonth === now.getMonth() + 1;
+}
+
+function isViewingHistoricalPeriod(settings: Settings, now = new Date()): boolean {
+  if (settings.selectedYear < now.getFullYear()) return true;
+  if (settings.selectedYear > now.getFullYear()) return false;
+  if (settings.selectedMonth < now.getMonth() + 1) return true;
+  if (settings.selectedMonth > now.getMonth() + 1) return false;
+  return settings.selectedWeek < getIsoWeek(now);
 }
 
 function activityToDraft(activity: Activity | null, snapshot: BudgetSnapshot): ActivityDraft {
