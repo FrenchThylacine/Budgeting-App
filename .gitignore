@@ -1,0 +1,23 @@
+# Dependencies
+node_modules/
+
+# Logs
+*.log
+
+# Environment
+.env
+.env.*
+
+# Build outputs
+dist/
+build/
+out/
+
+# VS Code
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+.pnpm-store/

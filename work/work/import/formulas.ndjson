@@ -1,0 +1,142 @@
+{"kind":"formula","sheet":"Budget","address":"J1","formula":"=C14-E14"}
+{"kind":"formula","sheet":"Budget","address":"C5","formula":"=D5/10"}
+{"kind":"formula","sheet":"Budget","address":"E5","formula":"=if(B5=\"USD\",D5/H$1,D5)"}
+{"kind":"formula","sheet":"Budget","address":"F5","formula":"=D5*12"}
+{"kind":"formula","sheet":"Budget","address":"G5","formula":"=if(B5=\"USD\",F5/H$1,F5)"}
+{"kind":"formula","sheet":"Budget","address":"M5","formula":"= IF(L5=TRUE,0,IF(K5=TRUE,0,J5))"}
+{"kind":"formula","sheet":"Budget","address":"D6","formula":"=C6*4"}
+{"kind":"formula","sheet":"Budget","address":"E6","formula":"=if(B6=\"USD\",D6/H$1,D6)"}
+{"kind":"formula","sheet":"Budget","address":"F6","formula":"=D6*12"}
+{"kind":"formula","sheet":"Budget","address":"G6","formula":"=if(B6=\"USD\",F6/H$1,F6)"}
+{"kind":"formula","sheet":"Budget","address":"K6","formula":"=K5"}
+{"kind":"formula","sheet":"Budget","address":"M6","formula":"= IF(L6=TRUE,0,IF(K6=TRUE,0,J6))"}
+{"kind":"formula","sheet":"Budget","address":"D7","formula":"=F7/12"}
+{"kind":"formula","sheet":"Budget","address":"E7","formula":"=if(B7=\"USD\",D7/H$1,D7)"}
+{"kind":"formula","sheet":"Budget","address":"G7","formula":"=if(B7=\"USD\",F7/H$1,F7)"}
+{"kind":"formula","sheet":"Budget","address":"M7","formula":"= IF(L7=TRUE,0,IF(K7=TRUE,0,J7))"}
+{"kind":"formula","sheet":"Budget","address":"F8","formula":"=C8"}
+{"kind":"formula","sheet":"Budget","address":"G8","formula":"=if(B8=\"USD\",F8/H$1,F8)"}
+{"kind":"formula","sheet":"Budget","address":"M8","formula":"= IF(L8=TRUE,0,IF(K8=TRUE,0,J8))"}
+{"kind":"formula","sheet":"Budget","address":"E9","formula":"=if(B9=\"USD\",D9/H$1,D9)"}
+{"kind":"formula","sheet":"Budget","address":"G9","formula":"=if(B9=\"USD\",F9/H$1,F9)"}
+{"kind":"formula","sheet":"Budget","address":"M9","formula":"= IF(L9=TRUE,0,IF(K9=TRUE,0,J9))"}
+{"kind":"formula","sheet":"Budget","address":"E10","formula":"=if(B10=\"USD\",D10/H$1,D10)"}
+{"kind":"formula","sheet":"Budget","address":"F10","formula":"=D10*12"}
+{"kind":"formula","sheet":"Budget","address":"G10","formula":"=if(B10=\"USD\",F10/H$1,F10)"}
+{"kind":"formula","sheet":"Budget","address":"M10","formula":"= IF(L10=TRUE,0,IF(K10=TRUE,0,J10))"}
+{"kind":"formula","sheet":"Budget","address":"E11","formula":"=if(B11=\"USD\",D11/H$1,D11)"}
+{"kind":"formula","sheet":"Budget","address":"F11","formula":"=D11*12"}
+{"kind":"formula","sheet":"Budget","address":"G11","formula":"=if(B11=\"USD\",F11/H$1,F11)"}
+{"kind":"formula","sheet":"Budget","address":"M11","formula":"= IF(L11=TRUE,0,IF(K11=TRUE,0,J11))"}
+{"kind":"formula","sheet":"Budget","address":"E12","formula":"=if(B12=\"USD\",D12/H$1,D12)"}
+{"kind":"formula","sheet":"Budget","address":"F12","formula":"=36+7.20"}
+{"kind":"formula","sheet":"Budget","address":"G12","formula":"=if(B12=\"USD\",F12/H$1,F12)"}
+{"kind":"formula","sheet":"Budget","address":"M12","formula":"= IF(L12=TRUE,0,IF(K12=TRUE,0,J12))"}
+{"kind":"formula","sheet":"Budget","address":"C13","formula":"=G13+M18"}
+{"kind":"formula","sheet":"Budget","address":"E13","formula":"=SUM(E5:E12)"}
+{"kind":"formula","sheet":"Budget","address":"G13","formula":"=SUM(G5:G12)"}
+{"kind":"formula","sheet":"Budget","address":"M13","formula":"= IF(L13=TRUE,0,IF(K13=TRUE,0,J13))"}
+{"kind":"formula","sheet":"Budget","address":"C14","formula":"=E14+210*H1+SUM(Spending!E65:E67)   "}
+{"kind":"formula","sheet":"Budget","address":"E14","formula":"=600/H1"}
+{"kind":"formula","sheet":"Budget","address":"G14","formula":"=E14*12"}
+{"kind":"formula","sheet":"Budget","address":"M14","formula":"= IF(L14=TRUE,0,IF(K14=TRUE,0,J14))"}
+{"kind":"formula","sheet":"Budget","address":"C15","formula":"=C14-C13"}
+{"kind":"formula","sheet":"Budget","address":"D15","formula":"=E15+E7"}
+{"kind":"formula","sheet":"Budget","address":"E15","formula":"=E14-E13"}
+{"kind":"formula","sheet":"Budget","address":"F15","formula":"=G15+G7"}
+{"kind":"formula","sheet":"Budget","address":"G15","formula":"=G14-G13"}
+{"kind":"formula","sheet":"Budget","address":"M15","formula":"= IF(L15=TRUE,0,IF(K15=TRUE,0,J15))"}
+{"kind":"formula","sheet":"Budget","address":"D16","formula":"= IF(K5=TRUE,SPARKLINE({1,0}),F16+M5+M6+M7)"}
+{"kind":"formula","sheet":"Budget","address":"E16","formula":"=IF(K5=TRUE,SPARKLINE({1,0}),\"<=No PC\")"}
+{"kind":"formula","sheet":"Budget","address":"F16","formula":"=F15-M18"}
+{"kind":"formula","sheet":"Budget","address":"M16","formula":"= IF(L16=TRUE,0,IF(K16=TRUE,0,J16))"}
+{"kind":"formula","sheet":"Budget","address":"M17","formula":"= IF(L17=TRUE,0,IF(K17=TRUE,0,J17))"}
+{"kind":"formula","sheet":"Budget","address":"J18","formula":"=SUM(J5:J17)"}
+{"kind":"formula","sheet":"Budget","address":"M18","formula":"=SUM(M5:M17)"}
+{"kind":"formula","sheet":"Spending","address":"H1","formula":"=WEEKNUM(TODAY(), 2)"}
+{"kind":"formula","sheet":"Spending","address":"A6","formula":"=\"Week \"&ROW()-3"}
+{"kind":"formula","sheet":"Spending","address":"A7","formula":"=\"Week \"&ROW()-3"}
+{"kind":"formula","sheet":"Spending","address":"A8","formula":"=\"Week \"&ROW()-3"}
+{"kind":"formula","sheet":"Spending","address":"A9","formula":"=\"Week \"&ROW()-3"}
+{"kind":"formula","sheet":"Spending","address":"A10","formula":"=\"Week \"&ROW()-3"}
+{"kind":"formula","sheet":"Spending","address":"A11","formula":"=\"Week \"&ROW()-3"}
+{"kind":"formula","sheet":"Spending","address":"A12","formula":"=\"Week \"&ROW()-3"}
+{"kind":"formula","sheet":"Spending","address":"A13","formula":"=\"Week \"&ROW()-3"}
+{"kind":"formula","sheet":"Spending","address":"B13","formula":"=(300000*5)/F$1+25"}
+{"kind":"formula","sheet":"Spending","address":"C13","formula":"=30"}
+{"kind":"formula","sheet":"Spending","address":"D13","formula":"=(B13/D$1)+C13"}
+{"kind":"formula","sheet":"Spending","address":"A14","formula":"=\"Week \"&ROW()-3"}
+{"kind":"formula","sheet":"Spending","address":"D14","formula":"=(B14/D$1)+C14"}
+{"kind":"formula","sheet":"Spending","address":"A15","formula":"=\"Week \"&ROW()-3"}
+{"kind":"formula","sheet":"Spending","address":"B15","formula":"=(300000*3)/F1+35+400"}
+{"kind":"formula","sheet":"Spending","address":"D15","formula":"=(B15/D$1)+C15"}
+{"kind":"formula","sheet":"Spending","address":"A16","formula":"=\"Week \"&ROW()-3"}
+{"kind":"formula","sheet":"Spending","address":"B16","formula":"=(300000*2)/F1+35"}
+{"kind":"formula","sheet":"Spending","address":"D16","formula":"=(B16/D$1)+C16"}
+{"kind":"formula","sheet":"Spending","address":"A17","formula":"=\"Week \"&ROW()-3"}
+{"kind":"formula","sheet":"Spending","address":"B17","formula":"=(200000*2+650000)/F1+35"}
+{"kind":"formula","sheet":"Spending","address":"D17","formula":"=(B17/D$1)+C17"}
+{"kind":"formula","sheet":"Spending","address":"A18","formula":"=\"Week \"&ROW()-3"}
+{"kind":"formula","sheet":"Spending","address":"B18","formula":"=700000/F1+10"}
+{"kind":"formula","sheet":"Spending","address":"D18","formula":"=(B18/D$1)+C18"}
+{"kind":"formula","sheet":"Spending","address":"A19","formula":"=\"Week \"&ROW()-3"}
+{"kind":"formula","sheet":"Spending","address":"B19","formula":"=390+26"}
+{"kind":"formula","sheet":"Spending","address":"D19","formula":"=(B19/D$1)+C19"}
+{"kind":"formula","sheet":"Spending","address":"A20","formula":"=\"Week \"&ROW()-3"}
+{"kind":"formula","sheet":"Spending","address":"D20","formula":"=(B20/D$1)+C20"}
+{"kind":"formula","sheet":"Spending","address":"A21","formula":"=\"Week \"&ROW()-3"}
+{"kind":"formula","sheet":"Spending","address":"D21","formula":"=(B21/D$1)+C21"}
+{"kind":"formula","sheet":"Spending","address":"A22","formula":"=\"Week \"&ROW()-3"}
+{"kind":"formula","sheet":"Spending","address":"D22","formula":"=(B22/D$1)+C22"}
+{"kind":"formula","sheet":"Spending","address":"A23","formula":"=\"Week \"&ROW()-3"}
+{"kind":"formula","sheet":"Spending","address":"D23","formula":"=(B23/D$1)+C23"}
+{"kind":"formula","sheet":"Spending","address":"A24","formula":"=\"Week \"&ROW()-3"}
+{"kind":"formula","sheet":"Spending","address":"D24","formula":"=(B24/D$1)+C24"}
+{"kind":"formula","sheet":"Spending","address":"A25","formula":"=\"Week \"&ROW()-3"}
+{"kind":"formula","sheet":"Spending","address":"D25","formula":"=(B25/D$1)+C25"}
+{"kind":"formula","sheet":"Spending","address":"A26","formula":"=\"Week \"&ROW()-3"}
+{"kind":"formula","sheet":"Spending","address":"B26","formula":"=10+25"}
+{"kind":"formula","sheet":"Spending","address":"D26","formula":"=(B26/D$1)+C26"}
+{"kind":"formula","sheet":"Spending","address":"A27","formula":"=\"Week \"&ROW()-3"}
+{"kind":"formula","sheet":"Spending","address":"D27","formula":"=(B27/D$1)+C27"}
+{"kind":"formula","sheet":"Spending","address":"A28","formula":"=\"Week \"&ROW()-3"}
+{"kind":"formula","sheet":"Spending","address":"B28","formula":"=10+25"}
+{"kind":"formula","sheet":"Spending","address":"D28","formula":"=(B28/D$1)+C28"}
+{"kind":"formula","sheet":"Spending","address":"A29","formula":"=\"Week \"&ROW()-3"}
+{"kind":"formula","sheet":"Spending","address":"B29","formula":"=400"}
+{"kind":"formula","sheet":"Spending","address":"D29","formula":"=(B29/D$1)+C29"}
+{"kind":"formula","sheet":"Spending","address":"A30","formula":"=\"Week \"&ROW()-3"}
+{"kind":"formula","sheet":"Spending","address":"D30","formula":"=(B30/D$1)+C30"}
+{"kind":"formula","sheet":"Spending","address":"A31","formula":"=\"Week \"&ROW()-3"}
+{"kind":"formula","sheet":"Spending","address":"D31","formula":"=(B31/D$1)+C31"}
+{"kind":"formula","sheet":"Spending","address":"A32","formula":"=\"Week \"&ROW()-3"}
+{"kind":"formula","sheet":"Spending","address":"D32","formula":"=(B32/D$1)+C32"}
+{"kind":"formula","sheet":"Spending","address":"A33","formula":"=\"Week \"&ROW()-3"}
+{"kind":"formula","sheet":"Spending","address":"D33","formula":"=(B33/D$1)+C33"}
+{"kind":"formula","sheet":"Spending","address":"A34","formula":"=\"Week \"&ROW()-3"}
+{"kind":"formula","sheet":"Spending","address":"D34","formula":"=(B34/D$1)+C34"}
+{"kind":"formula","sheet":"Spending","address":"A35","formula":"=\"Week \"&ROW()-3"}
+{"kind":"formula","sheet":"Spending","address":"D35","formula":"=(B35/D$1)+C35"}
+{"kind":"formula","sheet":"Spending","address":"A36","formula":"=\"Week \"&ROW()-3"}
+{"kind":"formula","sheet":"Spending","address":"D36","formula":"=(B36/D$1)+C36"}
+{"kind":"formula","sheet":"Spending","address":"A37","formula":"=\"Week \"&ROW()-3"}
+{"kind":"formula","sheet":"Spending","address":"D37","formula":"=(B37/D$1)+C37"}
+{"kind":"formula","sheet":"Spending","address":"A38","formula":"=\"Week \"&ROW()-3"}
+{"kind":"formula","sheet":"Spending","address":"D38","formula":"=(B38/D$1)+C38"}
+{"kind":"formula","sheet":"Spending","address":"A39","formula":"=\"Week \"&ROW()-3"}
+{"kind":"formula","sheet":"Spending","address":"D39","formula":"=(B39/D$1)+C39"}
+{"kind":"formula","sheet":"Spending","address":"A40","formula":"=\"Week \"&ROW()-3"}
+{"kind":"formula","sheet":"Spending","address":"D40","formula":"=(B40/D$1)+C40"}
+{"kind":"formula","sheet":"Spending","address":"A41","formula":"=\"Week \"&ROW()-3"}
+{"kind":"formula","sheet":"Spending","address":"D41","formula":"=(B41/D$1)+C41"}
+{"kind":"formula","sheet":"Spending","address":"A42","formula":"=\"Week \"&ROW()-3"}
+{"kind":"formula","sheet":"Spending","address":"D42","formula":"=(B42/D$1)+C42"}
+{"kind":"formula","sheet":"Spending","address":"A43","formula":"=\"Week \"&ROW()-3"}
+{"kind":"formula","sheet":"Spending","address":"D43","formula":"=(B43/D$1)+C43"}
+{"kind":"formula","sheet":"Spending","address":"A44","formula":"=\"Week \"&ROW()-3"}
+{"kind":"formula","sheet":"Spending","address":"D44","formula":"=(B44/D$1)+C44"}
+{"kind":"formula","sheet":"Spending","address":"A45","formula":"=\"Week \"&ROW()-3"}
+{"kind":"formula","sheet":"Spending","address":"D45","formula":"=(B45/D$1)+C45"}
+{"kind":"formula","sheet":"Spending","address":"A46","formula":"=\"Week \"&ROW()-3"}
+{"kind":"formula","sheet":"Spending","address":"D46","formula":"=(B46/D$1)+C46"}
+{"kind":"notice","message":"Truncated: omitted 71 lines. Increase maxChars, narrow range, or use tableMaxRows/tableMaxCols/tableMaxCellChars."}
