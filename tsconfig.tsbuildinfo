@@ -1,1 +1,0 @@
-{"root":["./src/app.tsx","./src/main.tsx","./src/data/seedbudget.ts","./src/domain/calculations.ts","./src/domain/currency.ts","./src/domain/dates.ts","./src/domain/importexport.ts","./src/domain/types.ts","./src/storage/idb.ts","./src/store/budgetstore.ts","./tests/calculations.test.ts","./vite.config.ts"],"version":"5.9.3"}
