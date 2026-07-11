@@ -1876,7 +1876,7 @@ function HistoryPanel({ filters, setFilters }: { filters: Filters; setFilters: (
     const category = snapshot.categories.find((c) => c.id === catId);
     if (!category || !category.archived) return;
     if (!window.confirm(`Restore category ${category.name}?`)) return;
-    updateCategory(catId, { archived: false, active: true, visible: true });
+      updateCategory(catId, { archived: false });
   }
 
   return (
@@ -2303,7 +2303,7 @@ function ChangelogModal({ open, onClose }: { open: boolean; onClose: () => void 
     const category = snapshot.categories.find((c) => c.id === catId);
     if (!category || !category.archived) return;
     if (!window.confirm(`Restore category ${category.name}?`)) return;
-    updateCategory(catId, { archived: false, active: true, visible: true });
+      updateCategory(catId, { archived: false });
   }
 
   return (
