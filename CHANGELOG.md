@@ -24,3 +24,13 @@ Run installer from repo root to install to Desktop:
   powershell -ExecutionPolicy Bypass -File .\scripts\install-launcher.ps1
 
 Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
+
+### 2026-07-11 — Desktop GUI tracked & local build
+- Added repo-tracked copy of Desktop GUI launcher: `scripts/desktop-launcher-gui.ps1`.
+- Performed local production build (tsc + vite build); `dist/` produced successfully.
+
+Files changed in this step:
+- scripts/desktop-launcher-gui.ps1 (new)
+
+The GitHub Actions deploy workflow exists but shows no recent runs via the API; check the Actions tab in GitHub or trigger a manual run if you want the site published immediately.
+
