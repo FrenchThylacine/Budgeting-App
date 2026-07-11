@@ -36,7 +36,13 @@ Use the included shortcut scripts to start the app and open it in your default b
 - `run-local.bat` — Windows shortcut-friendly batch wrapper
 - `Budget App.lnk` — shortcut file in the repository root that launches the app
 
-You can move `Budget App.lnk` to your Desktop or another convenient folder for single-click app launch.
+To use the desktop shortcut:
+
+1. Keep the app folder intact. Do not move `run-local.bat` or `run-local.ps1` out of the project directory.
+2. Copy `Budget App.lnk` from the project root to your Desktop.
+3. Double-click `Budget App.lnk` to start the app and open it in your browser.
+
+If you want, you can also create a new shortcut from `run-local.bat` by right-clicking it and choosing `Send to > Desktop (create shortcut)`.
 
 ## Phone access
 
