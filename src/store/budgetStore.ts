@@ -13,6 +13,7 @@ import type {
   WalletEntry,
   WishlistItem,
   YearRecord,
+  BudgetCategory,
 } from "../domain/types";
 import { createSeedBudgetSnapshot } from "../data/seedBudget";
 import { defaultCategories } from "../data/seedBudget";
