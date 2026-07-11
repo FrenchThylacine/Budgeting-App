@@ -672,15 +672,20 @@ function BudgetSuggestionPanel() {
   }
 
   const approvedAmount = parseAmount(editedAmount);
-
+  const noActiveRecurring = suggestion.recurringTotal === 0;
+  
   return (
     <section className="budget-suggestion">
       <div>
         <p className="eyebrow">Monthly budget approval</p>
         <h2>Suggested budget for {monthName(snapshot.settings.selectedMonth)}</h2>
         <span>
-          Based on active recurring expenses excluding piloting: {formatDualMoney(suggestion.recurringTotal, snapshot.settings)}. Rounded up to{" "}
-          <strong>{formatDualMoney(suggestion.suggestedAmount, snapshot.settings)}</strong>.
+          Based on active recurring expenses excluding piloting: {formatDualMoney(suggestion.recurringTotal, snapshot.settings)}.
+          {noActiveRecurring ? (
+            <> Use the edit field below to set a starting budget for this month.</>
+          ) : (
+            <> Rounded up to <strong>{formatDualMoney(suggestion.suggestedAmount, snapshot.settings)}</strong>.</>
+          )}
         </span>
       </div>
       <div className="suggestion-controls">

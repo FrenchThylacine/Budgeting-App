@@ -126,4 +126,17 @@ describe("budget calculations", () => {
     expect(suggestion.recurringTotal).toBe(1234);
     expect(suggestion.suggestedAmount).toBe(1300);
   });
+
+  it("rounds suggested budget up to the next hundred in USD", () => {
+    const snapshot = createSeedBudgetSnapshot(NOW);
+    snapshot.settings.baseCurrency = "USD";
+    snapshot.years["2026"].activities = [
+      recurringActivity({ id: "usd-recurring", categoryId: "cat-other", currency: "USD", pricePerMonth: 5678, estimatedCost: 5678 }),
+    ];
+
+    const suggestion = calculateSuggestedMonthlyBudget(snapshot);
+
+    expect(suggestion.recurringTotal).toBe(5678);
+    expect(suggestion.suggestedAmount).toBe(5700);
+  });
 });
