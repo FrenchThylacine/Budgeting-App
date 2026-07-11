@@ -189,6 +189,21 @@ export default function App() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [store]);
 
+  // Month-boundary detector: dispatches an event when local month rolls over so the budget modal can open
+  useEffect(() => {
+    let lastMonth = new Date().getMonth() + 1;
+    const check = () => {
+      const nowMonth = new Date().getMonth() + 1;
+      if (nowMonth !== lastMonth) {
+        lastMonth = nowMonth;
+        window.dispatchEvent(new CustomEvent("open-budget-suggestion"));
+      }
+    };
+    // check every minute - lightweight
+    const idInterval = window.setInterval(check, 60 * 1000);
+    return () => window.clearInterval(idInterval);
+  }, []);
+
   const calculation = useMemo(() => calculateYear(snapshot), [snapshot]);
   const record = snapshot.years[String(snapshot.settings.selectedYear)];
   const historical = isViewingHistoricalPeriod(snapshot.settings);
@@ -202,6 +217,14 @@ export default function App() {
       </main>
     );
   }
+
+  const [changelogOpen, setChangelogOpen] = useState(false);
+
+  useEffect(() => {
+    const onOpen = () => setChangelogOpen(true);
+    window.addEventListener("open-changelog", onOpen as EventListener);
+    return () => window.removeEventListener("open-changelog", onOpen as EventListener);
+  }, []);
 
   return (
     <div className={sidebarCollapsed ? "app-shell sidebar-collapsed" : "app-shell"}>
@@ -220,7 +243,7 @@ export default function App() {
         {notice && (
           <div className="notice" role="status">
             <span>{notice}</span>
-            <button className="icon-button" title="Dismiss" onClick={() => setNotice("")}>
+            <button className="icon-button" title="Dismiss" onClick={() => setNotice("")}> 
               <X size={16} />
             </button>
           </div>
@@ -238,6 +261,7 @@ export default function App() {
         </section>
       </main>
       {rolloverOpen && <RolloverDialog calculation={calculation} onClose={() => setRolloverOpen(false)} />}
+      <ChangelogModal open={changelogOpen} onClose={() => setChangelogOpen(false)} />
     </div>
   );
 }
@@ -557,6 +581,9 @@ function Header({ calculation, setRolloverOpen }: { calculation: BudgetCalculati
             <strong title={latestAudit.summary}>{latestAudit.summary}</strong>
           </div>
         )}
+        <button className="icon-button" title="Changelog" onClick={() => window.dispatchEvent(new CustomEvent("open-changelog"))}>
+          <History size={17} />
+        </button>
         <select className="currency-pill" value={snapshot.settings.baseCurrency} onChange={(event) => updateSettings({ baseCurrency: event.target.value as CurrencyCode })} title="Base currency">
           {CURRENCY_OPTIONS.map((currency) => (
             <option key={currency} value={currency}>
@@ -671,6 +698,13 @@ function BudgetSuggestionPanel() {
     if (!existing && isViewingCurrentMonth(snapshot.settings)) {
       setShowModal(true);
     }
+
+    // Listen for explicit open events (month boundary detector)
+    const onOpen = () => {
+      if (!existing && isViewingCurrentMonth(snapshot.settings)) setShowModal(true);
+    };
+    window.addEventListener("open-budget-suggestion", onOpen as EventListener);
+    return () => window.removeEventListener("open-budget-suggestion", onOpen as EventListener);
   }, [existing, snapshot.settings.selectedYear, snapshot.settings.selectedMonth]);
 
   const approvedAmount = parseAmount(editedAmount);
@@ -1954,11 +1988,38 @@ function CategoryManager() {
   const [newName, setNewName] = useState("");
   const [newBucket, setNewBucket] = useState<BudgetCategory["bucket"]>("general");
   const [newColor, setNewColor] = useState("#64748B");
+  const [confirmArchiveId, setConfirmArchiveId] = useState<string | null>(null);
+  const dragSourceRef = useRef<string | null>(null);
 
   function handleAdd() {
     if (!newName.trim()) return;
     addCategory({ name: newName.trim(), bucket: newBucket, color: newColor });
     setNewName("");
+  }
+
+  function handleArchive(id: string) {
+    setConfirmArchiveId(id);
+  }
+
+  function confirmArchive() {
+    if (confirmArchiveId) archiveCategory(confirmArchiveId);
+    setConfirmArchiveId(null);
+  }
+
+  function onDragStart(e: React.DragEvent, id: string) {
+    dragSourceRef.current = id;
+    e.dataTransfer.effectAllowed = "move";
+  }
+
+  function onDragOver(e: React.DragEvent) {
+    e.preventDefault();
+  }
+
+  function onDrop(e: React.DragEvent, targetId: string) {
+    e.preventDefault();
+    const sourceId = dragSourceRef.current;
+    dragSourceRef.current = null;
+    if (sourceId && sourceId !== targetId) reorderCategory(sourceId, targetId);
   }
 
   return (
@@ -1978,7 +2039,14 @@ function CategoryManager() {
       </div>
       <div style={{ display: 'grid', gap: 8 }}>
         {snapshot.categories.map((cat, index) => (
-          <div key={cat.id} style={{ display: 'grid', gridTemplateColumns: '1fr 120px 80px 36px', gap: 8, alignItems: 'center' }}>
+          <div
+            key={cat.id}
+            draggable
+            onDragStart={(e) => onDragStart(e, cat.id)}
+            onDragOver={onDragOver}
+            onDrop={(e) => onDrop(e, cat.id)}
+            style={{ display: 'grid', gridTemplateColumns: '1fr 120px 80px 36px', gap: 8, alignItems: 'center' }}
+          >
             <input value={cat.name} onChange={(e) => updateCategory(cat.id, { name: e.target.value })} />
             <select value={cat.bucket} onChange={(e) => updateCategory(cat.id, { bucket: e.target.value as any })}>
               <option value="general">General</option>
@@ -1991,13 +2059,27 @@ function CategoryManager() {
               <button className="icon-button" title="Move up" onClick={() => index > 0 && reorderCategory(cat.id, snapshot.categories[index - 1].id)}>
                 <ChevronLeft size={14} />
               </button>
-              <button className="icon-button" title="Archive" onClick={() => archiveCategory(cat.id)}>
+              <button className="icon-button" title="Archive" onClick={() => handleArchive(cat.id)}>
                 <Archive size={14} />
               </button>
             </div>
           </div>
         ))}
       </div>
+
+      {confirmArchiveId && (
+        <Modal title="Confirm archive" onClose={() => setConfirmArchiveId(null)}>
+          <p>Are you sure you want to archive this category? This will hide it from most selectors but keep historical data intact.</p>
+          <div className="modal-actions">
+            <button className="soft-button compact" onClick={() => setConfirmArchiveId(null)}>
+              Cancel
+            </button>
+            <button className="primary-button warn" onClick={confirmArchive}>
+              Archive
+            </button>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }
@@ -2048,6 +2130,39 @@ function Modal({ title, children, onClose }: { title: string; children: ReactNod
         {children}
       </section>
     </div>
+  );
+}
+
+function ChangelogModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const snapshot = useBudgetStore((state) => state.snapshot);
+  if (!open) return null;
+  return (
+    <Modal title="Changelog" onClose={onClose}>
+      <div className="changelog-list">
+        {snapshot.auditLog.length === 0 ? (
+          <EmptyState title="No recent changes" detail="Your actions will appear here as an audit trail." />
+        ) : (
+          <ol>
+            {snapshot.auditLog.map((item) => (
+              <li key={item.id}>
+                <div className="changelog-item">
+                  <div className="changelog-ts">{formatDateTime(item.createdAt)}</div>
+                  <div>
+                    <strong>{item.summary}</strong>
+                    {item.metadata && <pre className="muted">{JSON.stringify(item.metadata)}</pre>}
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ol>
+        )}
+        <div className="modal-actions">
+          <button className="soft-button compact" onClick={onClose}>
+            Close
+          </button>
+        </div>
+      </div>
+    </Modal>
   );
 }
 
