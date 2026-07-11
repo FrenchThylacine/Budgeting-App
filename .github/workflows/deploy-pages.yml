@@ -2,7 +2,7 @@ name: Deploy to GitHub Pages
 
 on:
   push:
-    branches: [main, copilot-budget-dashboard-improvements-and-deployment-8ed00ebd]
+    branches: [main, copilot-budget-dashboard-improvements-and-deployment-8ed00ebd, copilot/continue-new-chat-from-copilot]
   workflow_dispatch:
 
 permissions:

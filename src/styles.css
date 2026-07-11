@@ -232,6 +232,7 @@ label {
 .main-area.historical-period {
   outline: 2px solid rgba(217, 119, 6, 0.32);
   outline-offset: -12px;
+  background: rgba(255, 235, 205, 0.08);
 }
 
 .historical-label {
@@ -285,6 +286,29 @@ label {
   margin: 0;
   font-size: clamp(1.3rem, 1.8vw, 1.95rem);
   letter-spacing: 0;
+}
+
+@media (max-width: 1080px) {
+  .top-header {
+    grid-template-columns: 1fr;
+  }
+
+  .period-switcher {
+    grid-template-columns: 1fr;
+    padding: 10px;
+  }
+
+  .compact-period-controls {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .week-buttons {
+    justify-content: start;
+  }
+
+  .header-actions {
+    justify-content: stretch;
+  }
 }
 
 .eyebrow {
@@ -470,7 +494,7 @@ label {
 
 .summary-grid {
   display: grid;
-  grid-template-columns: repeat(6, minmax(150px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: 10px;
   margin-bottom: 18px;
 }
@@ -605,6 +629,17 @@ label {
   gap: 8px;
 }
 
+@media (max-width: 700px) {
+  .budget-suggestion {
+    grid-template-columns: 1fr;
+    padding: 16px;
+  }
+  .suggestion-controls {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+}
+
 .section-toolbar {
   display: flex;
   align-items: center;
@@ -625,7 +660,7 @@ label {
 .wishlist-grid,
 .insight-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(240px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
   gap: 12px;
 }
 
