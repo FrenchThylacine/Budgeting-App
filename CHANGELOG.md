@@ -1,5 +1,12 @@
 # Changelog
 
+## v2026.07.11 - 2026-07-11
+
+- Finalized local-launch support (run-local scripts and repository shortcut)
+- Mobile UI improvements and compact time selector
+- Dashboard improvements and recurring budget suggestion support
+- Verified tests and production build
+
 ## 2026-07-11
 
 - Added local startup support and one-click launch helper for Windows.
