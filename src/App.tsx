@@ -2036,10 +2036,18 @@ function CategoryManager() {
     e.preventDefault();
   }
 
+  function onDragEnter(e: React.DragEvent, id: string) {
+    setDragOverId(id);
+  }
+  function onDragLeave() {
+    setDragOverId(null);
+  }
+
   function onDrop(e: React.DragEvent, targetId: string) {
     e.preventDefault();
     const sourceId = dragSourceRef.current;
     dragSourceRef.current = null;
+    setDragOverId(null);
     if (sourceId && sourceId !== targetId) reorderCategory(sourceId, targetId);
   }
 
@@ -2065,8 +2073,10 @@ function CategoryManager() {
             draggable
             onDragStart={(e) => onDragStart(e, cat.id)}
             onDragOver={onDragOver}
+            onDragEnter={(e) => onDragEnter(e, cat.id)}
+            onDragLeave={onDragLeave}
             onDrop={(e) => onDrop(e, cat.id)}
-            className="category-row"
+            className={"category-row" + (dragOverId === cat.id ? " drag-over" : "")}
           >
             <div className="drag-handle" title="Drag to reorder">
               <Menu size={14} />
