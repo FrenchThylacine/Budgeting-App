@@ -1,0 +1,67 @@
+:root {
+  --transition-fast: 160ms;
+  --transition-medium: 280ms;
+}
+
+/* Modal appearance */
+.modal-backdrop {
+  display: grid;
+  place-items: center;
+  position: fixed;
+  inset: 0;
+  background: rgba(10, 12, 15, 0.42);
+  z-index: 60;
+  animation: fadeIn 160ms ease;
+}
+
+.modal {
+  width: min(880px, calc(100% - 40px));
+  max-height: 84vh;
+  overflow: auto;
+  padding: 18px;
+  border-radius: 10px;
+  box-shadow: var(--shadow-md);
+  border: 1px solid var(--line-strong);
+  transform: translateY(-6px);
+  animation: slideUp var(--transition-medium) ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0 }
+  to { opacity: 1 }
+}
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(6px) }
+  to { opacity: 1; transform: translateY(0) }
+}
+
+/* Category manager drag handle and row */
+.category-row {
+  display: grid;
+  grid-template-columns: 28px 1fr 120px 80px 36px;
+  gap: 8px;
+  align-items: center;
+  padding: 6px;
+  border-radius: 8px;
+  transition: background var(--transition-fast), transform var(--transition-fast);
+}
+.category-row:active { transform: scale(0.997); }
+.drag-handle {
+  display: grid;
+  place-items: center;
+  cursor: grab;
+  color: var(--muted);
+}
+.category-row.drag-over { background: rgba(37, 99, 235, 0.04); }
+
+/* Changelog */
+.changelog-list ol { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
+.changelog-item { display: flex; gap: 12px; align-items: flex-start; }
+.changelog-ts { color: var(--muted); font-size: 0.78rem; min-width: 160px; }
+.changelog-item pre.muted { margin: 6px 0 0; color: var(--muted); font-size: 0.72rem; white-space: pre-wrap; word-break: break-word; }
+
+/* Category manager responsive */
+@media (max-width: 780px) {
+  .category-row { grid-template-columns: 20px 1fr 80px 64px; }
+  .drag-handle { display: none; }
+}

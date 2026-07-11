@@ -189,19 +189,40 @@ export default function App() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [store]);
 
-  // Month-boundary detector: dispatches an event when local month rolls over so the budget modal can open
+  // Month-boundary detector: schedule an exact timeout to next month start and wake on visibilitychange
   useEffect(() => {
     let lastMonth = new Date().getMonth() + 1;
-    const check = () => {
+    let timeoutId: number | undefined;
+
+    function scheduleNext() {
+      const now = new Date();
+      const next = new Date(now.getFullYear(), now.getMonth() + 1, 1, 0, 0, 0, 0);
+      const ms = Math.max(0, next.getTime() - now.getTime());
+      timeoutId = window.setTimeout(() => {
+        lastMonth = new Date().getMonth() + 1;
+        window.dispatchEvent(new CustomEvent("open-budget-suggestion"));
+        scheduleNext();
+      }, ms);
+    }
+
+    function onVisibility() {
+      // if the user changed system time or resumed after sleep, detect month change
       const nowMonth = new Date().getMonth() + 1;
       if (nowMonth !== lastMonth) {
         lastMonth = nowMonth;
         window.dispatchEvent(new CustomEvent("open-budget-suggestion"));
       }
+      // reschedule to ensure the timeout is correct
+      if (timeoutId) window.clearTimeout(timeoutId);
+      scheduleNext();
+    }
+
+    scheduleNext();
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      if (timeoutId) window.clearTimeout(timeoutId);
+      document.removeEventListener("visibilitychange", onVisibility);
     };
-    // check every minute - lightweight
-    const idInterval = window.setInterval(check, 60 * 1000);
-    return () => window.clearInterval(idInterval);
   }, []);
 
   const calculation = useMemo(() => calculateYear(snapshot), [snapshot]);
@@ -2135,15 +2156,47 @@ function Modal({ title, children, onClose }: { title: string; children: ReactNod
 
 function ChangelogModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const snapshot = useBudgetStore((state) => state.snapshot);
+  const [filter, setFilter] = useState("");
   if (!open) return null;
+
+  const filtered = snapshot.auditLog.filter((item) => {
+    if (!filter) return true;
+    return item.summary.toLowerCase().includes(filter.toLowerCase()) || (item.metadata && JSON.stringify(item.metadata).toLowerCase().includes(filter.toLowerCase()));
+  });
+
+  function exportAudit() {
+    try {
+      const data = JSON.stringify(snapshot.auditLog, null, 2);
+      if (navigator && (navigator as any).clipboard && typeof (navigator as any).clipboard.writeText === "function") {
+        void (navigator as any).clipboard.writeText(data);
+        alert("Changelog copied to clipboard.");
+        return;
+      }
+      const blob = new Blob([data], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `changelog-${new Date().toISOString()}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      alert("Export failed.");
+    }
+  }
+
   return (
     <Modal title="Changelog" onClose={onClose}>
       <div className="changelog-list">
-        {snapshot.auditLog.length === 0 ? (
-          <EmptyState title="No recent changes" detail="Your actions will appear here as an audit trail." />
+        <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+          <input placeholder="Filter changelog..." value={filter} onChange={(e) => setFilter(e.target.value)} />
+          <button className="soft-button compact" onClick={() => setFilter("")}>Clear</button>
+          <button className="command-button compact" onClick={exportAudit}>Export</button>
+        </div>
+        {filtered.length === 0 ? (
+          <EmptyState title="No matching changes" detail="Try clearing the filter." />
         ) : (
           <ol>
-            {snapshot.auditLog.map((item) => (
+            {filtered.map((item) => (
               <li key={item.id}>
                 <div className="changelog-item">
                   <div className="changelog-ts">{formatDateTime(item.createdAt)}</div>
