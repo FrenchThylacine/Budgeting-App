@@ -1847,8 +1847,38 @@ function ScenarioLab() {
 
 function HistoryPanel({ filters, setFilters }: { filters: Filters; setFilters: (filters: Filters) => void }) {
   const snapshot = useBudgetStore((state) => state.snapshot);
+  const updateCategory = useBudgetStore((state) => state.updateCategory);
   const record = snapshot.years[String(snapshot.settings.selectedYear)];
   const history = snapshot.auditLog.filter((entry) => `${entry.summary} ${entry.type}`.toLowerCase().includes(filters.historyQuery.toLowerCase()));
+
+  function exportAuditCsv() {
+    try {
+      const rows = ["createdAt,type,summary,metadata"];
+      for (const item of snapshot.auditLog) {
+        const meta = item.metadata ? JSON.stringify(item.metadata).replace(/\"/g, '""') : "";
+        rows.push(`"${item.createdAt}","${String(item.type)}","${String(item.summary).replace(/"/g, '""')}","${meta.replace(/"/g, '""')}"`);
+      }
+      const blob = new Blob([rows.join("\n")], { type: "text/csv" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `audit-${new Date().toISOString()}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      alert("Export failed.");
+    }
+  }
+
+  function tryUndoArchive(item: any) {
+    const catId = item.metadata && item.metadata.id;
+    if (!catId) return;
+    const category = snapshot.categories.find((c) => c.id === catId);
+    if (!category || !category.archived) return;
+    if (!window.confirm(`Restore category ${category.name}?`)) return;
+    updateCategory(catId, { archived: false, active: true, visible: true });
+  }
+
   return (
     <div className="panel-stack">
       <div className="section-toolbar">
@@ -1865,6 +1895,10 @@ function HistoryPanel({ filters, setFilters }: { filters: Filters; setFilters: (
           <button className="command-button compact" onClick={() => exportWalletCsv(snapshot)}>
             <Download size={16} />
             Wallet CSV
+          </button>
+          <button className="command-button compact" onClick={exportAuditCsv}>
+            <Download size={16} />
+            Audit CSV
           </button>
         </div>
       </div>
@@ -1902,6 +1936,11 @@ function HistoryPanel({ filters, setFilters }: { filters: Filters; setFilters: (
               <Badge tone="neutral">{item.type}</Badge>
               <strong>{item.summary}</strong>
               <small>{formatDateTime(item.createdAt)}</small>
+              {item.summary && item.summary.toLowerCase().includes('archived category') && (
+                <div style={{ marginLeft: 'auto' }}>
+                  <button className="soft-button compact" onClick={() => tryUndoArchive(item)}>Restore</button>
+                </div>
+              )}
             </div>
           ))}
         </section>
@@ -2011,6 +2050,7 @@ function CategoryManager() {
   const [newColor, setNewColor] = useState("#64748B");
   const [confirmArchiveId, setConfirmArchiveId] = useState<string | null>(null);
   const dragSourceRef = useRef<string | null>(null);
+  const [dragOverId, setDragOverId] = useState<string | null>(null);
 
   function handleAdd() {
     if (!newName.trim()) return;
@@ -2077,6 +2117,22 @@ function CategoryManager() {
             onDragLeave={onDragLeave}
             onDrop={(e) => onDrop(e, cat.id)}
             className={"category-row" + (dragOverId === cat.id ? " drag-over" : "")}
+            tabIndex={0}
+            onKeyDown={(e) => {
+              if (e.key === "ArrowUp") {
+                e.preventDefault();
+                if (index > 0) reorderCategory(cat.id, snapshot.categories[index - 1].id);
+              }
+              if (e.key === "ArrowDown") {
+                e.preventDefault();
+                if (index < snapshot.categories.length - 1) reorderCategory(cat.id, snapshot.categories[index + 1].id);
+              }
+              if (e.key === "Enter") {
+                // focus first input in row
+                const input = (e.currentTarget.querySelector("input") as HTMLInputElement | null) ?? null;
+                input?.focus();
+              }
+            }}
           >
             <div className="drag-handle" title="Drag to reorder">
               <Menu size={14} />
@@ -2154,10 +2210,24 @@ function RolloverDialog({ calculation, onClose }: { calculation: BudgetCalculati
 }
 
 function Modal({ title, children, onClose }: { title: string; children: ReactNode; onClose: () => void }) {
+  const closeRef = useRef<HTMLButtonElement | null>(null);
+  useEffect(() => {
+    const prevFocus = document.activeElement as HTMLElement | null;
+    closeRef.current?.focus();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      prevFocus?.focus();
+    };
+  }, [onClose]);
+
   return (
     <div className="modal-backdrop" role="dialog" aria-modal="true">
       <section className="modal">
-        <button className="icon-button modal-close" onClick={onClose} title="Close">
+        <button ref={closeRef} className="icon-button modal-close" onClick={onClose} title="Close">
           <X size={17} />
         </button>
         <h2>{title}</h2>
@@ -2169,6 +2239,7 @@ function Modal({ title, children, onClose }: { title: string; children: ReactNod
 
 function ChangelogModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const snapshot = useBudgetStore((state) => state.snapshot);
+  const updateCategory = useBudgetStore((state) => state.updateCategory);
   const [filter, setFilter] = useState("");
   if (!open) return null;
 
@@ -2177,7 +2248,16 @@ function ChangelogModal({ open, onClose }: { open: boolean; onClose: () => void 
     return item.summary.toLowerCase().includes(filter.toLowerCase()) || (item.metadata && JSON.stringify(item.metadata).toLowerCase().includes(filter.toLowerCase()));
   });
 
-  function exportAudit() {
+  // group by date (YYYY-MM-DD)
+  const groups: Record<string, typeof filtered> = {};
+  for (const item of filtered) {
+    const d = new Date(item.createdAt).toISOString().slice(0, 10);
+    groups[d] ||= [];
+    groups[d].push(item as any);
+  }
+  const groupKeys = Object.keys(groups).sort((a, b) => (a < b ? -1 : 1)).reverse();
+
+  function exportAuditJson() {
     try {
       const data = JSON.stringify(snapshot.auditLog, null, 2);
       if (navigator && (navigator as any).clipboard && typeof (navigator as any).clipboard.writeText === "function") {
@@ -2197,30 +2277,74 @@ function ChangelogModal({ open, onClose }: { open: boolean; onClose: () => void 
     }
   }
 
+  function exportAuditCsv() {
+    try {
+      const rows = ["createdAt,type,summary,metadata"];
+      for (const item of snapshot.auditLog) {
+        const meta = item.metadata ? JSON.stringify(item.metadata).replace(/\"/g, '""') : "";
+        rows.push(`"${item.createdAt}","${String(item.type)}","${String(item.summary).replace(/"/g, '""')}","${meta.replace(/"/g, '""')}"`);
+      }
+      const blob = new Blob([rows.join("\n")], { type: "text/csv" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `changelog-${new Date().toISOString()}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      alert("Export failed.");
+    }
+  }
+
+  function tryUndoArchive(item: { id: string; summary: string; metadata?: any }) {
+    // look for metadata.id which is category id
+    const catId = item.metadata && (item.metadata as any).id;
+    if (!catId) return;
+    const category = snapshot.categories.find((c) => c.id === catId);
+    if (!category || !category.archived) return;
+    if (!window.confirm(`Restore category ${category.name}?`)) return;
+    updateCategory(catId, { archived: false, active: true, visible: true });
+  }
+
   return (
     <Modal title="Changelog" onClose={onClose}>
       <div className="changelog-list">
         <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
           <input placeholder="Filter changelog..." value={filter} onChange={(e) => setFilter(e.target.value)} />
           <button className="soft-button compact" onClick={() => setFilter("")}>Clear</button>
-          <button className="command-button compact" onClick={exportAudit}>Export</button>
+          <button className="command-button compact" onClick={exportAuditJson}>Export JSON</button>
+          <button className="command-button compact" onClick={exportAuditCsv}>Export CSV</button>
         </div>
-        {filtered.length === 0 ? (
+        {groupKeys.length === 0 ? (
           <EmptyState title="No matching changes" detail="Try clearing the filter." />
         ) : (
-          <ol>
-            {filtered.map((item) => (
-              <li key={item.id}>
-                <div className="changelog-item">
-                  <div className="changelog-ts">{formatDateTime(item.createdAt)}</div>
-                  <div>
-                    <strong>{item.summary}</strong>
-                    {item.metadata && <pre className="muted">{JSON.stringify(item.metadata)}</pre>}
-                  </div>
-                </div>
-              </li>
+          <div>
+            {groupKeys.map((day) => (
+              <section key={day} style={{ marginBottom: 12 }}>
+                <h4 style={{ margin: '6px 0', color: 'var(--muted)', fontSize: '0.82rem' }}>{day}</h4>
+                <ol>
+                  {groups[day].map((item: any) => (
+                    <li key={item.id} style={{ marginBottom: 6 }}>
+                      <div className="changelog-item">
+                        <div className="changelog-ts">{formatDateTime(item.createdAt)}</div>
+                        <div>
+                          <strong>{item.summary}</strong>
+                          {item.metadata && <pre className="muted">{JSON.stringify(item.metadata)}</pre>}
+                        </div>
+                        <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
+                          {item.summary && item.summary.toLowerCase().includes('archived category') && (
+                            <button className="soft-button compact" onClick={() => tryUndoArchive(item)}>
+                              Restore
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </li>
+                  ))}
+                </ol>
+              </section>
             ))}
-          </ol>
+          </div>
         )}
         <div className="modal-actions">
           <button className="soft-button compact" onClick={onClose}>
