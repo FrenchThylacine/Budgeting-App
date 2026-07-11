@@ -9,8 +9,24 @@ $GHPAGES_URL = 'https://FrenchThylacine.github.io/Budgeting-App/'
 
 $form = New-Object System.Windows.Forms.Form
 $form.Text = 'Budgeting App Launcher (repo)'
-$form.Size = New-Object System.Drawing.Size(420,260)
+$form.Size = New-Object System.Drawing.Size(420,320)
 $form.StartPosition = 'CenterScreen'
+
+# Notify icon (tray)
+$notify = New-Object System.Windows.Forms.NotifyIcon
+$notify.Icon = [System.Drawing.SystemIcons]::Application
+$notify.Visible = $true
+$notify.Text = 'Budgeting App Launcher'
+
+# Context menu for tray
+$contextMenu = New-Object System.Windows.Forms.ContextMenu
+$miOpen = New-Object System.Windows.Forms.MenuItem('Open')
+$miExit = New-Object System.Windows.Forms.MenuItem('Exit')
+$contextMenu.MenuItems.Add($miOpen) | Out-Null
+$contextMenu.MenuItems.Add($miExit) | Out-Null
+$notify.ContextMenu = $contextMenu
+$miOpen.Click.Add({ $form.WindowState = 'Normal'; $form.Show(); $form.BringToFront() })
+$miExit.Click.Add({ $notify.Dispose(); $form.Close() })
 
 $btnDev = New-Object System.Windows.Forms.Button
 $btnDev.Text = 'Start Dev Server'
@@ -48,13 +64,64 @@ $label.AutoSize = $true
 $label.Location = New-Object System.Drawing.Point(20,190)
 $form.Controls.Add($label)
 
+# Timer to poll ports and show notification when ready
+$portTimer = New-Object System.Windows.Forms.Timer
+$portTimer.Interval = 1000
+$portTimerState = @{ Port = $null; Action = $null }
+$portTimer.Add_Tick({
+    if(-not $portTimerState.Port) { return }
+    try{ $c = Test-NetConnection -ComputerName 'localhost' -Port $portTimerState.Port -WarningAction SilentlyContinue } catch{ $c = $null }
+    if ($c -and $c.TcpTestSucceeded) {
+        $notify.ShowBalloonTip(3000, 'Server ready', "Server is listening on port $($portTimerState.Port)", [System.Windows.Forms.ToolTipIcon]::Info)
+        # open browser local + LAN
+        Start-Process "http://localhost:$($portTimerState.Port)"
+        try{ $ip=(Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.IPAddress -notlike '127.*' -and $_.IPAddress -notlike '169.*' } | Select-Object -First 1 -ExpandProperty IPAddress); if($ip){ Start-Process "http://$ip:$($portTimerState.Port)" } } catch{}
+        $portTimer.Stop()
+        $portTimerState.Port = $null
+        $portTimerState.Action = $null
+    }
+})
+
 $btnDev.Add_Click({
     $label.Text = 'Status: Starting dev server...'
     Start-Process -FilePath 'cmd.exe' -ArgumentList "/k cd /d `"$PROJECT_DIR`" && if not exist node_modules (npm ci) && npm run dev" -WindowStyle Normal
-    Start-Job -ScriptBlock { param($p) Start-Sleep -Seconds 1; & { $tries=0; while($tries -lt 120){ try{ $c=Test-NetConnection -ComputerName 'localhost' -Port $using:DEV_PORT -WarningAction SilentlyContinue; if($c.TcpTestSucceeded){ break } } catch{}; Start-Sleep -Seconds 1; $tries++ }; if($tries -lt 120){ Start-Process 'http://localhost:$using:DEV_PORT' } } } | Out-Null
-    Start-Job -ScriptBlock { param($p) Start-Sleep -Seconds 1; & { $tries=0; while($tries -lt 120){ try{ $c=Test-NetConnection -ComputerName 'localhost' -Port $using:DEV_PORT -WarningAction SilentlyContinue; if($c.TcpTestSucceeded){ break } } catch{}; Start-Sleep -Seconds 1; $tries++ }; if($tries -lt 120){ try{ $ip=(Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.IPAddress -notlike '127.*' -and $_.IPAddress -notlike '169.*' } | Select-Object -First 1 -ExpandProperty IPAddress); if($ip){ Start-Process "http://$ip:$using:DEV_PORT" } } catch{} } } } | Out-Null
-    $label.Text = 'Status: Dev server started (check browser)'
+    # start timer-based poll and notify
+    $portTimerState.Port = $DEV_PORT
+    $portTimerState.Action = 'dev'
+    $portTimer.Start()
+    $label.Text = 'Status: Dev server launching...'
 })
+
+$btnPreview.Add_Click({
+    $label.Text = 'Status: Building & previewing...'
+    Start-Process -FilePath 'cmd.exe' -ArgumentList "/k cd /d `"$PROJECT_DIR`" && if not exist node_modules (npm ci) && npm run build && npm run preview" -WindowStyle Normal
+    $portTimerState.Port = $PREVIEW_PORT
+    $portTimerState.Action = 'preview'
+    $portTimer.Start()
+    $label.Text = 'Status: Preview launching...'
+})
+
+$btnOpen.Add_Click({ Start-Process $GHPAGES_URL })
+
+$btnStop.Add_Click({
+    $label.Text = 'Status: Stopping servers...'
+    try{ Get-NetTCPConnection -LocalPort $DEV_PORT -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force } } catch{}
+    try{ Get-NetTCPConnection -LocalPort $PREVIEW_PORT -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force } } catch{}
+    $notify.ShowBalloonTip(2000, 'Servers stopped', "Stopped servers on ports $DEV_PORT and $PREVIEW_PORT", [System.Windows.Forms.ToolTipIcon]::Info)
+    $label.Text = 'Status: Servers stopped'
+})
+
+$btnOpenProject.Add_Click({ Start-Process -FilePath 'explorer.exe' -ArgumentList "`"$PROJECT_DIR`"" })
+
+$form.add_Resize({
+    if ($form.WindowState -eq 'Minimized'){
+        $form.Hide()
+        $notify.ShowBalloonTip(1500, 'Budgeting App', 'Launcher minimized to tray. Right-click the tray icon to restore.', [System.Windows.Forms.ToolTipIcon]::Info)
+    }
+})
+
+[void] $form.ShowDialog()
+
 
 $btnPreview.Add_Click({
     $label.Text = 'Status: Building & previewing...'
