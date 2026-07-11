@@ -26,8 +26,8 @@ echo 3) Open GitHub Pages site
 echo 4) Stop servers
 echo 5) Exit
 set /p choice="Choose [1-5]: "
-if "%choice%"=="1" start "Budget Dev" cmd /k "cd /d "%PROJECT_DIR%" && if not exist node_modules (npm ci) && npm run dev" & goto MENU
-if "%choice%"=="2" start "Budget Preview" cmd /k "cd /d "%PROJECT_DIR%" && if not exist node_modules (npm ci) && npm run build && npm run preview" & goto MENU
+if "%choice%"=="1" start "Budget Dev" cmd /k "cd /d "%PROJECT_DIR%" && if not exist node_modules (npm ci) && npm run dev" & start "OpenBrowser" powershell -NoProfile -WindowStyle Hidden -Command " $port=%DEV_PORT%; $tries=0; while($tries -lt 120){ try{ $c=Test-NetConnection -ComputerName 'localhost' -Port $port -WarningAction SilentlyContinue; if($c.TcpTestSucceeded){ break } } catch{}; Start-Sleep -Seconds 1; $tries++ }; if($tries -lt 120){ Start-Process 'http://localhost:%DEV_PORT%'; try{ $ip=(Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.IPAddress -notlike '127.*' -and $_.IPAddress -notlike '169.*' } | Select-Object -First 1 -ExpandProperty IPAddress); if($ip){ Start-Process "http://$ip:%DEV_PORT%" } } catch{} }" & goto MENU
+if "%choice%"=="2" start "Budget Preview" cmd /k "cd /d "%PROJECT_DIR%" && if not exist node_modules (npm ci) && npm run build && npm run preview" & start "OpenBrowser" powershell -NoProfile -WindowStyle Hidden -Command " $port=%PREVIEW_PORT%; $tries=0; while($tries -lt 120){ try{ $c=Test-NetConnection -ComputerName 'localhost' -Port $port -WarningAction SilentlyContinue; if($c.TcpTestSucceeded){ break } } catch{}; Start-Sleep -Seconds 1; $tries++ }; if($tries -lt 120){ Start-Process 'http://localhost:%PREVIEW_PORT%'; try{ $ip=(Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.IPAddress -notlike '127.*' -and $_.IPAddress -notlike '169.*' } | Select-Object -First 1 -ExpandProperty IPAddress); if($ip){ Start-Process "http://$ip:%PREVIEW_PORT%" } } catch{} }" & goto MENU
 if "%choice%"=="3" start "" "%GHPAGES_URL%" & goto MENU
 if "%choice%"=="4" (
   for /f "tokens=5" %%a in ('netstat -ano ^| findstr ":%DEV_PORT% "') do taskkill /PID %%a /F >nul 2>&1
