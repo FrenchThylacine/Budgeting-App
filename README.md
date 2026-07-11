@@ -34,8 +34,9 @@ Use the included shortcut scripts to start the app and open it in your default b
 
 - `run-local.ps1` — PowerShell startup script
 - `run-local.bat` — Windows shortcut-friendly batch wrapper
+- `Budget App.lnk` — shortcut file in the repository root that launches the app
 
-You can create a Windows desktop shortcut that points to `run-local.bat` for a single-click app launch.
+You can move `Budget App.lnk` to your Desktop or another convenient folder for single-click app launch.
 
 ## Phone access
 
@@ -58,5 +59,6 @@ The app is primarily intended for local use, but GitHub Pages is available if yo
 - `vite.config.ts` now allows local network binding for mobile access.
 - `package.json` includes `npm run start` for local launches.
 - `run-local.ps1` and `run-local.bat` provide one-click startup support.
+- A desktop shortcut named `Budget App.lnk` has been created on your Windows desktop.
 - The UI now improves responsiveness for smaller screens and mobile devices.
 - Existing budget calculation and persistence behavior has been preserved and verified.
