@@ -8,3 +8,19 @@
 - Added clearer README instructions for running the app locally and accessing it from a phone.
 - Verified all existing tests pass and confirmed the production build succeeds.
 - Preserved budget calculations, recurring expense logic, and data persistence.
+
+### 2026-07-11 — Launcher & installer (follow-up)
+- Added installer script: `scripts/install-launcher.ps1` — copies GUI and batch to Desktop and creates a Desktop shortcut that runs the GUI via PowerShell.
+- Enhanced repo launcher with tray icon, port polling timer, LAN auto-open, and balloon notifications: `scripts/launch-gui.ps1`.
+- Improved repo batch launcher to auto-open browser and support LAN preview: `scripts/launch-desktop.bat`.
+- Local Desktop GUI updated at `C:\Users\iyadf\Desktop\Budget-Launcher-GUI.ps1` (not tracked by default). Use the installer to sync.
+
+Files changed in this step:
+- scripts/install-launcher.ps1 (new)
+- scripts/launch-gui.ps1 (updated)
+- scripts/launch-desktop.bat (updated)
+
+Run installer from repo root to install to Desktop:
+  powershell -ExecutionPolicy Bypass -File .\scripts\install-launcher.ps1
+
+Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>
