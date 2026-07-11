@@ -988,6 +988,7 @@ function SpendingPanel({ filters, calculation }: { filters: Filters; calculation
     categoryId: "cat-spending",
     activityId: "",
     isPiloting: false,
+    source: "personal",
     note: "",
   });
   const entries = record.spendingEntries
@@ -1010,6 +1011,7 @@ function SpendingPanel({ filters, calculation }: { filters: Filters; calculation
       currency: draft.currency as CurrencyCode,
       recurrenceType: "none",
       isPiloting: draft.isPiloting,
+      source: draft.source,
       note: draft.note,
     });
     setDraft({ ...draft, amount: "", note: "" });
@@ -1048,7 +1050,7 @@ function SpendingPanel({ filters, calculation }: { filters: Filters; calculation
       </div>
       <form className="quick-add spending-add" onSubmit={submitDraft}>
         <input type="date" value={draft.date} onChange={(event) => setDraft({ ...draft, date: event.target.value })} />
-        <input inputMode="decimal" value={draft.amount} onChange={(event) => setDraft({ ...draft, amount: event.target.value })} placeholder="Amount, 0 allowed" />
+            <input inputMode="decimal" value={draft.amount} onChange={(event) => setDraft({ ...draft, amount: event.target.value })} placeholder="Amount, 0 allowed" />
         <select value={draft.currency} onChange={(event) => setDraft({ ...draft, currency: event.target.value as CurrencyCode })}>
           {CURRENCY_OPTIONS.map((currency) => (
             <option key={currency} value={currency}>
@@ -1077,6 +1079,14 @@ function SpendingPanel({ filters, calculation }: { filters: Filters; calculation
             </option>
           ))}
         </select>
+        <label>
+          Source
+          <select value={draft.source} onChange={(event) => setDraft({ ...draft, source: event.target.value })}>
+            <option value="personal">Personal (my budget)</option>
+            <option value="shared">Shared / split</option>
+            <option value="external">External / reimbursed</option>
+          </select>
+        </label>
         <label className="check-row compact">
           <input type="checkbox" checked={draft.isPiloting} onChange={(event) => setDraft({ ...draft, isPiloting: event.target.checked })} />
           Pilot
@@ -1097,6 +1107,7 @@ function SpendingPanel({ filters, calculation }: { filters: Filters; calculation
               <th>Category</th>
               <th>Activity</th>
               <th>Amount</th>
+              <th>Source</th>
               <th>Pilot</th>
               <th>Note</th>
               <th />
@@ -1105,58 +1116,65 @@ function SpendingPanel({ filters, calculation }: { filters: Filters; calculation
           <tbody>
             {entries.map((entry) => (
               <tr key={entry.id}>
-                <td>
-                  <input type="date" value={entry.date} onChange={(event) => updateSpendingEntry(entry.id, { date: event.target.value })} />
-                </td>
-                <td>
-                  <Badge tone={entry.week === snapshot.settings.selectedWeek ? "info" : "neutral"}>Week {entry.week}</Badge>
-                </td>
-                <td>
-                  <select value={entry.categoryId} onChange={(event) => updateSpendingEntry(entry.id, { categoryId: event.target.value })}>
-                    {snapshot.categories.map((category) => (
-                      <option key={category.id} value={category.id}>
-                        {category.name}
-                      </option>
-                    ))}
-                  </select>
-                </td>
-                <td>
-                  <select value={entry.activityId ?? ""} onChange={(event) => updateSpendingEntry(entry.id, { activityId: event.target.value || undefined })}>
-                    <option value="">No activity</option>
-                    {record.activities.map((activity) => (
-                      <option key={activity.id} value={activity.id}>
-                        {activity.name}
-                      </option>
-                    ))}
-                  </select>
-                </td>
-                <td className="money-edit">
-                  <input inputMode="decimal" value={entry.amount} onChange={(event) => updateSpendingEntry(entry.id, { amount: Number(event.target.value) })} />
-                  <select value={entry.currency} onChange={(event) => updateSpendingEntry(entry.id, { currency: event.target.value as CurrencyCode })}>
-                    {CURRENCY_OPTIONS.map((currency) => (
-                      <option key={currency} value={currency}>
-                        {currency}
-                      </option>
-                    ))}
-                  </select>
-                </td>
-                <td>
-                  <input type="checkbox" checked={entry.isPiloting} onChange={(event) => updateSpendingEntry(entry.id, { isPiloting: event.target.checked })} />
-                </td>
-                <td>
-                  <NoteButton value={entry.note} onSave={(note) => updateSpendingEntry(entry.id, { note })} />
-                </td>
-                <td>
-                  <button
-                    className="icon-button danger"
-                    title="Delete"
-                    onClick={() => {
-                      if (window.confirm("Delete this spending entry?")) removeSpendingEntry(entry.id);
-                    }}
-                  >
-                    <Trash2 size={15} />
-                  </button>
-                </td>
+              <td>
+                <input type="date" value={entry.date} onChange={(event) => updateSpendingEntry(entry.id, { date: event.target.value })} />
+              </td>
+              <td>
+                <Badge tone={entry.week === snapshot.settings.selectedWeek ? "info" : "neutral"}>Week {entry.week}</Badge>
+              </td>
+              <td>
+                <select value={entry.categoryId} onChange={(event) => updateSpendingEntry(entry.id, { categoryId: event.target.value })}>
+                  {snapshot.categories.map((category) => (
+                    <option key={category.id} value={category.id}>
+                      {category.name}
+                    </option>
+                  ))}
+                </select>
+              </td>
+              <td>
+                <select value={entry.activityId ?? ""} onChange={(event) => updateSpendingEntry(entry.id, { activityId: event.target.value || undefined })}>
+                  <option value="">No activity</option>
+                  {record.activities.map((activity) => (
+                    <option key={activity.id} value={activity.id}>
+                      {activity.name}
+                    </option>
+                  ))}
+                </select>
+              </td>
+              <td className="money-edit">
+                <input inputMode="decimal" value={entry.amount} onChange={(event) => updateSpendingEntry(entry.id, { amount: Number(event.target.value) })} />
+                <select value={entry.currency} onChange={(event) => updateSpendingEntry(entry.id, { currency: event.target.value as CurrencyCode })}>
+                  {CURRENCY_OPTIONS.map((currency) => (
+                    <option key={currency} value={currency}>
+                      {currency}
+                    </option>
+                  ))}
+                </select>
+              </td>
+              <td>
+                <select value={entry.source ?? 'personal'} onChange={(event) => updateSpendingEntry(entry.id, { source: event.target.value })}>
+                  <option value="personal">Personal</option>
+                  <option value="shared">Shared</option>
+                  <option value="external">External</option>
+                </select>
+              </td>
+              <td>
+                <input type="checkbox" checked={entry.isPiloting} onChange={(event) => updateSpendingEntry(entry.id, { isPiloting: event.target.checked })} />
+              </td>
+              <td>
+                <NoteButton value={entry.note} onSave={(note) => updateSpendingEntry(entry.id, { note })} />
+              </td>
+              <td>
+                <button
+                  className="icon-button danger"
+                  title="Delete"
+                  onClick={() => {
+                    if (window.confirm("Delete this spending entry?")) removeSpendingEntry(entry.id);
+                  }}
+                >
+                  <Trash2 size={15} />
+                </button>
+              </td>
               </tr>
             ))}
           </tbody>
@@ -1509,16 +1527,10 @@ function WalletPanel({ calculation, openRollover }: { calculation: BudgetCalcula
 function AnalyticsPanel({ calculation }: { calculation: BudgetCalculation }) {
   const snapshot = useBudgetStore((state) => state.snapshot);
   const record = snapshot.years[String(snapshot.settings.selectedYear)];
-  const selected = calculation.selectedMonthSpend.total ?? null;
+  const selected = (calculation.selectedMonthSpend.personalTotal ?? calculation.selectedMonthSpend.total) ?? null;
   const previous = calculation.month > 1 ? calculation.monthlyTrend[calculation.month - 2] : null;
-  const previousValue = previous?.total ?? null;
+  const previousValue = (previous?.personalTotal ?? previous?.total) ?? null;
   const change = selected != null && previousValue != null ? selected - previousValue : null;
-  const monthlyData = calculation.monthlyTrend.map((summary) => ({
-    name: summary.label.slice(0, 3),
-    total: summary.status === "value" || summary.status === "zero" ? summary.total : null,
-    budget: calculation.monthlyBudgetBase,
-    status: summary.status,
-  }));
   const weeklyData = calculation.weeklyTrend.slice(0, Math.max(calculation.week, 12)).map((summary) => ({
     name: `W${summary.week}`,
     total: summary.status === "value" || summary.status === "zero" ? summary.total : null,
@@ -1526,9 +1538,17 @@ function AnalyticsPanel({ calculation }: { calculation: BudgetCalculation }) {
   const categoryData = calculation.categoryTotals.map((item) => ({ ...item, name: item.categoryName }));
   const normalCategoryData = categoryData.filter((item) => item.bucket !== "piloting");
   const normalCategoryTotal = normalCategoryData.reduce((total, item) => total + item.total, 0);
+  // monthly data: prefer personal-only values when available so external/reimbursed spend does not distort analytics
+  const monthlyData = calculation.monthlyTrend.map((summary) => ({
+    name: summary.label.slice(0, 3),
+    total: (summary.personalTotal ?? summary.total) as number | null,
+    budget: calculation.monthlyBudgetBase,
+    status: summary.status,
+  }));
+  const personalSelected = calculation.selectedMonthSpend.personalTotal ?? calculation.selectedMonthSpend.total ?? 0;
   const recurringVsActualData = [
     { name: "Recurring", value: calculation.generalBudget, color: "#2563EB" },
-    { name: "Non-recurring", value: Math.max(0, (calculation.selectedMonthSpend.total ?? 0) - calculation.generalBudget), color: "#DB2777" },
+    { name: "Non-recurring", value: Math.max(0, personalSelected - calculation.generalBudget), color: "#DB2777" },
   ];
   let walletRunning = 0;
   const walletData = record.walletEntries
@@ -1566,13 +1586,13 @@ function AnalyticsPanel({ calculation }: { calculation: BudgetCalculation }) {
         </ChartPanel>
         <ChartPanel title="Category breakdown">
           <ResponsiveContainer width="100%" height={270}>
-            <BarChart data={categoryData}>
+            <BarChart data={normalCategoryData}>
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="name" />
               <YAxis />
               <Tooltip formatter={(value) => formatMoney(Number(value), snapshot.settings.baseCurrency, snapshot.settings.currencyDisplayMode)} />
               <Bar dataKey="total" radius={[6, 6, 0, 0]}>
-                {categoryData.map((entry) => (
+                  {normalCategoryData.map((entry) => (
                   <Cell key={entry.categoryId} fill={entry.color} />
                 ))}
               </Bar>

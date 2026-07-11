@@ -108,6 +108,11 @@ export interface SpendingEntry {
   currency: CurrencyCode;
   recurrenceType: RecurrenceType;
   isPiloting: boolean;
+  /**
+   * Source indicates whether this spending came from the user's personal budget
+   * or from an external payer (shared, reimbursed, etc.). Defaults to 'personal'.
+   */
+  source?: "personal" | "external" | "shared" | string;
   note: string;
   createdAt: string;
   updatedAt: string;
@@ -233,6 +238,10 @@ export interface PeriodSummary {
   total: number | null;
   generalTotal: number | null;
   pilotingTotal: number | null;
+  /** Sum of personal-budget spend (excludes external/shared) */
+  personalTotal?: number | null;
+  /** Sum of external/shared spend */
+  externalTotal?: number | null;
   entryCount: number;
   isClosed: boolean;
 }

@@ -344,6 +344,7 @@ label {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
+  font-size: 0.85rem; /* slightly smaller compact control */
 }
 
 .compact-period-controls label {
@@ -352,7 +353,7 @@ label {
 
 .compact-period-controls label span {
   display: block;
-  font-size: 0.7rem;
+  font-size: 0.68rem;
   color: var(--muted);
   font-weight: 800;
 }
