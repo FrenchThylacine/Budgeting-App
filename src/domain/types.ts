@@ -75,6 +75,8 @@ export interface BudgetCategory {
   color: string;
   monthlyCap?: number;
   notes?: string;
+  /** Soft-archive flag for UI; categories are preserved in history */
+  archived?: boolean;
 }
 
 export interface Activity {

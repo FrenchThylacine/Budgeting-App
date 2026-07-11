@@ -385,6 +385,19 @@ label {
   background: var(--panel-soft);
 }
 
+.recent-change {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 200px;
+  padding: 6px 9px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+}
+.recent-change span { color: var(--muted); font-size: 0.72rem; font-weight: 800; }
+.recent-change strong { font-size: 0.85rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
 .clock-card span,
 .timestamp span,
 .activity-cost span,
@@ -1395,3 +1408,6 @@ td input[type="checkbox"] {
     width: min(260px, calc(100vw - 48px));
   }
 }
+
+/* small analytics control */
+.analytics-controls { display:flex; align-items:center; justify-content:flex-start; gap:12px; padding:6px 8px; }

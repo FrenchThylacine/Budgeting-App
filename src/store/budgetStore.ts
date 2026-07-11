@@ -54,6 +54,11 @@ interface BudgetStore {
   applyScenarioPreset: (presetId: string) => void;
   undo: () => void;
   redo: () => void;
+  // Category management
+  addCategory: (category: Omit<BudgetCategory, "id">) => void;
+  updateCategory: (id: string, patch: Partial<BudgetCategory>) => void;
+  archiveCategory: (id: string) => void;
+  reorderCategory: (sourceId: string, targetId: string) => void;
 }
 
 export const useBudgetStore = create<BudgetStore>((set, get) => ({
@@ -497,6 +502,67 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
       "preset",
       "Applied scenario preset.",
       { presetId },
+    );
+  },
+
+  // Category management
+  addCategory: (category) => {
+    commit(
+      set,
+      get,
+      (snapshot) => {
+        const newCat = { ...category, id: id("cat") };
+        snapshot.categories.push(newCat);
+      },
+      "settings",
+      "Added category.",
+      category,
+    );
+  },
+
+  updateCategory: (idValue, patch) => {
+    commit(
+      set,
+      get,
+      (snapshot) => {
+        const cat = snapshot.categories.find((c) => c.id === idValue);
+        if (cat) Object.assign(cat, patch);
+      },
+      "settings",
+      "Updated category.",
+      { id: idValue, patch },
+    );
+  },
+
+  archiveCategory: (idValue) => {
+    commit(
+      set,
+      get,
+      (snapshot) => {
+        const cat = snapshot.categories.find((c) => c.id === idValue);
+        if (cat) cat.archived = true;
+      },
+      "settings",
+      "Archived category.",
+      { id: idValue },
+    );
+  },
+
+  reorderCategory: (sourceId, targetId) => {
+    commit(
+      set,
+      get,
+      (snapshot) => {
+        const cats = snapshot.categories;
+        const sourceIndex = cats.findIndex((c) => c.id === sourceId);
+        const targetIndex = cats.findIndex((c) => c.id === targetId);
+        if (sourceIndex < 0 || targetIndex < 0) return;
+        const [source] = cats.splice(sourceIndex, 1);
+        cats.splice(targetIndex, 0, source);
+      },
+      "settings",
+      "Reordered categories.",
+      { sourceId, targetId },
     );
   },
 

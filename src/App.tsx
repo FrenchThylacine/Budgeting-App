@@ -79,6 +79,7 @@ import {
 import type {
   Activity,
   BudgetSnapshot,
+  BudgetCategory,
   CurrencyCode,
   RecurrenceType,
   Settings,
@@ -447,6 +448,8 @@ function Header({ calculation, setRolloverOpen }: { calculation: BudgetCalculati
     (a, b) => a - b,
   );
 
+  const latestAudit = snapshot.auditLog[0];
+
   function moveMonth(delta: number) {
     let nextMonth = snapshot.settings.selectedMonth + delta;
     let nextYear = currentYear;
@@ -548,6 +551,12 @@ function Header({ calculation, setRolloverOpen }: { calculation: BudgetCalculati
           <span>Last updated</span>
           <strong>{formatDateTime(snapshot.settings.lastUpdated)}</strong>
         </div>
+        {latestAudit && (
+          <div className="recent-change">
+            <span>Recent change</span>
+            <strong title={latestAudit.summary}>{latestAudit.summary}</strong>
+          </div>
+        )}
         <select className="currency-pill" value={snapshot.settings.baseCurrency} onChange={(event) => updateSettings({ baseCurrency: event.target.value as CurrencyCode })} title="Base currency">
           {CURRENCY_OPTIONS.map((currency) => (
             <option key={currency} value={currency}>
@@ -651,10 +660,35 @@ function BudgetSuggestionPanel() {
     (approval) => approval.year === snapshot.settings.selectedYear && approval.month === snapshot.settings.selectedMonth,
   );
   const [editedAmount, setEditedAmount] = useState(String(suggestion.suggestedAmount));
+  const [showModal, setShowModal] = useState(false);
 
   useEffect(() => {
     setEditedAmount(String(suggestion.suggestedAmount));
   }, [suggestion.suggestedAmount, snapshot.settings.selectedYear, snapshot.settings.selectedMonth]);
+
+  useEffect(() => {
+    // Auto-open modal at start of month or when user navigates to current month with no approval
+    if (!existing && isViewingCurrentMonth(snapshot.settings)) {
+      setShowModal(true);
+    }
+  }, [existing, snapshot.settings.selectedYear, snapshot.settings.selectedMonth]);
+
+  const approvedAmount = parseAmount(editedAmount);
+  const noActiveRecurring = suggestion.recurringTotal === 0;
+
+  function doRecord(status: "approved" | "rejected") {
+    recordBudgetApproval({
+      year: snapshot.settings.selectedYear,
+      month: snapshot.settings.selectedMonth,
+      suggestedAmount: suggestion.suggestedAmount,
+      approvedAmount: status === "approved" ? approvedAmount : null,
+      currency: snapshot.settings.baseCurrency,
+      status,
+      recurringTotal: suggestion.recurringTotal,
+      note: status === "approved" ? "Approved from dashboard suggestion." : "Rejected from dashboard suggestion.",
+    });
+    setShowModal(false);
+  }
 
   if (existing || !isViewingCurrentMonth(snapshot.settings)) {
     return existing ? (
@@ -671,65 +705,65 @@ function BudgetSuggestionPanel() {
     ) : null;
   }
 
-  const approvedAmount = parseAmount(editedAmount);
-  const noActiveRecurring = suggestion.recurringTotal === 0;
-  
   return (
-    <section className="budget-suggestion">
-      <div>
-        <p className="eyebrow">Monthly budget approval</p>
-        <h2>Suggested budget for {monthName(snapshot.settings.selectedMonth)}</h2>
-        <span>
-          Based on active recurring expenses excluding piloting: {formatDualMoney(suggestion.recurringTotal, snapshot.settings)}.
-          {noActiveRecurring ? (
-            <> Use the edit field below to set a starting budget for this month.</>
-          ) : (
-            <> Rounded up to <strong>{formatDualMoney(suggestion.suggestedAmount, snapshot.settings)}</strong>.</>
-          )}
-        </span>
-      </div>
-      <div className="suggestion-controls">
-        <label>
-          Edit suggestion
-          <input inputMode="decimal" value={editedAmount} onChange={(event) => setEditedAmount(event.target.value)} />
-        </label>
-        <button
-          className="primary-button"
-          disabled={approvedAmount == null}
-          onClick={() =>
-            recordBudgetApproval({
-              year: snapshot.settings.selectedYear,
-              month: snapshot.settings.selectedMonth,
-              suggestedAmount: suggestion.suggestedAmount,
-              approvedAmount,
-              currency: snapshot.settings.baseCurrency,
-              status: "approved",
-              recurringTotal: suggestion.recurringTotal,
-              note: "Approved from dashboard suggestion.",
-            })
-          }
-        >
-          Approve
-        </button>
-        <button
-          className="soft-button compact"
-          onClick={() =>
-            recordBudgetApproval({
-              year: snapshot.settings.selectedYear,
-              month: snapshot.settings.selectedMonth,
-              suggestedAmount: suggestion.suggestedAmount,
-              approvedAmount: null,
-              currency: snapshot.settings.baseCurrency,
-              status: "rejected",
-              recurringTotal: suggestion.recurringTotal,
-              note: "Rejected from dashboard suggestion.",
-            })
-          }
-        >
-          Reject
-        </button>
-      </div>
-    </section>
+    <>
+      <section className="budget-suggestion">
+        <div>
+          <p className="eyebrow">Monthly budget approval</p>
+          <h2>Suggested budget for {monthName(snapshot.settings.selectedMonth)}</h2>
+          <span>
+            Based on active recurring expenses excluding piloting: {formatDualMoney(suggestion.recurringTotal, snapshot.settings)}.
+            {noActiveRecurring ? (
+              <> Use the edit field below to set a starting budget for this month.</>
+            ) : (
+              <> Rounded up to <strong>{formatDualMoney(suggestion.suggestedAmount, snapshot.settings)}</strong>.</>
+            )}
+          </span>
+        </div>
+        <div className="suggestion-controls">
+          <label>
+            Edit suggestion
+            <input inputMode="decimal" value={editedAmount} onChange={(event) => setEditedAmount(event.target.value)} />
+          </label>
+          <button className="primary-button" disabled={approvedAmount == null} onClick={() => doRecord("approved")}>
+            Approve
+          </button>
+          <button className="soft-button compact" onClick={() => doRecord("rejected")}>
+            Reject
+          </button>
+          <button className="soft-button compact" onClick={() => setShowModal(true)}>
+            Open modal
+          </button>
+        </div>
+      </section>
+
+      {showModal && (
+        <Modal title={`Approve suggested budget for ${monthName(snapshot.settings.selectedMonth)}`} onClose={() => setShowModal(false)}>
+          <div className="modal-summary">
+            <div>
+              <p className="eyebrow">Suggested amount</p>
+              <h2>{formatDualMoney(suggestion.suggestedAmount, snapshot.settings)}</h2>
+              <p>Based on recurring total {formatDualMoney(suggestion.recurringTotal, snapshot.settings)}</p>
+            </div>
+          </div>
+          <label>
+            Final approved amount
+            <input inputMode="decimal" value={editedAmount} onChange={(event) => setEditedAmount(event.target.value)} />
+          </label>
+          <div className="modal-actions">
+            <button className="soft-button compact" onClick={() => setShowModal(false)}>
+              Cancel
+            </button>
+            <button className="soft-button compact" onClick={() => doRecord("rejected")}>
+              Reject
+            </button>
+            <button className="primary-button" disabled={parseAmount(editedAmount) == null} onClick={() => doRecord("approved")}>
+              Approve
+            </button>
+          </div>
+        </Modal>
+      )}
+    </>
   );
 }
 
@@ -1527,9 +1561,10 @@ function WalletPanel({ calculation, openRollover }: { calculation: BudgetCalcula
 function AnalyticsPanel({ calculation }: { calculation: BudgetCalculation }) {
   const snapshot = useBudgetStore((state) => state.snapshot);
   const record = snapshot.years[String(snapshot.settings.selectedYear)];
-  const selected = (calculation.selectedMonthSpend.personalTotal ?? calculation.selectedMonthSpend.total) ?? null;
+  const [includeExternal, setIncludeExternal] = useState(false);
+  const selected = (includeExternal ? calculation.selectedMonthSpend.total : calculation.selectedMonthSpend.personalTotal ?? calculation.selectedMonthSpend.total) ?? null;
   const previous = calculation.month > 1 ? calculation.monthlyTrend[calculation.month - 2] : null;
-  const previousValue = (previous?.personalTotal ?? previous?.total) ?? null;
+  const previousValue = (includeExternal ? previous?.total : previous?.personalTotal ?? previous?.total) ?? null;
   const change = selected != null && previousValue != null ? selected - previousValue : null;
   const weeklyData = calculation.weeklyTrend.slice(0, Math.max(calculation.week, 12)).map((summary) => ({
     name: `W${summary.week}`,
@@ -1571,6 +1606,12 @@ function AnalyticsPanel({ calculation }: { calculation: BudgetCalculation }) {
       <ScenarioLab />
 
       <div className="analytics-grid">
+        <div className="analytics-controls" style={{ padding: 8 }}>
+          <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <input type="checkbox" checked={includeExternal} onChange={(e) => setIncludeExternal(e.target.checked)} />
+            Include external / shared spend in analytics
+          </label>
+        </div>
         <ChartPanel title="Monthly spend vs budget">
           <ResponsiveContainer width="100%" height={270}>
             <ComposedChart data={monthlyData}>
@@ -1892,6 +1933,71 @@ function SettingsPanel() {
           Save timestamp
         </label>
       </section>
+
+      <section className="settings-card">
+        <h3>Categories</h3>
+        <div>
+          <small style={{ color: 'var(--muted)' }}>Create, rename, reorder, and archive categories. Piloting stays separate.</small>
+        </div>
+        <CategoryManager />
+      </section>
+    </div>
+  );
+}
+
+function CategoryManager() {
+  const snapshot = useBudgetStore((state) => state.snapshot);
+  const addCategory = useBudgetStore((state) => state.addCategory);
+  const updateCategory = useBudgetStore((state) => state.updateCategory);
+  const archiveCategory = useBudgetStore((state) => state.archiveCategory);
+  const reorderCategory = useBudgetStore((state) => state.reorderCategory);
+  const [newName, setNewName] = useState("");
+  const [newBucket, setNewBucket] = useState<BudgetCategory["bucket"]>("general");
+  const [newColor, setNewColor] = useState("#64748B");
+
+  function handleAdd() {
+    if (!newName.trim()) return;
+    addCategory({ name: newName.trim(), bucket: newBucket, color: newColor });
+    setNewName("");
+  }
+
+  return (
+    <div>
+      <div style={{ display: 'grid', gap: 8, gridTemplateColumns: '1fr 140px 120px auto', marginBottom: 8 }}>
+        <input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="New category name" />
+        <select value={newBucket} onChange={(e) => setNewBucket(e.target.value as any)}>
+          <option value="general">General</option>
+          <option value="piloting">Piloting</option>
+          <option value="personal">Personal</option>
+          <option value="wallet">Wallet</option>
+        </select>
+        <input value={newColor} onChange={(e) => setNewColor(e.target.value)} placeholder="#hex" />
+        <button className="primary-button" onClick={handleAdd}>
+          <Plus size={13} /> Create
+        </button>
+      </div>
+      <div style={{ display: 'grid', gap: 8 }}>
+        {snapshot.categories.map((cat, index) => (
+          <div key={cat.id} style={{ display: 'grid', gridTemplateColumns: '1fr 120px 80px 36px', gap: 8, alignItems: 'center' }}>
+            <input value={cat.name} onChange={(e) => updateCategory(cat.id, { name: e.target.value })} />
+            <select value={cat.bucket} onChange={(e) => updateCategory(cat.id, { bucket: e.target.value as any })}>
+              <option value="general">General</option>
+              <option value="piloting">Piloting</option>
+              <option value="personal">Personal</option>
+              <option value="wallet">Wallet</option>
+            </select>
+            <input value={cat.color} onChange={(e) => updateCategory(cat.id, { color: e.target.value })} />
+            <div style={{ display: 'flex', gap: 6 }}>
+              <button className="icon-button" title="Move up" onClick={() => index > 0 && reorderCategory(cat.id, snapshot.categories[index - 1].id)}>
+                <ChevronLeft size={14} />
+              </button>
+              <button className="icon-button" title="Archive" onClick={() => archiveCategory(cat.id)}>
+                <Archive size={14} />
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
