@@ -2,7 +2,7 @@ name: Deploy to GitHub Pages
 
 on:
   push:
-    branches: [main]
+    branches: [main, copilot-budget-dashboard-improvements-and-deployment-8ed00ebd]
   workflow_dispatch:
 
 permissions:

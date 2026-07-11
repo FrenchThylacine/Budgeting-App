@@ -491,51 +491,55 @@ function Header({ calculation, setRolloverOpen }: { calculation: BudgetCalculati
         </div>
       </div>
 
-      <div className="period-control-bar" aria-label="Period controls">
+      <div className="period-switcher" aria-label="Period controls">
         <button className="icon-button" title="Previous month" onClick={() => moveMonth(-1)}>
           <ChevronLeft size={17} />
         </button>
-        <label>
-          Month
-          <select value={snapshot.settings.selectedMonth} onChange={(event) => updateSettings({ selectedMonth: Number(event.target.value) })}>
-            {MONTH_NAMES.map((name, index) => (
-              <option key={name} value={index + 1}>
-                {name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          Week
-          <select value={snapshot.settings.selectedWeek} onChange={(event) => updateSettings({ selectedWeek: Number(event.target.value) })}>
-            {Array.from({ length: maxWeeks }, (_, index) => index + 1).map((week) => (
-              <option key={week} value={week}>
-                Week {week}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          Year
-          <select value={currentYear} onChange={(event) => selectYear(Number(event.target.value))}>
-            {yearOptions.map((year) => (
-              <option key={year} value={year}>
-                {year}
-              </option>
-            ))}
-          </select>
-        </label>
+        <div className="compact-period-controls">
+          <label>
+            <span>Month</span>
+            <select value={snapshot.settings.selectedMonth} onChange={(event) => updateSettings({ selectedMonth: Number(event.target.value) })}>
+              {MONTH_NAMES.map((name, index) => (
+                <option key={name} value={index + 1}>
+                  {name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            <span>Week</span>
+            <select value={snapshot.settings.selectedWeek} onChange={(event) => updateSettings({ selectedWeek: Number(event.target.value) })}>
+              {Array.from({ length: maxWeeks }, (_, index) => index + 1).map((week) => (
+                <option key={week} value={week}>
+                  Week {week}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            <span>Year</span>
+            <select value={currentYear} onChange={(event) => selectYear(Number(event.target.value))}>
+              {yearOptions.map((year) => (
+                <option key={year} value={year}>
+                  {year}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
         <button className="icon-button" title="Next month" onClick={() => moveMonth(1)}>
           <ChevronRight size={17} />
         </button>
-        <button className="soft-button compact" onClick={() => moveWeek(-1)}>
-          <ChevronLeft size={15} />
-          Week
-        </button>
-        <button className="soft-button compact" onClick={() => moveWeek(1)}>
-          Week
-          <ChevronRight size={15} />
-        </button>
+        <div className="week-buttons">
+          <button className="soft-button compact" onClick={() => moveWeek(-1)}>
+            <ChevronLeft size={15} />
+            Week
+          </button>
+          <button className="soft-button compact" onClick={() => moveWeek(1)}>
+            Week
+            <ChevronRight size={15} />
+          </button>
+        </div>
       </div>
 
       <div className="header-actions">

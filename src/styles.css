@@ -307,12 +307,36 @@ label {
   font-size: 0.78rem;
 }
 
+.period-switcher,
 .period-control-bar {
   display: grid;
-  grid-template-columns: 38px minmax(120px, 1fr) minmax(110px, 0.8fr) minmax(92px, 0.65fr) 38px auto auto;
+  grid-template-columns: 38px minmax(200px, 1fr) 38px auto;
   gap: 8px;
   align-items: end;
   padding: 12px;
+}
+
+.compact-period-controls {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.compact-period-controls label {
+  margin: 0;
+}
+
+.compact-period-controls label span {
+  display: block;
+  font-size: 0.7rem;
+  color: var(--muted);
+  font-weight: 800;
+}
+
+.week-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .header-actions {
@@ -1056,6 +1080,149 @@ td input[type="checkbox"] {
   background: rgba(255, 255, 255, 0.65);
   color: #422006;
   border-color: rgba(133, 77, 14, 0.2);
+}
+
+@media (max-width: 1080px) {
+  .app-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar {
+    position: relative;
+    top: 0;
+    height: auto;
+    border-right: none;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .main-area {
+    padding: 18px 16px;
+  }
+
+  .top-header {
+    grid-template-columns: 1fr;
+  }
+
+  .period-switcher,
+  .header-actions,
+  .budget-suggestion,
+  .suggestion-controls,
+  .activity-grid,
+  .wishlist-grid,
+  .insight-grid,
+  .analytics-grid,
+  .settings-grid,
+  .history-grid,
+  .wallet-overview,
+  .scenario-form,
+  .impact-grid,
+  .scenario-results,
+  .equivalent-panel {
+    grid-template-columns: 1fr;
+  }
+
+  .period-switcher {
+    grid-template-columns: 1fr 38px auto;
+    align-items: center;
+  }
+
+  .compact-period-controls {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .header-actions {
+    justify-content: stretch;
+  }
+
+  .header-actions > * {
+    width: 100%;
+  }
+
+  .summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  .sidebar {
+    padding: 14px 12px;
+  }
+
+  .side-nav {
+    gap: 4px;
+  }
+
+  .side-nav-item {
+    padding: 10px 8px;
+    font-size: 0.82rem;
+  }
+
+  .brand-block {
+    gap: 8px;
+  }
+
+  .brand-copy {
+    display: none;
+  }
+
+  .header-title h1 {
+    font-size: 1.4rem;
+  }
+
+  .period-meta {
+    gap: 6px;
+    font-size: 0.7rem;
+  }
+
+  .period-switcher {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .compact-period-controls {
+    grid-template-columns: 1fr;
+  }
+
+  .currency-pill {
+    width: 100%;
+  }
+
+  .header-actions {
+    gap: 6px;
+  }
+
+  .summary-grid,
+  .activity-grid,
+  .wishlist-grid,
+  .insight-grid,
+  .analytics-grid,
+  .settings-grid,
+  .history-grid,
+  .wallet-overview,
+  .scenario-form {
+    grid-template-columns: 1fr;
+  }
+
+  .quick-add,
+  .spending-add,
+  .table-shell,
+  .data-table,
+  .note-card,
+  .modal {
+    width: 100%;
+  }
+
+  .top-header,
+  .summary-card,
+  .chart-panel,
+  .insight-card,
+  .activity-card,
+  .wishlist-card,
+  .settings-card,
+  .history-card,
+  .budget-suggestion {
+    padding: 12px;
+  }
 }
 
 .note-actions {
