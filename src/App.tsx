@@ -2066,8 +2066,11 @@ function CategoryManager() {
             onDragStart={(e) => onDragStart(e, cat.id)}
             onDragOver={onDragOver}
             onDrop={(e) => onDrop(e, cat.id)}
-            style={{ display: 'grid', gridTemplateColumns: '1fr 120px 80px 36px', gap: 8, alignItems: 'center' }}
+            className="category-row"
           >
+            <div className="drag-handle" title="Drag to reorder">
+              <Menu size={14} />
+            </div>
             <input value={cat.name} onChange={(e) => updateCategory(cat.id, { name: e.target.value })} />
             <select value={cat.bucket} onChange={(e) => updateCategory(cat.id, { bucket: e.target.value as any })}>
               <option value="general">General</option>
