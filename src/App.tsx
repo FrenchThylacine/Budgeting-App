@@ -228,6 +228,13 @@ export default function App() {
   const calculation = useMemo(() => calculateYear(snapshot), [snapshot]);
   const record = snapshot.years[String(snapshot.settings.selectedYear)];
   const historical = isViewingHistoricalPeriod(snapshot.settings);
+  const [changelogOpen, setChangelogOpen] = useState(false);
+
+  useEffect(() => {
+    const onOpen = () => setChangelogOpen(true);
+    window.addEventListener("open-changelog", onOpen as EventListener);
+    return () => window.removeEventListener("open-changelog", onOpen as EventListener);
+  }, []);
 
   if (!hydrated || !record) {
     return (
@@ -238,14 +245,6 @@ export default function App() {
       </main>
     );
   }
-
-  const [changelogOpen, setChangelogOpen] = useState(false);
-
-  useEffect(() => {
-    const onOpen = () => setChangelogOpen(true);
-    window.addEventListener("open-changelog", onOpen as EventListener);
-    return () => window.removeEventListener("open-changelog", onOpen as EventListener);
-  }, []);
 
   return (
     <div className={sidebarCollapsed ? "app-shell sidebar-collapsed" : "app-shell"}>
