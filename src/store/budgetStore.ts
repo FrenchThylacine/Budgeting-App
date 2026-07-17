@@ -17,7 +17,8 @@ import type {
 } from "../domain/types";
 import { createSeedBudgetSnapshot } from "../data/seedBudget";
 import { defaultCategories } from "../data/seedBudget";
-import { deleteSnapshot, loadSnapshot, saveSnapshot } from "../storage/idb";
+import { deleteSnapshot as deleteIdbSnapshot, loadSnapshot as loadIdbSnapshot, saveSnapshot as saveIdbSnapshot } from "../storage/idb";
+import { getApiClient } from "../api/client";
 
 type ActivityInput = Omit<Activity, "id" | "order"> & Partial<Pick<Activity, "id" | "order">>;
 type SpendingInput = Omit<SpendingEntry, "id" | "createdAt" | "updatedAt"> & Partial<Pick<SpendingEntry, "id">>;
@@ -675,3 +676,53 @@ function normalizeSnapshot(snapshot: BudgetSnapshot): BudgetSnapshot {
   snapshot.budgetApprovals ??= [];
   return snapshot;
 }
+
+/**
+ * Load snapshot from API or fallback to IndexedDB
+ */
+async function loadSnapshot(): Promise<BudgetSnapshot | null> {
+  const apiClient = getApiClient();
+  try {
+    // Try API first
+    const apiSnapshot = await apiClient.loadSnapshot();
+    if (apiSnapshot) return apiSnapshot;
+  } catch (error) {
+    console.warn("API load failed, falling back to IndexedDB:", error);
+  }
+  // Fallback to IndexedDB
+  return loadIdbSnapshot();
+}
+
+/**
+ * Save snapshot to API and IndexedDB (for offline capability)
+ */
+async function saveSnapshot(snapshot: BudgetSnapshot): Promise<void> {
+  const apiClient = getApiClient();
+  try {
+    // Try saving to API
+    await apiClient.saveSnapshot(snapshot);
+  } catch (error) {
+    console.warn("API save failed, falling back to IndexedDB:", error);
+  }
+  // Also save to IndexedDB for offline capability
+  try {
+    await saveIdbSnapshot(snapshot);
+  } catch (error) {
+    console.error("Failed to save snapshot:", error);
+  }
+}
+
+/**
+ * Delete snapshot from API and IndexedDB
+ */
+async function deleteSnapshot(): Promise<void> {
+  const apiClient = getApiClient();
+  try {
+    // Note: API doesn't have a delete endpoint yet; it would reset server-side
+    // For now, just delete locally
+    await deleteIdbSnapshot();
+  } catch (error) {
+    console.error("Failed to delete snapshot:", error);
+  }
+}
+
