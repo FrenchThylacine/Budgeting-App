@@ -25,3 +25,6 @@ Prompt.txt
 Thumbs.db
 
 .pnpm-store/
+.vercel
+.env*
+*.tsbuildinfo
