@@ -2,6 +2,10 @@ import express from "express";
 import cors from "cors";
 import { getDatabase, closeDatabase } from "./db/index";
 import { createSnapshotRoutes } from "./routes/snapshot";
+import { createSpendingRoutes } from "./routes/spending";
+import { createCategoryRoutes } from "./routes/categories";
+import { createActivitiesRoutes } from "./routes/activities";
+import { createApprovalRoutes } from "./routes/approvals";
 import { errorHandler } from "./middleware/errorHandler";
 
 const app = express();
@@ -22,6 +26,10 @@ app.get("/api/health", (_req, res) => {
 
 // Routes
 app.use("/api/snapshot", createSnapshotRoutes());
+app.use("/api/spending", createSpendingRoutes());
+app.use("/api/categories", createCategoryRoutes());
+app.use("/api/activities", createActivitiesRoutes());
+app.use("/api/approvals", createApprovalRoutes());
 
 // Error handling (must be last)
 app.use(errorHandler);
