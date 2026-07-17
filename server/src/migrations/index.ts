@@ -1,42 +1,48 @@
-import Database from "better-sqlite3";
+import type { NeonQueryFunction } from "@neondatabase/serverless";
 
-export function runMigrations(db: Database.Database): void {
-  // Check if migrations table exists; if not, we're starting fresh
-  const migrationsTableExists = db
-    .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='migrations'")
-    .get();
+export async function runMigrations(
+  sql: NeonQueryFunction<any, any>
+): Promise<void> {
 
-  if (!migrationsTableExists) {
-    db.exec(`
-      CREATE TABLE migrations (
-        id INTEGER PRIMARY KEY,
-        name TEXT UNIQUE NOT NULL,
-        executed_at TEXT NOT NULL
-      );
-    `);
-  }
+  // Create migrations tracking table
+  await sql`
+    CREATE TABLE IF NOT EXISTS migrations (
+      id SERIAL PRIMARY KEY,
+      name TEXT UNIQUE NOT NULL,
+      executed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+  `;
 
-  // List of migrations to run (in order)
+
   const migrations = [
     {
       name: "001-initial-schema",
-      run: () => {
-        // Schema is already initialized in schema.ts
-        // This migration just serves as a checkpoint
+      run: async () => {
+        // Schema is created in schema.ts
+        // This migration is only a checkpoint
       },
     },
   ];
 
-  for (const migration of migrations) {
-    const executed = db
-      .prepare("SELECT 1 FROM migrations WHERE name = ?")
-      .get(migration.name);
 
-    if (!executed) {
-      migration.run();
-      db.prepare("INSERT INTO migrations (name, executed_at) VALUES (?, datetime('now'))").run(
-        migration.name,
-      );
+  for (const migration of migrations) {
+
+    const result = await sql`
+      SELECT 1
+      FROM migrations
+      WHERE name = ${migration.name};
+    `;
+
+
+    if (result.length === 0) {
+
+      await migration.run();
+
+
+      await sql`
+        INSERT INTO migrations (name)
+        VALUES (${migration.name});
+      `;
     }
   }
 }

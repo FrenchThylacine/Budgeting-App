@@ -16,6 +16,7 @@
     "dev:all": "concurrently \"npm run dev\" \"npm run server:dev\""
   },
   "dependencies": {
+    "@neondatabase/serverless": "^1.1.0",
     "@vitejs/plugin-react": "^4.3.4",
     "better-sqlite3": "^12.11.1",
     "cors": "^2.8.6",
@@ -41,10 +42,12 @@
     "tsx": "^4.23.1",
     "typescript": "^5.7.2",
     "vite": "^6.0.3",
-    "vitest": "^2.1.8"
+    "vitest": "^4.1.10"
   },
   "allowScripts": {
     "esbuild@0.25.12": true,
-    "esbuild@0.21.5": true
+    "esbuild@0.21.5": true,
+    "better-sqlite3@12.11.1": true,
+    "esbuild@0.28.1": true
   }
 }

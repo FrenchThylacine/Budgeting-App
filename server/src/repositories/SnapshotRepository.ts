@@ -1,4 +1,4 @@
-import Database from "better-sqlite3";
+import { getDatabase } from "../db/client";
 import type {
   BudgetSnapshot,
   Activity,
@@ -16,7 +16,7 @@ import type {
 } from "@/domain/types";
 
 export class SnapshotRepository {
-  constructor(private db: Database.Database) {}
+  constructor(private db = getDatabase()) {}
 
   loadSnapshot(snapshotId: string = "active"): BudgetSnapshot | null {
     const row = this.db
@@ -229,7 +229,7 @@ export class SnapshotRepository {
           activity.order,
           activity.notes,
         now,
-        now,
+        now
         );
     }
 
