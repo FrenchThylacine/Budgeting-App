@@ -2,7 +2,9 @@
 
 A Vite + React budget dashboard focused on fast local use, recurring budget approval, dual-currency analytics, and mobile-friendly access.
 
-## What’s included
+**New in Phase 1:** Full backend integration with Express + SQLite for persistent data storage beyond client-side IndexedDB.
+
+## What's included
 
 - Monthly budget suggestion based on active recurring costs (excludes Piloting)
 - Piloting expenses visible separately and excluded from category-share calculations
@@ -10,87 +12,162 @@ A Vite + React budget dashboard focused on fast local use, recurring budget appr
 - Dashboard cards for current budget, remaining budget, monthly spending, recurring costs, and progress
 - Compact header controls for month/week/year navigation
 - Mobile-responsive layout and charts for phones/tablets
-- Local data persistence via IndexedDB
+- **Backend persistence via SQLite** (with automatic IndexedDB fallback for offline use)
 - Easy local launch scripts for Windows
+
+## Architecture
+
+- **Frontend:** Vite + React (TSX), Zustand state management, Recharts charts
+- **Backend:** Express.js + SQLite (better-sqlite3), TypeScript
+- **Storage:** SQLite database (backend) + IndexedDB (frontend fallback for offline)
+- **Deployment:** Static frontend (GitHub Pages/Netlify) + separate backend with persistent database
 
 ## Local development
 
-1. Install dependencies:
+### Prerequisites
+
+1. Node.js 18+ and npm
+
+### Run both frontend and backend together
 
 ```bash
-npm ci
+npm install
+npm run dev:all
 ```
 
-2. Run the app locally (development server):
+This starts:
+- Frontend dev server on `http://localhost:5173`
+- Backend API server on `http://localhost:3001`
+
+### Run frontend only (without backend)
 
 ```bash
+npm install
 npm run dev
 ```
 
-or use the included `start` script which runs Vite and is suitable for local launches:
+The app will fall back to local IndexedDB storage if the backend API is not available.
+
+### Run backend only
 
 ```bash
-npm run start
+npm install
+npm run server:dev
 ```
 
-3. Build for production:
+The backend will listen on `http://0.0.0.0:3001` and bind to all network interfaces for LAN access.
+
+### Build for production
 
 ```bash
 npm run build
 ```
 
-4. Preview the production build locally:
+Produces:
+- `dist/` — static frontend (deploy to GitHub Pages, Netlify, etc.)
+- `server/dist/` — backend (deploy to a Node.js hosting platform)
+
+### Run production build
 
 ```bash
+# Frontend preview
 npm run preview
+
+# Backend production
+npm run server:prod
 ```
 
-5. Run tests:
+### Database management
+
+The backend uses SQLite with automatic schema initialization on first run.
+
+**Database location:** `data/budget.db` (or set `DB_PATH` environment variable)
+
+#### Import existing data
+
+If you have a JSON backup from the app:
+
+```bash
+npm run server:dev &
+npx tsx server/src/migrate.ts path/to/backup.json
+```
+
+This imports your existing budget data into the SQLite database.
+
+## Phone access (LAN)
+
+With the backend running:
+
+1. Run `npm run dev:all` (or `npm run server:dev` for backend-only)
+2. Find your PC's IP address on the local network
+3. From your phone browser, open:
+   ```
+   http://<your-pc-ip>:5173
+   ```
+
+For remote access outside your network, use a secure tunnel tool such as `ngrok` or `localtunnel`.
+
+## Deployment
+
+### Option 1: Frontend + Backend on same server
+
+- Deploy static frontend to a CDN (GitHub Pages, Netlify, Vercel)
+- Deploy backend to Node.js hosting (Heroku, Railway, Render, etc.)
+- Configure frontend API URL with environment variable:
+  ```
+  VITE_API_URL=https://api.example.com
+  ```
+
+### Option 2: Backend only on private server
+
+- Deploy frontend as static files on private server
+- Deploy backend on the same server or private network
+- Set `CORS_ORIGIN` on backend to match frontend domain
+
+## Configuration
+
+Create a `.env` file (copy from `.env.example`):
+
+```bash
+cp .env.example .env
+```
+
+**Frontend (.env for build time):**
+- `VITE_API_URL` — Backend API base URL (default: `/api` for relative paths)
+
+**Backend (runtime):**
+- `NODE_ENV` — `development` or `production`
+- `HOST` — Server host binding (default: `0.0.0.0`)
+- `PORT` — Server port (default: `3001`)
+- `DB_PATH` — SQLite database path (default: `data/budget.db`)
+- `CORS_ORIGIN` — Comma-separated list of allowed origins for CORS
+
+## Development scripts
+
+- `npm run dev` — Frontend dev server (Vite)
+- `npm run server:dev` — Backend dev server (Node.js with tsx)
+- `npm run dev:all` — Both frontend and backend together
+- `npm run build` — Build frontend + server for production
+- `npm run server:build` — Build backend only
+- `npm run test` — Run tests (vitest)
+- `npm run test:watch` — Watch mode for tests
+
+## Testing
 
 ```bash
 npm test
 ```
 
-### One-click launch
-
-Use the included shortcut scripts to start the app and open it in your default browser automatically:
-
-- `run-local.ps1` — PowerShell startup script
-- `run-local.bat` — Windows shortcut-friendly batch wrapper
-- `Budget App.lnk` — shortcut file in the repository root that launches the app
-
-To use the desktop shortcut:
-
-1. Keep the app folder intact. Do not move `run-local.bat` or `run-local.ps1` out of the project directory.
-2. Copy `Budget App.lnk` from the project root to your Desktop (or another convenient folder).
-3. Double-click `Budget App.lnk` to start the app and open it in your browser.
-
-If you prefer, create a new shortcut directly from `run-local.bat` by right-clicking it and choosing `Send to > Desktop (create shortcut)`.
-
-## Phone access
-
-The development server binds to `0.0.0.0`, so your phone can access the app from the same local network.
-
-1. Run `npm run start` (or `npm run dev`)
-2. Find your computer IP address on the local network
-3. Open `http://<your-pc-ip>:5173` in your phone browser
-
-If you need remote access outside your network, use a secure tunnel tool such as `ngrok` or `localtunnel`.
-
-## Deployment
-
-Static deployment options included in this repository:
-
-- GitHub Pages: `.github/workflows/deploy-pages.yml` is present for Pages-based static hosting.
-- Netlify: `.github/workflows/deploy-netlify.yml` can be used to deploy `dist/` to Netlify (requires `NETLIFY_AUTH_TOKEN` and `NETLIFY_SITE_ID` secrets).
-
-The app is primarily intended for private local use. Use a private Netlify site or a secure tunnel if you need remote access while keeping the repository private.
+Includes safety-net tests for:
+- Value handling (0 as valid, null/NaN as missing)
+- Currency conversion determinism
+- Historical data immutability
+- Budget calculations (piloting separation, rollover, suggestions)
 
 ## Notes
 
-- `vite.config.ts` allows local network binding for mobile access.
-- `package.json` includes `npm run start` for local launches.
-- `run-local.ps1` and `run-local.bat` provide one-click startup support.
-- `Budget App.lnk` is available in the repository root; copy it to your Desktop to launch the app with one click.
-- The UI improves responsiveness for smaller screens and mobile devices.
-- Existing budget calculation and persistence behavior has been preserved and verified.
+- Existing budget data is preserved through IndexedDB and can be migrated to SQLite using the migration tool
+- The app works offline with IndexedDB if the backend is unavailable
+- All calculation and UI logic remains in the frontend; the backend is a thin persistence layer
+- Database schema is Postgres-friendly for future migration if needed
+

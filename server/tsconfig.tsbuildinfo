@@ -1,0 +1,1 @@
+{"root":["./src/index.ts","./src/migrate.ts","./src/db/index.ts","./src/db/schema.ts","./src/middleware/errorhandler.ts","./src/migrations/index.ts","./src/repositories/snapshotrepository.ts","./src/routes/snapshot.ts","./src/services/budgetservice.ts"],"errors":true,"version":"5.9.3"}
