@@ -282,9 +282,11 @@ export class BudgetApiClient {
   async proposeApproval(approval: {
     year: number;
     month: number;
-    suggestedBudget: number;
-    approvedBudget?: number;
+    suggestedAmount: number;
+    approvedAmount?: number;
     notes?: string;
+    currency: string;
+    recurringTotal: number;
   }): Promise<any> {
     try {
       const response = await fetch(`${this.baseUrl}/approvals`, {
@@ -305,14 +307,14 @@ export class BudgetApiClient {
    */
   async approveApproval(
     id: string,
-    approvedBudget: number,
+    approvedAmount: number,
     notes?: string,
   ): Promise<any> {
     try {
-      const response = await fetch(`${this.baseUrl}/approvals/${id}/approve`, {
+      const response = await fetch(`${this.baseUrl}/approvals/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ approvedBudget, notes }),
+        body: JSON.stringify({ approvedAmount, status: "approved", decidedAt: new Date().toISOString(), note: notes }),
       });
       if (!response.ok) throw new Error(`Failed to approve: ${response.statusText}`);
       return response.json();
@@ -327,10 +329,10 @@ export class BudgetApiClient {
    */
   async rejectApproval(id: string, reason?: string): Promise<any> {
     try {
-      const response = await fetch(`${this.baseUrl}/approvals/${id}/reject`, {
+      const response = await fetch(`${this.baseUrl}/approvals/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ reason }),
+        body: JSON.stringify({ status: "rejected", decidedAt: new Date().toISOString(), note: reason }),
       });
       if (!response.ok) throw new Error(`Failed to reject: ${response.statusText}`);
       return response.json();
