@@ -42,6 +42,9 @@ export interface BudgetCategory {
     notes?: string;
     /** Soft-archive flag for UI; categories are preserved in history */
     archived?: boolean;
+    icon?: string;
+    description?: string;
+    parentId?: string;
 }
 export interface Activity {
     id: string;

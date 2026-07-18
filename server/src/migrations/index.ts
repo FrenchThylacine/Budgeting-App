@@ -17,9 +17,21 @@ export async function runMigrations(
   const migrations = [
     {
       name: "001-initial-schema",
-      run: async () => {
+      run: async (sql: NeonQueryFunction<any, any>) => {
         // Schema is created in schema.ts
         // This migration is only a checkpoint
+      },
+    },
+    {
+      name: "002-add-category-metadata",
+      run: async (sql: NeonQueryFunction<any, any>) => {
+        try {
+          await sql`ALTER TABLE categories ADD COLUMN IF NOT EXISTS icon TEXT;`;
+          await sql`ALTER TABLE categories ADD COLUMN IF NOT EXISTS description TEXT;`;
+          await sql`ALTER TABLE categories ADD COLUMN IF NOT EXISTS parent_id TEXT;`;
+        } catch (e) {
+          console.error("Migration 002 error (might already exist):", e);
+        }
       },
     },
   ];
@@ -36,7 +48,7 @@ export async function runMigrations(
 
     if (result.length === 0) {
 
-      await migration.run();
+      await migration.run(sql);
 
 
       await sql`

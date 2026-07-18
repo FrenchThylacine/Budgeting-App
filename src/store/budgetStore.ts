@@ -455,7 +455,6 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
           createdAt: timestamp,
           decidedAt: timestamp,
         });
-        snapshot.budgetApprovals = snapshot.budgetApprovals.slice(0, 120);
         if (approval.status === "approved" && approval.approvedAmount != null) {
           snapshot.settings.monthlyBudget = approval.approvedAmount;
           snapshot.settings.monthlyBudgetCurrency = approval.currency;

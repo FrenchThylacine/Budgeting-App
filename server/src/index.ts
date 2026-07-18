@@ -1,6 +1,6 @@
 import express from "express";
 import cors from "cors";
-import { getDatabase, closeDatabase } from "./db/index";
+import { getDatabase, closeDatabase, initializeDatabase } from "./db/index";
 import { createSnapshotRoutes } from "./routes/snapshot";
 import { createSpendingRoutes } from "./routes/spending";
 import { createCategoryRoutes } from "./routes/categories";
@@ -18,6 +18,19 @@ app.use(
     credentials: true,
   }),
 );
+
+// DB Initialization middleware for serverless / local use
+const dbInitMiddleware = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
+  try {
+    await initializeDatabase();
+    next();
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Mount DB Init middleware for all API routes
+app.use("/api", dbInitMiddleware);
 
 // Health check
 app.get("/api/health", (_req, res) => {
@@ -50,9 +63,14 @@ process.on("SIGINT", () => {
 const PORT = parseInt(process.env.PORT || "3001", 10);
 const HOST = process.env.HOST || "0.0.0.0";
 
-const server = app.listen(PORT, HOST, () => {
+const server = app.listen(PORT, HOST, async () => {
   console.log(`Budget API server running on http://${HOST}:${PORT}`);
-  console.log(`Database: ${process.env.DB_PATH || "data/budget.db"}`);
+  try {
+    await initializeDatabase();
+    console.log("Neon database initialized successfully");
+  } catch (error) {
+    console.error("Neon database initialization failed on startup:", error);
+  }
 });
 
 export default app;

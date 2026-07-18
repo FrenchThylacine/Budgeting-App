@@ -1,4 +1,4 @@
-import { getDatabase } from "../db/client";
+import { getDatabase } from "../db";
 import type {
   BudgetSnapshot,
   Activity,
@@ -10,35 +10,31 @@ import type {
   BudgetApproval,
   AuditLog,
   YearRecord,
-  Settings,
   SeasonalPreset,
   ScenarioPreset,
 } from "@/domain/types";
 
 export class SnapshotRepository {
-  constructor(private db = getDatabase()) {}
+  constructor(private sql = getDatabase()) {}
 
-  loadSnapshot(snapshotId: string = "active"): BudgetSnapshot | null {
-    const row = this.db
-      .prepare("SELECT * FROM snapshots WHERE id = ?")
-      .get(snapshotId) as any;
+  async loadSnapshot(snapshotId: string = "active"): Promise<BudgetSnapshot | null> {
+    const rows = await this.sql("SELECT * FROM snapshots WHERE id = $1", [snapshotId]);
+    const row = rows[0];
 
     if (!row) return null;
 
     const settings = JSON.parse(row.settings);
-    const categories = this.loadCategories(snapshotId);
-    const seasonalPresets = this.loadSeasonalPresets(snapshotId);
-    const scenarioPresets = this.loadScenarioPresets(snapshotId);
-    const budgetApprovals = this.loadBudgetApprovals();
-    const auditLog = this.loadAuditLog(snapshotId);
+    const categories = await this.loadCategories(snapshotId);
+    const seasonalPresets = await this.loadSeasonalPresets(snapshotId);
+    const scenarioPresets = await this.loadScenarioPresets(snapshotId);
+    const budgetApprovals = await this.loadBudgetApprovals();
+    const auditLog = await this.loadAuditLog(snapshotId);
 
-    const yearsData = this.db
-      .prepare("SELECT id, year FROM years WHERE snapshot_id = ?")
-      .all(snapshotId) as any[];
+    const yearsData = await this.sql("SELECT id, year FROM years WHERE snapshot_id = $1", [snapshotId]);
 
     const years: Record<string, YearRecord> = {};
     for (const yearRow of yearsData) {
-      const yearRecord = this.loadYearRecord(yearRow.id);
+      const yearRecord = await this.loadYearRecord(yearRow.id);
       if (yearRecord) {
         years[String(yearRecord.year)] = yearRecord;
       }
@@ -56,311 +52,285 @@ export class SnapshotRepository {
     };
   }
 
-  saveSnapshot(snapshot: BudgetSnapshot, snapshotId: string = "active"): void {
-    const txn = this.db.transaction(() => {
-      const now = new Date().toISOString();
+  async saveSnapshot(snapshot: BudgetSnapshot, snapshotId: string = "active"): Promise<void> {
+    const now = new Date().toISOString();
 
-      // Upsert snapshot
-      this.db
-        .prepare(
-          `
-        INSERT OR REPLACE INTO snapshots (id, version, settings, created_at, updated_at)
-        VALUES (?, ?, ?, 
-          COALESCE((SELECT created_at FROM snapshots WHERE id = ?), ?),
-          ?
-        )
-      `,
-        )
-        .run(snapshotId, snapshot.version, JSON.stringify(snapshot.settings), snapshotId, now, now);
+    // Upsert snapshot
+    await this.sql(`
+      INSERT INTO snapshots (id, version, settings, created_at, updated_at)
+      VALUES ($1, $2, $3, $4, $5)
+      ON CONFLICT (id) DO UPDATE SET
+        version = EXCLUDED.version,
+        settings = EXCLUDED.settings,
+        updated_at = EXCLUDED.updated_at
+    `, [snapshotId, snapshot.version, JSON.stringify(snapshot.settings), now, now]);
 
-      // Categories
-      for (const category of snapshot.categories) {
-        this.db
-          .prepare(
-            `
-          INSERT OR REPLACE INTO categories
-          (id, snapshot_id, name, bucket, color, monthly_cap, notes, archived)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        `,
-          )
-          .run(
-            category.id,
-            snapshotId,
-            category.name,
-            category.bucket,
-            category.color,
-            category.monthlyCap ?? null,
-            category.notes ?? null,
-            category.archived ? 1 : 0,
-          );
-      }
+    // Categories
+    for (const category of snapshot.categories) {
+      await this.sql(`
+        INSERT INTO categories
+        (id, snapshot_id, name, bucket, color, monthly_cap, notes, archived, icon, description, parent_id)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        ON CONFLICT (id) DO UPDATE SET
+          name = EXCLUDED.name,
+          bucket = EXCLUDED.bucket,
+          color = EXCLUDED.color,
+          monthly_cap = EXCLUDED.monthly_cap,
+          notes = EXCLUDED.notes,
+          archived = EXCLUDED.archived,
+          icon = EXCLUDED.icon,
+          description = EXCLUDED.description,
+          parent_id = EXCLUDED.parent_id
+      `, [
+        category.id,
+        snapshotId,
+        category.name,
+        category.bucket,
+        category.color,
+        category.monthlyCap ?? null,
+        category.notes ?? null,
+        category.archived ? 1 : 0,
+        category.icon ?? null,
+        category.description ?? null,
+        category.parentId ?? null,
+      ]);
+    }
 
-      // Years and nested data
-      for (const yearRecord of Object.values(snapshot.years)) {
-        this.saveYearRecord(snapshotId, yearRecord, now);
-      }
+    // Years and nested data
+    for (const yearRecord of Object.values(snapshot.years)) {
+      await this.saveYearRecord(snapshotId, yearRecord, now);
+    }
 
-      // Presets
-      for (const preset of snapshot.seasonalPresets) {
-        this.db
-          .prepare(
-            `
-          INSERT OR REPLACE INTO seasonal_presets
-          (id, snapshot_id, name, season, activity_overrides, notes)
-          VALUES (?, ?, ?, ?, ?, ?)
-        `,
-          )
-          .run(preset.id, snapshotId, preset.name, preset.season, JSON.stringify(preset.activityOverrides), preset.notes);
-      }
+    // Presets
+    for (const preset of snapshot.seasonalPresets) {
+      await this.sql(`
+        INSERT INTO seasonal_presets
+        (id, snapshot_id, name, season, activity_overrides, notes)
+        VALUES ($1, $2, $3, $4, $5, $6)
+        ON CONFLICT (id) DO UPDATE SET
+          name = EXCLUDED.name,
+          season = EXCLUDED.season,
+          activity_overrides = EXCLUDED.activity_overrides,
+          notes = EXCLUDED.notes
+      `, [preset.id, snapshotId, preset.name, preset.season, JSON.stringify(preset.activityOverrides), preset.notes]);
+    }
 
-      for (const preset of snapshot.scenarioPresets) {
-        this.db
-          .prepare(
-            `
-          INSERT OR REPLACE INTO scenario_presets
-          (id, snapshot_id, name, monthly_budget, pilot_included_in_budget, category_caps, notes)
-          VALUES (?, ?, ?, ?, ?, ?, ?)
-        `,
-          )
-          .run(
-            preset.id,
-            snapshotId,
-            preset.name,
-            preset.monthlyBudget ?? null,
-            preset.pilotIncludedInBudget ? 1 : 0,
-            preset.categoryCaps ? JSON.stringify(preset.categoryCaps) : null,
-            preset.notes,
-          );
-      }
+    for (const preset of snapshot.scenarioPresets) {
+      await this.sql(`
+        INSERT INTO scenario_presets
+        (id, snapshot_id, name, monthly_budget, pilot_included_in_budget, category_caps, notes)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        ON CONFLICT (id) DO UPDATE SET
+          name = EXCLUDED.name,
+          monthly_budget = EXCLUDED.monthly_budget,
+          pilot_included_in_budget = EXCLUDED.pilot_included_in_budget,
+          category_caps = EXCLUDED.category_caps,
+          notes = EXCLUDED.notes
+      `, [
+        preset.id,
+        snapshotId,
+        preset.name,
+        preset.monthlyBudget ?? null,
+        preset.pilotIncludedInBudget ? 1 : 0,
+        preset.categoryCaps ? JSON.stringify(preset.categoryCaps) : null,
+        preset.notes,
+      ]);
+    }
 
-      // Budget approvals
-      for (const approval of snapshot.budgetApprovals) {
-        this.db
-          .prepare(
-            `
-          INSERT OR REPLACE INTO budget_approvals
-          (id, year, month, suggested_amount, approved_amount, currency, status, recurring_total, note, created_at, decided_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `,
-          )
-          .run(
-            approval.id,
-            approval.year,
-            approval.month,
-            approval.suggestedAmount,
-            approval.approvedAmount ?? null,
-            approval.currency,
-            approval.status,
-            approval.recurringTotal,
-            approval.note,
-            approval.createdAt,
-            approval.decidedAt,
-          );
-      }
+    // Budget approvals
+    for (const approval of snapshot.budgetApprovals) {
+      await this.sql(`
+        INSERT INTO budget_approvals
+        (id, year, month, suggested_amount, approved_amount, currency, status, recurring_total, note, created_at, decided_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        ON CONFLICT (id) DO UPDATE SET
+          suggested_amount = EXCLUDED.suggested_amount,
+          approved_amount = EXCLUDED.approved_amount,
+          currency = EXCLUDED.currency,
+          status = EXCLUDED.status,
+          recurring_total = EXCLUDED.recurring_total,
+          note = EXCLUDED.note,
+          decided_at = EXCLUDED.decided_at
+      `, [
+        approval.id,
+        approval.year,
+        approval.month,
+        approval.suggestedAmount,
+        approval.approvedAmount ?? null,
+        approval.currency,
+        approval.status,
+        approval.recurringTotal,
+        approval.note ?? null,
+        approval.createdAt,
+        approval.decidedAt,
+      ]);
+    }
 
-      // Audit log
-      for (const log of snapshot.auditLog) {
-        this.db
-          .prepare(
-            `
-          INSERT OR REPLACE INTO audit_log
-          (id, snapshot_id, type, summary, metadata, created_at)
-          VALUES (?, ?, ?, ?, ?, ?)
-        `,
-          )
-          .run(log.id, snapshotId, log.type, log.summary, log.metadata ? JSON.stringify(log.metadata) : null, log.createdAt);
-      }
-    });
-
-    txn();
+    // Audit log
+    for (const log of snapshot.auditLog) {
+      await this.sql(`
+        INSERT INTO audit_log
+        (id, snapshot_id, type, summary, metadata, created_at)
+        VALUES ($1, $2, $3, $4, $5, $6)
+        ON CONFLICT (id) DO UPDATE SET
+          summary = EXCLUDED.summary,
+          metadata = EXCLUDED.metadata
+      `, [log.id, snapshotId, log.type, log.summary, log.metadata ? JSON.stringify(log.metadata) : null, log.createdAt]);
+    }
   }
 
-  private saveYearRecord(snapshotId: string, yearRecord: YearRecord, now: string): void {
-    let yearId = this.db
-      .prepare("SELECT id FROM years WHERE snapshot_id = ? AND year = ?")
-      .get(snapshotId, yearRecord.year) as any;
+  private async saveYearRecord(snapshotId: string, yearRecord: YearRecord, now: string): Promise<void> {
+    const existingYears = await this.sql("SELECT id FROM years WHERE snapshot_id = $1 AND year = $2", [snapshotId, yearRecord.year]);
+    let yearId: string;
 
-    if (!yearId) {
-      const id = `year-${snapshotId}-${yearRecord.year}-${Date.now()}`;
-      this.db
-        .prepare(
-          `
+    if (existingYears.length === 0) {
+      yearId = `year-${snapshotId}-${yearRecord.year}-${Date.now()}`;
+      await this.sql(`
         INSERT INTO years (id, snapshot_id, year, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?)
-      `,
-        )
-        .run(id, snapshotId, yearRecord.year, yearRecord.createdAt, now);
-      yearId = { id };
+        VALUES ($1, $2, $3, $4, $5)
+      `, [yearId, snapshotId, yearRecord.year, yearRecord.createdAt, now]);
     } else {
-      this.db
-        .prepare("UPDATE years SET updated_at = ? WHERE id = ?")
-        .run(now, yearId.id);
+      yearId = existingYears[0].id;
+      await this.sql("UPDATE years SET updated_at = $1 WHERE id = $2", [now, yearId]);
     }
 
     // Activities
-    this.db.prepare("DELETE FROM activities WHERE year_id = ?").run(yearId.id);
+    await this.sql("DELETE FROM activities WHERE year_id = $1", [yearId]);
     for (const activity of yearRecord.activities) {
-      this.db
-        .prepare(
-          `
+      await this.sql(`
         INSERT INTO activities
         (id, year_id, name, category_id, currency, recurrence_type, recurrence_interval,
          price_per_session, price_per_purchase, price_per_month, estimated_cost, yearly_estimate,
-         active, visible, seasonal_tag, \`order\`, notes, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `,
-        )
-        .run(
-          activity.id,
-          yearId.id,
-          activity.name,
-          activity.categoryId,
-          activity.currency,
-          activity.recurrenceType,
-          activity.recurrenceInterval,
-          activity.pricePerSession,
-          activity.pricePerPurchase,
-          activity.pricePerMonth,
-          activity.estimatedCost,
-          activity.yearlyEstimate,
-          activity.active ? 1 : 0,
-          activity.visible ? 1 : 0,
-          activity.seasonalTag,
-          activity.order,
-          activity.notes,
+         active, visible, seasonal_tag, "order", notes, created_at, updated_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+      `, [
+        activity.id,
+        yearId,
+        activity.name,
+        activity.categoryId,
+        activity.currency,
+        activity.recurrenceType,
+        activity.recurrenceInterval,
+        activity.pricePerSession ?? null,
+        activity.pricePerPurchase ?? null,
+        activity.pricePerMonth ?? null,
+        activity.estimatedCost ?? null,
+        activity.yearlyEstimate ?? null,
+        activity.active ? 1 : 0,
+        activity.visible ? 1 : 0,
+        activity.seasonalTag,
+        activity.order,
+        activity.notes || "",
         now,
-        now
-        );
+        now,
+      ]);
     }
 
     // Spending entries
-    this.db.prepare("DELETE FROM spending_entries WHERE year_id = ?").run(yearId.id);
+    await this.sql("DELETE FROM spending_entries WHERE year_id = $1", [yearId]);
     for (const entry of yearRecord.spendingEntries) {
-      this.db
-        .prepare(
-          `
+      await this.sql(`
         INSERT INTO spending_entries
         (id, year_id, month, week, date, category_id, activity_id, amount, currency,
          recurrence_type, is_piloting, source, note, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `,
-        )
-        .run(
-          entry.id,
-          yearId.id,
-          entry.month,
-          entry.week,
-          entry.date,
-          entry.categoryId,
-          entry.activityId ?? null,
-          entry.amount,
-          entry.currency,
-          entry.recurrenceType,
-          entry.isPiloting ? 1 : 0,
-          entry.source ?? "personal",
-          entry.note,
-          entry.createdAt,
-          entry.updatedAt,
-        );
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+      `, [
+        entry.id,
+        yearId,
+        entry.month,
+        entry.week,
+        entry.date,
+        entry.categoryId,
+        entry.activityId ?? null,
+        entry.amount,
+        entry.currency,
+        entry.recurrenceType,
+        entry.isPiloting ? 1 : 0,
+        entry.source || "personal",
+        entry.note ?? null,
+        entry.createdAt,
+        entry.updatedAt,
+      ]);
     }
 
     // Wishlist items
-    this.db.prepare("DELETE FROM wishlist_items WHERE year_id = ?").run(yearId.id);
+    await this.sql("DELETE FROM wishlist_items WHERE year_id = $1", [yearId]);
     for (const item of yearRecord.wishlistItems) {
-      this.db
-        .prepare(
-          `
+      await this.sql(`
         INSERT INTO wishlist_items
         (id, year_id, name, category_id, actual_price, effective_value, currency,
          bought, in_wishlist, priority, date_added, date_purchased, notes, active, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `,
-        )
-        .run(
-          item.id,
-          yearId.id,
-          item.name,
-          item.categoryId,
-          item.actualPrice,
-          item.effectiveValue,
-          item.currency,
-          item.bought ? 1 : 0,
-          item.inWishlist ? 1 : 0,
-          item.priority,
-          item.dateAdded,
-          item.datePurchased ?? null,
-          item.notes,
-          item.active ? 1 : 0,
-          now,
-          now,
-        );
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+      `, [
+        item.id,
+        yearId,
+        item.name,
+        item.categoryId,
+        item.actualPrice ?? null,
+        item.effectiveValue ?? null,
+        item.currency,
+        item.bought ? 1 : 0,
+        item.inWishlist ? 1 : 0,
+        item.priority,
+        item.dateAdded,
+        item.datePurchased ?? null,
+        item.notes ?? null,
+        item.active ? 1 : 0,
+        now,
+        now,
+      ]);
     }
 
     // Wallet entries
-    this.db.prepare("DELETE FROM wallet_entries WHERE year_id = ?").run(yearId.id);
+    await this.sql("DELETE FROM wallet_entries WHERE year_id = $1", [yearId]);
     for (const entry of yearRecord.walletEntries) {
-      this.db
-        .prepare(
-          `
-        INSERT INTO wallet_entries
-        (id, year_id, month, amount, currency, source, type, note, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `,
-        )
-        .run(entry.id, yearId.id, entry.month, entry.amount, entry.currency, entry.source, entry.type, entry.note, entry.createdAt);
+      await this.sql(`
+        INSERT INTO wallet_entries (id, year_id, month, amount, currency, source, type, note, created_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      `, [
+        entry.id,
+        yearId,
+        entry.month,
+        entry.amount,
+        entry.currency,
+        entry.source,
+        entry.type,
+        entry.note ?? null,
+        entry.createdAt,
+      ]);
     }
 
     // Closed months
-    this.db.prepare("DELETE FROM closed_months WHERE year_id = ?").run(yearId.id);
+    await this.sql("DELETE FROM closed_months WHERE year_id = $1", [yearId]);
     for (const record of yearRecord.closedMonths) {
-      this.db
-        .prepare(
-          `
-        INSERT INTO closed_months
-        (id, year_id, month, status, spend_total, delta, rollover_wallet_entry_id, confirmed_at, note)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `,
-        )
-        .run(
-          record.id,
-          yearId.id,
-          record.month,
-          record.status,
-          record.spendTotal,
-          record.delta,
-          record.rolloverWalletEntryId ?? null,
-          record.confirmedAt,
-          record.note,
-        );
+      await this.sql(`
+        INSERT INTO closed_months (id, year_id, month, status, spend_total, delta, rollover_wallet_entry_id, confirmed_at, note)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      `, [
+        record.id,
+        yearId,
+        record.month,
+        record.status,
+        record.spendTotal ?? null,
+        record.delta ?? null,
+        record.rolloverWalletEntryId ?? null,
+        record.confirmedAt,
+        record.note ?? null,
+      ]);
     }
   }
 
-  private loadYearRecord(yearId: string): YearRecord | null {
-    const yearRow = this.db
-      .prepare("SELECT * FROM years WHERE id = ?")
-      .get(yearId) as any;
+  private async loadYearRecord(yearId: string): Promise<YearRecord | null> {
+    const yearRows = await this.sql("SELECT * FROM years WHERE id = $1", [yearId]);
+    const yearRow = yearRows[0];
 
     if (!yearRow) return null;
 
-    const activities = this.db
-      .prepare("SELECT * FROM activities WHERE year_id = ? ORDER BY `order`")
-      .all(yearId) as any[];
-
-    const spendingEntries = this.db
-      .prepare("SELECT * FROM spending_entries WHERE year_id = ?")
-      .all(yearId) as any[];
-
-    const wishlistItems = this.db
-      .prepare("SELECT * FROM wishlist_items WHERE year_id = ?")
-      .all(yearId) as any[];
-
-    const walletEntries = this.db
-      .prepare("SELECT * FROM wallet_entries WHERE year_id = ?")
-      .all(yearId) as any[];
-
-    const closedMonths = this.db
-      .prepare("SELECT * FROM closed_months WHERE year_id = ?")
-      .all(yearId) as any[];
+    const activities = await this.sql('SELECT * FROM activities WHERE year_id = $1 ORDER BY "order"', [yearId]);
+    const spendingEntries = await this.sql("SELECT * FROM spending_entries WHERE year_id = $1", [yearId]);
+    const wishlistItems = await this.sql("SELECT * FROM wishlist_items WHERE year_id = $1", [yearId]);
+    const walletEntries = await this.sql("SELECT * FROM wallet_entries WHERE year_id = $1", [yearId]);
+    const closedMonths = await this.sql("SELECT * FROM closed_months WHERE year_id = $1", [yearId]);
 
     return {
       year: yearRow.year,
@@ -369,81 +339,74 @@ export class SnapshotRepository {
       wishlistItems: wishlistItems.map((i) => this.parseWishlistItem(i)),
       walletEntries: walletEntries.map((e) => this.parseWalletEntry(e)),
       closedMonths: closedMonths.map((r) => this.parseMonthCloseRecord(r)),
-      monthlyNotes: {}, // TODO: implement monthly notes table if needed
+      monthlyNotes: {},
       createdAt: yearRow.created_at,
       updatedAt: yearRow.updated_at,
     };
   }
 
-  private loadCategories(snapshotId: string): BudgetCategory[] {
-    const rows = this.db
-      .prepare("SELECT * FROM categories WHERE snapshot_id = ? ORDER BY name")
-      .all(snapshotId) as any[];
+  private async loadCategories(snapshotId: string): Promise<BudgetCategory[]> {
+    const rows = await this.sql("SELECT * FROM categories WHERE snapshot_id = $1 ORDER BY name", [snapshotId]);
 
     return rows.map((r) => ({
       id: r.id,
       name: r.name,
       bucket: r.bucket,
       color: r.color,
-      monthlyCap: r.monthly_cap,
-      notes: r.notes,
-      archived: r.archived === 1,
+      monthlyCap: r.monthly_cap ?? undefined,
+      notes: r.notes ?? undefined,
+      archived: r.archived === 1 || r.archived === true,
+      icon: r.icon ?? undefined,
+      description: r.description ?? undefined,
+      parentId: r.parent_id ?? undefined,
     }));
   }
 
-  private loadSeasonalPresets(snapshotId: string): SeasonalPreset[] {
-    const rows = this.db
-      .prepare("SELECT * FROM seasonal_presets WHERE snapshot_id = ?")
-      .all(snapshotId) as any[];
+  private async loadSeasonalPresets(snapshotId: string): Promise<SeasonalPreset[]> {
+    const rows = await this.sql("SELECT * FROM seasonal_presets WHERE snapshot_id = $1", [snapshotId]);
 
     return rows.map((r) => ({
       id: r.id,
       name: r.name,
       season: r.season,
       activityOverrides: JSON.parse(r.activity_overrides),
-      notes: r.notes,
+      notes: r.notes ?? undefined,
     }));
   }
 
-  private loadScenarioPresets(snapshotId: string): ScenarioPreset[] {
-    const rows = this.db
-      .prepare("SELECT * FROM scenario_presets WHERE snapshot_id = ?")
-      .all(snapshotId) as any[];
+  private async loadScenarioPresets(snapshotId: string): Promise<ScenarioPreset[]> {
+    const rows = await this.sql("SELECT * FROM scenario_presets WHERE snapshot_id = $1", [snapshotId]);
 
     return rows.map((r) => ({
       id: r.id,
       name: r.name,
-      monthlyBudget: r.monthly_budget,
-      pilotIncludedInBudget: r.pilot_included_in_budget === 1,
+      monthlyBudget: r.monthly_budget ?? undefined,
+      pilotIncludedInBudget: r.pilot_included_in_budget === 1 || r.pilot_included_in_budget === true,
       categoryCaps: r.category_caps ? JSON.parse(r.category_caps) : undefined,
-      notes: r.notes,
+      notes: r.notes ?? undefined,
     }));
   }
 
-  private loadBudgetApprovals(): BudgetApproval[] {
-    const rows = this.db
-      .prepare("SELECT * FROM budget_approvals ORDER BY decided_at DESC LIMIT 120")
-      .all() as any[];
+  private async loadBudgetApprovals(): Promise<BudgetApproval[]> {
+    const rows = await this.sql("SELECT * FROM budget_approvals ORDER BY decided_at DESC");
 
     return rows.map((r) => ({
       id: r.id,
       year: r.year,
       month: r.month,
       suggestedAmount: r.suggested_amount,
-      approvedAmount: r.approved_amount,
+      approvedAmount: r.approved_amount ?? undefined,
       currency: r.currency,
       status: r.status,
       recurringTotal: r.recurring_total,
       createdAt: r.created_at,
       decidedAt: r.decided_at,
-      note: r.note,
+      note: r.note ?? undefined,
     }));
   }
 
-  private loadAuditLog(snapshotId: string): AuditLog[] {
-    const rows = this.db
-      .prepare("SELECT * FROM audit_log WHERE snapshot_id = ? ORDER BY created_at DESC LIMIT 500")
-      .all(snapshotId) as any[];
+  private async loadAuditLog(snapshotId: string): Promise<AuditLog[]> {
+    const rows = await this.sql("SELECT * FROM audit_log WHERE snapshot_id = $1 ORDER BY created_at DESC LIMIT 500", [snapshotId]);
 
     return rows.map((r) => ({
       id: r.id,
@@ -461,35 +424,35 @@ export class SnapshotRepository {
       categoryId: row.category_id,
       currency: row.currency,
       recurrenceType: row.recurrence_type,
-      recurrenceInterval: row.recurrence_interval,
-      pricePerSession: row.price_per_session,
-      pricePerPurchase: row.price_per_purchase,
-      pricePerMonth: row.price_per_month,
-      estimatedCost: row.estimated_cost,
-      yearlyEstimate: row.yearly_estimate,
-      active: row.active === 1,
-      visible: row.visible === 1,
+      recurrenceInterval: Number(row.recurrence_interval),
+      pricePerSession: row.price_per_session != null ? Number(row.price_per_session) : null,
+      pricePerPurchase: row.price_per_purchase != null ? Number(row.price_per_purchase) : null,
+      pricePerMonth: row.price_per_month != null ? Number(row.price_per_month) : null,
+      estimatedCost: row.estimated_cost != null ? Number(row.estimated_cost) : null,
+      yearlyEstimate: row.yearly_estimate != null ? Number(row.yearly_estimate) : null,
+      active: row.active === 1 || row.active === true,
+      visible: row.visible === 1 || row.visible === true,
       seasonalTag: row.seasonal_tag,
-      order: row.order,
-      notes: row.notes,
+      order: Number(row.order),
+      notes: row.notes || "",
     };
   }
 
   private parseSpendingEntry(row: any): SpendingEntry {
     return {
       id: row.id,
-      year: row.year_id, // Note: should be parsed from year_id relationship
-      month: row.month,
-      week: row.week,
+      year: Number(row.year_id.split("-").pop()) || 2026,
+      month: Number(row.month),
+      week: Number(row.week),
       date: row.date,
       categoryId: row.category_id,
-      activityId: row.activity_id,
-      amount: row.amount,
+      activityId: row.activity_id ?? undefined,
+      amount: Number(row.amount),
       currency: row.currency,
       recurrenceType: row.recurrence_type,
-      isPiloting: row.is_piloting === 1,
+      isPiloting: row.is_piloting === 1 || row.is_piloting === true,
       source: row.source,
-      note: row.note,
+      note: row.note ?? "",
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     };
@@ -500,29 +463,29 @@ export class SnapshotRepository {
       id: row.id,
       name: row.name,
       categoryId: row.category_id,
-      actualPrice: row.actual_price,
-      effectiveValue: row.effective_value,
+      actualPrice: row.actual_price != null ? Number(row.actual_price) : null,
+      effectiveValue: row.effective_value != null ? Number(row.effective_value) : 0,
       currency: row.currency,
-      bought: row.bought === 1,
-      inWishlist: row.in_wishlist === 1,
+      bought: row.bought === 1 || row.bought === true,
+      inWishlist: row.in_wishlist === 1 || row.in_wishlist === true,
       priority: row.priority,
       dateAdded: row.date_added,
-      datePurchased: row.date_purchased,
-      notes: row.notes,
-      active: row.active === 1,
+      datePurchased: row.date_purchased ?? undefined,
+      notes: row.notes ?? "",
+      active: row.active === 1 || row.active === true,
     };
   }
 
   private parseWalletEntry(row: any): WalletEntry {
     return {
       id: row.id,
-      year: row.year_id, // Note: should be parsed from year_id relationship
-      month: row.month,
-      amount: row.amount,
+      year: Number(row.year_id.split("-").pop()) || 2026,
+      month: Number(row.month),
+      amount: Number(row.amount),
       currency: row.currency,
       source: row.source,
       type: row.type,
-      note: row.note,
+      note: row.note ?? "",
       createdAt: row.created_at,
     };
   }
@@ -530,14 +493,14 @@ export class SnapshotRepository {
   private parseMonthCloseRecord(row: any): MonthCloseRecord {
     return {
       id: row.id,
-      year: row.year_id, // Note: should be parsed from year_id relationship
-      month: row.month,
+      year: Number(row.year_id.split("-").pop()) || 2026,
+      month: Number(row.month),
       status: row.status,
-      spendTotal: row.spend_total,
-      delta: row.delta,
-      rolloverWalletEntryId: row.rollover_wallet_entry_id,
+      spendTotal: row.spend_total != null ? Number(row.spend_total) : null,
+      delta: row.delta != null ? Number(row.delta) : null,
+      rolloverWalletEntryId: row.rollover_wallet_entry_id ?? undefined,
       confirmedAt: row.confirmed_at,
-      note: row.note,
+      note: row.note ?? "",
     };
   }
 }

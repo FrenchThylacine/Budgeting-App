@@ -77,6 +77,12 @@ export interface BudgetCategory {
   notes?: string;
   /** Soft-archive flag for UI; categories are preserved in history */
   archived?: boolean;
+  /** Lucide icon name */
+  icon?: string;
+  /** Optional description for the category */
+  description?: string;
+  /** Parent category id for subcategory grouping (1-level deep) */
+  parentId?: string;
 }
 
 export interface Activity {

@@ -25,6 +25,9 @@ export async function initializeSchema(
       monthly_cap DOUBLE PRECISION,
       notes TEXT,
       archived BOOLEAN DEFAULT false,
+      icon TEXT,
+      description TEXT,
+      parent_id TEXT,
       FOREIGN KEY (snapshot_id)
         REFERENCES snapshots(id)
         ON DELETE CASCADE

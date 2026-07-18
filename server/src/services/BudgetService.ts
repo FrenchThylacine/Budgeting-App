@@ -1,43 +1,43 @@
 import type { BudgetSnapshot } from "@/domain/types";
 import { SnapshotRepository } from "../repositories/SnapshotRepository";
-import Database from "better-sqlite3";
+import { getDatabase } from "../db";
 
 export class BudgetService {
   private repository: SnapshotRepository;
 
-  constructor(db: Database.Database) {
-    this.repository = new SnapshotRepository(db);
+  constructor(sql = getDatabase()) {
+    this.repository = new SnapshotRepository(sql);
   }
 
   /**
    * Load the active budget snapshot
    */
-  loadSnapshot(): BudgetSnapshot | null {
-    return this.repository.loadSnapshot("active");
+  async loadSnapshot(): Promise<BudgetSnapshot | null> {
+    return await this.repository.loadSnapshot("active");
   }
 
   /**
    * Save the full budget snapshot (with all nested entities)
    */
-  saveSnapshot(snapshot: BudgetSnapshot): void {
-    this.repository.saveSnapshot(snapshot, "active");
+  async saveSnapshot(snapshot: BudgetSnapshot): Promise<void> {
+    await this.repository.saveSnapshot(snapshot, "active");
   }
 
   /**
    * Update only the settings (top-level configuration)
    */
-  updateSettings(snapshot: BudgetSnapshot, patch: Partial<any>): BudgetSnapshot {
+  async updateSettings(snapshot: BudgetSnapshot, patch: Partial<any>): Promise<BudgetSnapshot> {
     snapshot.settings = { ...snapshot.settings, ...patch };
     snapshot.settings.lastUpdated = new Date().toISOString();
-    this.saveSnapshot(snapshot);
+    await this.saveSnapshot(snapshot);
     return snapshot;
   }
 
   /**
    * Get the active snapshot or throw if not found
    */
-  getOrThrow(): BudgetSnapshot {
-    const snapshot = this.loadSnapshot();
+  async getOrThrow(): Promise<BudgetSnapshot> {
+    const snapshot = await this.loadSnapshot();
     if (!snapshot) {
       throw new Error("No active budget snapshot found. Initialize the app first.");
     }

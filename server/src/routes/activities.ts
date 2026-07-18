@@ -1,12 +1,11 @@
 import { Router, Request, Response } from "express";
 import { BudgetService } from "../services/BudgetService";
 import { asyncHandler, AppError, validateRequired } from "../middleware/errorHandler";
-import { getDatabase } from "../db";
 import type { Activity } from "@/domain/types";
 
 export function createActivitiesRoutes(): Router {
   const router = Router();
-  const getService = () => new BudgetService(getDatabase());
+  const getService = () => new BudgetService();
 
   /**
    * GET /api/activities/:year
@@ -14,9 +13,9 @@ export function createActivitiesRoutes(): Router {
    */
   router.get(
     "/:year",
-    asyncHandler((req: Request, res: Response) => {
+    asyncHandler(async (req: Request, res: Response) => {
       const service = getService();
-      const snapshot = service.getOrThrow();
+      const snapshot = await service.getOrThrow();
       const year = parseInt(String(req.params.year));
 
       const yearRecord = snapshot.years[String(year)];
@@ -34,11 +33,11 @@ export function createActivitiesRoutes(): Router {
    */
   router.post(
     "/",
-    asyncHandler((req: Request, res: Response) => {
+    asyncHandler(async (req: Request, res: Response) => {
       validateRequired(req.body, "year", "name", "categoryId", "currency", "recurrenceType");
 
       const service = getService();
-      let snapshot = service.getOrThrow();
+      let snapshot = await service.getOrThrow();
       const year = parseInt(req.body.year);
 
       const yearRecord = snapshot.years[String(year)];
@@ -52,12 +51,12 @@ export function createActivitiesRoutes(): Router {
         categoryId: req.body.categoryId,
         currency: req.body.currency,
         recurrenceType: req.body.recurrenceType,
-        recurrenceInterval: req.body.recurrenceInterval || 1,
-        pricePerSession: req.body.pricePerSession || null,
-        pricePerPurchase: req.body.pricePerPurchase || null,
-        pricePerMonth: req.body.pricePerMonth || null,
-        estimatedCost: req.body.estimatedCost || null,
-        yearlyEstimate: req.body.yearlyEstimate || null,
+        recurrenceInterval: Number(req.body.recurrenceInterval || 1),
+        pricePerSession: req.body.pricePerSession != null ? Number(req.body.pricePerSession) : null,
+        pricePerPurchase: req.body.pricePerPurchase != null ? Number(req.body.pricePerPurchase) : null,
+        pricePerMonth: req.body.pricePerMonth != null ? Number(req.body.pricePerMonth) : null,
+        estimatedCost: req.body.estimatedCost != null ? Number(req.body.estimatedCost) : null,
+        yearlyEstimate: req.body.yearlyEstimate != null ? Number(req.body.yearlyEstimate) : null,
         active: req.body.active !== false,
         visible: req.body.visible !== false,
         seasonalTag: req.body.seasonalTag || "normal",
@@ -67,7 +66,7 @@ export function createActivitiesRoutes(): Router {
 
       yearRecord.activities.push(newActivity);
       yearRecord.updatedAt = new Date().toISOString();
-      service.saveSnapshot(snapshot);
+      await service.saveSnapshot(snapshot);
 
       res.status(201).json(newActivity);
     }),
@@ -79,9 +78,9 @@ export function createActivitiesRoutes(): Router {
    */
   router.patch(
     "/:id",
-    asyncHandler((req: Request, res: Response) => {
+    asyncHandler(async (req: Request, res: Response) => {
       const service = getService();
-      let snapshot = service.getOrThrow();
+      let snapshot = await service.getOrThrow();
       const activityId = req.params.id;
 
       let found = false;
@@ -93,19 +92,19 @@ export function createActivitiesRoutes(): Router {
           if (req.body.categoryId !== undefined) activity.categoryId = req.body.categoryId;
           if (req.body.currency !== undefined) activity.currency = req.body.currency;
           if (req.body.recurrenceType !== undefined) activity.recurrenceType = req.body.recurrenceType;
-          if (req.body.recurrenceInterval !== undefined) activity.recurrenceInterval = req.body.recurrenceInterval;
-          if (req.body.pricePerSession !== undefined) activity.pricePerSession = req.body.pricePerSession;
-          if (req.body.pricePerPurchase !== undefined) activity.pricePerPurchase = req.body.pricePerPurchase;
-          if (req.body.pricePerMonth !== undefined) activity.pricePerMonth = req.body.pricePerMonth;
-          if (req.body.estimatedCost !== undefined) activity.estimatedCost = req.body.estimatedCost;
-          if (req.body.yearlyEstimate !== undefined) activity.yearlyEstimate = req.body.yearlyEstimate;
+          if (req.body.recurrenceInterval !== undefined) activity.recurrenceInterval = Number(req.body.recurrenceInterval);
+          if (req.body.pricePerSession !== undefined) activity.pricePerSession = req.body.pricePerSession != null ? Number(req.body.pricePerSession) : null;
+          if (req.body.pricePerPurchase !== undefined) activity.pricePerPurchase = req.body.pricePerPurchase != null ? Number(req.body.pricePerPurchase) : null;
+          if (req.body.pricePerMonth !== undefined) activity.pricePerMonth = req.body.pricePerMonth != null ? Number(req.body.pricePerMonth) : null;
+          if (req.body.estimatedCost !== undefined) activity.estimatedCost = req.body.estimatedCost != null ? Number(req.body.estimatedCost) : null;
+          if (req.body.yearlyEstimate !== undefined) activity.yearlyEstimate = req.body.yearlyEstimate != null ? Number(req.body.yearlyEstimate) : null;
           if (req.body.active !== undefined) activity.active = req.body.active;
           if (req.body.visible !== undefined) activity.visible = req.body.visible;
           if (req.body.seasonalTag !== undefined) activity.seasonalTag = req.body.seasonalTag;
           if (req.body.notes !== undefined) activity.notes = req.body.notes;
 
           yearRecord.updatedAt = new Date().toISOString();
-          service.saveSnapshot(snapshot);
+          await service.saveSnapshot(snapshot);
           found = true;
           res.json(activity);
           break;
@@ -124,9 +123,9 @@ export function createActivitiesRoutes(): Router {
    */
   router.delete(
     "/:id",
-    asyncHandler((req: Request, res: Response) => {
+    asyncHandler(async (req: Request, res: Response) => {
       const service = getService();
-      let snapshot = service.getOrThrow();
+      let snapshot = await service.getOrThrow();
       const activityId = req.params.id;
 
       let found = false;
@@ -139,7 +138,7 @@ export function createActivitiesRoutes(): Router {
             a.order = i;
           });
           yearRecord.updatedAt = new Date().toISOString();
-          service.saveSnapshot(snapshot);
+          await service.saveSnapshot(snapshot);
           found = true;
           res.json({ success: true, message: "Activity deleted" });
           break;
