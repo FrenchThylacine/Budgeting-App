@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { Analytics } from "@vercel/analytics/react";
 import {
   Activity as ActivityIcon,
   AlertTriangle,
@@ -282,6 +283,7 @@ export default function App() {
       </main>
       {rolloverOpen && <RolloverDialog calculation={calculation} onClose={() => setRolloverOpen(false)} />}
       <ChangelogModal open={changelogOpen} onClose={() => setChangelogOpen(false)} />
+      <Analytics />
     </div>
   );
 }
