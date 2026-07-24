@@ -11,7 +11,7 @@ export type NeonSql = NeonQueryFunction<false, false>;
  * Execute a parameterized SQL query using the Neon driver.
  * Converts sql(queryString, params[]) into the proper tagged template call.
  */
-export async function query(sql: NeonSql, queryString: string, params: unknown[] = []): Promise<Record<string, any>[]> {
+export async function query(sql: any, queryString: string, params: unknown[] = []): Promise<Record<string, any>[]> {
   // Build a TemplateStringsArray-like object from the query with $1, $2, ... placeholders
   const parts = queryString.split(/\$\d+/);
   // Create the template strings array

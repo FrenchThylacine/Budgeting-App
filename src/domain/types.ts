@@ -66,6 +66,7 @@ export interface Settings {
   exchangeRates: ExchangeRates;
   lastUpdated: string;
   darkMode: boolean;
+  ignoreNonBudgetSpending?: boolean;
 }
 
 export interface BudgetCategory {

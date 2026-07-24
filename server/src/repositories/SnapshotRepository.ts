@@ -1,4 +1,5 @@
 import { getDatabase } from "../db";
+import { query as execQuery } from "../db/queryHelper";
 import type {
   BudgetSnapshot,
   Activity,
@@ -17,8 +18,12 @@ import type {
 export class SnapshotRepository {
   constructor(private sql = getDatabase()) {}
 
+  private async query(sqlString: string, params: unknown[] = []): Promise<Record<string, any>[]> {
+    return execQuery(this.sql, sqlString, params);
+  }
+
   async loadSnapshot(snapshotId: string = "active"): Promise<BudgetSnapshot | null> {
-    const rows = await this.sql("SELECT * FROM snapshots WHERE id = $1", [snapshotId]);
+    const rows = await this.query("SELECT * FROM snapshots WHERE id = $1", [snapshotId]);
     const row = rows[0];
 
     if (!row) return null;
@@ -30,7 +35,7 @@ export class SnapshotRepository {
     const budgetApprovals = await this.loadBudgetApprovals();
     const auditLog = await this.loadAuditLog(snapshotId);
 
-    const yearsData = await this.sql("SELECT id, year FROM years WHERE snapshot_id = $1", [snapshotId]);
+    const yearsData = await this.query("SELECT id, year FROM years WHERE snapshot_id = $1", [snapshotId]);
 
     const years: Record<string, YearRecord> = {};
     for (const yearRow of yearsData) {
@@ -56,7 +61,7 @@ export class SnapshotRepository {
     const now = new Date().toISOString();
 
     // Upsert snapshot
-    await this.sql(`
+    await this.query(`
       INSERT INTO snapshots (id, version, settings, created_at, updated_at)
       VALUES ($1, $2, $3, $4, $5)
       ON CONFLICT (id) DO UPDATE SET
@@ -67,7 +72,7 @@ export class SnapshotRepository {
 
     // Categories
     for (const category of snapshot.categories) {
-      await this.sql(`
+      await this.query(`
         INSERT INTO categories
         (id, snapshot_id, name, bucket, color, monthly_cap, notes, archived, icon, description, parent_id)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
@@ -103,7 +108,7 @@ export class SnapshotRepository {
 
     // Presets
     for (const preset of snapshot.seasonalPresets) {
-      await this.sql(`
+      await this.query(`
         INSERT INTO seasonal_presets
         (id, snapshot_id, name, season, activity_overrides, notes)
         VALUES ($1, $2, $3, $4, $5, $6)
@@ -116,7 +121,7 @@ export class SnapshotRepository {
     }
 
     for (const preset of snapshot.scenarioPresets) {
-      await this.sql(`
+      await this.query(`
         INSERT INTO scenario_presets
         (id, snapshot_id, name, monthly_budget, pilot_included_in_budget, category_caps, notes)
         VALUES ($1, $2, $3, $4, $5, $6, $7)
@@ -139,7 +144,7 @@ export class SnapshotRepository {
 
     // Budget approvals
     for (const approval of snapshot.budgetApprovals) {
-      await this.sql(`
+      await this.query(`
         INSERT INTO budget_approvals
         (id, year, month, suggested_amount, approved_amount, currency, status, recurring_total, note, created_at, decided_at)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
@@ -168,7 +173,7 @@ export class SnapshotRepository {
 
     // Audit log
     for (const log of snapshot.auditLog) {
-      await this.sql(`
+      await this.query(`
         INSERT INTO audit_log
         (id, snapshot_id, type, summary, metadata, created_at)
         VALUES ($1, $2, $3, $4, $5, $6)
@@ -180,24 +185,24 @@ export class SnapshotRepository {
   }
 
   private async saveYearRecord(snapshotId: string, yearRecord: YearRecord, now: string): Promise<void> {
-    const existingYears = await this.sql("SELECT id FROM years WHERE snapshot_id = $1 AND year = $2", [snapshotId, yearRecord.year]);
+    const existingYears = await this.query("SELECT id FROM years WHERE snapshot_id = $1 AND year = $2", [snapshotId, yearRecord.year]);
     let yearId: string;
 
     if (existingYears.length === 0) {
       yearId = `year-${snapshotId}-${yearRecord.year}-${Date.now()}`;
-      await this.sql(`
+      await this.query(`
         INSERT INTO years (id, snapshot_id, year, created_at, updated_at)
         VALUES ($1, $2, $3, $4, $5)
       `, [yearId, snapshotId, yearRecord.year, yearRecord.createdAt, now]);
     } else {
       yearId = existingYears[0].id;
-      await this.sql("UPDATE years SET updated_at = $1 WHERE id = $2", [now, yearId]);
+      await this.query("UPDATE years SET updated_at = $1 WHERE id = $2", [now, yearId]);
     }
 
     // Activities
-    await this.sql("DELETE FROM activities WHERE year_id = $1", [yearId]);
+    await this.query("DELETE FROM activities WHERE year_id = $1", [yearId]);
     for (const activity of yearRecord.activities) {
-      await this.sql(`
+      await this.query(`
         INSERT INTO activities
         (id, year_id, name, category_id, currency, recurrence_type, recurrence_interval,
          price_per_session, price_per_purchase, price_per_month, estimated_cost, yearly_estimate,
@@ -227,9 +232,9 @@ export class SnapshotRepository {
     }
 
     // Spending entries
-    await this.sql("DELETE FROM spending_entries WHERE year_id = $1", [yearId]);
+    await this.query("DELETE FROM spending_entries WHERE year_id = $1", [yearId]);
     for (const entry of yearRecord.spendingEntries) {
-      await this.sql(`
+      await this.query(`
         INSERT INTO spending_entries
         (id, year_id, month, week, date, category_id, activity_id, amount, currency,
          recurrence_type, is_piloting, source, note, created_at, updated_at)
@@ -254,9 +259,9 @@ export class SnapshotRepository {
     }
 
     // Wishlist items
-    await this.sql("DELETE FROM wishlist_items WHERE year_id = $1", [yearId]);
+    await this.query("DELETE FROM wishlist_items WHERE year_id = $1", [yearId]);
     for (const item of yearRecord.wishlistItems) {
-      await this.sql(`
+      await this.query(`
         INSERT INTO wishlist_items
         (id, year_id, name, category_id, actual_price, effective_value, currency,
          bought, in_wishlist, priority, date_added, date_purchased, notes, active, created_at, updated_at)
@@ -282,9 +287,9 @@ export class SnapshotRepository {
     }
 
     // Wallet entries
-    await this.sql("DELETE FROM wallet_entries WHERE year_id = $1", [yearId]);
+    await this.query("DELETE FROM wallet_entries WHERE year_id = $1", [yearId]);
     for (const entry of yearRecord.walletEntries) {
-      await this.sql(`
+      await this.query(`
         INSERT INTO wallet_entries (id, year_id, month, amount, currency, source, type, note, created_at)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
       `, [
@@ -301,9 +306,9 @@ export class SnapshotRepository {
     }
 
     // Closed months
-    await this.sql("DELETE FROM closed_months WHERE year_id = $1", [yearId]);
+    await this.query("DELETE FROM closed_months WHERE year_id = $1", [yearId]);
     for (const record of yearRecord.closedMonths) {
-      await this.sql(`
+      await this.query(`
         INSERT INTO closed_months (id, year_id, month, status, spend_total, delta, rollover_wallet_entry_id, confirmed_at, note)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
       `, [
@@ -321,16 +326,16 @@ export class SnapshotRepository {
   }
 
   private async loadYearRecord(yearId: string): Promise<YearRecord | null> {
-    const yearRows = await this.sql("SELECT * FROM years WHERE id = $1", [yearId]);
+    const yearRows = await this.query("SELECT * FROM years WHERE id = $1", [yearId]);
     const yearRow = yearRows[0];
 
     if (!yearRow) return null;
 
-    const activities = await this.sql('SELECT * FROM activities WHERE year_id = $1 ORDER BY "order"', [yearId]);
-    const spendingEntries = await this.sql("SELECT * FROM spending_entries WHERE year_id = $1", [yearId]);
-    const wishlistItems = await this.sql("SELECT * FROM wishlist_items WHERE year_id = $1", [yearId]);
-    const walletEntries = await this.sql("SELECT * FROM wallet_entries WHERE year_id = $1", [yearId]);
-    const closedMonths = await this.sql("SELECT * FROM closed_months WHERE year_id = $1", [yearId]);
+    const activities = await this.query('SELECT * FROM activities WHERE year_id = $1 ORDER BY "order"', [yearId]);
+    const spendingEntries = await this.query("SELECT * FROM spending_entries WHERE year_id = $1", [yearId]);
+    const wishlistItems = await this.query("SELECT * FROM wishlist_items WHERE year_id = $1", [yearId]);
+    const walletEntries = await this.query("SELECT * FROM wallet_entries WHERE year_id = $1", [yearId]);
+    const closedMonths = await this.query("SELECT * FROM closed_months WHERE year_id = $1", [yearId]);
 
     return {
       year: yearRow.year,
@@ -346,7 +351,7 @@ export class SnapshotRepository {
   }
 
   private async loadCategories(snapshotId: string): Promise<BudgetCategory[]> {
-    const rows = await this.sql("SELECT * FROM categories WHERE snapshot_id = $1 ORDER BY name", [snapshotId]);
+    const rows = await this.query("SELECT * FROM categories WHERE snapshot_id = $1 ORDER BY name", [snapshotId]);
 
     return rows.map((r) => ({
       id: r.id,
@@ -363,7 +368,7 @@ export class SnapshotRepository {
   }
 
   private async loadSeasonalPresets(snapshotId: string): Promise<SeasonalPreset[]> {
-    const rows = await this.sql("SELECT * FROM seasonal_presets WHERE snapshot_id = $1", [snapshotId]);
+    const rows = await this.query("SELECT * FROM seasonal_presets WHERE snapshot_id = $1", [snapshotId]);
 
     return rows.map((r) => ({
       id: r.id,
@@ -375,7 +380,7 @@ export class SnapshotRepository {
   }
 
   private async loadScenarioPresets(snapshotId: string): Promise<ScenarioPreset[]> {
-    const rows = await this.sql("SELECT * FROM scenario_presets WHERE snapshot_id = $1", [snapshotId]);
+    const rows = await this.query("SELECT * FROM scenario_presets WHERE snapshot_id = $1", [snapshotId]);
 
     return rows.map((r) => ({
       id: r.id,
@@ -388,14 +393,14 @@ export class SnapshotRepository {
   }
 
   private async loadBudgetApprovals(): Promise<BudgetApproval[]> {
-    const rows = await this.sql("SELECT * FROM budget_approvals ORDER BY decided_at DESC");
+    const rows = await this.query("SELECT * FROM budget_approvals ORDER BY decided_at DESC");
 
     return rows.map((r) => ({
       id: r.id,
       year: r.year,
       month: r.month,
       suggestedAmount: r.suggested_amount,
-      approvedAmount: r.approved_amount ?? undefined,
+      approvedAmount: r.approved_amount ?? null,
       currency: r.currency,
       status: r.status,
       recurringTotal: r.recurring_total,
@@ -406,7 +411,7 @@ export class SnapshotRepository {
   }
 
   private async loadAuditLog(snapshotId: string): Promise<AuditLog[]> {
-    const rows = await this.sql("SELECT * FROM audit_log WHERE snapshot_id = $1 ORDER BY created_at DESC LIMIT 500", [snapshotId]);
+    const rows = await this.query("SELECT * FROM audit_log WHERE snapshot_id = $1 ORDER BY created_at DESC LIMIT 500", [snapshotId]);
 
     return rows.map((r) => ({
       id: r.id,

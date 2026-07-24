@@ -70,7 +70,7 @@ export function createApprovalRoutes(): Router {
         year: year,
         month: month,
         suggestedAmount: Number(req.body.suggestedAmount),
-        approvedAmount: req.body.approvedAmount != null ? Number(req.body.approvedAmount) : undefined,
+        approvedAmount: req.body.approvedAmount != null ? Number(req.body.approvedAmount) : null,
         currency: req.body.currency,
         status: req.body.status || "rejected",
         recurringTotal: Number(req.body.recurringTotal),
@@ -114,7 +114,7 @@ export function createApprovalRoutes(): Router {
       }
 
       // Update allowed fields
-      if (req.body.approvedAmount !== undefined) approval.approvedAmount = req.body.approvedAmount != null ? Number(req.body.approvedAmount) : undefined;
+      if (req.body.approvedAmount !== undefined) approval.approvedAmount = req.body.approvedAmount != null ? Number(req.body.approvedAmount) : null;
       if (req.body.status !== undefined) approval.status = req.body.status;
       if (req.body.note !== undefined) approval.note = req.body.note;
       if (req.body.decidedAt !== undefined) approval.decidedAt = req.body.decidedAt;

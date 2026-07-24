@@ -46,7 +46,7 @@ export async function runMigrations(
     `;
 
 
-    if (result.length === 0) {
+    if ((result as any[]).length === 0) {
 
       await migration.run(sql);
 

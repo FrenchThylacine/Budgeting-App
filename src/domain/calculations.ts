@@ -281,9 +281,13 @@ function summarizeCategories(
   snapshot: BudgetSnapshot,
   selectedMonth: number,
 ): CategoryTotal[] {
-  // For category distribution we exclude piloting and external/shared spend.
   const totals = new Map<string, number>();
-  for (const entry of entries.filter((item) => item.month === selectedMonth && !item.isPiloting && (item.source ?? "personal") === "personal")) {
+  const filteredEntries = entries.filter((item) => {
+    if (item.month !== selectedMonth) return false;
+    if (snapshot.settings.ignoreNonBudgetSpending && (item.source ?? "personal") !== "personal") return false;
+    return true;
+  });
+  for (const entry of filteredEntries) {
     totals.set(entry.categoryId, (totals.get(entry.categoryId) ?? 0) + normalizeEntry(entry, snapshot));
   }
   return Array.from(totals.entries())
@@ -334,8 +338,12 @@ function summarizePeriod({
     };
   }
 
-  const generalEntries = entries.filter((entry) => !entry.isPiloting);
-  const pilotingEntries = entries.filter((entry) => entry.isPiloting);
+  const activeEntries = snapshot.settings.ignoreNonBudgetSpending
+    ? entries.filter((entry) => (entry.source ?? "personal") === "personal")
+    : entries;
+
+  const generalEntries = activeEntries.filter((entry) => !entry.isPiloting);
+  const pilotingEntries = activeEntries.filter((entry) => entry.isPiloting);
   const generalTotal = sum(generalEntries.map((entry) => normalizeEntry(entry, snapshot)));
   const pilotingTotal = sum(pilotingEntries.map((entry) => normalizeEntry(entry, snapshot)));
   const total = generalTotal + pilotingTotal;

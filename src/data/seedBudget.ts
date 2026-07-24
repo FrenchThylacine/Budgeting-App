@@ -105,6 +105,7 @@ export function createSeedBudgetSnapshot(now = new Date()): BudgetSnapshot {
       },
       lastUpdated: timestamp,
       darkMode: false,
+      ignoreNonBudgetSpending: false,
     },
     categories: defaultCategories,
     years: {
