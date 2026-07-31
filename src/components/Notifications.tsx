@@ -55,6 +55,12 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   );
 }
 
+export function Notifications() {
+  const context = React.useContext(NotificationContext);
+  if (!context) return null;
+  return <NotificationContainer />;
+}
+
 function NotificationContainer() {
   const context = React.useContext(NotificationContext);
   if (!context) return null;
