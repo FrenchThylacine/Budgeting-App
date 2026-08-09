@@ -3,7 +3,7 @@ import type { BudgetSnapshot } from "@/domain/types";
 import { SnapshotRepository } from "./repositories/SnapshotRepository";
 
 /**
- * Migrate data from a JSON backup (exported from IndexedDB) into SQLite
+ * Migrate data from a JSON backup (exported from IndexedDB) into Neon PostgreSQL.
  * Run this once to import existing user data into the new backend
  */
 export async function migrateFromJsonBackup(jsonBackup: BudgetSnapshot): Promise<void> {
@@ -18,7 +18,7 @@ export async function migrateFromJsonBackup(jsonBackup: BudgetSnapshot): Promise
   }
 
   try {
-    repository.saveSnapshot(jsonBackup, "active");
+    await repository.saveSnapshot(jsonBackup, "active");
     console.log("✓ Migration completed successfully");
     console.log(`  - Imported settings for year ${jsonBackup.settings.selectedYear}`);
     console.log(`  - Imported ${Object.keys(jsonBackup.years).length} year(s)`);
@@ -61,4 +61,3 @@ async function main() {
 if (import.meta.url === `file://${process.argv[1]}`) {
   main();
 }
-

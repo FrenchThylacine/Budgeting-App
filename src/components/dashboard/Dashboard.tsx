@@ -276,7 +276,7 @@ export const Dashboard: React.FC = () => {
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
                 {calculation.categoryTotals.slice(0, 6).map((cat) => {
-                  const maxTotal = calculation.categoryTotals[0].total || 1;
+                  const maxTotal = calculation.categoryTotals[0].total === 0 ? 1 : calculation.categoryTotals[0].total;
                   return (
                     <div key={cat.categoryId}>
                       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6, alignItems: "center" }}>

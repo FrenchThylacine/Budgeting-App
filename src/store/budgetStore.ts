@@ -19,6 +19,7 @@ import { createSeedBudgetSnapshot } from "../data/seedBudget";
 import { defaultCategories } from "../data/seedBudget";
 import { deleteSnapshot as deleteIdbSnapshot, loadSnapshot as loadIdbSnapshot, saveSnapshot as saveIdbSnapshot } from "../storage/idb";
 import { getApiClient } from "../api/client";
+import { isViewingHistoricalPeriod } from "../utils/formatters";
 
 type ActivityInput = Omit<Activity, "id" | "order"> & Partial<Pick<Activity, "id" | "order">>;
 type SpendingInput = Omit<SpendingEntry, "id" | "createdAt" | "updatedAt"> & Partial<Pick<SpendingEntry, "id">>;
@@ -30,6 +31,7 @@ interface BudgetStore {
   hydrated: boolean;
   undoStack: BudgetSnapshot[];
   redoStack: BudgetSnapshot[];
+  isCurrentPeriodMutable: () => boolean;
   hydrate: () => Promise<void>;
   resetToSeed: () => Promise<void>;
   importSnapshot: (snapshot: BudgetSnapshot, summary?: string) => void;
@@ -68,6 +70,7 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
   hydrated: false,
   undoStack: [],
   redoStack: [],
+  isCurrentPeriodMutable: () => !isViewingHistoricalPeriod(get().snapshot.settings),
 
   hydrate: async () => {
     try {
@@ -120,6 +123,7 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
   },
 
   addActivity: (activity) => {
+    if (!get().isCurrentPeriodMutable()) return;
     commit(
       set,
       get,
@@ -137,6 +141,7 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
   },
 
   updateActivity: (idValue, patch) => {
+    if (!get().isCurrentPeriodMutable()) return;
     commit(
       set,
       get,
@@ -151,6 +156,7 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
   },
 
   removeActivity: (idValue) => {
+    if (!get().isCurrentPeriodMutable()) return;
     commit(
       set,
       get,
@@ -170,6 +176,7 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
   },
 
   duplicateActivity: (idValue) => {
+    if (!get().isCurrentPeriodMutable()) return;
     commit(
       set,
       get,
@@ -191,6 +198,7 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
   },
 
   moveActivity: (idValue, direction) => {
+    if (!get().isCurrentPeriodMutable()) return;
     commit(
       set,
       get,
@@ -208,6 +216,7 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
   },
 
   reorderActivity: (sourceId, targetId) => {
+    if (!get().isCurrentPeriodMutable()) return;
     commit(
       set,
       get,
@@ -229,6 +238,7 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
   },
 
   addSpendingEntry: (entry) => {
+    if (!get().isCurrentPeriodMutable()) return;
     const timestamp = new Date().toISOString();
     commit(
       set,
@@ -248,6 +258,7 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
   },
 
   updateSpendingEntry: (idValue, patch) => {
+    if (!get().isCurrentPeriodMutable()) return;
     commit(
       set,
       get,
@@ -268,6 +279,7 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
   },
 
   removeSpendingEntry: (idValue) => {
+    if (!get().isCurrentPeriodMutable()) return;
     commit(
       set,
       get,
@@ -282,6 +294,7 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
   },
 
   addWishlistItem: (item) => {
+    if (!get().isCurrentPeriodMutable()) return;
     commit(
       set,
       get,
@@ -298,6 +311,7 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
   },
 
   updateWishlistItem: (idValue, patch) => {
+    if (!get().isCurrentPeriodMutable()) return;
     commit(
       set,
       get,
@@ -316,6 +330,7 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
   },
 
   removeWishlistItem: (idValue) => {
+    if (!get().isCurrentPeriodMutable()) return;
     commit(
       set,
       get,
@@ -330,6 +345,7 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
   },
 
   addWalletEntry: (entry) => {
+    if (!get().isCurrentPeriodMutable()) return;
     commit(
       set,
       get,
@@ -347,6 +363,7 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
   },
 
   updateWalletEntry: (idValue, patch) => {
+    if (!get().isCurrentPeriodMutable()) return;
     commit(
       set,
       get,
@@ -361,6 +378,7 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
   },
 
   removeWalletEntry: (idValue) => {
+    if (!get().isCurrentPeriodMutable()) return;
     commit(
       set,
       get,
@@ -375,6 +393,7 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
   },
 
   closeMonth: (year, month, applyRollover) => {
+    if (!get().isCurrentPeriodMutable()) return;
     commit(
       set,
       get,
@@ -444,6 +463,10 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
   },
 
   recordBudgetApproval: (approval) => {
+    if (!get().isCurrentPeriodMutable()) return;
+    if (get().snapshot.budgetApprovals.some((item) => item.year === approval.year && item.month === approval.month && item.status === "approved")) {
+      return;
+    }
     commit(
       set,
       get,
@@ -724,4 +747,3 @@ async function deleteSnapshot(): Promise<void> {
     console.error("Failed to delete snapshot:", error);
   }
 }
-

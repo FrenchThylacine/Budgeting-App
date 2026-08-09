@@ -19,6 +19,7 @@ export const Header: React.FC<{
   const selectYear = useBudgetStore((s) => s.selectYear);
   const undo = useBudgetStore((s) => s.undo);
   const redo = useBudgetStore((s) => s.redo);
+  const isCurrentPeriodMutable = useBudgetStore((s) => s.isCurrentPeriodMutable);
 
   const currentYear = snapshot.settings.selectedYear;
   const maxWeeks = weeksInIsoYear(currentYear);
@@ -119,7 +120,7 @@ export const Header: React.FC<{
           <Button variant="secondary" onClick={() => updateSettings({ lastUpdated: new Date().toISOString() })}>
             <Save size={16} /> Save
           </Button>
-          <Button variant="primary" onClick={() => setRolloverOpen(true)}>
+          <Button variant="primary" onClick={() => setRolloverOpen(true)} disabled={!isCurrentPeriodMutable()} title={isCurrentPeriodMutable() ? undefined : "Historical periods are read-only"}>
             <Wallet size={16} /> Close Month
           </Button>
         </div>

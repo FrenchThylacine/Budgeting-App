@@ -1,21 +1,15 @@
-import React from "react";
+import React, { useState } from "react";
+import { Check, Plus, Trash2 } from "lucide-react";
+import { CURRENCY_OPTIONS, formatMoney } from "../../domain/currency";
 import { useBudgetStore } from "../../store/budgetStore";
-import { Section } from "../ui/Section";
+import { Button } from "../ui/Button";
 import { EmptyState } from "../ui/EmptyState";
-import { Gift } from "lucide-react";
+import { Section } from "../ui/Section";
 
 export const WishlistPanel: React.FC = () => {
-  // TODO: Migrate full logic from original App.tsx WishlistPanel
-  // This is a placeholder using the new design system
-  return (
-    <div className="page-enter">
-      <Section title="Wishlist">
-        <EmptyState
-          icon=<Gift size={24} />
-          title="Wishlist"
-          description="This section is being migrated to the new design system. The full functionality will be restored."
-        />
-      </Section>
-    </div>
-  );
+  const snapshot = useBudgetStore((s) => s.snapshot); const add = useBudgetStore((s) => s.addWishlistItem); const update = useBudgetStore((s) => s.updateWishlistItem); const remove = useBudgetStore((s) => s.removeWishlistItem); const mutable = useBudgetStore((s) => s.isCurrentPeriodMutable)();
+  const [name, setName] = useState(""); const [price, setPrice] = useState(""); const [currency, setCurrency] = useState(snapshot.settings.baseCurrency);
+  const items = snapshot.years[String(snapshot.settings.selectedYear)]?.wishlistItems ?? [];
+  const submit = (event: React.FormEvent) => { event.preventDefault(); const value = price === "" ? null : Number(price); if (!name.trim() || (value !== null && !Number.isFinite(value))) return; add({ name: name.trim(), categoryId: "cat-wishlist", actualPrice: value, effectiveValue: value, currency, bought: false, inWishlist: true, priority: "medium", notes: "", active: true }); setName(""); setPrice(""); };
+  return <div className="page-enter" style={{ display: "grid", gap: 20 }}><Section title="Wishlist">{mutable && <form className="card card-body" onSubmit={submit} style={{ display: "flex", gap: 10, flexWrap: "wrap" }}><input className="input" required placeholder="Item" value={name} onChange={(e) => setName(e.target.value)} /><input className="input" type="number" step="any" placeholder="Price (optional)" value={price} onChange={(e) => setPrice(e.target.value)} /><select className="select" value={currency} onChange={(e) => setCurrency(e.target.value as typeof currency)}>{CURRENCY_OPTIONS.map((item) => <option key={item}>{item}</option>)}</select><Button type="submit" variant="primary"><Plus size={16} /> Add item</Button></form>}</Section>{items.length === 0 ? <EmptyState title="Your wishlist is empty" description="Save future purchases without mixing them with monthly spending." /> : <div className="item-list">{items.map((item) => <div key={item.id} className="item-row" style={{ opacity: item.bought ? .55 : 1 }}><div><div className="text-callout" style={{ fontWeight: 600 }}>{item.name}</div><div className="text-footnote">{item.bought ? "Bought" : item.priority}</div></div><div style={{ display: "flex", alignItems: "center", gap: 8 }}><strong>{formatMoney(item.actualPrice, item.currency, snapshot.settings.currencyDisplayMode)}</strong>{mutable && !item.bought && <Button size="sm" variant="ghost" icon onClick={() => update(item.id, { bought: true })} aria-label="Mark bought"><Check size={15} /></Button>}{mutable && <Button size="sm" variant="ghost" icon onClick={() => { if (window.confirm("Delete this wishlist item?")) remove(item.id); }} aria-label="Delete wishlist item"><Trash2 size={15} /></Button>}</div></div>)}</div>}</div>;
 };

@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-08-09
+
+### Core workflow restoration and financial safeguards
+- Replaced the placeholder primary navigation panels with working client workflows for spending, recurring activities, categories, wallet entries, wishlist items, analytics, history, scenarios, and settings.
+- Added a working month-close dialog that preserves missing-period semantics and makes rollover an explicit user choice.
+- Blocked client-side edits to period-bound data while a historical month is selected, and prevented modification of approved budgets through the API.
+- Corrected the migration-script SQLite reference and made its snapshot save await completion.
+- Added `implementation_plan.md` as the live project tracker.
+
 ## 2026-07-31
 
 ### Phase 1 & 2: Neon PostgreSQL Backend Migration

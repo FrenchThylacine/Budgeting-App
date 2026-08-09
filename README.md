@@ -19,6 +19,12 @@ A Vite + React budget dashboard focused on fast local use, recurring budget appr
 - **Serverless PostgreSQL persistence via Neon** (with automatic IndexedDB fallback for offline use)
 - Easy local launch scripts for Windows
 
+## Current implementation status
+
+The main application workflows are implemented in the current React client: recurring activities, transactions, categories, wallet entries, wishlist items, analytics, historical summaries, scenarios, settings, month close, and exports. Historical months are read-only in the client so viewing the past cannot change recorded transactions or close records.
+
+Neon remains the intended remote source of truth and IndexedDB is retained as an offline fallback. A working `DATABASE_URL` and a Node.js 18+ runtime are required to verify the API persistence path.
+
 ## Architecture
 
 - **Frontend:** Vite + React (TSX), Zustand state management, Recharts analytics, Lucide icons

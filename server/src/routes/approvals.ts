@@ -113,6 +113,10 @@ export function createApprovalRoutes(): Router {
         throw new AppError(404, `Approval not found: ${approvalId}`);
       }
 
+      if (approval.status === "approved") {
+        throw new AppError(400, "Approved budgets are immutable historical records.");
+      }
+
       // Update allowed fields
       if (req.body.approvedAmount !== undefined) approval.approvedAmount = req.body.approvedAmount != null ? Number(req.body.approvedAmount) : null;
       if (req.body.status !== undefined) approval.status = req.body.status;

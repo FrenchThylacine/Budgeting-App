@@ -1,21 +1,11 @@
-import React from "react";
+import React, { useMemo } from "react";
+import { calculateYear } from "../../domain/calculations";
+import { formatDualMoney, statusLabel } from "../../utils/formatters";
 import { useBudgetStore } from "../../store/budgetStore";
-import { Section } from "../ui/Section";
 import { EmptyState } from "../ui/EmptyState";
-import { History } from "lucide-react";
+import { Section } from "../ui/Section";
 
 export const HistoryPanel: React.FC = () => {
-  // TODO: Migrate full logic from original App.tsx HistoryPanel
-  // This is a placeholder using the new design system
-  return (
-    <div className="page-enter">
-      <Section title="History">
-        <EmptyState
-          icon=<History size={24} />
-          title="History"
-          description="This section is being migrated to the new design system. The full functionality will be restored."
-        />
-      </Section>
-    </div>
-  );
+  const snapshot = useBudgetStore((s) => s.snapshot); const calculation = useMemo(() => calculateYear(snapshot), [snapshot]);
+  return <div className="page-enter" style={{ display: "grid", gap: 20 }}><Section title="Financial history"><div className="text-caption">Closed periods retain their recorded status; missing data is shown as unavailable rather than zero.</div></Section><div className="item-list">{calculation.monthlyTrend.map((period) => <div className="item-row" key={period.month}><div><div className="text-callout" style={{ fontWeight: 600 }}>{period.label} {period.year}</div><div className="text-footnote">{statusLabel(period.status)} · {period.entryCount} transactions</div></div><strong>{formatDualMoney(period.total, snapshot.settings)}</strong></div>)}</div>{snapshot.budgetApprovals.length === 0 && <EmptyState title="No budget approvals" description="Approved budgets are retained here as historical records." />}</div>;
 };
