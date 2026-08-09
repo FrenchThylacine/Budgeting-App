@@ -2,12 +2,12 @@
 
 This is the active engineering tracker for the current stabilization and completion effort. It is updated at each implementation checkpoint. A checkbox is marked complete only after implementation and the relevant verification have both succeeded.
 
-**Last updated:** 2026-08-09 — post-implementation review; automated verification is blocked because this environment has no Node.js/npm runtime.
+**Last updated:** 2026-08-09 — full completion pass started. The immediate dependency is a Node.js/npm runtime so automated verification can run.
 
 ## In progress
 
-- [ ] Verify the restored client workflows through the test suite and browser, including mobile layouts.
-- [ ] Make persistence and deployment behavior trustworthy and document the verified architecture.
+- [ ] Establish the local Node.js toolchain and run the existing test/build commands.
+- [ ] Harden persistence, API validation, and deployment configuration; then reconcile all project guides with verified behavior.
 
 ## Completed
 
