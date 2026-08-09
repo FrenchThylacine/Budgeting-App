@@ -32,6 +32,10 @@ Highest Priority
 
 ✅ Analytics
 
+## Delivery status — 2026-08-10
+
+The client workflows and serverless deployment entrypoint are implemented but not release-verified. The immediate roadmap priority is therefore persistence durability, browser/mobile theme verification, targeted API tests, and an authenticated Vercel preview—not additional feature modules.
+
 ---
 
 # Version 1.0

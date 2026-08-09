@@ -82,7 +82,7 @@ Future work should improve it rather than replacing it.
 
 ## Implementation status (2026-08-09)
 
-The React client provides the core budgeting workflows, including transaction, recurring activity, category, wallet, wishlist, scenario, settings, analytics, and historical-summary views. The client blocks period-bound mutations while a past month is selected. Remote Neon persistence is configured through the Express API, with IndexedDB used as an offline fallback; persistence must still be verified against a configured database in a Node.js-capable environment. Consult `implementation_plan.md` for the live, verified status rather than treating this context document as a release checklist.
+The React client provides the core budgeting workflows, including transaction, recurring activity, category, wallet, wishlist, scenario, settings, analytics, and historical-summary views. The client blocks period-bound mutations while a past month is selected. Remote Neon persistence is configured through the Express API, with IndexedDB used as an offline fallback; persistence must still be verified against a configured database in a Node.js-capable environment. The reusable Express app is served locally by `server/src/index.ts` and on Vercel through `api/[...path].ts`. Consult `implementation_plan.md` for the live, verified status rather than treating this context document as a release checklist.
 
 ---
 

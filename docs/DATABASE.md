@@ -38,6 +38,12 @@ It has now migrated to Neon to support:
 
 SQLite should no longer be considered the reference implementation.
 
+## Current verification status — 2026-08-10
+
+`SnapshotRepository` uses the Neon serverless driver and all repository calls are asynchronous. The build succeeds, but no `DATABASE_URL` is available in the current execution environment, so no claim is made that a create, refresh, server restart, update, and delete cycle has been verified against Neon.
+
+The current snapshot save flow upserts top-level records but deletes and reinserts a year's nested activities, spending entries, wishlist items, wallet entries, and closed months. This is a known limitation: it can preserve the current snapshot but is not suitable as the long-term concurrent-write or audit-log strategy. It is tracked in `implementation_plan.md`.
+
 ---
 
 # General Philosophy

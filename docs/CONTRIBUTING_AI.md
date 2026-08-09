@@ -220,6 +220,8 @@ Comments where necessary
 
 Meaningful commit messages
 
+Keep `implementation_plan.md` as the single live task tracker. Mark a task complete only after its implementation and stated verification are both complete; record browser, deployment, or database limitations explicitly rather than treating a successful TypeScript build as end-to-end proof.
+
 Changelog entry if appropriate
 
 ---

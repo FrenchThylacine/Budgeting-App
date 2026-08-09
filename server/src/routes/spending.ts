@@ -1,7 +1,11 @@
 import { Router, Request, Response } from "express";
 import { BudgetService } from "../services/BudgetService";
-import { asyncHandler, AppError, validateRequired } from "../middleware/errorHandler";
+import { asyncHandler, AppError, validateDateInput, validateEnum, validateFiniteNumber, validateRequired } from "../middleware/errorHandler";
 import type { SpendingEntry } from "@/domain/types";
+import { getIsoWeek } from "@/domain/dates";
+
+const currencies = ["EUR", "USD", "LBP", "GBP", "CAD", "AUD", "JPY", "TRY", "SAR", "AED"] as const;
+const recurrenceTypes = ["none", "weekly", "monthly", "yearly", "session", "purchase", "custom"] as const;
 
 export function createSpendingRoutes(): Router {
   const router = Router();
@@ -42,24 +46,31 @@ export function createSpendingRoutes(): Router {
       let snapshot = await service.getOrThrow();
 
       const now = new Date().toISOString();
-      const year = parseInt(req.body.year);
+      const year = validateFiniteNumber(req.body.year, "year", { integer: true, min: 1 });
+      const month = validateFiniteNumber(req.body.month, "month", { integer: true, min: 1 });
+      if (month > 12) throw new AppError(400, "Field must be at most 12: month");
+      const date = req.body.date === undefined ? new Date().toISOString().slice(0, 10) : validateDateInput(req.body.date, "date");
+      const dateValue = new Date(`${date}T00:00:00Z`);
+      if (dateValue.getUTCMonth() + 1 !== month) throw new AppError(400, "Date and month must match");
       const yearRecord = snapshot.years[String(year)];
       if (!yearRecord) {
         throw new AppError(404, `No data for year ${year}`);
       }
+      const category = snapshot.categories.find((item) => item.id === req.body.categoryId);
+      if (!category || category.archived) throw new AppError(400, "Invalid active category");
 
       const newEntry: SpendingEntry = {
         id: `spend-${Date.now()}-${Math.random().toString(16).slice(2)}`,
         year,
-        month: Number(req.body.month),
-        week: Number(req.body.week || 1),
-        date: req.body.date || new Date().toISOString().split("T")[0],
+        month,
+        week: getIsoWeek(dateValue),
+        date,
         categoryId: req.body.categoryId,
         activityId: req.body.activityId || undefined,
-        amount: Number(req.body.amount),
-        currency: req.body.currency,
-        recurrenceType: req.body.recurrenceType || "none",
-        isPiloting: req.body.isPiloting || false,
+        amount: validateFiniteNumber(req.body.amount, "amount"),
+        currency: validateEnum(req.body.currency, "currency", currencies),
+        recurrenceType: req.body.recurrenceType === undefined ? "none" : validateEnum(req.body.recurrenceType, "recurrenceType", recurrenceTypes),
+        isPiloting: req.body.isPiloting === true,
         source: req.body.source || "personal",
         note: req.body.note || "",
         createdAt: now,
@@ -90,24 +101,23 @@ export function createSpendingRoutes(): Router {
         const entry = yearRecord.spendingEntries.find((e) => e.id === entryId);
         if (entry) {
           // Update allowed fields
-          if (req.body.amount !== undefined) entry.amount = Number(req.body.amount);
-          if (req.body.currency !== undefined) entry.currency = req.body.currency;
-          if (req.body.categoryId !== undefined) entry.categoryId = req.body.categoryId;
+          if (req.body.amount !== undefined) entry.amount = validateFiniteNumber(req.body.amount, "amount");
+          if (req.body.currency !== undefined) entry.currency = validateEnum(req.body.currency, "currency", currencies);
+          if (req.body.categoryId !== undefined) {
+            const category = snapshot.categories.find((item) => item.id === req.body.categoryId);
+            if (!category || category.archived) throw new AppError(400, "Invalid active category");
+            entry.categoryId = req.body.categoryId;
+          }
           if (req.body.source !== undefined) entry.source = req.body.source;
           if (req.body.note !== undefined) entry.note = req.body.note;
           if (req.body.isPiloting !== undefined) entry.isPiloting = req.body.isPiloting;
           if (req.body.activityId !== undefined) entry.activityId = req.body.activityId || undefined;
-          if (req.body.recurrenceType !== undefined) entry.recurrenceType = req.body.recurrenceType;
+          if (req.body.recurrenceType !== undefined) entry.recurrenceType = validateEnum(req.body.recurrenceType, "recurrenceType", recurrenceTypes);
           if (req.body.date !== undefined) {
-            entry.date = req.body.date;
-            // Recalculate month/week from date (handling UTC/local date correctly)
-            const parts = req.body.date.split("-");
-            if (parts.length === 3) {
-              entry.month = parseInt(parts[1], 10);
-            } else {
-              const d = new Date(`${req.body.date}T00:00:00`);
-              entry.month = d.getMonth() + 1;
-            }
+            entry.date = validateDateInput(req.body.date, "date");
+            const date = new Date(`${entry.date}T00:00:00Z`);
+            entry.month = date.getUTCMonth() + 1;
+            entry.week = getIsoWeek(date);
           }
 
           entry.updatedAt = new Date().toISOString();

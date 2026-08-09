@@ -25,6 +25,10 @@ The main application workflows are implemented in the current React client: recu
 
 Neon remains the intended remote source of truth and IndexedDB is retained as an offline fallback. A working `DATABASE_URL` and a Node.js 18+ runtime are required to verify the API persistence path.
 
+### Deployment
+
+Vercel deploys the Vite build from `dist/` and routes `/api/*` requests through `api/[...path].ts`, which exports the same Express application used locally. Configure `DATABASE_URL` in Vercel before deployment. The configuration and function entrypoint compile locally, but an authenticated Vercel preview and a Neon persistence cycle are still required before treating deployment as verified.
+
 ### Verification status
 
 The repository includes calculation safety tests, but the current implementation has not yet been runtime-verified in this environment because Node.js/npm is unavailable. Before deploying, run the test and build commands below, then verify database persistence by changing data, refreshing the app, and restarting the server. The live implementation tracker contains the remaining verification tasks.

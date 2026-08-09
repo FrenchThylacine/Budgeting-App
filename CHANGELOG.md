@@ -1,5 +1,33 @@
 # Changelog
 
+## 2026-08-10
+
+### Spending API validation
+
+- Added shared Express validators for finite numeric inputs, calendar dates, and fixed-value enums.
+- Applied them to spending creation and updates so `NaN`, invalid dates, mismatched date/month values, archived or unknown categories, unsupported currencies, and unsupported recurrence types fail with a structured client error instead of entering persisted data.
+- Retained zero as a valid amount. Transaction date edits now update both the stored month and ISO week, keeping weekly and monthly calculations aligned after an edit.
+- `npm run test`, `npm run build`, and `npm run server:build` passed after the API change.
+
+### Theme and deployment architecture audit
+
+#### Theme-system repair
+
+- Moved the dark-theme token scope from an app-shell-only class to `html.dark`, which is where page background, browser-native form controls, and all descendants consistently inherit the selected theme.
+- Synchronised `settings.darkMode` with `document.documentElement` and its `color-scheme` property. This preserves the persisted setting while making native inputs and browser chrome follow the selected mode.
+- Added a tokenized application background and replaced stale `--line-strong` and `--muted` references in modal and auxiliary styles with the active design-system tokens. This removes undefined CSS values that could render inconsistently in dark mode.
+
+#### Deployment preparation
+
+- Split Express initialization from the local listener: `server/src/app.ts` creates the reusable application, while `server/src/index.ts` starts it only for local development.
+- Added `api/[...path].ts` as the Vercel Functions entrypoint and `vercel.json` for the Vite production build. This keeps local `server:dev` behavior intact while enabling Vercel to serve the REST API.
+- Added the API directory to frontend TypeScript validation so the serverless entrypoint is checked by `npm run build`.
+
+#### Verification
+
+- `npm run test`, `npm run build`, and `npm run server:build` passed after these changes. The production build has an existing chunk-size warning only.
+- Browser/mobile theme checks, authenticated Vercel deployment, and live Neon durability tests remain unverified because this environment lacks an approved local server execution path and a `DATABASE_URL`.
+
 ## 2026-08-09
 
 ### Core workflow restoration and financial safeguards

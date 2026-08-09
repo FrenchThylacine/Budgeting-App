@@ -150,6 +150,10 @@ Requirements:
 - Smooth gradients
 - Premium appearance
 
+## Implementation status — 2026-08-10
+
+Theme state is the persisted `settings.darkMode` value. The application applies it to `html.dark`, where the design tokens are defined, and sets the browser `color-scheme` so native controls follow the selected mode. The app shell, sidebar, cards, forms, dialogs, charts, and mobile navigation consume tokenized colors. The code compiles and builds; final browser checks for both themes and narrow mobile layouts remain required.
+
 ---
 
 # Typography

@@ -78,7 +78,7 @@
 }
 
 /* Dark mode — deep, calm */
-.dark {
+:root.dark {
   --bg: #0C0E12;
   --bg-elevated: #16181D;
   --bg-subtle: #12141A;
@@ -116,6 +116,8 @@ body {
   min-height: 100vh;
 }
 
+#root { min-height: 100vh; }
+
 /* Scrollbar premium */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
@@ -139,6 +141,7 @@ body {
   display: grid;
   grid-template-columns: var(--sidebar-width) 1fr;
   min-height: 100vh;
+  background: var(--bg);
   transition: grid-template-columns var(--duration-slow) var(--ease-out);
 }
 
@@ -803,7 +806,7 @@ body {
   z-index: 40;
 }
 
-.dark .mobile-nav {
+:root.dark .mobile-nav {
   background: rgba(12,14,18,0.85);
 }
 

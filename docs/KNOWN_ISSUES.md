@@ -29,6 +29,13 @@ Do not solve the same problem twice.
 
 These issues have the highest priority.
 
+## Verification gaps — 2026-08-10
+
+- Neon persistence is not yet exercised in this environment because `DATABASE_URL` is unavailable. Do not claim refresh or restart durability until a live database cycle has passed.
+- Browser verification is pending because local dev-server execution requires an environment approval that is currently unavailable. This includes the final dark-mode and mobile checks.
+- Vercel configuration and a catch-all API function now exist, but an authenticated preview deployment remains required.
+- Snapshot writes delete and reinsert nested year records. This is a concurrency and auditability risk that should be replaced with targeted transactional writes.
+
 ## Financial calculations
 
 Nothing should ever compromise:

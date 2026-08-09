@@ -78,6 +78,18 @@ Settings
 
 Recurring Expenses
 
+## Implemented routes — 2026-08-10
+
+The current Express app exposes the following unversioned routes beneath `/api`:
+
+- `GET`, `PUT /snapshot` and `PATCH /snapshot/settings`
+- `GET`, `POST /spending/:year/:month` / `/spending` plus `PATCH`, `DELETE /spending/:id`
+- `GET`, `POST /categories` plus category `PATCH` and archive/reorder routes
+- `GET /activities/:year`, `POST /activities`, and activity `PATCH`/`DELETE`
+- approval read/create/update routes under `/approvals`
+
+The API is served by the same Express app in local development and through `api/[...path].ts` on Vercel. Approved budget records reject subsequent PATCH updates. Spending writes validate finite amounts, date/month consistency, active category references, supported currencies, and recurrence values; a transaction date edit recalculates both its month and ISO week. Validation for the remaining route families is still being expanded.
+
 Future:
 
 Authentication

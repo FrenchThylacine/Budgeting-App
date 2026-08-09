@@ -41,6 +41,15 @@ export default function App() {
   useEffect(() => {
     try { localStorage.setItem(SIDEBAR_PREF_KEY, String(sidebarCollapsed)); } catch { /* noop */ }
   }, [sidebarCollapsed]);
+  useEffect(() => {
+    const root = document.documentElement;
+    root.classList.toggle("dark", snapshot.settings.darkMode);
+    root.style.colorScheme = snapshot.settings.darkMode ? "dark" : "light";
+    return () => {
+      root.classList.remove("dark");
+      root.style.removeProperty("color-scheme");
+    };
+  }, [snapshot.settings.darkMode]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -86,7 +95,7 @@ export default function App() {
 
   return (
     <ErrorBoundary>
-      <div className={`app-shell ${sidebarCollapsed ? "sidebar-collapsed" : ""} ${snapshot.settings.darkMode ? "dark" : ""}`}>
+      <div className={`app-shell ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}>
         <Sidebar
           activeTab={activeTab}
           setActiveTab={setActiveTab}
