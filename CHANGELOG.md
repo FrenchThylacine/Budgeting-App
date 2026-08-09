@@ -3,11 +3,34 @@
 ## 2026-08-09
 
 ### Core workflow restoration and financial safeguards
-- Replaced the placeholder primary navigation panels with working client workflows for spending, recurring activities, categories, wallet entries, wishlist items, analytics, history, scenarios, and settings.
-- Added a working month-close dialog that preserves missing-period semantics and makes rollover an explicit user choice.
-- Blocked client-side edits to period-bound data while a historical month is selected, and prevented modification of approved budgets through the API.
-- Corrected the migration-script SQLite reference and made its snapshot save await completion.
-- Added `implementation_plan.md` as the live project tracker.
+
+#### User-facing changes
+
+- Restored the formerly empty **Spending** view. Users can now add, edit, search, and delete transactions for the selected month. Amount `0` remains accepted as a real entered amount; it is not treated as absent data.
+- Restored **Recurring activities** management. Users can add, edit, and remove recurring costs, select their category/currency/recurrence, and record monthly or session costs used by budget suggestions and forecasts.
+- Restored **Categories**, **Wallet**, **Wishlist**, **Analytics**, **History**, **Scenarios**, and **Settings** screens. These expose the already-existing store capabilities rather than presenting an empty migration notice.
+- Added a usable month-close dialog. It explains the calculated month-end delta, requires the user to choose whether that delta enters the wallet, and refuses rollover when a period remains missing instead of coercing missing data to zero.
+- Historical months are now read-only for activities, transactions, wishlist items, wallet entries, month closing, and budget approvals. Controls in the active views reflect this restriction.
+
+#### Data-integrity and backend changes
+
+- Added store-level guards around period-bound mutations so navigating to a past month cannot silently change its transactions, close records, or related entries.
+- Prevented local duplicate approval writes when the selected period already has an approved budget.
+- Changed `PATCH /api/approvals/:id` to reject all writes to an already approved budget. This preserves approved budgets as immutable historical records.
+- Updated the JSON-to-database migration helper to await `SnapshotRepository.saveSnapshot`, ensuring the command does not report success before the Neon write completes.
+- Corrected the migration helper documentation to name Neon PostgreSQL rather than the retired SQLite implementation.
+
+#### Documentation and maintenance
+
+- Replaced `implementation_plan.md` with a live tracker containing in-progress work, verified completions, remaining work, and discovered issues. It now records that runtime verification is still pending.
+- Added the project continuity documents to version control and updated `README.md` plus `docs/AI_CONTEXT.md` with the current implemented scope and the Neon/IndexedDB persistence limitation.
+
+#### Verification and deployment impact
+
+- `git diff --check` passed before commit; no whitespace errors were found.
+- Automated tests, frontend build, server build, database persistence checks, and browser/mobile checks were **not run** because Node.js/npm is unavailable in the execution environment.
+- No database migration needs to be applied for this client-workflow restoration. A configured `DATABASE_URL` is still required to verify server-side persistence.
+- The commit is local until GitHub authentication is available; the repository is one commit ahead of `origin/main`.
 
 ## 2026-07-31
 

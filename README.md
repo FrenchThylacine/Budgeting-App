@@ -21,9 +21,13 @@ A Vite + React budget dashboard focused on fast local use, recurring budget appr
 
 ## Current implementation status
 
-The main application workflows are implemented in the current React client: recurring activities, transactions, categories, wallet entries, wishlist items, analytics, historical summaries, scenarios, settings, month close, and exports. Historical months are read-only in the client so viewing the past cannot change recorded transactions or close records.
+The main application workflows are implemented in the current React client: recurring activities, transactions, categories, wallet entries, wishlist items, analytics, historical summaries, scenarios, settings, month close, and exports. Historical months are read-only in the client so viewing the past cannot change recorded transactions, close records, or approved budgets.
 
 Neon remains the intended remote source of truth and IndexedDB is retained as an offline fallback. A working `DATABASE_URL` and a Node.js 18+ runtime are required to verify the API persistence path.
+
+### Verification status
+
+The repository includes calculation safety tests, but the current implementation has not yet been runtime-verified in this environment because Node.js/npm is unavailable. Before deploying, run the test and build commands below, then verify database persistence by changing data, refreshing the app, and restarting the server. The live implementation tracker contains the remaining verification tasks.
 
 ## Architecture
 
