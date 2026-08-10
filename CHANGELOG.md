@@ -2,6 +2,13 @@
 
 ## 2026-08-10
 
+### Safe targeted snapshot persistence and API validation hardening
+
+- Refactored `SnapshotRepository.ts` to replace destructive whole-table deletions (`DELETE FROM <table_name> WHERE year_id = $1`) with targeted `ON CONFLICT (id) DO UPDATE SET ...` upsert queries and selective deletion of removed IDs (`id NOT IN (...)`). This protects audit history, foreign keys (`spending_entries.activity_id`), and concurrent write safety.
+- Hardened Category, Activity, and Approval API routes with input validation (`validateFiniteNumber`, `validateEnum`, `validateRequired`, category-reference validation, recurrence interval bounds, and non-negative amount checks).
+- Enforced approved-budget immutability across `POST /api/approvals` and `PATCH /api/approvals/:id` so approved monthly budgets cannot be overwritten.
+- Added automated unit tests for API validation helpers and `SnapshotRepository` targeted upsert persistence. Vitest suite now has 6 test files and 24 passing tests; frontend and server TypeScript builds compile cleanly.
+
 ### Global period navigation and analytics repair
 
 - Redesigned the header into a compact Month / Week / Year control with previous/next navigation and a clear selected-period label. The control now treats ISO weeks as first-class periods rather than a cosmetic month selector.

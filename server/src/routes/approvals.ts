@@ -1,7 +1,10 @@
 import { Router, Request, Response } from "express";
 import { BudgetService } from "../services/BudgetService";
-import { asyncHandler, AppError, validateRequired } from "../middleware/errorHandler";
+import { asyncHandler, AppError, validateEnum, validateFiniteNumber, validateRequired } from "../middleware/errorHandler";
 import type { BudgetApproval } from "@/domain/types";
+
+const currencies = ["EUR", "USD", "LBP", "GBP", "CAD", "AUD", "JPY", "TRY", "SAR", "AED"] as const;
+const approvalStatuses = ["approved", "rejected"] as const;
 
 export function createApprovalRoutes(): Router {
   const router = Router();
@@ -29,8 +32,9 @@ export function createApprovalRoutes(): Router {
     asyncHandler(async (req: Request, res: Response) => {
       const service = getService();
       const snapshot = await service.getOrThrow();
-      const year = parseInt(String(req.params.year));
-      const month = parseInt(String(req.params.month));
+      const year = validateFiniteNumber(req.params.year, "year", { integer: true, min: 1 });
+      const month = validateFiniteNumber(req.params.month, "month", { integer: true, min: 1 });
+      if (month > 12) throw new AppError(400, "Month must be between 1 and 12");
 
       const approval = (snapshot.budgetApprovals || []).find((a) => a.year === year && a.month === month);
       if (!approval) {
@@ -52,8 +56,18 @@ export function createApprovalRoutes(): Router {
 
       const service = getService();
       let snapshot = await service.getOrThrow();
-      const year = parseInt(String(req.body.year));
-      const month = parseInt(String(req.body.month));
+      const year = validateFiniteNumber(req.body.year, "year", { integer: true, min: 1 });
+      const month = validateFiniteNumber(req.body.month, "month", { integer: true, min: 1 });
+      if (month > 12) throw new AppError(400, "Month must be between 1 and 12");
+
+      const suggestedAmount = validateFiniteNumber(req.body.suggestedAmount, "suggestedAmount", { min: 0 });
+      const recurringTotal = validateFiniteNumber(req.body.recurringTotal, "recurringTotal", { min: 0 });
+      const currency = validateEnum(req.body.currency, "currency", currencies);
+      const approvedAmount = req.body.approvedAmount != null
+        ? validateFiniteNumber(req.body.approvedAmount, "approvedAmount", { min: 0 })
+        : null;
+
+      const status = req.body.status ? validateEnum(req.body.status, "status", approvalStatuses) : "rejected";
 
       // Check if approval already exists for this month
       const existingApproval = (snapshot.budgetApprovals || []).find((a) => a.year === year && a.month === month);
@@ -66,15 +80,15 @@ export function createApprovalRoutes(): Router {
       }
 
       const newApproval: BudgetApproval = {
-        id: `approval-${year}-${month}-${Date.now()}`,
-        year: year,
-        month: month,
-        suggestedAmount: Number(req.body.suggestedAmount),
-        approvedAmount: req.body.approvedAmount != null ? Number(req.body.approvedAmount) : null,
-        currency: req.body.currency,
-        status: req.body.status || "rejected",
-        recurringTotal: Number(req.body.recurringTotal),
-        createdAt: new Date().toISOString(),
+        id: existingApproval ? existingApproval.id : `approval-${year}-${month}-${Date.now()}`,
+        year,
+        month,
+        suggestedAmount,
+        approvedAmount,
+        currency,
+        status,
+        recurringTotal,
+        createdAt: existingApproval ? existingApproval.createdAt : new Date().toISOString(),
         decidedAt: new Date().toISOString(),
         note: req.body.note || "",
       };
@@ -118,10 +132,16 @@ export function createApprovalRoutes(): Router {
       }
 
       // Update allowed fields
-      if (req.body.approvedAmount !== undefined) approval.approvedAmount = req.body.approvedAmount != null ? Number(req.body.approvedAmount) : null;
-      if (req.body.status !== undefined) approval.status = req.body.status;
-      if (req.body.note !== undefined) approval.note = req.body.note;
-      if (req.body.decidedAt !== undefined) approval.decidedAt = req.body.decidedAt;
+      if (req.body.approvedAmount !== undefined) {
+        approval.approvedAmount = req.body.approvedAmount != null
+          ? validateFiniteNumber(req.body.approvedAmount, "approvedAmount", { min: 0 })
+          : null;
+      }
+      if (req.body.status !== undefined) {
+        approval.status = validateEnum(req.body.status, "status", approvalStatuses);
+      }
+      if (req.body.note !== undefined) approval.note = String(req.body.note);
+      if (req.body.decidedAt !== undefined) approval.decidedAt = String(req.body.decidedAt);
 
       await service.saveSnapshot(snapshot);
       res.json(approval);

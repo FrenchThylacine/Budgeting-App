@@ -1,7 +1,9 @@
 import { Router, Request, Response } from "express";
 import { BudgetService } from "../services/BudgetService";
-import { asyncHandler, AppError, validateRequired } from "../middleware/errorHandler";
+import { asyncHandler, AppError, validateEnum, validateFiniteNumber, validateRequired } from "../middleware/errorHandler";
 import type { BudgetCategory } from "@/domain/types";
+
+const categoryBuckets = ["general", "piloting", "personal", "wallet"] as const;
 
 export function createCategoryRoutes(): Router {
   const router = Router();
@@ -32,12 +34,26 @@ export function createCategoryRoutes(): Router {
       const service = getService();
       let snapshot = await service.getOrThrow();
 
+      const name = String(req.body.name).trim();
+      if (!name) throw new AppError(400, "Category name cannot be empty");
+      const bucket = validateEnum(req.body.bucket, "bucket", categoryBuckets);
+      const color = String(req.body.color).trim();
+      if (!color) throw new AppError(400, "Category color cannot be empty");
+
+      const monthlyCap =
+        req.body.monthlyCap != null ? validateFiniteNumber(req.body.monthlyCap, "monthlyCap", { min: 0 }) : undefined;
+
+      if (req.body.parentId) {
+        const parent = snapshot.categories.find((c) => c.id === req.body.parentId);
+        if (!parent || parent.archived) throw new AppError(400, "Invalid parent category");
+      }
+
       const newCategory: BudgetCategory = {
-        id: `cat-${req.body.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${Date.now()}`,
-        name: req.body.name,
-        bucket: req.body.bucket,
-        color: req.body.color,
-        monthlyCap: req.body.monthlyCap != null ? Number(req.body.monthlyCap) : undefined,
+        id: `cat-${name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${Date.now()}`,
+        name,
+        bucket,
+        color,
+        monthlyCap,
         notes: req.body.notes || "",
         archived: false,
         icon: req.body.icon || undefined,
@@ -69,14 +85,32 @@ export function createCategoryRoutes(): Router {
       }
 
       // Update allowed fields
-      if (req.body.name !== undefined) category.name = req.body.name;
-      if (req.body.color !== undefined) category.color = req.body.color;
-      if (req.body.monthlyCap !== undefined) category.monthlyCap = req.body.monthlyCap != null ? Number(req.body.monthlyCap) : undefined;
+      if (req.body.name !== undefined) {
+        const name = String(req.body.name).trim();
+        if (!name) throw new AppError(400, "Category name cannot be empty");
+        category.name = name;
+      }
+      if (req.body.bucket !== undefined) category.bucket = validateEnum(req.body.bucket, "bucket", categoryBuckets);
+      if (req.body.color !== undefined) {
+        const color = String(req.body.color).trim();
+        if (!color) throw new AppError(400, "Category color cannot be empty");
+        category.color = color;
+      }
+      if (req.body.monthlyCap !== undefined) {
+        category.monthlyCap =
+          req.body.monthlyCap != null ? validateFiniteNumber(req.body.monthlyCap, "monthlyCap", { min: 0 }) : undefined;
+      }
       if (req.body.notes !== undefined) category.notes = req.body.notes;
-      if (req.body.archived !== undefined) category.archived = req.body.archived;
+      if (req.body.archived !== undefined) category.archived = Boolean(req.body.archived);
       if (req.body.icon !== undefined) category.icon = req.body.icon;
       if (req.body.description !== undefined) category.description = req.body.description;
-      if (req.body.parentId !== undefined) category.parentId = req.body.parentId || undefined;
+      if (req.body.parentId !== undefined) {
+        if (req.body.parentId) {
+          const parent = snapshot.categories.find((c) => c.id === req.body.parentId);
+          if (!parent || parent.archived) throw new AppError(400, "Invalid parent category");
+        }
+        category.parentId = req.body.parentId || undefined;
+      }
 
       await service.saveSnapshot(snapshot);
       res.json(category);

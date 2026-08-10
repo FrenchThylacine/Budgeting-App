@@ -56,7 +56,7 @@ Each layer has a single responsibility.
 
 The current client persists a complete `BudgetSnapshot` through `src/store/budgetStore.ts`: it attempts the REST API first and also writes IndexedDB as an offline fallback. The Express application is now reusable in `server/src/app.ts`; `server/src/index.ts` is only the local listener, and `api/[...path].ts` exports the same app for Vercel Functions. Frontend and server TypeScript builds pass.
 
-The repository still uses delete-and-reinsert writes for nested snapshot records. That is functional only after a Neon-backed persistence test is run, and it remains a tracked concurrency/auditability risk rather than a completed transactional design.
+`SnapshotRepository.ts` has been refactored from whole-table deletions to targeted `UPSERT` statements (`ON CONFLICT (id) DO UPDATE SET ...`) and selective deletion of removed IDs for all child records (`activities`, `spending_entries`, `wishlist_items`, `wallet_entries`, `closed_months`). This preserves record identity, auditability, and foreign key integrity.
 
 ---
 

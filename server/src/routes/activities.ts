@@ -1,7 +1,10 @@
 import { Router, Request, Response } from "express";
 import { BudgetService } from "../services/BudgetService";
-import { asyncHandler, AppError, validateRequired } from "../middleware/errorHandler";
+import { asyncHandler, AppError, validateEnum, validateFiniteNumber, validateRequired } from "../middleware/errorHandler";
 import type { Activity } from "@/domain/types";
+
+const currencies = ["EUR", "USD", "LBP", "GBP", "CAD", "AUD", "JPY", "TRY", "SAR", "AED"] as const;
+const recurrenceTypes = ["none", "weekly", "monthly", "yearly", "session", "purchase", "custom"] as const;
 
 export function createActivitiesRoutes(): Router {
   const router = Router();
@@ -16,7 +19,7 @@ export function createActivitiesRoutes(): Router {
     asyncHandler(async (req: Request, res: Response) => {
       const service = getService();
       const snapshot = await service.getOrThrow();
-      const year = parseInt(String(req.params.year));
+      const year = validateFiniteNumber(req.params.year, "year", { integer: true, min: 1 });
 
       const yearRecord = snapshot.years[String(year)];
       if (!yearRecord) {
@@ -38,25 +41,39 @@ export function createActivitiesRoutes(): Router {
 
       const service = getService();
       let snapshot = await service.getOrThrow();
-      const year = parseInt(req.body.year);
+      const year = validateFiniteNumber(req.body.year, "year", { integer: true, min: 1 });
 
       const yearRecord = snapshot.years[String(year)];
       if (!yearRecord) {
         throw new AppError(404, `No data for year ${year}`);
       }
 
+      const category = snapshot.categories.find((c) => c.id === req.body.categoryId);
+      if (!category || category.archived) {
+        throw new AppError(400, "Invalid active category reference");
+      }
+
+      const name = String(req.body.name).trim();
+      if (!name) throw new AppError(400, "Activity name cannot be empty");
+
+      const currency = validateEnum(req.body.currency, "currency", currencies);
+      const recurrenceType = validateEnum(req.body.recurrenceType, "recurrenceType", recurrenceTypes);
+      const recurrenceInterval = req.body.recurrenceInterval != null
+        ? validateFiniteNumber(req.body.recurrenceInterval, "recurrenceInterval", { integer: true, min: 1 })
+        : 1;
+
       const newActivity: Activity = {
-        id: `act-${req.body.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${Date.now()}`,
-        name: req.body.name,
+        id: `act-${name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${Date.now()}`,
+        name,
         categoryId: req.body.categoryId,
-        currency: req.body.currency,
-        recurrenceType: req.body.recurrenceType,
-        recurrenceInterval: Number(req.body.recurrenceInterval || 1),
-        pricePerSession: req.body.pricePerSession != null ? Number(req.body.pricePerSession) : null,
-        pricePerPurchase: req.body.pricePerPurchase != null ? Number(req.body.pricePerPurchase) : null,
-        pricePerMonth: req.body.pricePerMonth != null ? Number(req.body.pricePerMonth) : null,
-        estimatedCost: req.body.estimatedCost != null ? Number(req.body.estimatedCost) : null,
-        yearlyEstimate: req.body.yearlyEstimate != null ? Number(req.body.yearlyEstimate) : null,
+        currency,
+        recurrenceType,
+        recurrenceInterval,
+        pricePerSession: req.body.pricePerSession != null ? validateFiniteNumber(req.body.pricePerSession, "pricePerSession", { min: 0 }) : null,
+        pricePerPurchase: req.body.pricePerPurchase != null ? validateFiniteNumber(req.body.pricePerPurchase, "pricePerPurchase", { min: 0 }) : null,
+        pricePerMonth: req.body.pricePerMonth != null ? validateFiniteNumber(req.body.pricePerMonth, "pricePerMonth", { min: 0 }) : null,
+        estimatedCost: req.body.estimatedCost != null ? validateFiniteNumber(req.body.estimatedCost, "estimatedCost", { min: 0 }) : null,
+        yearlyEstimate: req.body.yearlyEstimate != null ? validateFiniteNumber(req.body.yearlyEstimate, "yearlyEstimate", { min: 0 }) : null,
         active: req.body.active !== false,
         visible: req.body.visible !== false,
         seasonalTag: req.body.seasonalTag || "normal",
@@ -88,20 +105,40 @@ export function createActivitiesRoutes(): Router {
         const activity = yearRecord.activities.find((a) => a.id === activityId);
         if (activity) {
           // Update allowed fields
-          if (req.body.name !== undefined) activity.name = req.body.name;
-          if (req.body.categoryId !== undefined) activity.categoryId = req.body.categoryId;
-          if (req.body.currency !== undefined) activity.currency = req.body.currency;
-          if (req.body.recurrenceType !== undefined) activity.recurrenceType = req.body.recurrenceType;
-          if (req.body.recurrenceInterval !== undefined) activity.recurrenceInterval = Number(req.body.recurrenceInterval);
-          if (req.body.pricePerSession !== undefined) activity.pricePerSession = req.body.pricePerSession != null ? Number(req.body.pricePerSession) : null;
-          if (req.body.pricePerPurchase !== undefined) activity.pricePerPurchase = req.body.pricePerPurchase != null ? Number(req.body.pricePerPurchase) : null;
-          if (req.body.pricePerMonth !== undefined) activity.pricePerMonth = req.body.pricePerMonth != null ? Number(req.body.pricePerMonth) : null;
-          if (req.body.estimatedCost !== undefined) activity.estimatedCost = req.body.estimatedCost != null ? Number(req.body.estimatedCost) : null;
-          if (req.body.yearlyEstimate !== undefined) activity.yearlyEstimate = req.body.yearlyEstimate != null ? Number(req.body.yearlyEstimate) : null;
-          if (req.body.active !== undefined) activity.active = req.body.active;
-          if (req.body.visible !== undefined) activity.visible = req.body.visible;
-          if (req.body.seasonalTag !== undefined) activity.seasonalTag = req.body.seasonalTag;
-          if (req.body.notes !== undefined) activity.notes = req.body.notes;
+          if (req.body.name !== undefined) {
+            const name = String(req.body.name).trim();
+            if (!name) throw new AppError(400, "Activity name cannot be empty");
+            activity.name = name;
+          }
+          if (req.body.categoryId !== undefined) {
+            const category = snapshot.categories.find((c) => c.id === req.body.categoryId);
+            if (!category || category.archived) throw new AppError(400, "Invalid active category reference");
+            activity.categoryId = req.body.categoryId;
+          }
+          if (req.body.currency !== undefined) activity.currency = validateEnum(req.body.currency, "currency", currencies);
+          if (req.body.recurrenceType !== undefined) activity.recurrenceType = validateEnum(req.body.recurrenceType, "recurrenceType", recurrenceTypes);
+          if (req.body.recurrenceInterval !== undefined) {
+            activity.recurrenceInterval = validateFiniteNumber(req.body.recurrenceInterval, "recurrenceInterval", { integer: true, min: 1 });
+          }
+          if (req.body.pricePerSession !== undefined) {
+            activity.pricePerSession = req.body.pricePerSession != null ? validateFiniteNumber(req.body.pricePerSession, "pricePerSession", { min: 0 }) : null;
+          }
+          if (req.body.pricePerPurchase !== undefined) {
+            activity.pricePerPurchase = req.body.pricePerPurchase != null ? validateFiniteNumber(req.body.pricePerPurchase, "pricePerPurchase", { min: 0 }) : null;
+          }
+          if (req.body.pricePerMonth !== undefined) {
+            activity.pricePerMonth = req.body.pricePerMonth != null ? validateFiniteNumber(req.body.pricePerMonth, "pricePerMonth", { min: 0 }) : null;
+          }
+          if (req.body.estimatedCost !== undefined) {
+            activity.estimatedCost = req.body.estimatedCost != null ? validateFiniteNumber(req.body.estimatedCost, "estimatedCost", { min: 0 }) : null;
+          }
+          if (req.body.yearlyEstimate !== undefined) {
+            activity.yearlyEstimate = req.body.yearlyEstimate != null ? validateFiniteNumber(req.body.yearlyEstimate, "yearlyEstimate", { min: 0 }) : null;
+          }
+          if (req.body.active !== undefined) activity.active = Boolean(req.body.active);
+          if (req.body.visible !== undefined) activity.visible = Boolean(req.body.visible);
+          if (req.body.seasonalTag !== undefined) activity.seasonalTag = String(req.body.seasonalTag);
+          if (req.body.notes !== undefined) activity.notes = String(req.body.notes);
 
           yearRecord.updatedAt = new Date().toISOString();
           await service.saveSnapshot(snapshot);

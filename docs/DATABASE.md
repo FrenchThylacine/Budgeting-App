@@ -40,9 +40,9 @@ SQLite should no longer be considered the reference implementation.
 
 ## Current verification status — 2026-08-10
 
-`SnapshotRepository` uses the Neon serverless driver and all repository calls are asynchronous. The build succeeds, but no `DATABASE_URL` is available in the current execution environment, so no claim is made that a create, refresh, server restart, update, and delete cycle has been verified against Neon.
+`SnapshotRepository` uses the Neon serverless driver and all repository calls are asynchronous. The build succeeds, and unit test mocks verify safe upsert execution. In the absence of a live `DATABASE_URL` in the local execution environment, live Neon durability cycles remain unverified.
 
-The current snapshot save flow upserts top-level records but deletes and reinserts a year's nested activities, spending entries, wishlist items, wallet entries, and closed months. This is a known limitation: it can preserve the current snapshot but is not suitable as the long-term concurrent-write or audit-log strategy. It is tracked in `implementation_plan.md`.
+The snapshot save flow has been refactored to perform targeted `ON CONFLICT (id) DO UPDATE SET ...` upserts for all top-level and nested child records (`activities`, `spending_entries`, `wishlist_items`, `wallet_entries`, `closed_months`, `categories`, `seasonal_presets`, `scenario_presets`). Only records that have been removed from memory are deleted using targeted `NOT IN` queries. Whole-table deletions for year records have been completely eliminated.
 
 ---
 

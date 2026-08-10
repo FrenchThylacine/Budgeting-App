@@ -100,10 +100,27 @@ export class SnapshotRepository {
         category.parentId ?? null,
       ]);
     }
+    const catIds = snapshot.categories.map((c) => c.id);
+    if (catIds.length > 0) {
+      await this.query(
+        `DELETE FROM categories WHERE snapshot_id = $1 AND id NOT IN (${catIds.map((_, i) => `$${i + 2}`).join(", ")})`,
+        [snapshotId, ...catIds]
+      );
+    } else {
+      await this.query("DELETE FROM categories WHERE snapshot_id = $1", [snapshotId]);
+    }
 
     // Years and nested data
     for (const yearRecord of Object.values(snapshot.years)) {
       await this.saveYearRecord(snapshotId, yearRecord, now);
+    }
+    const activeYears = Object.values(snapshot.years);
+    const activeYearNums = activeYears.map((y) => y.year);
+    if (activeYearNums.length > 0) {
+      await this.query(
+        `DELETE FROM years WHERE snapshot_id = $1 AND year NOT IN (${activeYearNums.map((_, i) => `$${i + 2}`).join(", ")})`,
+        [snapshotId, ...activeYearNums]
+      );
     }
 
     // Presets
@@ -118,6 +135,15 @@ export class SnapshotRepository {
           activity_overrides = EXCLUDED.activity_overrides,
           notes = EXCLUDED.notes
       `, [preset.id, snapshotId, preset.name, preset.season, JSON.stringify(preset.activityOverrides), preset.notes]);
+    }
+    const seasonalIds = snapshot.seasonalPresets.map((p) => p.id);
+    if (seasonalIds.length > 0) {
+      await this.query(
+        `DELETE FROM seasonal_presets WHERE snapshot_id = $1 AND id NOT IN (${seasonalIds.map((_, i) => `$${i + 2}`).join(", ")})`,
+        [snapshotId, ...seasonalIds]
+      );
+    } else {
+      await this.query("DELETE FROM seasonal_presets WHERE snapshot_id = $1", [snapshotId]);
     }
 
     for (const preset of snapshot.scenarioPresets) {
@@ -140,6 +166,15 @@ export class SnapshotRepository {
         preset.categoryCaps ? JSON.stringify(preset.categoryCaps) : null,
         preset.notes,
       ]);
+    }
+    const scenarioIds = snapshot.scenarioPresets.map((p) => p.id);
+    if (scenarioIds.length > 0) {
+      await this.query(
+        `DELETE FROM scenario_presets WHERE snapshot_id = $1 AND id NOT IN (${scenarioIds.map((_, i) => `$${i + 2}`).join(", ")})`,
+        [snapshotId, ...scenarioIds]
+      );
+    } else {
+      await this.query("DELETE FROM scenario_presets WHERE snapshot_id = $1", [snapshotId]);
     }
 
     // Budget approvals
@@ -199,8 +234,7 @@ export class SnapshotRepository {
       await this.query("UPDATE years SET updated_at = $1 WHERE id = $2", [now, yearId]);
     }
 
-    // Activities
-    await this.query("DELETE FROM activities WHERE year_id = $1", [yearId]);
+    // Activities - Upsert and delete missing
     for (const activity of yearRecord.activities) {
       await this.query(`
         INSERT INTO activities
@@ -208,6 +242,23 @@ export class SnapshotRepository {
          price_per_session, price_per_purchase, price_per_month, estimated_cost, yearly_estimate,
          active, visible, seasonal_tag, "order", notes, created_at, updated_at)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+        ON CONFLICT (id) DO UPDATE SET
+          name = EXCLUDED.name,
+          category_id = EXCLUDED.category_id,
+          currency = EXCLUDED.currency,
+          recurrence_type = EXCLUDED.recurrence_type,
+          recurrence_interval = EXCLUDED.recurrence_interval,
+          price_per_session = EXCLUDED.price_per_session,
+          price_per_purchase = EXCLUDED.price_per_purchase,
+          price_per_month = EXCLUDED.price_per_month,
+          estimated_cost = EXCLUDED.estimated_cost,
+          yearly_estimate = EXCLUDED.yearly_estimate,
+          active = EXCLUDED.active,
+          visible = EXCLUDED.visible,
+          seasonal_tag = EXCLUDED.seasonal_tag,
+          "order" = EXCLUDED."order",
+          notes = EXCLUDED.notes,
+          updated_at = EXCLUDED.updated_at
       `, [
         activity.id,
         yearId,
@@ -230,15 +281,36 @@ export class SnapshotRepository {
         now,
       ]);
     }
+    const actIds = yearRecord.activities.map((a) => a.id);
+    if (actIds.length > 0) {
+      await this.query(
+        `DELETE FROM activities WHERE year_id = $1 AND id NOT IN (${actIds.map((_, i) => `$${i + 2}`).join(", ")})`,
+        [yearId, ...actIds]
+      );
+    } else {
+      await this.query("DELETE FROM activities WHERE year_id = $1", [yearId]);
+    }
 
-    // Spending entries
-    await this.query("DELETE FROM spending_entries WHERE year_id = $1", [yearId]);
+    // Spending entries - Upsert and delete missing
     for (const entry of yearRecord.spendingEntries) {
       await this.query(`
         INSERT INTO spending_entries
         (id, year_id, month, week, date, category_id, activity_id, amount, currency,
          recurrence_type, is_piloting, source, note, created_at, updated_at)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+        ON CONFLICT (id) DO UPDATE SET
+          month = EXCLUDED.month,
+          week = EXCLUDED.week,
+          date = EXCLUDED.date,
+          category_id = EXCLUDED.category_id,
+          activity_id = EXCLUDED.activity_id,
+          amount = EXCLUDED.amount,
+          currency = EXCLUDED.currency,
+          recurrence_type = EXCLUDED.recurrence_type,
+          is_piloting = EXCLUDED.is_piloting,
+          source = EXCLUDED.source,
+          note = EXCLUDED.note,
+          updated_at = EXCLUDED.updated_at
       `, [
         entry.id,
         yearId,
@@ -257,15 +329,37 @@ export class SnapshotRepository {
         entry.updatedAt,
       ]);
     }
+    const spendIds = yearRecord.spendingEntries.map((e) => e.id);
+    if (spendIds.length > 0) {
+      await this.query(
+        `DELETE FROM spending_entries WHERE year_id = $1 AND id NOT IN (${spendIds.map((_, i) => `$${i + 2}`).join(", ")})`,
+        [yearId, ...spendIds]
+      );
+    } else {
+      await this.query("DELETE FROM spending_entries WHERE year_id = $1", [yearId]);
+    }
 
-    // Wishlist items
-    await this.query("DELETE FROM wishlist_items WHERE year_id = $1", [yearId]);
+    // Wishlist items - Upsert and delete missing
     for (const item of yearRecord.wishlistItems) {
       await this.query(`
         INSERT INTO wishlist_items
         (id, year_id, name, category_id, actual_price, effective_value, currency,
          bought, in_wishlist, priority, date_added, date_purchased, notes, active, created_at, updated_at)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+        ON CONFLICT (id) DO UPDATE SET
+          name = EXCLUDED.name,
+          category_id = EXCLUDED.category_id,
+          actual_price = EXCLUDED.actual_price,
+          effective_value = EXCLUDED.effective_value,
+          currency = EXCLUDED.currency,
+          bought = EXCLUDED.bought,
+          in_wishlist = EXCLUDED.in_wishlist,
+          priority = EXCLUDED.priority,
+          date_added = EXCLUDED.date_added,
+          date_purchased = EXCLUDED.date_purchased,
+          notes = EXCLUDED.notes,
+          active = EXCLUDED.active,
+          updated_at = EXCLUDED.updated_at
       `, [
         item.id,
         yearId,
@@ -285,13 +379,28 @@ export class SnapshotRepository {
         now,
       ]);
     }
+    const wishIds = yearRecord.wishlistItems.map((i) => i.id);
+    if (wishIds.length > 0) {
+      await this.query(
+        `DELETE FROM wishlist_items WHERE year_id = $1 AND id NOT IN (${wishIds.map((_, i) => `$${i + 2}`).join(", ")})`,
+        [yearId, ...wishIds]
+      );
+    } else {
+      await this.query("DELETE FROM wishlist_items WHERE year_id = $1", [yearId]);
+    }
 
-    // Wallet entries
-    await this.query("DELETE FROM wallet_entries WHERE year_id = $1", [yearId]);
+    // Wallet entries - Upsert and delete missing
     for (const entry of yearRecord.walletEntries) {
       await this.query(`
         INSERT INTO wallet_entries (id, year_id, month, amount, currency, source, type, note, created_at)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        ON CONFLICT (id) DO UPDATE SET
+          month = EXCLUDED.month,
+          amount = EXCLUDED.amount,
+          currency = EXCLUDED.currency,
+          source = EXCLUDED.source,
+          type = EXCLUDED.type,
+          note = EXCLUDED.note
       `, [
         entry.id,
         yearId,
@@ -304,13 +413,29 @@ export class SnapshotRepository {
         entry.createdAt,
       ]);
     }
+    const walletIds = yearRecord.walletEntries.map((e) => e.id);
+    if (walletIds.length > 0) {
+      await this.query(
+        `DELETE FROM wallet_entries WHERE year_id = $1 AND id NOT IN (${walletIds.map((_, i) => `$${i + 2}`).join(", ")})`,
+        [yearId, ...walletIds]
+      );
+    } else {
+      await this.query("DELETE FROM wallet_entries WHERE year_id = $1", [yearId]);
+    }
 
-    // Closed months
-    await this.query("DELETE FROM closed_months WHERE year_id = $1", [yearId]);
+    // Closed months - Upsert and delete missing
     for (const record of yearRecord.closedMonths) {
       await this.query(`
         INSERT INTO closed_months (id, year_id, month, status, spend_total, delta, rollover_wallet_entry_id, confirmed_at, note)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        ON CONFLICT (id) DO UPDATE SET
+          month = EXCLUDED.month,
+          status = EXCLUDED.status,
+          spend_total = EXCLUDED.spend_total,
+          delta = EXCLUDED.delta,
+          rollover_wallet_entry_id = EXCLUDED.rollover_wallet_entry_id,
+          confirmed_at = EXCLUDED.confirmed_at,
+          note = EXCLUDED.note
       `, [
         record.id,
         yearId,
@@ -322,6 +447,15 @@ export class SnapshotRepository {
         record.confirmedAt,
         record.note ?? null,
       ]);
+    }
+    const closedIds = yearRecord.closedMonths.map((r) => r.id);
+    if (closedIds.length > 0) {
+      await this.query(
+        `DELETE FROM closed_months WHERE year_id = $1 AND id NOT IN (${closedIds.map((_, i) => `$${i + 2}`).join(", ")})`,
+        [yearId, ...closedIds]
+      );
+    } else {
+      await this.query("DELETE FROM closed_months WHERE year_id = $1", [yearId]);
     }
   }
 
