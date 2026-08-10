@@ -1,5 +1,46 @@
 # Changelog
 
+## 2026-08-11
+
+### Analytics panel rebuilt, wishlist editing, and category editing
+
+#### Analytics — real data, period-aware, with charts and burn rate
+
+- Rebuilt `AnalyticsPanel.tsx` from the ground up (previously a minimal 85-line placeholder).
+- All analytics now read exclusively from real `snapshot.years[*].spendingEntries` via the same period-filtering logic as the Spending panel: month, ISO week, and year modes all produce correct entry sets.
+- New sections: KPI metrics row (total spend, budget remaining, average transaction, burn rate %); Budget vs Actual with progress bar and colour-coded delta (month mode); Recurring vs non-recurring split with percentages; SVG sparkline bar chart for 12-month and up to 26-week trends; Category breakdown with per-category progress bars (piloting correctly excluded from share %); Savings & Wallet section (wallet total + wishlist active total).
+- Historical period detection banner (read-only notice when `isHistoricalPeriod` is true).
+- Zero spend is preserved as €0; pending/missing periods show '?' in the chart. No fake data or mock values.
+- No external chart libraries — charts use inline SVG with `viewBox` for mobile responsiveness.
+- Added `tests/analytics-filtering.test.ts` with 7 regression tests: month/week/year period isolation, zero-value preservation, piloting bucket separation, recurring vs non-recurring split accuracy, and cross-month year total. Vitest suite: **7 files, 31 tests, all passing**.
+
+#### Wishlist — full editing workflow
+
+- Completely rewrote `WishlistPanel.tsx` (previously all minified onto one line with no edit capability).
+- View filter tabs with live counts: Active / All / Bought.
+- Add form with all WishlistItem fields: name, price, currency, priority (low/medium/high/dream), notes, inWishlist.
+- Inline edit form per-item: pre-loaded with existing values, saves via `store.updateWishlistItem`, validates name non-empty, price if present is finite ≥ 0. Cancel without saving does not mutate state.
+- Mark-bought button, delete with `window.confirm`, priority colour dots, truncated notes preview.
+- Summary footer: active count, active value total, bought count.
+- All controls hidden in historical/read-only periods (`isCurrentPeriodMutable() === false`).
+- Mobile: all flex layouts use `flexWrap`, inputs have `minWidth` constraints.
+
+#### Categories — full editing workflow
+
+- Completely rewrote `CategoryManager.tsx` (previously only add/archive with no edit capability).
+- Inline edit form per-category with all `BudgetCategory` fields: name, bucket (General/Piloting/Personal/Wallet), colour picker, monthly cap, parent category (1-level), description, icon name, notes.
+- Patch flows through `store.updateCategory` — existing spending and activity records are not touched.
+- Archive / Restore: archiving soft-hides the category; restoring via `updateCategory({ archived: false })`.
+- Archived categories collapsible section (expand/collapse toggle).
+- Referential-integrity note shown to users.
+- Parent category select excludes self and already-archived categories.
+
+#### Builds and tests
+
+- Frontend build: ✅ 1616 modules, zero TypeScript errors (bundle-size advisory only, pre-existing).
+- Server build: ✅ 0 errors.
+- Test suite: ✅ 31/31 tests passing across 7 files.
+
 ## 2026-08-10
 
 ### Safe targeted snapshot persistence and API validation hardening
