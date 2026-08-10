@@ -1,4 +1,4 @@
-import { dateInputValue, getIsoWeek, startOfIsoWeek } from "../domain/dates";
+import { dateInputValue, getIsoWeek, startOfIsoWeek, weekYear } from "../domain/dates";
 import type {
   Activity,
   BudgetCategory,
@@ -85,6 +85,8 @@ export function createSeedBudgetSnapshot(now = new Date()): BudgetSnapshot {
       selectedYear: SOURCE_YEAR,
       selectedMonth: now.getFullYear() === SOURCE_YEAR ? now.getMonth() + 1 : 1,
       selectedWeek,
+      selectedWeekYear: weekYear(now),
+      selectedPeriodMode: "month",
       selectedSeason: "normal",
       baseCurrency: "EUR",
       currencyDisplayMode: "both",

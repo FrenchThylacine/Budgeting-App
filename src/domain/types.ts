@@ -13,6 +13,7 @@ export type CurrencyCode =
 export type CurrencyDisplayMode = "symbol" | "code" | "both";
 export type RoundingRule = "none" | "nearest-1" | "nearest-5" | "nearest-10" | "ceil-10";
 export type NanPolicy = "closed-periods-only";
+export type PeriodMode = "month" | "week" | "year";
 export type RecurrenceType =
   | "none"
   | "weekly"
@@ -50,6 +51,9 @@ export interface Settings {
   selectedYear: number;
   selectedMonth: number;
   selectedWeek: number;
+  /** ISO week-year; separate from the calendar year used by monthly records. */
+  selectedWeekYear: number;
+  selectedPeriodMode: PeriodMode;
   selectedSeason: string;
   baseCurrency: CurrencyCode;
   currencyDisplayMode: CurrencyDisplayMode;

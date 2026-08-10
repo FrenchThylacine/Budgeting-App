@@ -1,7 +1,8 @@
 import React from "react";
 import { useBudgetStore } from "../../store/budgetStore";
 import { calculateYear } from "../../domain/calculations";
-import { monthName, weeksInIsoYear } from "../../domain/dates";
+import { getIsoWeek, monthName, weekYear } from "../../domain/dates";
+import { movePeriod, periodLabel, periodPatchForMode, selectedIsoWeekYear } from "../../domain/periods";
 import { Badge } from "../ui/Badge";
 import { Button } from "../ui/Button";
 import {
@@ -22,30 +23,20 @@ export const Header: React.FC<{
   const isCurrentPeriodMutable = useBudgetStore((s) => s.isCurrentPeriodMutable);
 
   const currentYear = snapshot.settings.selectedYear;
-  const maxWeeks = weeksInIsoYear(currentYear);
+  const mode = snapshot.settings.selectedPeriodMode;
+  const activeYear = mode === "week" ? selectedIsoWeekYear(snapshot.settings) : currentYear;
   const yearOptions = Array.from(
-    new Set([currentYear - 1, currentYear, currentYear + 1, 2026, 2027, 2028, 2029, 2030, ...Object.keys(snapshot.years).map(Number)])
+    new Set([activeYear - 1, activeYear, activeYear + 1, 2026, 2027, 2028, 2029, 2030, ...Object.keys(snapshot.years).map(Number)])
   ).sort((a, b) => a - b);
 
   const latestAudit = snapshot.auditLog[0];
 
-  function moveMonth(delta: number) {
-    let nextMonth = snapshot.settings.selectedMonth + delta;
-    let nextYear = currentYear;
-    if (nextMonth < 1) { nextMonth = 12; nextYear -= 1; }
-    if (nextMonth > 12) { nextMonth = 1; nextYear += 1; }
-    if (nextYear !== currentYear) selectYear(nextYear);
-    updateSettings({ selectedMonth: nextMonth });
+  function selectMonth(month: number, year = currentYear) {
+    const date = new Date(Date.UTC(year, month - 1, 1));
+    updateSettings({ selectedYear: year, selectedMonth: month, selectedWeek: getIsoWeek(date), selectedWeekYear: weekYear(date) });
   }
 
-  function moveWeek(delta: number) {
-    let nextWeek = snapshot.settings.selectedWeek + delta;
-    let nextYear = currentYear;
-    if (nextWeek < 1) { nextYear -= 1; nextWeek = weeksInIsoYear(nextYear); }
-    if (nextWeek > maxWeeks) { nextYear += 1; nextWeek = 1; }
-    if (nextYear !== currentYear) selectYear(nextYear);
-    updateSettings({ selectedWeek: nextWeek });
-  }
+  const periodTitle = periodLabel(snapshot.settings);
 
   const status = calculation.selectedMonthSpend.status;
   const statusTone = status === "nan" ? "danger" : status === "pending" ? "warning" : "success";
@@ -55,11 +46,11 @@ export const Header: React.FC<{
       <div>
         <div className="text-footnote" style={{ marginBottom: 4 }}>Current Period</div>
         <h1 className="text-display" style={{ fontSize: "clamp(1.5rem, 3vw, 2rem)" }}>
-          {monthName(calculation.month)} {calculation.year}
+          {periodTitle}
         </h1>
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
           <Badge tone={statusTone}>{status === "value" ? "Active" : status === "zero" ? "No Spend" : status === "pending" ? "Pending" : "Closed"}</Badge>
-          <span className="text-caption">Week {calculation.week}{snapshot.settings.selectedSeason ? ` · ${snapshot.settings.selectedSeason}` : ""}</span>
+          <span className="text-caption">{mode === "month" ? `Week ${calculation.week}` : mode === "week" ? `${activeYear} ISO week` : "Year overview"}{snapshot.settings.selectedSeason ? ` · ${snapshot.settings.selectedSeason}` : ""}</span>
         </div>
         {latestAudit && (
           <div className="text-caption" style={{ marginTop: 6, display: "flex", alignItems: "center", gap: 6 }}>
@@ -69,42 +60,43 @@ export const Header: React.FC<{
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 12, alignItems: "flex-end" }}>
-        <div className="period-nav">
-          <Button variant="ghost" icon onClick={() => moveMonth(-1)} aria-label="Previous month">
+        <div className="period-selector" aria-label="Period selector">
+          <div className="period-mode-toggle" role="group" aria-label="Period type">
+            {(["month", "week", "year"] as const).map((periodMode) => (
+              <button key={periodMode} className={`period-mode ${mode === periodMode ? "active" : ""}`} onClick={() => updateSettings(periodPatchForMode(snapshot.settings, periodMode))} type="button">{periodMode}</button>
+            ))}
+          </div>
+          <div className="period-nav">
+          <Button variant="ghost" icon onClick={() => updateSettings(movePeriod(snapshot.settings, -1))} aria-label={`Previous ${mode}`}>
             <ChevronLeft size={18} />
           </Button>
-          <select
+          {mode === "month" && <select
             className="select"
             style={{ width: "auto", minWidth: 120 }}
             value={snapshot.settings.selectedMonth}
-            onChange={(e) => updateSettings({ selectedMonth: Number(e.target.value) })}
+            onChange={(e) => selectMonth(Number(e.target.value))}
           >
             {Array.from({ length: 12 }, (_, i) => (
               <option key={i + 1} value={i + 1}>{monthName(i + 1)}</option>
             ))}
-          </select>
-          <Button variant="ghost" icon onClick={() => moveMonth(1)} aria-label="Next month">
-            <ChevronRight size={18} />
-          </Button>
+          </select>}
 
+          {mode === "week" && <div className="period-current-label">W{snapshot.settings.selectedWeek}</div>}
           <select
             className="select"
             style={{ width: "auto", minWidth: 80 }}
-            value={currentYear}
-            onChange={(e) => selectYear(Number(e.target.value))}
+            value={activeYear}
+            onChange={(e) => mode === "week" ? updateSettings({ selectedWeekYear: Number(e.target.value) }) : selectYear(Number(e.target.value))}
           >
             {yearOptions.map((y) => (
               <option key={y} value={y}>{y}</option>
             ))}
           </select>
 
-          <Button variant="ghost" icon onClick={() => moveWeek(-1)} aria-label="Previous week">
-            <ChevronLeft size={18} />
-          </Button>
-          <span className="text-caption" style={{ minWidth: 60, textAlign: "center" }}>W{snapshot.settings.selectedWeek}</span>
-          <Button variant="ghost" icon onClick={() => moveWeek(1)} aria-label="Next week">
+          <Button variant="ghost" icon onClick={() => updateSettings(movePeriod(snapshot.settings, 1))} aria-label={`Next ${mode}`}>
             <ChevronRight size={18} />
           </Button>
+          </div>
         </div>
 
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>

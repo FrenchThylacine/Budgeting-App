@@ -22,6 +22,16 @@ This file records decisions that affect future changes to the Budgeting App.
 
 **Status:** Builds pass; browser light/dark verification remains open.
 
+## 2026-08-10 — Separate calendar and ISO week years
+
+**Decision:** Keep the existing calendar `selectedYear` for monthly/yearly records and persist a separate `selectedWeekYear` for ISO-week navigation.
+
+**Implementation:** `src/domain/periods.ts` centralizes period labels, mode transitions, navigation, and historical comparisons. The header, application shell, spending view, and analytics all use this model. Switching from a week to a month anchors to the ISO week's Thursday, which belongs to the ISO week-year and gives a predictable month at year boundaries.
+
+**Why:** An ISO week can span two calendar years. Reusing the calendar record year made week 1/week 53 navigation, historical detection, and analytics filtering ambiguous and could hide December or January entries.
+
+**Status:** Automated ISO-boundary regression tests and both TypeScript builds pass. Browser verification remains open.
+
 ## Open decision — Snapshot write model
 
 The current nested-record delete-and-reinsert persistence strategy has not been accepted as a long-term architecture. Replace it with targeted transactional writes only after a Neon-backed behavior audit and migration plan are in place; do not make an unverified rewrite.

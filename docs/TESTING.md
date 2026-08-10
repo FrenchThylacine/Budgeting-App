@@ -24,7 +24,7 @@ Run this checklist before every release.
 
 ## Last recorded automated run — 2026-08-10
 
-- `npm run test`: passed — 2 files, 12 tests.
+- `npm run test`: passed — 4 files, 19 tests, including ISO-week boundaries, week-53 navigation, mode transitions, historical-week detection, and store-level historical write guards.
 - `npm run build`: passed — Vite emitted a bundle-size warning only.
 - `npm run server:build`: passed.
 

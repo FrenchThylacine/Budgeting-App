@@ -113,6 +113,12 @@ export default function App() {
 
           <Header calculation={calculation} setRolloverOpen={setRolloverOpen} />
 
+          {isHistorical && (
+            <div className="historical-banner" role="status">
+              Historical period · period-bound financial data is read-only.
+            </div>
+          )}
+
           {tabs[activeTab]}
         </main>
 

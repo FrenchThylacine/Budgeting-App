@@ -2,13 +2,13 @@
 
 This is the active engineering tracker for the current stabilization and completion effort. It is updated at each implementation checkpoint. A checkbox is marked complete only after implementation and the relevant verification have both succeeded.
 
-**Last updated:** 2026-08-10 — Codex 2 audit underway. This is the repository’s only live engineering tracker.
+**Last updated:** 2026-08-10 — ISO period model, historical state, analytics filtering, and regression tests are implemented and build-verified; browser, Neon, and deployment verification remain open. This is the repository’s only live engineering tracker.
 
 ## In progress
 
-- [ ] Audit Codex 1 implementation claims in the browser and against a configured Neon database.
-- [ ] Diagnose and repair the dark-mode system across desktop and mobile.
-- [ ] Harden persistence, API validation, and deployment configuration; then reconcile all project guides with verified behavior.
+- [ ] Complete browser verification for the redesigned month/week/year selector on desktop, tablet, and mobile.
+- [ ] Complete browser verification for the shared historical contour/banner and selected-period analytics across every major view.
+- [ ] Verify Codex 1 workflows against browser and configured Neon persistence; complete the remaining deployment and API hardening work.
 
 ## Completed
 
@@ -24,11 +24,17 @@ This is the active engineering tracker for the current stabilization and complet
 - [x] Ran the existing Vitest suite successfully: 2 files and 12 tests passed (2026-08-10).
 - [x] Ran the frontend production build successfully (2026-08-10; Vite reported only a bundle-size warning).
 - [x] Ran the server TypeScript build successfully (2026-08-10).
+- [x] Audited Codex 1 and Codex 2 commits against source, tracker, tests, and builds (2026-08-10; browser/Neon/deployment claims remain explicitly unverified).
+- [x] Added finite-number, date/month consistency, active-category, currency, and recurrence validation for spending API writes; transaction edits now recalculate ISO week as well as month (2026-08-10; frontend/server builds and domain tests pass).
+- [x] Introduced a shared calendar/ISO period model with a separate `selectedWeekYear`, predictable mode transitions, cross-year week navigation, and a compact mode-aware header selector (2026-08-10; 19 automated tests plus frontend/server builds pass; visual verification remains open).
+- [x] Propagated shared historical-period state to the application shell and made spending and analytics filter the selected month, ISO week, or year from real entries (2026-08-10; regression tests and builds pass; browser verification remains open).
+- [x] Added store-level regression coverage preventing historical-week spending writes and historical-month budget approvals (2026-08-10; automated suite passes; API integration remains open).
 
 ## Remaining
 
 - [ ] Perform browser checks for dashboard, each restored workflow, historical read-only behavior, light/dark switching, and mobile layouts. Local server startup is currently blocked by the execution environment’s approval policy.
-- [ ] Add automated regression tests for historical write protection and approved-budget API immutability.
+- [ ] Verify the dark-mode source repair in a browser across light/dark switching, persistence, mobile navigation, dialogs, forms, charts, and historical mode.
+- [ ] Add automated regression coverage for approved-budget API immutability; store-level historical write protection is covered, but API persistence still needs an integration test.
 - [ ] Extend API validation beyond the completed spending validation to categories, activities, settings, and approvals (including category-reference checks and recurrence intervals).
 - [ ] Replace destructive whole-snapshot persistence with safe targeted, transactional persistence.
 - [ ] Add and verify Vercel deployment configuration.
@@ -38,10 +44,9 @@ This is the active engineering tracker for the current stabilization and complet
 ## Discovered issues
 
 - [ ] Full snapshot writes delete and recreate child records, which is unsafe for auditability and concurrent updates.
-- [ ] The repository lacks Vercel serverless/deployment configuration despite deployment claims.
-- [ ] `styles-extras.css` uses legacy tokens such as `--line-strong` and `--muted` that are not defined by the active theme token set; this is a likely dark-mode inconsistency.
+- [x] The repository now has Vercel serverless/deployment configuration (`vercel.json` and `api/[...path].ts`) and both builds compile it (2026-08-10; authenticated preview remains open).
+- [x] Replaced the stale `styles-extras.css` `--line-strong` and `--muted` references with active design tokens (2026-08-10; builds pass; visual dark-mode verification remains open).
 - [ ] Browser and Neon persistence checks require a local-server execution approval and a valid `DATABASE_URL`, respectively. Neither has been verified yet.
 - [ ] Two legacy editor components (`ActivityEditor` and `WishlistEditor`) remain unused placeholders; the active panels now provide the supported create/edit workflow and these components should be removed or completed in a later cleanup.
-- [ ] Dark-mode root cause has been addressed in source by moving theme tokens to `html.dark`, but desktop/mobile browser verification remains required before completion.
 - [ ] Vercel API function entrypoint and build configuration have been added and compile successfully, but an authenticated preview deployment is still required before completion.
-- [x] Added finite-number, date/month consistency, active-category, currency, and recurrence validation for spending API writes; transaction edits now recalculate ISO week as well as month (2026-08-10; frontend/server builds and domain tests pass).
+- [x] The header previously mixed calendar and ISO week years, and analytics only aggregated the selected month. The shared period model now keeps ISO week-years explicit and filters real entries consistently (2026-08-10; automated regression coverage added).

@@ -1,7 +1,8 @@
 import React, { useMemo, useState } from "react";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import { CURRENCY_OPTIONS, formatMoney } from "../../domain/currency";
-import { monthFromDateInput, weekFromDateInput } from "../../domain/dates";
+import { monthFromDateInput, weekFromDateInput, weekYear } from "../../domain/dates";
+import { selectedIsoWeekYear } from "../../domain/periods";
 import type { SpendingEntry } from "../../domain/types";
 import { useBudgetStore } from "../../store/budgetStore";
 import { matchesEntryFilters } from "../../utils/formatters";
@@ -17,15 +18,18 @@ export const SpendingPanel: React.FC = () => {
   const update = useBudgetStore((s) => s.updateSpendingEntry);
   const remove = useBudgetStore((s) => s.removeSpendingEntry);
   const mutable = useBudgetStore((s) => s.isCurrentPeriodMutable)();
-  const record = snapshot.years[String(snapshot.settings.selectedYear)];
+  const mode = snapshot.settings.selectedPeriodMode;
   const [search, setSearch] = useState("");
   const [editing, setEditing] = useState<SpendingEntry | null>(null);
   const [draft, setDraft] = useState({ amount: "", date: today(), categoryId: snapshot.categories[0]?.id ?? "", currency: snapshot.settings.baseCurrency, note: "", source: "personal", isPiloting: false });
 
-  const entries = useMemo(() => (record?.spendingEntries ?? [])
-    .filter((entry) => entry.month === snapshot.settings.selectedMonth)
+  const entries = useMemo(() => Object.values(snapshot.years).flatMap((record) => record.spendingEntries)
+    .filter((entry) => mode === "week"
+      ? entry.week === snapshot.settings.selectedWeek && weekYear(new Date(`${entry.date}T12:00:00`)) === selectedIsoWeekYear(snapshot.settings)
+      : mode === "year" ? entry.year === snapshot.settings.selectedYear
+        : entry.year === snapshot.settings.selectedYear && entry.month === snapshot.settings.selectedMonth)
     .filter((entry) => matchesEntryFilters(entry, { search }))
-    .sort((a, b) => b.date.localeCompare(a.date)), [record, snapshot.settings.selectedMonth, search]);
+    .sort((a, b) => b.date.localeCompare(a.date)), [mode, snapshot, search]);
 
   const reset = () => { setEditing(null); setDraft({ amount: "", date: today(), categoryId: snapshot.categories[0]?.id ?? "", currency: snapshot.settings.baseCurrency, note: "", source: "personal", isPiloting: false }); };
   const save = (event: React.FormEvent) => {
@@ -33,7 +37,7 @@ export const SpendingPanel: React.FC = () => {
     const amount = Number(draft.amount);
     if (!Number.isFinite(amount) || !draft.categoryId || !draft.date) return;
     const patch = { amount, date: draft.date, month: monthFromDateInput(draft.date), week: weekFromDateInput(draft.date), categoryId: draft.categoryId, currency: draft.currency, note: draft.note, source: draft.source, isPiloting: draft.isPiloting, recurrenceType: "none" as const };
-    if (editing) update(editing.id, patch); else add({ ...patch, year: snapshot.settings.selectedYear });
+    if (editing) update(editing.id, patch); else add({ ...patch, year: Number(draft.date.slice(0, 4)) });
     reset();
   };
   const beginEdit = (entry: SpendingEntry) => { setEditing(entry); setDraft({ amount: String(entry.amount), date: entry.date, categoryId: entry.categoryId, currency: entry.currency, note: entry.note, source: entry.source ?? "personal", isPiloting: entry.isPiloting }); };
@@ -53,6 +57,6 @@ export const SpendingPanel: React.FC = () => {
       </form>}
       <input className="input" aria-label="Search transactions" placeholder="Search notes" value={search} onChange={(e) => setSearch(e.target.value)} />
     </Section>
-    {entries.length === 0 ? <EmptyState title="No transactions for this month" description="Add an expense to begin tracking this period." /> : <div className="item-list">{entries.map((entry) => <div key={entry.id} className="item-row"><div><div className="text-callout" style={{ fontWeight: 600 }}>{snapshot.categories.find((c) => c.id === entry.categoryId)?.name ?? "Uncategorized"}</div><div className="text-footnote">{entry.date}{entry.note ? ` · ${entry.note}` : ""}</div></div><div style={{ display: "flex", alignItems: "center", gap: 8 }}><strong>{formatMoney(entry.amount, entry.currency, snapshot.settings.currencyDisplayMode)}</strong>{mutable && <><Button variant="ghost" size="sm" icon onClick={() => beginEdit(entry)} aria-label="Edit transaction"><Pencil size={15} /></Button><Button variant="ghost" size="sm" icon onClick={() => { if (window.confirm("Delete this transaction?")) remove(entry.id); }} aria-label="Delete transaction"><Trash2 size={15} /></Button></>}</div></div>)}</div>}
+    {entries.length === 0 ? <EmptyState title={`No transactions for this ${mode}`} description="Add an expense to begin tracking this period." /> : <div className="item-list">{entries.map((entry) => <div key={entry.id} className="item-row"><div><div className="text-callout" style={{ fontWeight: 600 }}>{snapshot.categories.find((c) => c.id === entry.categoryId)?.name ?? "Uncategorized"}</div><div className="text-footnote">{entry.date}{entry.note ? ` · ${entry.note}` : ""}</div></div><div style={{ display: "flex", alignItems: "center", gap: 8 }}><strong>{formatMoney(entry.amount, entry.currency, snapshot.settings.currencyDisplayMode)}</strong>{mutable && <><Button variant="ghost" size="sm" icon onClick={() => beginEdit(entry)} aria-label="Edit transaction"><Pencil size={15} /></Button><Button variant="ghost" size="sm" icon onClick={() => { if (window.confirm("Delete this transaction?")) remove(entry.id); }} aria-label="Delete transaction"><Trash2 size={15} /></Button></>}</div></div>)}</div>}
   </div>;
 };

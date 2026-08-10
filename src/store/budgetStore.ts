@@ -244,8 +244,10 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
       set,
       get,
       (snapshot) => {
-        currentYear(snapshot).spendingEntries.push({
+        const year = entry.year;
+        ensureYearRecord(snapshot, year).spendingEntries.push({
           ...entry,
+          year,
           id: entry.id ?? id("spend"),
           createdAt: timestamp,
           updatedAt: timestamp,
@@ -263,14 +265,20 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
       set,
       get,
       (snapshot) => {
-        const entry = currentYear(snapshot).spendingEntries.find((item) => item.id === idValue);
-        if (!entry) return;
+        const sourceRecord = Object.values(snapshot.years).find((record) => record.spendingEntries.some((item) => item.id === idValue));
+        const entry = sourceRecord?.spendingEntries.find((item) => item.id === idValue);
+        if (!entry || !sourceRecord) return;
         Object.assign(entry, patch);
         if (patch.date) {
           entry.month = monthFromDateInput(patch.date);
           entry.week = weekFromDateInput(patch.date);
+          entry.year = Number(patch.date.slice(0, 4));
         }
         entry.updatedAt = new Date().toISOString();
+        if (entry.year !== sourceRecord.year) {
+          sourceRecord.spendingEntries = sourceRecord.spendingEntries.filter((item) => item.id !== idValue);
+          ensureYearRecord(snapshot, entry.year).spendingEntries.push(entry);
+        }
       },
       "spending",
       "Updated spending entry.",
@@ -284,8 +292,9 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
       set,
       get,
       (snapshot) => {
-        const year = currentYear(snapshot);
-        year.spendingEntries = year.spendingEntries.filter((item) => item.id !== idValue);
+        for (const year of Object.values(snapshot.years)) {
+          year.spendingEntries = year.spendingEntries.filter((item) => item.id !== idValue);
+        }
       },
       "delete",
       "Deleted spending entry.",
@@ -654,9 +663,13 @@ function touch(snapshot: BudgetSnapshot, type: AuditType, summary: string, metad
 }
 
 function currentYear(snapshot: BudgetSnapshot): YearRecord {
-  const key = String(snapshot.settings.selectedYear);
+  return ensureYearRecord(snapshot, snapshot.settings.selectedYear);
+}
+
+function ensureYearRecord(snapshot: BudgetSnapshot, year: number): YearRecord {
+  const key = String(year);
   if (!snapshot.years[key]) {
-    snapshot.years[key] = createNextYearRecord(snapshot, snapshot.settings.selectedYear);
+    snapshot.years[key] = createNextYearRecord(snapshot, year);
   }
   return snapshot.years[key];
 }
@@ -696,6 +709,8 @@ function normalizeSnapshot(snapshot: BudgetSnapshot): BudgetSnapshot {
     snapshot.categories = [...snapshot.categories, ...missingCategories];
   }
   snapshot.budgetApprovals ??= [];
+  snapshot.settings.selectedPeriodMode ??= "month";
+  snapshot.settings.selectedWeekYear ??= snapshot.settings.selectedYear;
   return snapshot;
 }
 

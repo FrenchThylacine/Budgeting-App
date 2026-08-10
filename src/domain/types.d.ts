@@ -2,6 +2,7 @@ export type CurrencyCode = "EUR" | "USD" | "LBP" | "GBP" | "CAD" | "AUD" | "JPY"
 export type CurrencyDisplayMode = "symbol" | "code" | "both";
 export type RoundingRule = "none" | "nearest-1" | "nearest-5" | "nearest-10" | "ceil-10";
 export type NanPolicy = "closed-periods-only";
+export type PeriodMode = "month" | "week" | "year";
 export type RecurrenceType = "none" | "weekly" | "monthly" | "yearly" | "session" | "purchase" | "custom";
 export type BudgetBucket = "general" | "piloting" | "personal" | "wallet";
 export type WalletEntryType = "opening" | "personal" | "budget" | "rollover" | "adjustment";
@@ -16,6 +17,8 @@ export interface Settings {
     selectedYear: number;
     selectedMonth: number;
     selectedWeek: number;
+    selectedWeekYear: number;
+    selectedPeriodMode: PeriodMode;
     selectedSeason: string;
     baseCurrency: CurrencyCode;
     currencyDisplayMode: CurrencyDisplayMode;

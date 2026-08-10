@@ -1,6 +1,7 @@
 import type { BudgetSnapshot, Settings, Activity, WishlistItem, BudgetCategory } from "../domain/types";
 import { normalizeAmount, formatMoney } from "../domain/currency";
 import { monthName } from "../domain/dates";
+import { isHistoricalPeriod } from "../domain/periods";
 
 export interface ActivityDraft {
   name: string;
@@ -56,16 +57,12 @@ export function formatDualMoney(
   return formatted;
 }
 
-export function isViewingCurrentMonth(settings: Settings): boolean {
-  const now = new Date();
+export function isViewingCurrentMonth(settings: Settings, now = new Date()): boolean {
   return settings.selectedYear === now.getFullYear() && settings.selectedMonth === now.getMonth() + 1;
 }
 
-export function isViewingHistoricalPeriod(settings: Settings): boolean {
-  const now = new Date();
-  if (settings.selectedYear < now.getFullYear()) return true;
-  if (settings.selectedYear === now.getFullYear() && settings.selectedMonth < now.getMonth() + 1) return true;
-  return false;
+export function isViewingHistoricalPeriod(settings: Settings, now = new Date()): boolean {
+  return isHistoricalPeriod(settings, now);
 }
 
 export function activityToDraft(activity: Activity | null, snapshot: BudgetSnapshot): ActivityDraft {

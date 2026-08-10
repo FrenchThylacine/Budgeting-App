@@ -12,7 +12,7 @@ A Vite + React budget dashboard focused on fast local use, recurring budget appr
 
 - Monthly budget suggestion based on active recurring costs (excludes Piloting)
 - Piloting expenses visible separately and excluded from category-share calculations
-- Distinctive historical period banner for past months/weeks with preserved values
+- Shared month/week/year selector with ISO-week navigation and a visible historical-data contour across application views
 - Modular Dashboard cards for current budget, remaining budget, monthly spending, recurring costs, progress, burn rate, and forecasts
 - Compact header controls for month/week/year navigation with keyboard accessibility
 - Mobile-responsive layout with bottom navigation bar for phones/tablets
@@ -21,7 +21,7 @@ A Vite + React budget dashboard focused on fast local use, recurring budget appr
 
 ## Current implementation status
 
-The main application workflows are implemented in the current React client: recurring activities, transactions, categories, wallet entries, wishlist items, analytics, historical summaries, scenarios, settings, month close, and exports. Historical months are read-only in the client so viewing the past cannot change recorded transactions, close records, or approved budgets.
+The main application workflows are implemented in the current React client: recurring activities, transactions, categories, wallet entries, wishlist items, analytics, historical summaries, scenarios, settings, month close, and exports. The header uses one shared period state: calendar year/month for monthly records, and an explicit ISO week-year for weekly records. Historical months, weeks, and years are read-only in the client so viewing the past cannot change period-bound transactions, close records, or approved budgets.
 
 Neon remains the intended remote source of truth and IndexedDB is retained as an offline fallback. A working `DATABASE_URL` and a Node.js 18+ runtime are required to verify the API persistence path.
 
@@ -31,7 +31,7 @@ Vercel deploys the Vite build from `dist/` and routes `/api/*` requests through 
 
 ### Verification status
 
-The repository includes calculation safety tests, but the current implementation has not yet been runtime-verified in this environment because Node.js/npm is unavailable. Before deploying, run the test and build commands below, then verify database persistence by changing data, refreshing the app, and restarting the server. The live implementation tracker contains the remaining verification tasks.
+The repository currently has 17 passing automated tests plus passing frontend and server TypeScript builds. Browser/mobile checks, a Neon persistence cycle, and an authenticated Vercel preview have not yet been verified. Before deploying, change data, refresh the app, restart the server, and confirm the change remains. The live implementation tracker contains the remaining verification tasks.
 
 ## Architecture
 

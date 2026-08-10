@@ -154,6 +154,12 @@ Requirements:
 
 Theme state is the persisted `settings.darkMode` value. The application applies it to `html.dark`, where the design tokens are defined, and sets the browser `color-scheme` so native controls follow the selected mode. The app shell, sidebar, cards, forms, dialogs, charts, and mobile navigation consume tokenized colors. The code compiles and builds; final browser checks for both themes and narrow mobile layouts remain required.
 
+## Period selector and historical state
+
+The header period control is compact: a three-way Month / Week / Year toggle sits above a single previous / selected period / next row. The selected period is the primary label, while mode and ISO year provide secondary context. On narrow screens the selector becomes full-width, keeps the mode targets equally sized, and preserves usable previous/next targets.
+
+A historical selection is informational, not an error. The main content area receives a subtle dashed warning contour and a status banner; navigation remains outside the contour. Pages should not add duplicate global banners or independently decide whether a period is historical.
+
 ---
 
 # Typography

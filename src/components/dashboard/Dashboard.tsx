@@ -2,7 +2,7 @@ import React, { useMemo } from "react";
 import { useBudgetStore } from "../../store/budgetStore";
 import { calculateYear, calculateSuggestedMonthlyBudget } from "../../domain/calculations";
 import { monthName } from "../../domain/dates";
-import { isViewingCurrentMonth, isViewingHistoricalPeriod } from "../../utils/formatters";
+import { isViewingCurrentMonth } from "../../utils/formatters";
 import { formatDualMoney } from "../../utils/formatters";
 import { Metric } from "../ui/Metric";
 import { Progress, CircularProgress } from "../ui/Progress";
@@ -12,7 +12,7 @@ import { Section } from "../ui/Section";
 import { EmptyState } from "../ui/EmptyState";
 import { Button } from "../ui/Button";
 import {
-  Wallet, Zap, PiggyBank, AlertCircle, ArrowRight, Calendar,
+  Wallet, Zap, PiggyBank, ArrowRight, Calendar,
   TrendingUp, TrendingDown, Activity, CreditCard, BarChart3
 } from "lucide-react";
 
@@ -22,7 +22,6 @@ export const Dashboard: React.FC = () => {
   const calculation = useMemo(() => calculateYear(snapshot), [snapshot]);
   const suggestion = useMemo(() => calculateSuggestedMonthlyBudget(snapshot), [snapshot]);
 
-  const isHistorical = isViewingHistoricalPeriod(snapshot.settings);
   const isCurrent = isViewingCurrentMonth(snapshot.settings);
 
   const spent = calculation.selectedMonthSpend.total ?? 0;
@@ -63,14 +62,6 @@ export const Dashboard: React.FC = () => {
 
   return (
     <div className="dashboard-grid page-enter">
-      {/* Historical Banner */}
-      {isHistorical && (
-        <div className="historical-banner">
-          <AlertCircle size={18} />
-          <span>You are viewing a historical period. Data is read-only.</span>
-        </div>
-      )}
-
       {/* HERO: 3 main metrics */}
       <div className="dashboard-hero">
         <Metric

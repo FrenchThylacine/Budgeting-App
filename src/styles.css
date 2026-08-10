@@ -544,6 +544,49 @@ body {
   gap: var(--space-2);
 }
 
+.period-selector {
+  display: grid;
+  gap: var(--space-2);
+  justify-items: end;
+}
+
+.period-mode-toggle {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.period-mode {
+  border: 0;
+  border-radius: 8px;
+  padding: 5px 9px;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: capitalize;
+  cursor: pointer;
+}
+
+.period-mode.active {
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-xs);
+  color: var(--text-primary);
+}
+
+.period-current-label {
+  min-width: 72px;
+  padding: 0 var(--space-3);
+  color: var(--text-primary);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  text-align: center;
+}
+
 /* =========================================================
    LAYOUT — Navigation
    ========================================================= */
@@ -676,6 +719,10 @@ body {
   .main-area { padding: var(--space-4); }
   .dashboard-hero { grid-template-columns: 1fr; }
   .top-header { grid-template-columns: 1fr; }
+  .period-selector { justify-items: stretch; width: 100%; }
+  .period-mode-toggle { width: 100%; }
+  .period-mode { flex: 1; }
+  .period-nav { justify-content: space-between; }
 }
 
 /* Historical period indicator */
@@ -692,6 +739,22 @@ body {
   font-size: 0.875rem;
   font-weight: 600;
 }
+
+.historical-period {
+  position: relative;
+}
+
+.historical-period::before {
+  content: "";
+  position: absolute;
+  inset: var(--space-3);
+  border: 1px dashed color-mix(in srgb, var(--warning) 45%, transparent);
+  border-radius: var(--radius-xl);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.historical-period > * { position: relative; z-index: 1; }
 
 /* Section divider */
 .section-divider {

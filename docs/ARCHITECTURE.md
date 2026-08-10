@@ -128,6 +128,12 @@ The store should become the single source of truth for client state.
 
 Avoid duplicated state.
 
+### Period state
+
+`Settings` owns one global period selection. Calendar views use `selectedYear` and `selectedMonth`; weekly views use `selectedWeek` together with `selectedWeekYear`, because ISO weeks can cross calendar-year records. `src/domain/periods.ts` is the shared source for mode transitions, navigation, labels, and historical comparisons. Components must not reimplement period arithmetic or infer an ISO year from a calendar record.
+
+The application shell derives historical mode from this state and supplies the banner/contour once. Spending and analytics query the same selected period; weekly queries may read entries from both calendar-year records at a New Year boundary.
+
 ---
 
 # Services
