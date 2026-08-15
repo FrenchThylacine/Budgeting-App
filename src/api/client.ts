@@ -6,9 +6,23 @@ import type { BudgetSnapshot, SpendingEntry, Activity, BudgetCategory } from "..
  * the caller can adopt it instead of overwriting it.
  */
 export class SnapshotConflictError extends Error {
-  constructor(public readonly serverSnapshot: BudgetSnapshot | null) {
+  constructor(
+    public readonly serverSnapshot: BudgetSnapshot | null,
+    public readonly serverRevision: number | null = null,
+  ) {
     super("Snapshot conflict: the server holds a newer revision.");
     this.name = "SnapshotConflictError";
+  }
+}
+
+/**
+ * The API could not be reached at all (offline, server down, bad routing).
+ * Distinct from a rejected write: the caller must not report "saved".
+ */
+export class ApiUnavailableError extends Error {
+  constructor(public readonly cause: unknown) {
+    super("The budget API is unreachable.");
+    this.name = "ApiUnavailableError";
   }
 }
 
@@ -37,43 +51,80 @@ export class BudgetApiClient {
    * Load the active snapshot
    */
   async loadSnapshot(): Promise<BudgetSnapshot | null> {
+    let response: Response;
     try {
-      const response = await fetch(`${this.baseUrl}/snapshot`);
-      if (response.status === 404) return null;
-      if (!response.ok) throw new Error(`Failed to load snapshot: ${response.statusText}`);
-      return response.json();
+      response = await fetch(`${this.baseUrl}/snapshot`);
     } catch (error) {
-      console.error("Error loading snapshot:", error);
-      throw error;
+      // Network-level failure: the API is unreachable, which is different
+      // from the API answering "no snapshot yet".
+      throw new ApiUnavailableError(error);
     }
+    if (response.status === 404) return null;
+    if (response.status >= 500) throw new ApiUnavailableError(new Error(response.statusText));
+    if (!response.ok) throw new Error(`Failed to load snapshot: ${response.statusText}`);
+    return response.json();
+  }
+
+  /** Cheap freshness probe used to detect another device's write. */
+  async loadRevision(): Promise<number | null> {
+    let response: Response;
+    try {
+      response = await fetch(`${this.baseUrl}/snapshot/revision`);
+    } catch (error) {
+      throw new ApiUnavailableError(error);
+    }
+    if (response.status === 404) return null;
+    if (!response.ok) throw new ApiUnavailableError(new Error(response.statusText));
+    const body = await response.json();
+    const revision = Number(body?.revision);
+    return Number.isFinite(revision) ? revision : null;
   }
 
   /**
    * Save the snapshot
    */
-  async saveSnapshot(snapshot: BudgetSnapshot): Promise<void> {
+  /**
+   * Persist the snapshot with a compare-and-swap on `baseRevision` — the
+   * revision this client last read from the server. Returns the revision the
+   * server assigned, which becomes the caller's new base.
+   */
+  async saveSnapshot(snapshot: BudgetSnapshot, baseRevision: number | null = null): Promise<number | null> {
+    let response: Response;
     try {
-      const response = await fetch(`${this.baseUrl}/snapshot`, {
+      response = await fetch(`${this.baseUrl}/snapshot`, {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(snapshot),
+        headers: {
+          "Content-Type": "application/json",
+          ...(baseRevision != null ? { "x-base-revision": String(baseRevision) } : {}),
+        },
+        body: JSON.stringify(baseRevision != null ? { ...snapshot, baseRevision } : snapshot),
       });
-      if (response.status === 409) {
-        let serverSnapshot: BudgetSnapshot | null = null;
-        try {
-          const body = await response.json();
-          serverSnapshot = body?.snapshot ?? null;
-        } catch {
-          /* body unavailable */
-        }
-        throw new SnapshotConflictError(serverSnapshot);
-      }
-      if (!response.ok) throw new Error(`Failed to save snapshot: ${response.statusText}`);
     } catch (error) {
-      if (!(error instanceof SnapshotConflictError)) {
-        console.error("Error saving snapshot:", error);
+      throw new ApiUnavailableError(error);
+    }
+
+    if (response.status === 409) {
+      let serverSnapshot: BudgetSnapshot | null = null;
+      let serverRevision: number | null = null;
+      try {
+        const body = await response.json();
+        serverSnapshot = body?.snapshot ?? null;
+        serverRevision = Number.isFinite(Number(body?.revision)) ? Number(body.revision) : null;
+      } catch {
+        /* body unavailable */
       }
-      throw error;
+      throw new SnapshotConflictError(serverSnapshot, serverRevision);
+    }
+
+    if (response.status >= 500) throw new ApiUnavailableError(new Error(response.statusText));
+    if (!response.ok) throw new Error(`Failed to save snapshot: ${response.statusText}`);
+
+    try {
+      const body = await response.json();
+      const revision = Number(body?.revision);
+      return Number.isFinite(revision) ? revision : null;
+    } catch {
+      return null;
     }
   }
 

@@ -1,6 +1,8 @@
 import { create } from "zustand";
 import { calculateRolloverDelta, createNextYearRecord } from "../domain/calculations";
-import { monthFromDateInput, weekFromDateInput } from "../domain/dates";
+import { monthFromDateInput, todayDateInput, weekFromDateInput } from "../domain/dates";
+import { isUsableAmount } from "../domain/wishlist";
+import type { WishlistLinkResult, WishlistPurchaseOverrides } from "../domain/wishlist";
 import type {
   Activity,
   AuditType,
@@ -18,7 +20,7 @@ import type {
 import { createSeedBudgetSnapshot } from "../data/seedBudget";
 import { defaultCategories } from "../data/seedBudget";
 import { deleteSnapshot as deleteIdbSnapshot, loadSnapshot as loadIdbSnapshot, saveSnapshot as saveIdbSnapshot } from "../storage/idb";
-import { getApiClient, SnapshotConflictError } from "../api/client";
+import { ApiUnavailableError, getApiClient, SnapshotConflictError } from "../api/client";
 import { isViewingHistoricalPeriod } from "../utils/formatters";
 import { periodLabel } from "../domain/periods";
 
@@ -30,6 +32,15 @@ const PERIOD_SETTING_KEYS = [
   "selectedWeekYear",
   "selectedPeriodMode",
 ] as const satisfies readonly (keyof Settings)[];
+
+/**
+ * `saved`    — in sync with the server.
+ * `saving`   — a write is in flight.
+ * `offline`  — server unreachable; changes live only on this device.
+ * `conflict` — the server holds data this device did not build on.
+ * `error`    — the server rejected or failed the write for another reason.
+ */
+export type SyncState = "saved" | "saving" | "offline" | "conflict" | "error";
 
 type ActivityInput = Omit<Activity, "id" | "order"> & Partial<Pick<Activity, "id" | "order">>;
 type SpendingInput = Omit<SpendingEntry, "id" | "createdAt" | "updatedAt"> & Partial<Pick<SpendingEntry, "id">>;
@@ -57,6 +68,22 @@ interface BudgetStore {
   /** User-facing message about cross-device sync (e.g. a rejected stale write). */
   syncNotice: string | null;
   clearSyncNotice: () => void;
+
+  /**
+   * Where the data currently stands relative to the server. Surfaced in the UI
+   * so "API unreachable" is never mistaken for "saved everywhere".
+   */
+  syncState: SyncState;
+  /** Revision this client last read from or wrote to the server. */
+  baseRevision: number | null;
+  lastSyncedAt: string | null;
+  /** True when local edits have not reached the server. */
+  pendingLocalChanges: boolean;
+  syncError: string | null;
+  /** Pull the server copy when it is newer (focus, load, manual retry). */
+  syncNow: (options?: { force?: boolean }) => Promise<void>;
+  /** Re-send local changes that never reached the server. */
+  retrySync: () => Promise<void>;
   /**
    * Deliberate, session-only override letting the user edit a closed period.
    * Never persisted: it is a UI intent, not financial data, and it must not
@@ -86,6 +113,26 @@ interface BudgetStore {
   addWishlistItem: (item: WishlistInput) => void;
   updateWishlistItem: (id: string, patch: Partial<WishlistItem>) => void;
   removeWishlistItem: (id: string) => void;
+
+  /**
+   * Wishlist ↔ spending linking.
+   *
+   * A wishlist item and the transaction that fulfilled it point at each other
+   * (`WishlistItem.linkedSpendingId` ⇄ `SpendingEntry.wishlistItemId`). These
+   * four actions are the only supported way to create or break that pair, so
+   * the two references can never disagree, no item ever ends up with two
+   * transactions, and no transaction is deleted behind the user's back.
+   */
+  /** Write the spending entry that fulfils an item and link both sides. */
+  recordWishlistPurchase: (itemId: string, overrides?: WishlistPurchaseOverrides) => WishlistLinkResult;
+  /** Point an existing transaction at an item, or pass `null` to unlink it. */
+  linkSpendingToWishlistItem: (spendingId: string, itemId: string | null) => WishlistLinkResult;
+  /** Break the pair, deliberately leaving the spending entry in place. */
+  unlinkWishlistPurchase: (itemId: string) => WishlistLinkResult;
+  /** Mark bought/not bought; un-marking unlinks but never deletes spending. */
+  setWishlistItemBought: (itemId: string, bought: boolean) => WishlistLinkResult;
+  /** The live transaction an item points at, or null when there is none. */
+  findLinkedSpendingEntry: (itemId: string) => SpendingEntry | null;
   addWalletEntry: (entry: WalletInput) => void;
   updateWalletEntry: (id: string, patch: Partial<WalletEntry>) => void;
   removeWalletEntry: (id: string) => void;
@@ -110,6 +157,20 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
   syncNotice: null,
   clearSyncNotice: () => set({ syncNotice: null }),
 
+  syncState: "saved",
+  baseRevision: null,
+  lastSyncedAt: null,
+  pendingLocalChanges: false,
+  syncError: null,
+  syncNow: async (options) => {
+    await syncFromServer(set, get, options);
+  },
+  retrySync: async () => {
+    // Re-send what this device holds. The compare-and-swap still protects the
+    // other device: a stale base is rejected rather than overwriting it.
+    persistSnapshot(get().snapshot, set, get);
+  },
+
   historicalEditUnlocked: false,
   unlockHistoricalEditing: () => set({ historicalEditUnlocked: true }),
   lockHistoricalEditing: () => set({ historicalEditUnlocked: false }),
@@ -119,20 +180,63 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
   isCurrentPeriodMutable: () =>
     !isViewingHistoricalPeriod(get().snapshot.settings) || get().historicalEditUnlocked,
 
+  /**
+   * Load order matters for multi-device correctness: the server is asked
+   * first and wins when reachable, so a device never boots from a stale local
+   * cache and then overwrites newer remote data. IndexedDB is used only when
+   * the server cannot be reached, and that case is reported as `offline`
+   * rather than being passed off as a normal load.
+   */
   hydrate: async () => {
+    const apiClient = getApiClient();
     try {
-      const loaded = await loadSnapshot();
-      set({ snapshot: normalizeSnapshot(loaded ?? createSeedBudgetSnapshot()), hydrated: true });
-    } catch {
-      set({ snapshot: normalizeSnapshot(createSeedBudgetSnapshot()), hydrated: true });
+      const remote = await apiClient.loadSnapshot();
+      if (remote) {
+        const normalized = normalizeSnapshot(remote);
+        set({
+          snapshot: normalized,
+          hydrated: true,
+          baseRevision: normalized.revision ?? 0,
+          syncState: "saved",
+          lastSyncedAt: new Date().toISOString(),
+          pendingLocalChanges: false,
+          syncError: null,
+        });
+        await saveIdbSnapshot(normalized).catch(() => undefined);
+        return;
+      }
+
+      // Server reachable but empty: this device seeds it, starting from
+      // whatever it already had locally so nothing is lost.
+      const local = await loadIdbSnapshot().catch(() => null);
+      const seeded = normalizeSnapshot(local ?? createSeedBudgetSnapshot());
+      set({ snapshot: seeded, hydrated: true, baseRevision: null, syncState: "saving" });
+      persistSnapshot(seeded, set, get);
+      return;
+    } catch (error) {
+      if (!(error instanceof ApiUnavailableError)) {
+        console.error("Unexpected error while loading from the server:", error);
+      }
+      const local = await loadIdbSnapshot().catch(() => null);
+      set({
+        snapshot: normalizeSnapshot(local ?? createSeedBudgetSnapshot()),
+        hydrated: true,
+        baseRevision: null,
+        syncState: "offline",
+        pendingLocalChanges: local != null,
+        syncError:
+          "The server is unreachable, so this is the copy stored on this device. Changes will not reach your other devices until it reconnects.",
+      });
     }
   },
 
   resetToSeed: async () => {
-    const next = createSeedBudgetSnapshot();
-    await deleteSnapshot().catch(() => undefined);
-    await saveSnapshot(next).catch(() => undefined);
+    const next = normalizeSnapshot(createSeedBudgetSnapshot());
+    await deleteIdbSnapshot().catch(() => undefined);
     set({ snapshot: next, undoStack: [], redoStack: [], hydrated: true });
+    // Push the reset through the same guarded path, so it is reported
+    // honestly if the server cannot be reached.
+    persistSnapshot(next, set, get);
   },
 
   importSnapshot: (snapshot, summary = "Imported budget data.") => {
@@ -345,6 +449,9 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
       set,
       get,
       (snapshot) => {
+        // Clear the wishlist side first: an item must never keep a
+        // `linkedSpendingId` pointing at a transaction that has been deleted.
+        clearWishlistLinks(snapshot, undefined, idValue);
         for (const year of Object.values(snapshot.years)) {
           year.spendingEntries = year.spendingEntries.filter((item) => item.id !== idValue);
         }
@@ -397,6 +504,9 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
       set,
       get,
       (snapshot) => {
+        // The transaction survives the item, but it must not keep pointing at
+        // something that no longer exists.
+        clearWishlistLinks(snapshot, idValue, undefined);
         const year = currentYear(snapshot);
         year.wishlistItems = year.wishlistItems.filter((item) => item.id !== idValue);
       },
@@ -404,6 +514,171 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
       "Deleted wishlist item.",
       { id: idValue },
     );
+  },
+
+  // ─── Wishlist ↔ spending linking ──────────────────────────────────────────
+
+  recordWishlistPurchase: (itemId, overrides = {}) => {
+    if (!get().isCurrentPeriodMutable()) return { status: "locked" };
+    const snapshot = get().snapshot;
+    const item = findWishlistItemById(snapshot, itemId);
+    if (!item) return { status: "not-found" };
+
+    // One item, one transaction. A link that still resolves wins: the caller
+    // is offered the existing entry instead of a second one being written.
+    const existing = findSpendingEntryById(snapshot, item.linkedSpendingId);
+    if (existing) return { status: "already-linked", spendingId: existing.id };
+
+    // 0 is a real price; only a missing one blocks the purchase.
+    const amount = isUsableAmount(overrides.amount) ? overrides.amount : item.actualPrice;
+    if (!isUsableAmount(amount)) return { status: "invalid-amount" };
+
+    const date = normalizeDateInput(overrides.date) ?? todayDateInput();
+    const spendingId = id("spend");
+    const timestamp = new Date().toISOString();
+
+    commit(
+      set,
+      get,
+      (draft) => {
+        const target = findWishlistItemById(draft, itemId);
+        if (!target) return;
+        const year = Number(date.slice(0, 4));
+        ensureYearRecord(draft, year).spendingEntries.push({
+          id: spendingId,
+          year,
+          month: monthFromDateInput(date),
+          week: weekFromDateInput(date),
+          date,
+          categoryId: overrides.categoryId ?? target.categoryId,
+          amount,
+          currency: overrides.currency ?? target.currency,
+          recurrenceType: overrides.recurrenceType ?? "none",
+          isPiloting: overrides.isPiloting ?? false,
+          source: overrides.source ?? "personal",
+          note: overrides.note?.trim() || target.name,
+          wishlistItemId: target.id,
+          createdAt: timestamp,
+          updatedAt: timestamp,
+        });
+        markWishlistBought(target, spendingId, date);
+      },
+      "spending",
+      `Recorded purchase of ${item.name}.`,
+      { itemId, spendingId, amount, date },
+    );
+
+    return { status: "created", spendingId };
+  },
+
+  linkSpendingToWishlistItem: (spendingId, itemId) => {
+    if (!get().isCurrentPeriodMutable()) return { status: "locked" };
+    const snapshot = get().snapshot;
+    const entry = findSpendingEntryById(snapshot, spendingId);
+    if (!entry) return { status: "not-found" };
+
+    if (!itemId) {
+      const owner = findWishlistItemBySpendingId(snapshot, spendingId);
+      if (!entry.wishlistItemId && !owner) return { status: "unlinked" };
+      commit(
+        set,
+        get,
+        (draft) => clearWishlistLinks(draft, entry.wishlistItemId, spendingId),
+        "wishlist",
+        "Unlinked a transaction from its wishlist item.",
+        { spendingId, itemId: entry.wishlistItemId },
+      );
+      return { status: "unlinked", spendingId };
+    }
+
+    const item = findWishlistItemById(snapshot, itemId);
+    if (!item) return { status: "not-found" };
+    if (entry.wishlistItemId === itemId && item.linkedSpendingId === spendingId) {
+      return { status: "linked", spendingId };
+    }
+    // The item already has a live transaction of its own: linking a second one
+    // would count the same purchase twice.
+    const rival = findSpendingEntryById(snapshot, item.linkedSpendingId);
+    if (rival && rival.id !== spendingId) return { status: "already-linked", spendingId: rival.id };
+
+    commit(
+      set,
+      get,
+      (draft) => {
+        const draftEntry = findSpendingEntryById(draft, spendingId);
+        const draftItem = findWishlistItemById(draft, itemId);
+        if (!draftEntry || !draftItem) return;
+        clearWishlistLinks(draft, itemId, spendingId);
+        draftEntry.wishlistItemId = itemId;
+        draftEntry.updatedAt = new Date().toISOString();
+        markWishlistBought(draftItem, spendingId, draftEntry.date);
+      },
+      "wishlist",
+      `Linked ${item.name} to a transaction.`,
+      { spendingId, itemId },
+    );
+    return { status: "linked", spendingId };
+  },
+
+  unlinkWishlistPurchase: (itemId) => {
+    if (!get().isCurrentPeriodMutable()) return { status: "locked" };
+    const snapshot = get().snapshot;
+    const item = findWishlistItemById(snapshot, itemId);
+    if (!item) return { status: "not-found" };
+    const linkedId = item.linkedSpendingId;
+    const linked = findSpendingEntryById(snapshot, linkedId);
+    if (!linkedId) return { status: "unlinked" };
+
+    commit(
+      set,
+      get,
+      // The spending entry is deliberately kept: only the user decides whether
+      // money that was really spent disappears from a period.
+      (draft) => clearWishlistLinks(draft, itemId, linkedId),
+      "wishlist",
+      `Unlinked ${item.name} from its transaction.`,
+      { itemId, spendingId: linkedId },
+    );
+    return { status: "unlinked", spendingId: linked?.id };
+  },
+
+  setWishlistItemBought: (itemId, bought) => {
+    if (!get().isCurrentPeriodMutable()) return { status: "locked" };
+    const snapshot = get().snapshot;
+    const item = findWishlistItemById(snapshot, itemId);
+    if (!item) return { status: "not-found" };
+    const linked = findSpendingEntryById(snapshot, item.linkedSpendingId);
+    if (item.bought === bought && !(bought === false && item.linkedSpendingId)) {
+      return { status: "updated" };
+    }
+
+    commit(
+      set,
+      get,
+      (draft) => {
+        const target = findWishlistItemById(draft, itemId);
+        if (!target) return;
+        if (bought) {
+          markWishlistBought(target, target.linkedSpendingId, undefined);
+          return;
+        }
+        clearWishlistLinks(draft, itemId, target.linkedSpendingId);
+        target.bought = false;
+        target.datePurchased = undefined;
+        Object.assign(target, normalizeWishlistPatch(target));
+      },
+      "wishlist",
+      bought ? `Marked ${item.name} as bought.` : `Marked ${item.name} as not bought.`,
+      { itemId, bought },
+    );
+
+    return bought ? { status: "updated" } : { status: "unlinked", spendingId: linked?.id };
+  },
+
+  findLinkedSpendingEntry: (itemId) => {
+    const snapshot = get().snapshot;
+    const item = findWishlistItemById(snapshot, itemId);
+    return findSpendingEntryById(snapshot, item?.linkedSpendingId);
   },
 
   addWalletEntry: (entry) => {
@@ -689,7 +964,7 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
       undoStack: undoStack.slice(1),
       redoStack: [snapshot, ...redoStack].slice(0, 40),
     });
-    persistSnapshot(restored, set);
+    persistSnapshot(restored, set, get);
   },
 
   redo: () => {
@@ -702,7 +977,7 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
       undoStack: [snapshot, ...undoStack].slice(0, 40),
       redoStack: redoStack.slice(1),
     });
-    persistSnapshot(restored, set);
+    persistSnapshot(restored, set, get);
   },
 }));
 
@@ -734,7 +1009,7 @@ function commit(
     undoStack: [before, ...get().undoStack].slice(0, 40),
     redoStack: [],
   });
-  persistSnapshot(finalSnapshot, set);
+  persistSnapshot(finalSnapshot, set, get);
 }
 
 function touch(
@@ -801,6 +1076,92 @@ function normalizeWishlistPatch<T extends Partial<WishlistItem>>(item: T): T {
   return { ...item, actualPrice, effectiveValue };
 }
 
+/**
+ * Wishlist ↔ spending link plumbing
+ * ---------------------------------
+ * Items and entries are looked up across every year record, not just the
+ * selected one: a purchase can be dated into another year, and a link that
+ * only half resolves is worse than no link at all.
+ */
+
+function findWishlistItemById(snapshot: BudgetSnapshot, itemId: string | undefined): WishlistItem | null {
+  if (!itemId) return null;
+  const selected = snapshot.years[String(snapshot.settings.selectedYear)]?.wishlistItems.find((item) => item.id === itemId);
+  if (selected) return selected;
+  for (const record of Object.values(snapshot.years)) {
+    const found = record.wishlistItems.find((item) => item.id === itemId);
+    if (found) return found;
+  }
+  return null;
+}
+
+function findSpendingEntryById(snapshot: BudgetSnapshot, entryId: string | undefined): SpendingEntry | null {
+  if (!entryId) return null;
+  for (const record of Object.values(snapshot.years)) {
+    const found = record.spendingEntries.find((entry) => entry.id === entryId);
+    if (found) return found;
+  }
+  return null;
+}
+
+function findWishlistItemBySpendingId(snapshot: BudgetSnapshot, entryId: string): WishlistItem | null {
+  for (const record of Object.values(snapshot.years)) {
+    const found = record.wishlistItems.find((item) => item.linkedSpendingId === entryId);
+    if (found) return found;
+  }
+  return null;
+}
+
+/**
+ * Remove every reference naming `itemId` or `spendingId`, on both sides.
+ *
+ * Run before establishing a new pair so re-linking cannot leave a second item
+ * claiming the same transaction (or the reverse), which would double-count a
+ * purchase in one place and orphan it in another.
+ */
+function clearWishlistLinks(snapshot: BudgetSnapshot, itemId?: string, spendingId?: string): void {
+  if (!itemId && !spendingId) return;
+  for (const record of Object.values(snapshot.years)) {
+    for (const entry of record.spendingEntries) {
+      const matchesItem = itemId != null && entry.wishlistItemId === itemId;
+      const matchesEntry = spendingId != null && entry.id === spendingId;
+      if (matchesItem || matchesEntry) entry.wishlistItemId = undefined;
+    }
+    for (const item of record.wishlistItems) {
+      const matchesEntry = spendingId != null && item.linkedSpendingId === spendingId;
+      const matchesItem = itemId != null && item.id === itemId;
+      if (matchesEntry || matchesItem) item.linkedSpendingId = undefined;
+    }
+  }
+}
+
+/** Mark an item bought, keeping `effectiveValue` and `datePurchased` honest. */
+function markWishlistBought(item: WishlistItem, spendingId: string | undefined, date: string | undefined): void {
+  item.bought = true;
+  item.linkedSpendingId = spendingId;
+  item.datePurchased = purchaseTimestamp(date) ?? item.datePurchased ?? new Date().toISOString();
+  // A bought item no longer competes for the budget, so its effective value
+  // drops to 0 — the same rule the rest of the wishlist already applies.
+  Object.assign(item, normalizeWishlistPatch(item));
+}
+
+const DATE_INPUT = /^\d{4}-\d{2}-\d{2}$/;
+
+function normalizeDateInput(value: string | undefined): string | undefined {
+  if (!value || !DATE_INPUT.test(value)) return undefined;
+  return Number.isNaN(new Date(`${value}T12:00:00`).getTime()) ? undefined : value;
+}
+
+/**
+ * Midday local time on the purchase date, so `toLocaleDateString()` shows the
+ * day the user chose rather than drifting a day either side of UTC.
+ */
+function purchaseTimestamp(date: string | undefined): string | undefined {
+  const normalized = normalizeDateInput(date);
+  if (!normalized) return undefined;
+  return new Date(`${normalized}T12:00:00`).toISOString();
+}
+
 function id(prefix: string): string {
   if ("crypto" in globalThis && "randomUUID" in crypto) return `${prefix}-${crypto.randomUUID()}`;
   return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -821,7 +1182,11 @@ export function currenciesForStore(): CurrencyCode[] {
 
 function normalizeSnapshot(snapshot: BudgetSnapshot): BudgetSnapshot {
   const existingCategories = new Set(snapshot.categories.map((category) => category.id));
-  const missingCategories = defaultCategories.filter((category) => !existingCategories.has(category.id));
+  // Copied, so a later edit to a restored default cannot write through to the
+  // shared seed definition.
+  const missingCategories = defaultCategories
+    .filter((category) => !existingCategories.has(category.id))
+    .map((category) => ({ ...category }));
   if (missingCategories.length > 0) {
     snapshot.categories = [...snapshot.categories, ...missingCategories];
   }
@@ -833,74 +1198,152 @@ function normalizeSnapshot(snapshot: BudgetSnapshot): BudgetSnapshot {
 }
 
 /**
- * Load snapshot from API or fallback to IndexedDB
+ * Persistence model
+ * -----------------
+ * The server is authoritative whenever it is reachable. IndexedDB is an
+ * explicit offline cache, never a silent equal: if a write cannot reach the
+ * server the store reports `offline`, so the UI can say "saved on this device
+ * only" instead of implying the change is safe everywhere.
+ *
+ * Writes use a compare-and-swap on `baseRevision` (the revision this client
+ * last read from the server), and the server assigns the next revision. That
+ * is what makes two devices safe: a client that edited while offline holds a
+ * stale base, so its write is rejected rather than overwriting the other
+ * device's work.
  */
-async function loadSnapshot(): Promise<BudgetSnapshot | null> {
-  const apiClient = getApiClient();
-  try {
-    // Try API first
-    const apiSnapshot = await apiClient.loadSnapshot();
-    if (apiSnapshot) return apiSnapshot;
-  } catch (error) {
-    console.warn("API load failed, falling back to IndexedDB:", error);
-  }
-  // Fallback to IndexedDB
-  return loadIdbSnapshot();
-}
 
-/**
- * Save snapshot to API and IndexedDB (for offline capability)
- */
-async function saveSnapshot(snapshot: BudgetSnapshot): Promise<void> {
-  const apiClient = getApiClient();
-  try {
-    // Try saving to API
-    await apiClient.saveSnapshot(snapshot);
-  } catch (error) {
-    if (error instanceof SnapshotConflictError) throw error;
-    console.warn("API save failed, falling back to IndexedDB:", error);
-  }
-  // Also save to IndexedDB for offline capability
-  try {
-    await saveIdbSnapshot(snapshot);
-  } catch (error) {
-    console.error("Failed to save snapshot:", error);
-  }
-}
+/** Serialises saves so two rapid commits cannot race each other to the server. */
+let saveChain: Promise<unknown> = Promise.resolve();
 
-/**
- * Persist a committed snapshot in the background. When the server rejects the
- * write as stale (another device saved a newer revision first), adopt the
- * server snapshot so newer remote data is never overwritten by this device.
- */
 function persistSnapshot(
   snapshot: BudgetSnapshot,
   set: (partial: Partial<BudgetStore>) => void,
+  get: () => BudgetStore,
 ): void {
-  void saveSnapshot(snapshot).catch(async (error: unknown) => {
-    if (error instanceof SnapshotConflictError && error.serverSnapshot) {
-      const server = normalizeSnapshot(error.serverSnapshot);
-      set({
-        snapshot: server,
-        undoStack: [],
-        redoStack: [],
-        syncNotice: "This device had outdated data. The latest version from your other device was loaded; please re-apply your last change.",
+  set({ syncState: "saving" });
+
+  saveChain = saveChain
+    .catch(() => undefined)
+    .then(async () => {
+      // The local cache is written first so an interrupted session keeps the
+      // change even if the network call never returns.
+      await saveIdbSnapshot(snapshot).catch((error) => {
+        console.error("Failed to write the local cache:", error);
       });
-      await saveIdbSnapshot(server).catch(() => undefined);
-    }
-  });
+
+      const apiClient = getApiClient();
+      try {
+        const assigned = await apiClient.saveSnapshot(snapshot, get().baseRevision);
+        set({
+          baseRevision: assigned ?? get().baseRevision,
+          syncState: "saved",
+          lastSyncedAt: new Date().toISOString(),
+          pendingLocalChanges: false,
+          syncError: null,
+        });
+        if (assigned != null) {
+          // Keep the in-memory revision aligned with what the server stored.
+          const current = get().snapshot;
+          if (current === snapshot) set({ snapshot: { ...current, revision: assigned } });
+        }
+      } catch (error) {
+        if (error instanceof SnapshotConflictError) {
+          if (error.serverSnapshot) {
+            const server = normalizeSnapshot(error.serverSnapshot);
+            set({
+              snapshot: server,
+              undoStack: [],
+              redoStack: [],
+              baseRevision: error.serverRevision ?? server.revision ?? null,
+              syncState: "conflict",
+              pendingLocalChanges: false,
+              syncNotice:
+                "Another device saved a newer version while this one was behind. The latest data has been loaded — please re-apply your last change.",
+            });
+            await saveIdbSnapshot(server).catch(() => undefined);
+          } else {
+            set({ syncState: "conflict", syncNotice: "This device was out of date. Reload to get the latest data." });
+          }
+          return;
+        }
+
+        if (error instanceof ApiUnavailableError) {
+          // Explicitly NOT "saved": the change exists only on this device.
+          set({
+            syncState: "offline",
+            pendingLocalChanges: true,
+            syncError: "The server is unreachable. Changes are saved on this device only.",
+          });
+          return;
+        }
+
+        set({
+          syncState: "error",
+          pendingLocalChanges: true,
+          syncError: error instanceof Error ? error.message : "Failed to save to the server.",
+        });
+      }
+    });
 }
 
 /**
- * Delete snapshot from API and IndexedDB
+ * Pull the server snapshot when it is newer than what this device holds.
+ * Called on load, on window focus, and on explicit retry, so a change made on
+ * another device appears without the user hunting for a refresh button.
+ *
+ * Unsynced local edits are never discarded silently: with pending changes the
+ * server copy is not adopted, and the user is told the two have diverged.
  */
-async function deleteSnapshot(): Promise<void> {
+async function syncFromServer(
+  set: (partial: Partial<BudgetStore>) => void,
+  get: () => BudgetStore,
+  options: { force?: boolean } = {},
+): Promise<void> {
   const apiClient = getApiClient();
   try {
-    // Note: API doesn't have a delete endpoint yet; it would reset server-side
-    // For now, just delete locally
-    await deleteIdbSnapshot();
+    const remoteRevision = await apiClient.loadRevision();
+    const base = get().baseRevision;
+
+    if (remoteRevision == null) {
+      set({ syncState: get().pendingLocalChanges ? "offline" : "saved", syncError: null });
+      return;
+    }
+    if (!options.force && base != null && remoteRevision === base) {
+      set({ syncState: get().pendingLocalChanges ? "offline" : "saved", syncError: null });
+      return;
+    }
+
+    if (get().pendingLocalChanges && !options.force) {
+      set({
+        syncState: "conflict",
+        syncNotice:
+          "This device has changes that never reached the server, and another device has saved since. Retry sync to send them, or reload to take the server version.",
+      });
+      return;
+    }
+
+    const remote = await apiClient.loadSnapshot();
+    if (!remote) return;
+    set({
+      snapshot: normalizeSnapshot(remote),
+      baseRevision: remote.revision ?? remoteRevision,
+      syncState: "saved",
+      lastSyncedAt: new Date().toISOString(),
+      pendingLocalChanges: false,
+      syncError: null,
+      undoStack: [],
+      redoStack: [],
+    });
+    await saveIdbSnapshot(remote).catch(() => undefined);
   } catch (error) {
-    console.error("Failed to delete snapshot:", error);
+    if (error instanceof ApiUnavailableError) {
+      set({
+        syncState: "offline",
+        syncError: "The server is unreachable. Working from this device's local copy.",
+      });
+      return;
+    }
+    set({ syncState: "error", syncError: error instanceof Error ? error.message : "Sync failed." });
   }
 }
+

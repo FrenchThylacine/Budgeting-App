@@ -29,6 +29,22 @@ Do not solve the same problem twice.
 
 These issues have the highest priority.
 
+## Multi-device synchronization — resolved 2026-08-16
+
+Reported symptom: changes made in a normal window and a private window did not synchronize.
+
+The conflict system was not the cause. The cause was that **an unreachable API was indistinguishable from a successful save**. Both `loadSnapshot` and `saveSnapshot` caught API errors and fell through to IndexedDB, so a browser with a broken or unconfigured backend behaved exactly like a healthy one while quietly building its own private dataset — and a private window has its own IndexedDB.
+
+A second, subtler fault sat underneath: the concurrency guard trusted a client-supplied `revision` and accepted anything higher than stored. A device that edited while offline keeps incrementing its counter, so it could reconnect with a larger number and overwrite the other device's work.
+
+Both are fixed. See `docs/ARCHITECTURE.md` for the model and `docs/API.md` for the protocol. The rule to preserve: **never let "API unavailable" be presented as "saved"**.
+
+If synchronization ever appears broken again, check in this order:
+
+1. `GET /api/health` — `503 degraded` means the server is up but `DATABASE_URL` is missing or wrong.
+2. The sync badge in the header — `Offline` means this device is not reaching the API at all.
+3. `GET /api/snapshot/revision` on both devices — if they differ and one shows `Offline`, it is a connectivity problem, not a merge problem.
+
 ## Verification status — 2026-08-15
 
 Resolved since the previous entry (all verified against a live PostgreSQL server and a real browser session):

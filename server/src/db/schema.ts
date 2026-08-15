@@ -80,6 +80,13 @@ export async function initializeSchema(
       seasonal_tag TEXT NOT NULL,
       "order" INTEGER NOT NULL,
       notes TEXT,
+      icon TEXT,
+      color TEXT,
+      cost_model TEXT,
+      sessions_per_month DOUBLE PRECISION,
+      weekdays TEXT,
+      day_of_month INTEGER,
+      start_date TEXT,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL,
       FOREIGN KEY(year_id)
@@ -116,6 +123,7 @@ export async function initializeSchema(
       is_piloting BOOLEAN NOT NULL DEFAULT false,
       source TEXT NOT NULL DEFAULT 'personal',
       note TEXT,
+      wishlist_item_id TEXT,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL,
       FOREIGN KEY(year_id)
@@ -166,6 +174,9 @@ export async function initializeSchema(
       date_purchased TEXT,
       notes TEXT,
       active BOOLEAN NOT NULL,
+      url TEXT,
+      color TEXT,
+      linked_spending_id TEXT,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL,
       FOREIGN KEY(year_id)

@@ -24,15 +24,69 @@ export function parseAmount(value: unknown): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
+function positive(value: unknown): number | null {
+  const n = Number(value);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+/**
+ * True when a real rate exists for this pair. Callers that must not present a
+ * fabricated figure (settings, currency management) check this first, because
+ * `rateToBase` falls back to 1:1 to keep the UI rendering.
+ */
+export function canConvert(currency: CurrencyCode, baseCurrency: CurrencyCode, rates: ExchangeRates): boolean {
+  if (currency === baseCurrency) return true;
+  const pair = new Set([currency, baseCurrency]);
+  if (pair.size === 2 && [...pair].every((c) => c === "EUR" || c === "USD" || c === "LBP")) return true;
+  if (positive(rates.customToBase[currency]) != null) return true;
+  const perEur = rates.perEur;
+  return perEur != null && positive(perEur[currency]) != null && positive(perEur[baseCurrency]) != null;
+}
+
+/**
+ * Multiplier that converts an amount in `currency` into `baseCurrency`.
+ *
+ * Resolution order, most to least specific:
+ *  1. the manually maintained EUR/USD/LBP pairs;
+ *  2. an explicit `customToBase` override;
+ *  3. provider rates pivoted through EUR;
+ *  4. 1 as a last resort.
+ *
+ * That final fallback silently treats an unknown currency as equal to the
+ * base, which is wrong but keeps the app rendering. `canConvert` exists so
+ * callers can detect and flag the case rather than quietly trusting it.
+ */
 export function rateToBase(currency: CurrencyCode, baseCurrency: CurrencyCode, rates: ExchangeRates): number {
   if (currency === baseCurrency) return 1;
-  if (currency === "EUR" && baseCurrency === "USD") return rates.eurUsd;
-  if (currency === "USD" && baseCurrency === "EUR") return 1 / rates.eurUsd;
-  if (currency === "LBP" && baseCurrency === "USD") return 1 / rates.usdLbp;
-  if (currency === "LBP" && baseCurrency === "EUR") return 1 / rates.usdLbp / rates.eurUsd;
-  if (currency === "EUR" && baseCurrency === "LBP") return rates.eurUsd * rates.usdLbp;
-  if (currency === "USD" && baseCurrency === "LBP") return rates.usdLbp;
-  return rates.customToBase[currency] ?? 1;
+
+  const eurUsd = positive(rates.eurUsd);
+  const usdLbp = positive(rates.usdLbp);
+  if (eurUsd != null) {
+    if (currency === "EUR" && baseCurrency === "USD") return eurUsd;
+    if (currency === "USD" && baseCurrency === "EUR") return 1 / eurUsd;
+    if (usdLbp != null) {
+      if (currency === "LBP" && baseCurrency === "EUR") return 1 / usdLbp / eurUsd;
+      if (currency === "EUR" && baseCurrency === "LBP") return eurUsd * usdLbp;
+    }
+  }
+  if (usdLbp != null) {
+    if (currency === "LBP" && baseCurrency === "USD") return 1 / usdLbp;
+    if (currency === "USD" && baseCurrency === "LBP") return usdLbp;
+  }
+
+  const override = positive(rates.customToBase[currency]);
+  if (override != null) return override;
+
+  // 1 unit of `currency` is 1/perEur[currency] EUR, which is
+  // perEur[base]/perEur[currency] units of the base.
+  const perEur = rates.perEur;
+  if (perEur) {
+    const from = positive(perEur[currency]);
+    const to = positive(perEur[baseCurrency]);
+    if (from != null && to != null) return to / from;
+  }
+
+  return 1;
 }
 
 export function normalizeAmount(amount: number | null | undefined, currency: CurrencyCode, settings: Settings): number {

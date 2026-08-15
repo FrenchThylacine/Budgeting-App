@@ -3,9 +3,41 @@ import { useBudgetStore } from "../../store/budgetStore";
 import {
   LayoutDashboard, ListTodo, Receipt, Gift, Wallet, BarChart3,
   FlaskConical, History, Settings, Tags, ChevronLeft, ChevronRight,
-  Plane, FileSpreadsheet, Download, FileJson, RefreshCw
+  Plane, FileSpreadsheet, Download, FileJson, RefreshCw, FileText
 } from "lucide-react";
 import { exportCurrentYearToExcel, exportAllYearsToExcel, exportJson } from "../../domain/importExport";
+import { buildPeriodReport, reportHtml, type ReportScope } from "../../domain/report";
+import { formatMoney } from "../../domain/currency";
+import type { BudgetSnapshot } from "../../domain/types";
+
+/**
+ * Render the report into a new window and let the browser produce the PDF.
+ *
+ * Using the print pipeline keeps the report pixel-accurate and printable
+ * without adding a PDF library to the bundle. The document is written from a
+ * self-contained HTML string, so it also works with no network.
+ */
+function openPeriodReport(snapshot: BudgetSnapshot, scope: ReportScope): void {
+  const report = buildPeriodReport(snapshot, scope);
+  const html = reportHtml(report, (value) =>
+    formatMoney(value, snapshot.settings.baseCurrency, snapshot.settings.currencyDisplayMode),
+  );
+
+  const win = window.open("", "_blank", "noopener,noreferrer,width=1024,height=768");
+  if (!win) {
+    // Pop-up blocked: fall back to a download so the report is never lost.
+    const blob = new Blob([html], { type: "text/html" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${report.title.replace(/\s+/g, "-").toLowerCase()}-report.html`;
+    link.click();
+    URL.revokeObjectURL(url);
+    return;
+  }
+  win.document.write(html);
+  win.document.close();
+}
 
 type TabKey = "dashboard" | "activities" | "spending" | "wishlist" | "wallet" | "analytics" | "scenarios" | "history" | "settings" | "categories";
 
@@ -90,6 +122,16 @@ export const Sidebar: React.FC<{
 
       {!collapsed && (
         <div className="nav-section" style={{ marginTop: "auto" }}>
+          <div className="nav-section-title">Reports</div>
+          <div style={{ display: "grid", gap: 8, marginBottom: 16 }}>
+            <button className="btn btn-secondary btn-sm" onClick={() => openPeriodReport(snapshot, "month")}>
+              <FileText size={14} /> Monthly report
+            </button>
+            <button className="btn btn-secondary btn-sm" onClick={() => openPeriodReport(snapshot, "year")}>
+              <FileText size={14} /> Annual report
+            </button>
+          </div>
+
           <div className="nav-section-title">Data</div>
           <div style={{ display: "grid", gap: 8 }}>
             <button className="btn btn-secondary btn-sm" onClick={() => exportCurrentYearToExcel(snapshot)}>

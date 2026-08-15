@@ -1,8 +1,12 @@
-import React from "react";
+import React, { useState } from "react";
+import { RefreshCw } from "lucide-react";
 import { CURRENCY_OPTIONS } from "../../domain/currency";
+import { formatDateTime } from "../../domain/dates";
+import { applyRatesToSettings, fetchExchangeRates } from "../../domain/exchangeRates";
 import { useBudgetStore } from "../../store/budgetStore";
 import type { CurrencyCode, CurrencyDisplayMode, RoundingRule } from "../../domain/types";
 import { Section } from "../ui/Section";
+import { SyncStatus } from "../layout/SyncStatus";
 
 const DISPLAY_MODES: { value: CurrencyDisplayMode; label: string }[] = [
   { value: "symbol", label: "Symbol only (€1 234)" },
@@ -21,6 +25,38 @@ const ROUNDING_RULES: { value: RoundingRule; label: string }[] = [
 export const SettingsPanel: React.FC = () => {
   const settings = useBudgetStore((s) => s.snapshot.settings);
   const update = useBudgetStore((s) => s.updateSettings);
+  const lastSyncedAt = useBudgetStore((s) => s.lastSyncedAt);
+  const syncError = useBudgetStore((s) => s.syncError);
+  const pendingLocalChanges = useBudgetStore((s) => s.pendingLocalChanges);
+  const syncNow = useBudgetStore((s) => s.syncNow);
+  const retrySync = useBudgetStore((s) => s.retrySync);
+
+  const [ratesBusy, setRatesBusy] = useState(false);
+  const [rateMessage, setRateMessage] = useState<{ ok: boolean; text: string } | null>(null);
+
+  /**
+   * Fetching never overwrites a manual override, and a failure leaves the
+   * existing rates in place — a stale rate is far better than a missing one,
+   * which would make every converted figure read as zero.
+   */
+  const refreshRates = async () => {
+    setRatesBusy(true);
+    setRateMessage(null);
+    try {
+      const result = await fetchExchangeRates({ force: true });
+      if (result.snapshot && result.status !== "unavailable") {
+        update({ exchangeRates: applyRatesToSettings(settings.exchangeRates, result.snapshot) });
+        setRateMessage({ ok: true, text: "Exchange rates updated." });
+      } else {
+        setRateMessage({
+          ok: false,
+          text: `Could not reach the rate provider${result.message ? ` (${result.message})` : ""}. Your current rates are unchanged.`,
+        });
+      }
+    } finally {
+      setRatesBusy(false);
+    }
+  };
 
   const fieldStyle: React.CSSProperties = { display: "grid", gap: 6 };
   const checkboxStyle: React.CSSProperties = { display: "flex", alignItems: "flex-start", gap: 10, cursor: "pointer" };
@@ -170,11 +206,61 @@ export const SettingsPanel: React.FC = () => {
         </div>
       </Section>
 
+      <Section title="Synchronization">
+        <div className="card card-body" style={{ display: "grid", gap: 12, maxWidth: 620 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+            <SyncStatus />
+            <span className="text-caption">
+              {lastSyncedAt ? `Last synced ${formatDateTime(lastSyncedAt)}` : "Not yet synced with the server"}
+            </span>
+          </div>
+          {syncError && (
+            <div className="text-caption" style={{ color: "var(--warning)" }}>{syncError}</div>
+          )}
+          <div className="text-footnote">
+            The server is the source of truth. This device keeps a local copy so the app works offline, but a
+            change only reaches your other devices once it has been sent.
+          </div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <button className="btn btn-secondary btn-sm" onClick={() => void syncNow({ force: true })}>
+              <RefreshCw size={14} /> Sync now
+            </button>
+            {pendingLocalChanges && (
+              <button className="btn btn-primary btn-sm" onClick={() => void retrySync()}>
+                Send local changes
+              </button>
+            )}
+          </div>
+        </div>
+      </Section>
+
       <Section title="Exchange rates">
         <div className="card card-body" style={{ display: "grid", gap: 16, maxWidth: 620 }}>
           <div className="text-caption">
             Rates convert stored amounts for display. Stored values are never rewritten.
           </div>
+
+          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+            <button className="btn btn-secondary btn-sm" onClick={refreshRates} disabled={ratesBusy}>
+              <RefreshCw size={14} className={ratesBusy ? "spin" : undefined} /> Update rates
+            </button>
+            <span className="text-caption">
+              {settings.exchangeRates.ratesUpdatedAt
+                ? `Updated ${formatDateTime(settings.exchangeRates.ratesUpdatedAt)}${
+                    settings.exchangeRates.ratesSource ? ` · ${settings.exchangeRates.ratesSource}` : ""
+                  }`
+                : "Using manual rates — never fetched"}
+            </span>
+          </div>
+          {rateMessage && (
+            <div
+              className="text-caption"
+              style={{ color: rateMessage.ok ? "var(--success)" : "var(--warning)" }}
+              role="status"
+            >
+              {rateMessage.text}
+            </div>
+          )}
 
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12 }}>
             <label className="text-callout" style={fieldStyle}>

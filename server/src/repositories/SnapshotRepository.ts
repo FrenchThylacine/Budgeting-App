@@ -20,6 +20,23 @@ interface PendingQuery {
   params: unknown[];
 }
 
+/**
+ * Weekday sets are stored as a JSON array. A malformed value is treated as
+ * "no schedule" rather than throwing: one bad row must not make the whole
+ * snapshot unloadable.
+ */
+function parseWeekdays(raw: unknown): Activity["weekdays"] {
+  if (typeof raw !== "string" || raw.length === 0) return undefined;
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return undefined;
+    const days = parsed.map(Number).filter((d) => Number.isInteger(d) && d >= 1 && d <= 7);
+    return days.length > 0 ? (days as Activity["weekdays"]) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export class SnapshotRepository {
   constructor(private sql = getDatabase()) {}
 
@@ -334,8 +351,11 @@ export class SnapshotRepository {
         INSERT INTO activities
         (id, year_id, name, category_id, currency, recurrence_type, recurrence_interval,
          price_per_session, price_per_purchase, price_per_month, estimated_cost, yearly_estimate,
-         active, visible, seasonal_tag, "order", notes, created_at, updated_at)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+         active, visible, seasonal_tag, "order", notes,
+         icon, color, cost_model, sessions_per_month, weekdays, day_of_month, start_date,
+         created_at, updated_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17,
+                $18, $19, $20, $21, $22, $23, $24, $25, $26)
         ON CONFLICT (id) DO UPDATE SET
           name = EXCLUDED.name,
           category_id = EXCLUDED.category_id,
@@ -352,6 +372,13 @@ export class SnapshotRepository {
           seasonal_tag = EXCLUDED.seasonal_tag,
           "order" = EXCLUDED."order",
           notes = EXCLUDED.notes,
+          icon = EXCLUDED.icon,
+          color = EXCLUDED.color,
+          cost_model = EXCLUDED.cost_model,
+          sessions_per_month = EXCLUDED.sessions_per_month,
+          weekdays = EXCLUDED.weekdays,
+          day_of_month = EXCLUDED.day_of_month,
+          start_date = EXCLUDED.start_date,
           updated_at = EXCLUDED.updated_at
       `,
         params: [
@@ -372,6 +399,15 @@ export class SnapshotRepository {
           activity.seasonalTag,
           activity.order,
           activity.notes || "",
+          activity.icon ?? null,
+          activity.color ?? null,
+          activity.costModel ?? null,
+          activity.sessionsPerMonth ?? null,
+          // Weekday sets are small and read as a unit, so JSON keeps the
+          // schema simple without needing a join table.
+          activity.weekdays && activity.weekdays.length > 0 ? JSON.stringify(activity.weekdays) : null,
+          activity.dayOfMonth ?? null,
+          activity.startDate ?? null,
           now,
           now,
         ],
@@ -393,8 +429,8 @@ export class SnapshotRepository {
         text: `
         INSERT INTO spending_entries
         (id, year_id, month, week, date, category_id, activity_id, amount, currency,
-         recurrence_type, is_piloting, source, note, created_at, updated_at)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+         recurrence_type, is_piloting, source, note, wishlist_item_id, created_at, updated_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
         ON CONFLICT (id) DO UPDATE SET
           month = EXCLUDED.month,
           week = EXCLUDED.week,
@@ -407,6 +443,7 @@ export class SnapshotRepository {
           is_piloting = EXCLUDED.is_piloting,
           source = EXCLUDED.source,
           note = EXCLUDED.note,
+          wishlist_item_id = EXCLUDED.wishlist_item_id,
           updated_at = EXCLUDED.updated_at
       `,
         params: [
@@ -423,6 +460,7 @@ export class SnapshotRepository {
           entry.isPiloting === true,
           entry.source || "personal",
           entry.note ?? null,
+          entry.wishlistItemId ?? null,
           entry.createdAt,
           entry.updatedAt,
         ],
@@ -444,8 +482,9 @@ export class SnapshotRepository {
         text: `
         INSERT INTO wishlist_items
         (id, year_id, name, category_id, actual_price, effective_value, currency,
-         bought, in_wishlist, priority, date_added, date_purchased, notes, active, created_at, updated_at)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+         bought, in_wishlist, priority, date_added, date_purchased, notes, active,
+         url, color, linked_spending_id, created_at, updated_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
         ON CONFLICT (id) DO UPDATE SET
           name = EXCLUDED.name,
           category_id = EXCLUDED.category_id,
@@ -459,6 +498,9 @@ export class SnapshotRepository {
           date_purchased = EXCLUDED.date_purchased,
           notes = EXCLUDED.notes,
           active = EXCLUDED.active,
+          url = EXCLUDED.url,
+          color = EXCLUDED.color,
+          linked_spending_id = EXCLUDED.linked_spending_id,
           updated_at = EXCLUDED.updated_at
       `,
         params: [
@@ -476,6 +518,9 @@ export class SnapshotRepository {
           item.datePurchased ?? null,
           item.notes ?? null,
           item.active === true,
+          item.url ?? null,
+          item.color ?? null,
+          item.linkedSpendingId ?? null,
           now,
           now,
         ],
@@ -686,6 +731,13 @@ export class SnapshotRepository {
       seasonalTag: row.seasonal_tag,
       order: Number(row.order),
       notes: row.notes || "",
+      icon: row.icon ?? undefined,
+      color: row.color ?? undefined,
+      costModel: row.cost_model ?? undefined,
+      sessionsPerMonth: row.sessions_per_month != null ? Number(row.sessions_per_month) : undefined,
+      weekdays: parseWeekdays(row.weekdays),
+      dayOfMonth: row.day_of_month != null ? Number(row.day_of_month) : undefined,
+      startDate: row.start_date ?? undefined,
     };
   }
 
@@ -704,6 +756,7 @@ export class SnapshotRepository {
       isPiloting: row.is_piloting === 1 || row.is_piloting === true,
       source: row.source,
       note: row.note ?? "",
+      wishlistItemId: row.wishlist_item_id ?? undefined,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     };
@@ -724,6 +777,9 @@ export class SnapshotRepository {
       datePurchased: row.date_purchased ?? undefined,
       notes: row.notes ?? "",
       active: row.active === 1 || row.active === true,
+      url: row.url ?? undefined,
+      color: row.color ?? undefined,
+      linkedSpendingId: row.linked_spending_id ?? undefined,
     };
   }
 

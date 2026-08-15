@@ -54,9 +54,27 @@ These could not be observed with a mocked driver and were all failing in real Po
 4. **Non-atomic saves.** Each statement ran separately, so a mid-save failure left the database partly written. Writes are collected and executed through one `sql.transaction([...])` batch.
 5. **Approvals and audit rows were subject to deletion passes.** Both are historical records and are now upsert-only.
 
+### Migrations
+
+| Migration | Adds |
+| --- | --- |
+| `001-initial-schema` | Checkpoint; tables are created by `schema.ts` |
+| `002-add-category-metadata` | `categories.icon`, `.description`, `.parent_id` |
+| `003-add-snapshot-revision` | `snapshots.revision` — optimistic concurrency |
+| `004-add-audit-historical-edit` | `audit_log.historical_edit`, `.historical_period` |
+| `005-add-activity-schedule-and-wishlist-links` | `activities.icon/color/cost_model/sessions_per_month/weekdays/day_of_month/start_date`, `wishlist_items.url/color/linked_spending_id`, `spending_entries.wishlist_item_id` |
+
+Migration 005 exists because the repository writes a **fixed column list**: a field added to the TypeScript model but not to the schema, the upsert and the parser is silently dropped on the next server round-trip. Adding a persisted field means touching all four places, and the integration suite has a round-trip test per field group to catch the omission.
+
+`activities.weekdays` stores a JSON array of ISO weekday numbers. A malformed value is read as "no schedule" rather than throwing, so one bad row cannot make the whole snapshot unloadable.
+
 ### Concurrency and multi-device safety
 
-`snapshots.revision` is a monotonically increasing counter (migration `003-add-snapshot-revision`). Each client commit increments it. `PUT /api/snapshot` rejects a write whose revision is not newer than the stored one with **409 Conflict**, returning the current server snapshot so the stale client rebases instead of silently overwriting a newer device's data. Verified in the browser: a stale device's write was rejected, the other device's data was preserved, and the user received an explanatory notice.
+`snapshots.revision` backs a compare-and-swap. A client sends `baseRevision` — the revision it last read — and the write is accepted only if that still matches what is stored; the server then assigns the next revision.
+
+Trusting a client-supplied `revision` was unsafe: a device editing while offline increments its own counter freely, so it could reconnect with a higher number and overwrite work another device had done. The current scheme cannot be gamed, because a stale base is exactly what gets rejected.
+
+Verified end to end in the browser with two isolated contexts: device A wrote, device B read it, device B edited, device A saw the edit on focus without reloading, and a stale write from device A was rejected with device B's data intact.
 
 ### Local development and testing against plain PostgreSQL
 

@@ -47,6 +47,27 @@ export async function runMigrations(
         await sql`ALTER TABLE audit_log ADD COLUMN IF NOT EXISTS historical_period TEXT;`;
       },
     },
+    {
+      // Activity presentation and scheduling, wishlist links, and the
+      // wishlist↔spending relationship. Without these the fields exist in the
+      // client model but are silently dropped on the next server round-trip.
+      name: "005-add-activity-schedule-and-wishlist-links",
+      run: async (sql: NeonQueryFunction<any, any>) => {
+        await sql`ALTER TABLE activities ADD COLUMN IF NOT EXISTS icon TEXT;`;
+        await sql`ALTER TABLE activities ADD COLUMN IF NOT EXISTS color TEXT;`;
+        await sql`ALTER TABLE activities ADD COLUMN IF NOT EXISTS cost_model TEXT;`;
+        await sql`ALTER TABLE activities ADD COLUMN IF NOT EXISTS sessions_per_month DOUBLE PRECISION;`;
+        await sql`ALTER TABLE activities ADD COLUMN IF NOT EXISTS weekdays TEXT;`;
+        await sql`ALTER TABLE activities ADD COLUMN IF NOT EXISTS day_of_month INTEGER;`;
+        await sql`ALTER TABLE activities ADD COLUMN IF NOT EXISTS start_date TEXT;`;
+
+        await sql`ALTER TABLE wishlist_items ADD COLUMN IF NOT EXISTS url TEXT;`;
+        await sql`ALTER TABLE wishlist_items ADD COLUMN IF NOT EXISTS color TEXT;`;
+        await sql`ALTER TABLE wishlist_items ADD COLUMN IF NOT EXISTS linked_spending_id TEXT;`;
+
+        await sql`ALTER TABLE spending_entries ADD COLUMN IF NOT EXISTS wishlist_item_id TEXT;`;
+      },
+    },
   ];
 
 

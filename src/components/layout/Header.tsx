@@ -2,12 +2,21 @@ import React from "react";
 import { useBudgetStore } from "../../store/budgetStore";
 import { calculateYear } from "../../domain/calculations";
 import { getIsoWeek, monthName, weekYear } from "../../domain/dates";
-import { movePeriod, periodLabel, periodPatchForMode, selectedIsoWeekYear } from "../../domain/periods";
+import {
+  currentPeriodPatch,
+  isAtCurrentPeriod,
+  movePeriod,
+  periodLabel,
+  periodPatchForMode,
+  periodRangeLabel,
+  selectedIsoWeekYear,
+} from "../../domain/periods";
 import { Badge } from "../ui/Badge";
 import { Button } from "../ui/Button";
+import { SyncStatus } from "./SyncStatus";
 import {
   ChevronLeft, ChevronRight, Sun, Moon, Undo2, Redo2, Save, Wallet,
-  Calendar, Clock
+  Clock, CalendarCheck
 } from "lucide-react";
 type BudgetCalculation = ReturnType<typeof calculateYear>;
 
@@ -37,6 +46,10 @@ export const Header: React.FC<{
   }
 
   const periodTitle = periodLabel(snapshot.settings);
+  const atCurrentPeriod = isAtCurrentPeriod(snapshot.settings);
+  const realPeriodTitle = periodLabel({ ...snapshot.settings, ...currentPeriodPatch(snapshot.settings) });
+  const todayLabel = new Intl.DateTimeFormat(undefined, { dateStyle: "long" }).format(new Date());
+  const goToCurrentPeriod = () => updateSettings(currentPeriodPatch(snapshot.settings));
 
   const status = calculation.selectedMonthSpend.status;
   const statusTone = status === "nan" ? "danger" : status === "pending" ? "warning" : "success";
@@ -44,14 +57,39 @@ export const Header: React.FC<{
   return (
     <header className="top-header">
       <div>
-        <div className="text-footnote" style={{ marginBottom: 4 }}>Current Period</div>
+        <div className="text-footnote" style={{ marginBottom: 4 }}>
+          {atCurrentPeriod ? "Current period" : "Viewing"}
+        </div>
         <h1 className="text-display" style={{ fontSize: "clamp(1.5rem, 3vw, 2rem)" }}>
           {periodTitle}
         </h1>
+        <div className="text-caption" style={{ marginTop: 2 }}>{periodRangeLabel(snapshot.settings)}</div>
+
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
           <Badge tone={statusTone}>{status === "value" ? "Active" : status === "zero" ? "No Spend" : status === "pending" ? "Pending" : "Closed"}</Badge>
-          <span className="text-caption">{mode === "month" ? `Week ${calculation.week}` : mode === "week" ? `${activeYear} ISO week` : "Year overview"}{snapshot.settings.selectedSeason ? ` · ${snapshot.settings.selectedSeason}` : ""}</span>
+          {/* In month mode the stored ISO week often belongs to a different
+              month, so showing it there is noise at best and wrong at worst.
+              The date range above already states the period exactly. */}
+          <span className="text-caption">
+            {mode === "week" ? `ISO week ${snapshot.settings.selectedWeek} · ${activeYear}` : mode === "year" ? "Year overview" : "Monthly view"}
+            {snapshot.settings.selectedSeason ? ` · ${snapshot.settings.selectedSeason}` : ""}
+          </span>
+          <SyncStatus />
         </div>
+
+        {/* The real period is stated separately so a historical view can never
+            be mistaken for today. */}
+        {!atCurrentPeriod && (
+          <div className="text-caption" style={{ marginTop: 6, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+            <span style={{ color: "var(--text-tertiary)" }}>
+              Today is {todayLabel} · current {mode} is {realPeriodTitle}
+            </span>
+            <button className="btn btn-ghost btn-sm" onClick={goToCurrentPeriod}>
+              <CalendarCheck size={13} /> Go to current {mode}
+            </button>
+          </div>
+        )}
+
         {latestAudit && (
           <div className="text-caption" style={{ marginTop: 6, display: "flex", alignItems: "center", gap: 6 }}>
             <Clock size={12} /> Last: {latestAudit.summary}

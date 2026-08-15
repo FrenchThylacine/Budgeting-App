@@ -58,24 +58,44 @@ The client persists a complete `BudgetSnapshot` through `src/store/budgetStore.t
 
 `SnapshotRepository` performs targeted `ON CONFLICT (id) DO UPDATE SET ...` upserts with selective deletion of removed ids, and executes every write for one save inside a single transaction batch.
 
-### Synchronization model
+### Synchronization model — compare-and-swap (revised 2026-08-15)
 
 The snapshot is the unit of persistence, and `snapshots.revision` is the unit of concurrency.
 
 ```
-Device A                    Server                     Device B
-  commit → revision N+1  →  stored if N+1 > stored
-                            else 409 + current snapshot
-  adopt server snapshot  ←
+Device A                       Server                      Device B
+  read  → baseRevision = 7
+  write (base 7)            →  stored 7 → accept, assign 8
+                                                        ← read → base 8
+                               stored 8 → reject base 7 with 409 + snapshot
+  adopt server snapshot     ←
 ```
 
-Each client commit increments `revision`. `PUT /api/snapshot` accepts a write only when its revision is newer than the stored one; otherwise it returns **409** with the current server snapshot, and the client adopts that snapshot and asks the user to re-apply their change. This is last-writer-wins guarded by a staleness check — deliberately simpler than field-level merging, and sufficient because a snapshot write is whole-document.
+`PUT /api/snapshot` accepts a write only when the client's `baseRevision` — the revision it last read from the server — still equals the stored revision. The **server** then assigns the next revision.
 
-Hydration order matters: the store loads from the API first and falls back to IndexedDB only when the API is unreachable, so a stale local cache can never win over server data.
+The earlier design trusted a client-supplied `revision` and accepted anything higher than stored. That was unsafe: a device editing while offline keeps incrementing its own counter, so it could reconnect with a larger number and overwrite whatever the other device had done in the meantime. A client cannot game `baseRevision`, because a stale base is exactly what gets rejected.
+
+`GET /api/snapshot/revision` is a cheap freshness probe, used on window focus so another device's change appears without a manual reload.
+
+### Online, offline, and the difference between them
+
+The server is authoritative whenever reachable. IndexedDB is an explicit offline cache, never a silent equal.
+
+| State | Meaning |
+| --- | --- |
+| `saved` | In sync with the server |
+| `saving` | A write is in flight |
+| `offline` | Server unreachable; the change exists only on this device |
+| `conflict` | The server holds data this device did not build on |
+| `error` | The write failed for another reason |
+
+The store exposes this as `syncState` and the header renders it. This matters more than it looks: the previous implementation caught API failures and fell through to IndexedDB, so a browser with a broken backend looked identical to a healthy one — and two browsers would each quietly accumulate their own private dataset while appearing to work. **"API unavailable" must never be presented as "saved".**
+
+Hydration asks the server first and falls back to the local cache only when it cannot be reached, so a device never boots from a stale cache and then overwrites newer remote data.
 
 ### Database driver seam
 
-`server/src/db/index.ts` exposes `setDatabase(driver)` alongside the default Neon client. Anything matching the driver shape — a tagged template plus optional `transaction([...])` — can be injected. This exists because the Neon serverless driver speaks HTTP to Neon and cannot target a local PostgreSQL server, which would otherwise make the backend impossible to run or test without a Neon account. Integration tests and `scripts/dev-server-local-pg.mjs` use it with a node-postgres adapter.
+`server/src/db/index.ts` exposes `setDatabase(driver)` alongside the default Neon client. Anything matching the driver shape — a tagged template plus optional `transaction([...])` — can be injected. This exists because the Neon serverless driver speaks HTTP to Neon and cannot target a local PostgreSQL server, which would otherwise make the backend impossible to run or test without a Neon account.
 
 ### Analytics layer
 
@@ -87,6 +107,17 @@ snapshot + settings → src/domain/analytics.ts → Dashboard
 ```
 
 The rule is that no financial figure is computed inside a component. The two surfaces previously each had their own implementation, which is how the Dashboard came to ignore the global period selector while the Analytics page honoured it.
+
+Presentation is layered on top:
+
+```
+src/domain/analytics.ts     selectors — totals, pacing, breakdowns, forecast, health
+src/domain/schedule.ts      recurrence maths — real occurrences per calendar month
+src/domain/report.ts        report model + printable HTML, from the same selectors
+src/components/charts/      dependency-free SVG chart library
+```
+
+`src/components/charts/scale.tsx` holds the pure maths (`niceTicks`, path builders, `compactNumber`) with no React or DOM, so axis and tick behaviour is unit-testable on its own.
 
 ---
 

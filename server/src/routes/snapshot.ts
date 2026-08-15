@@ -53,13 +53,33 @@ export function createSnapshotRoutes(): Router {
   );
 
   /**
+   * GET /api/snapshot/revision
+   * Cheap freshness probe. Clients poll this on focus to detect another
+   * device's write without transferring the whole snapshot.
+   */
+  router.get(
+    "/revision",
+    asyncHandler(async (_req: Request, res: Response) => {
+      const service = getService();
+      const revision = await service.loadRevision();
+      res.json({ revision });
+    }),
+  );
+
+  /**
    * PUT /api/snapshot
    * Save the full snapshot.
    *
-   * Optimistic concurrency: when the payload carries a `revision` counter and
-   * the stored snapshot already has an equal or newer revision, the write is
-   * rejected with 409 and the current server snapshot is returned so the
-   * stale client can rebase instead of silently overwriting newer data.
+   * Optimistic concurrency is a compare-and-swap on `baseRevision`: the
+   * revision the client last read from the server. The write is accepted only
+   * when it still matches what is stored, and the server — not the client —
+   * assigns the next revision.
+   *
+   * Trusting a client-supplied revision was unsafe: a device that edited while
+   * offline increments its own counter freely, so it could return with a
+   * higher number and overwrite work another device did in the meantime. A
+   * client cannot inflate `baseRevision` to win, because a stale base is
+   * exactly what gets rejected.
    */
   router.put(
     "/",
@@ -68,23 +88,47 @@ export function createSnapshotRoutes(): Router {
       validateSnapshotPayload(snapshot);
 
       const service = getService();
+      const storedRevision = await service.loadRevision();
 
-      const incomingRevision = Number(snapshot.revision);
-      if (Number.isFinite(incomingRevision)) {
-        const storedRevision = await service.loadRevision();
-        if (storedRevision != null && incomingRevision <= storedRevision) {
+      // `baseRevision` may travel in the body or as a header, so a plain
+      // fetch and an intermediary that strips unknown fields both work.
+      const headerBase = req.get("x-base-revision");
+      const rawBase = snapshot.baseRevision ?? (headerBase != null ? Number(headerBase) : undefined);
+      const baseRevision = Number.isFinite(Number(rawBase)) ? Number(rawBase) : null;
+
+      if (storedRevision != null && baseRevision != null && baseRevision !== storedRevision) {
+        const current = await service.loadSnapshot();
+        res.status(409).json({
+          error: "Snapshot conflict",
+          message: `Rejected stale write (based on revision ${baseRevision}, server is at ${storedRevision}).`,
+          revision: storedRevision,
+          snapshot: current,
+        });
+        return;
+      }
+
+      // Legacy clients send no baseRevision. Fall back to the previous
+      // monotonic check so they keep working rather than silently clobbering.
+      if (baseRevision == null) {
+        const incomingRevision = Number(snapshot.revision);
+        if (storedRevision != null && Number.isFinite(incomingRevision) && incomingRevision <= storedRevision) {
           const current = await service.loadSnapshot();
           res.status(409).json({
             error: "Snapshot conflict",
             message: `Rejected stale write (incoming revision ${incomingRevision}, stored revision ${storedRevision}).`,
+            revision: storedRevision,
             snapshot: current,
           });
           return;
         }
       }
 
-      await service.saveSnapshot(snapshot);
-      res.json({ success: true, message: "Snapshot saved" });
+      const nextRevision = (storedRevision ?? 0) + 1;
+      const toStore = { ...snapshot, revision: nextRevision };
+      delete (toStore as Record<string, unknown>).baseRevision;
+
+      await service.saveSnapshot(toStore);
+      res.json({ success: true, message: "Snapshot saved", revision: nextRevision });
     }),
   );
 

@@ -1,9 +1,11 @@
 import React, { useMemo, useState } from "react";
-import { Pencil, Plus, Trash2 } from "lucide-react";
+import { Pencil, Plus, ShoppingBag, Trash2, X } from "lucide-react";
 import { CURRENCY_OPTIONS, formatMoney } from "../../domain/currency";
 import { monthFromDateInput, todayDateInput, weekFromDateInput, weekYear } from "../../domain/dates";
 import { selectedIsoWeekYear } from "../../domain/periods";
-import type { CurrencyCode, RecurrenceType, SpendingEntry } from "../../domain/types";
+import { isActiveWishlistItem, sortWishlistItems } from "../../domain/wishlist";
+import type { WishlistLinkResult } from "../../domain/wishlist";
+import type { CurrencyCode, RecurrenceType, SpendingEntry, WishlistItem } from "../../domain/types";
 import { useBudgetStore } from "../../store/budgetStore";
 import { matchesEntryFilters } from "../../utils/formatters";
 import { Button } from "../ui/Button";
@@ -35,8 +37,9 @@ interface Draft {
   currency: CurrencyCode;
   note: string;
   source: string;
-  isPiloting: boolean;
   recurrenceType: RecurrenceType;
+  /** Wishlist item this transaction fulfils; "" when it stands on its own. */
+  wishlistItemId: string;
 }
 
 export const SpendingPanel: React.FC = () => {
@@ -44,6 +47,8 @@ export const SpendingPanel: React.FC = () => {
   const add = useBudgetStore((s) => s.addSpendingEntry);
   const update = useBudgetStore((s) => s.updateSpendingEntry);
   const remove = useBudgetStore((s) => s.removeSpendingEntry);
+  const recordPurchase = useBudgetStore((s) => s.recordWishlistPurchase);
+  const linkToWishlistItem = useBudgetStore((s) => s.linkSpendingToWishlistItem);
   const mutable = useBudgetStore((s) => s.isCurrentPeriodMutable)();
   const mode = snapshot.settings.selectedPeriodMode;
 
@@ -54,13 +59,34 @@ export const SpendingPanel: React.FC = () => {
     currency: snapshot.settings.baseCurrency,
     note: "",
     source: "personal",
-    isPiloting: false,
     recurrenceType: "none",
+    wishlistItemId: "",
   });
 
   const [search, setSearch] = useState("");
   const [editing, setEditing] = useState<SpendingEntry | null>(null);
   const [draft, setDraft] = useState<Draft>(emptyDraft);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  const wishlistItems: WishlistItem[] =
+    snapshot.years[String(snapshot.settings.selectedYear)]?.wishlistItems ?? [];
+
+  const wishlistById = useMemo(
+    () => new Map(wishlistItems.map((item) => [item.id, item])),
+    [wishlistItems],
+  );
+
+  /**
+   * Items offered in the form: everything still waiting to be bought, plus the
+   * one this transaction is already linked to — otherwise editing an entry
+   * would silently show "no wishlist item" for a link that exists.
+   */
+  const linkableWishlistItems = useMemo(() => {
+    const selectable = wishlistItems.filter(isActiveWishlistItem);
+    const current = draft.wishlistItemId ? wishlistById.get(draft.wishlistItemId) : undefined;
+    if (current && !selectable.some((item) => item.id === current.id)) selectable.push(current);
+    return sortWishlistItems(selectable);
+  }, [wishlistItems, wishlistById, draft.wishlistItemId]);
 
   const entries = useMemo(
     () =>
@@ -84,6 +110,42 @@ export const SpendingPanel: React.FC = () => {
     setDraft(emptyDraft());
   };
 
+  const selectedCategory = snapshot.categories.find((category) => category.id === draft.categoryId);
+
+  /**
+   * Piloting is a property of the category, not a separate switch: a "piloting"
+   * bucket says the spend is piloting, and nothing else does. Any other
+   * category leaves the question open, so an entry that was already flagged
+   * keeps its flag instead of being silently reclassified by an unrelated edit.
+   */
+  const categorySaysPiloting = selectedCategory?.bucket === "piloting";
+  const pilotingForDraft = categorySaysPiloting ? true : (editing?.isPiloting ?? false);
+
+  /** Turns a refused link into words instead of a silent no-op. */
+  const reportLinkResult = (result: WishlistLinkResult, itemName: string): boolean => {
+    if (result.status === "already-linked") {
+      const other = Object.values(snapshot.years)
+        .flatMap((record) => record.spendingEntries)
+        .find((entry) => entry.id === result.spendingId);
+      setNotice(
+        `"${itemName}" is already linked to a transaction${
+          other ? ` of ${formatMoney(other.amount, other.currency, snapshot.settings.currencyDisplayMode)} on ${other.date}` : ""
+        }. Unlink that one first if this is the real purchase.`,
+      );
+      return false;
+    }
+    if (result.status === "locked") {
+      setNotice("This period is historical and read-only.");
+      return false;
+    }
+    if (result.status === "not-found") {
+      setNotice("That wishlist item no longer exists.");
+      return false;
+    }
+    setNotice(null);
+    return true;
+  };
+
   const save = (event: React.FormEvent) => {
     event.preventDefault();
     const amount = Number(draft.amount);
@@ -98,18 +160,54 @@ export const SpendingPanel: React.FC = () => {
       currency: draft.currency,
       note: draft.note,
       source: draft.source,
-      isPiloting: draft.isPiloting,
+      isPiloting: pilotingForDraft,
       // Carried from the form so editing an entry cannot silently reset a
       // recurring transaction to one-off.
       recurrenceType: draft.recurrenceType,
     };
 
-    if (editing) update(editing.id, patch);
-    else add({ ...patch, year: Number(draft.date.slice(0, 4)) });
+    if (editing) {
+      update(editing.id, patch);
+      // Only touch the link when it actually changed, so ordinary edits do not
+      // rewrite a wishlist item's purchase state.
+      const previous = editing.wishlistItemId ?? "";
+      if (draft.wishlistItemId !== previous) {
+        const result = linkToWishlistItem(editing.id, draft.wishlistItemId || null);
+        const name = wishlistById.get(draft.wishlistItemId)?.name ?? "That item";
+        if (!reportLinkResult(result, name)) return;
+      } else {
+        setNotice(null);
+      }
+      reset();
+      return;
+    }
+
+    if (draft.wishlistItemId) {
+      // Same store action the wishlist's own "Buy" button uses, so there is one
+      // code path — and one duplicate guard — for both directions.
+      const item = wishlistById.get(draft.wishlistItemId);
+      const result = recordPurchase(draft.wishlistItemId, {
+        amount,
+        date: draft.date,
+        categoryId: draft.categoryId,
+        currency: draft.currency,
+        note: draft.note,
+        source: draft.source,
+        isPiloting: pilotingForDraft,
+        recurrenceType: draft.recurrenceType,
+      });
+      if (!reportLinkResult(result, item?.name ?? "That item")) return;
+      reset();
+      return;
+    }
+
+    add({ ...patch, year: Number(draft.date.slice(0, 4)) });
+    setNotice(null);
     reset();
   };
 
   const beginEdit = (entry: SpendingEntry) => {
+    setNotice(null);
     setEditing(entry);
     setDraft({
       amount: String(entry.amount),
@@ -118,9 +216,22 @@ export const SpendingPanel: React.FC = () => {
       currency: entry.currency,
       note: entry.note,
       source: entry.source ?? "personal",
-      isPiloting: entry.isPiloting,
+      // `isPiloting` is not a form field: it follows the category, and an
+      // existing flag is carried through `editing` so an edit never drops it.
       recurrenceType: entry.recurrenceType ?? "none",
+      wishlistItemId: entry.wishlistItemId ?? "",
     });
+  };
+
+  const confirmDelete = (entry: SpendingEntry) => {
+    const linkedItem = entry.wishlistItemId ? wishlistById.get(entry.wishlistItemId) : undefined;
+    const warning = linkedItem
+      ? `\n\n"${linkedItem.name}" will be unlinked from it and stays in your wishlist.`
+      : "";
+    if (window.confirm(`Delete this transaction?${warning}`)) {
+      remove(entry.id);
+      setNotice(null);
+    }
   };
 
   // Archived categories stay selectable while editing an entry that already
@@ -144,6 +255,33 @@ export const SpendingPanel: React.FC = () => {
         }
       >
         {!mutable && <div className="historical-banner">Historical periods are read-only.</div>}
+
+        {notice && (
+          <div
+            role="status"
+            className="text-caption"
+            style={{
+              display: "flex",
+              alignItems: "flex-start",
+              gap: 8,
+              padding: "8px 12px",
+              marginBottom: 12,
+              borderRadius: "var(--radius-md)",
+              background: "var(--warning-soft)",
+              color: "var(--warning)",
+            }}
+          >
+            <span style={{ flex: 1, minWidth: 0 }}>{notice}</span>
+            <button
+              type="button"
+              onClick={() => setNotice(null)}
+              aria-label="Dismiss message"
+              style={{ background: "none", border: "none", color: "inherit", cursor: "pointer", padding: 0 }}
+            >
+              <X size={13} />
+            </button>
+          </div>
+        )}
 
         {mutable && (
           <form
@@ -197,6 +335,16 @@ export const SpendingPanel: React.FC = () => {
                 </option>
               ))}
             </select>
+            {/* The category decides whether this counts as piloting; the state
+                is shown rather than asked for a second time. */}
+            {pilotingForDraft && (
+              <span
+                className="text-caption"
+                style={{ display: "flex", alignItems: "center", color: "var(--text-tertiary)" }}
+              >
+                {categorySaysPiloting ? "Counts as piloting spend." : "Kept as piloting spend."}
+              </span>
+            )}
             <select
               className="select"
               aria-label="Payment source"
@@ -221,6 +369,30 @@ export const SpendingPanel: React.FC = () => {
                 </option>
               ))}
             </select>
+            <div style={{ display: "grid", gap: 4, minWidth: 0 }}>
+              <select
+                className="select"
+                aria-label="Wishlist item"
+                value={draft.wishlistItemId}
+                onChange={(e) => setDraft({ ...draft, wishlistItemId: e.target.value })}
+                style={{ minWidth: 0 }}
+              >
+                <option value="">No wishlist item</option>
+                {linkableWishlistItems.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.name}
+                    {item.actualPrice != null
+                      ? ` · ${formatMoney(item.actualPrice, item.currency, snapshot.settings.currencyDisplayMode)}`
+                      : ""}
+                  </option>
+                ))}
+              </select>
+              {draft.wishlistItemId && (
+                <span className="text-caption" style={{ color: "var(--text-tertiary)" }}>
+                  {editing ? "Links this transaction and marks the item bought." : "Marks the item bought when saved."}
+                </span>
+              )}
+            </div>
             <input
               className="input"
               aria-label="Note"
@@ -228,14 +400,6 @@ export const SpendingPanel: React.FC = () => {
               value={draft.note}
               onChange={(e) => setDraft({ ...draft, note: e.target.value })}
             />
-            <label className="text-caption" style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <input
-                type="checkbox"
-                checked={draft.isPiloting}
-                onChange={(e) => setDraft({ ...draft, isPiloting: e.target.checked })}
-              />{" "}
-              Piloting
-            </label>
             <div style={{ display: "flex", gap: 8 }}>
               <Button variant="primary" type="submit">
                 {editing ? "Save changes" : "Add transaction"}
@@ -296,6 +460,16 @@ export const SpendingPanel: React.FC = () => {
                         {SOURCE_OPTIONS.find((o) => o.value === entry.source)?.label ?? entry.source}
                       </span>
                     )}
+                    {entry.wishlistItemId && (
+                      <span
+                        className="badge badge-success"
+                        style={{ maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                        title="Linked wishlist item"
+                      >
+                        <ShoppingBag size={11} />{" "}
+                        {wishlistById.get(entry.wishlistItemId)?.name ?? "Wishlist item"}
+                      </span>
+                    )}
                   </div>
                   <div className="text-footnote">
                     {entry.date}
@@ -313,9 +487,7 @@ export const SpendingPanel: React.FC = () => {
                         variant="ghost"
                         size="sm"
                         icon
-                        onClick={() => {
-                          if (window.confirm("Delete this transaction?")) remove(entry.id);
-                        }}
+                        onClick={() => confirmDelete(entry)}
                         aria-label="Delete transaction"
                       >
                         <Trash2 size={15} />

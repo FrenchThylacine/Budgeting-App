@@ -8,7 +8,7 @@ import type {
 import { normalizeAmount } from "./currency";
 import { normalizeEntry } from "./calculations";
 import { movePeriod, periodLabel, selectedIsoWeekYear } from "./periods";
-import { weekYear, weeksInIsoYear, startOfIsoWeek } from "./dates";
+import { dateInputValue, weekYear, weeksInIsoYear, startOfIsoWeek } from "./dates";
 
 /**
  * Shared, period-aware analytics selectors.
@@ -394,4 +394,422 @@ export function weeklyTrendBars(
 /** Number of ISO weeks in the selected week-year (needed by weekly windows). */
 export function weeksInSelectedWeekYear(settings: Settings): number {
   return weeksInIsoYear(selectedIsoWeekYear(settings));
+}
+
+/**
+ * Compact period label for chart axes, where `periodLabel` ("Week 28 · Jul
+ * 6–Jul 12") is far too long to sit under a bar.
+ */
+export function compactPeriodLabel(settings: Settings): string {
+  const mode = settings.selectedPeriodMode ?? "month";
+  if (mode === "year") return String(settings.selectedYear);
+  if (mode === "week") return `W${settings.selectedWeek}`;
+  return SHORT_MONTHS[settings.selectedMonth - 1] ?? `M${settings.selectedMonth}`;
+}
+
+// ─── Daily calendar (heatmap source) ─────────────────────────────────────────
+
+export interface DailySpendCell {
+  /** ISO date, `YYYY-MM-DD`. */
+  date: string;
+  /** Day of month, 1..31. */
+  day: number;
+  /** ISO weekday: 1 = Monday … 7 = Sunday. */
+  weekday: number;
+  /**
+   * Base-currency spend for the day.
+   *
+   * `0` means "recorded, nothing spent" and is a real value. `null` means the
+   * day is unknown: either the period holds no records at all, or the day has
+   * not happened yet. The two must never be conflated.
+   */
+  value: number | null;
+}
+
+/**
+ * Day-by-day totals for the selected period, ready for a calendar heatmap.
+ *
+ * Returns `null` in year mode: a 365-cell grid answers no question the
+ * monthly trend does not answer better.
+ */
+export function dailySpendingCalendar(
+  entries: SpendingEntry[],
+  snapshot: BudgetSnapshot,
+  settings: Settings,
+  now = new Date(),
+): DailySpendCell[] | null {
+  const mode = settings.selectedPeriodMode ?? "month";
+  if (mode === "year") return null;
+
+  const days: Date[] = [];
+  if (mode === "week") {
+    const start = startOfIsoWeek(selectedIsoWeekYear(settings), settings.selectedWeek);
+    for (let offset = 0; offset < 7; offset += 1) {
+      const day = new Date(start);
+      day.setUTCDate(start.getUTCDate() + offset);
+      days.push(day);
+    }
+  } else {
+    const total = daysInMonth(settings.selectedYear, settings.selectedMonth);
+    for (let day = 1; day <= total; day += 1) {
+      days.push(new Date(Date.UTC(settings.selectedYear, settings.selectedMonth - 1, day)));
+    }
+  }
+
+  // A period with no records at all stays unknown end to end — a wall of
+  // zeroes would claim the user spent nothing, which is not what we know.
+  const hasRecords = entries.length > 0;
+
+  const totals = new Map<string, number>();
+  for (const entry of entries) {
+    const key = (entry.date ?? "").slice(0, 10);
+    if (key.length !== 10) continue;
+    totals.set(key, (totals.get(key) ?? 0) + normalizeEntry(entry, snapshot));
+  }
+
+  const todayUtc = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
+
+  return days.map((date) => {
+    const key = dateInputValue(date);
+    const recorded = totals.get(key);
+    const elapsed = date.getTime() <= todayUtc;
+    return {
+      date: key,
+      day: date.getUTCDate(),
+      // getUTCDay() is 0 = Sunday; ISO weekdays run 1 = Monday … 7 = Sunday.
+      weekday: ((date.getUTCDay() + 6) % 7) + 1,
+      value: recorded != null ? recorded : hasRecords && elapsed ? 0 : null,
+    };
+  });
+}
+
+// ─── Category evolution (multi-line) ─────────────────────────────────────────
+
+export interface CategoryMonthlySeries {
+  categoryId: string;
+  name: string;
+  color: string;
+  /** One value per calendar month; `null` where that month holds no records. */
+  values: (number | null)[];
+  /** Year-to-date total, used to rank the series. */
+  total: number;
+}
+
+/**
+ * Monthly totals for the biggest categories of the selected calendar year.
+ *
+ * A month with records but no spend in a given category is a real `0` for
+ * that category; a month with no records at all stays `null` for every
+ * category, so the lines break instead of dropping to the axis.
+ */
+export function categoryMonthlySeries(
+  snapshot: BudgetSnapshot,
+  settings: Settings,
+  topN = 4,
+): { labels: string[]; series: CategoryMonthlySeries[] } {
+  const record = snapshot.years[String(settings.selectedYear)];
+  const entries = budgetRelevantEntries(record?.spendingEntries ?? [], settings);
+
+  const monthHasRecords = new Array<boolean>(12).fill(false);
+  const monthly = new Map<string, number[]>();
+  const yearTotals = new Map<string, number>();
+
+  for (const entry of entries) {
+    const index = entry.month - 1;
+    if (index < 0 || index > 11) continue;
+    monthHasRecords[index] = true;
+    const amount = normalizeEntry(entry, snapshot);
+    const slots = monthly.get(entry.categoryId) ?? new Array<number>(12).fill(0);
+    slots[index] += amount;
+    monthly.set(entry.categoryId, slots);
+    yearTotals.set(entry.categoryId, (yearTotals.get(entry.categoryId) ?? 0) + amount);
+  }
+
+  const categoryMap = new Map(snapshot.categories.map((category) => [category.id, category]));
+  const series = [...yearTotals.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, Math.max(0, Math.floor(topN)))
+    .map(([categoryId, total]) => {
+      const slots = monthly.get(categoryId) ?? new Array<number>(12).fill(0);
+      const category = categoryMap.get(categoryId);
+      return {
+        categoryId,
+        name: category?.name ?? "Uncategorized",
+        color: category?.color ?? "#64748B",
+        total,
+        values: monthHasRecords.map((hasRecords, index) => (hasRecords ? slots[index] : null)),
+      };
+    });
+
+  return { labels: [...SHORT_MONTHS], series };
+}
+
+// ─── Recurring vs one-off over time ──────────────────────────────────────────
+
+export interface RecurringSplitSeries {
+  labels: string[];
+  /** Committed spend (weekly / monthly / yearly / session) per month. */
+  recurring: (number | null)[];
+  /** Discretionary spend per month. */
+  oneOff: (number | null)[];
+  /**
+   * The selected month's committed spend, for a headline figure.
+   * `null` when that month has no records — missing is not zero.
+   */
+  committedMonthly: number | null;
+}
+
+/**
+ * Monthly recurring / one-off split for the selected calendar year, for the
+ * stacked view of how much of each month was already committed.
+ *
+ * Months without records stay `null` on both series so the column renders as
+ * "?" rather than as an empty (zero-looking) stack.
+ */
+export function recurringMonthlySplit(snapshot: BudgetSnapshot, settings: Settings): RecurringSplitSeries {
+  const record = snapshot.years[String(settings.selectedYear)];
+  const entries = budgetRelevantEntries(record?.spendingEntries ?? [], settings);
+
+  const recurring = new Array<number>(12).fill(0);
+  const oneOff = new Array<number>(12).fill(0);
+  const hasRecords = new Array<boolean>(12).fill(false);
+
+  for (const entry of entries) {
+    const index = entry.month - 1;
+    if (index < 0 || index > 11) continue;
+    hasRecords[index] = true;
+    const amount = normalizeEntry(entry, snapshot);
+    if (RECURRING_TYPES.has(entry.recurrenceType)) recurring[index] += amount;
+    else oneOff[index] += amount;
+  }
+
+  const selectedIndex = settings.selectedMonth - 1;
+  return {
+    labels: [...SHORT_MONTHS],
+    recurring: hasRecords.map((has, index) => (has ? recurring[index] : null)),
+    oneOff: hasRecords.map((has, index) => (has ? oneOff[index] : null)),
+    committedMonthly:
+      selectedIndex >= 0 && selectedIndex < 12 && hasRecords[selectedIndex] ? recurring[selectedIndex] : null,
+  };
+}
+
+// ─── Recent periods (comparison bars) ────────────────────────────────────────
+
+/**
+ * Totals for the last `count` periods of the current mode, ending on the
+ * selected one. Periods without records stay `null` so the chart shows a "?"
+ * instead of a zero-height bar.
+ */
+export function recentPeriodTotals(
+  snapshot: BudgetSnapshot,
+  settings: Settings,
+  count = 6,
+): TrendBar[] {
+  const size = Math.max(1, Math.floor(count));
+  const walk: Settings[] = [settings];
+  let cursor = settings;
+  for (let step = 1; step < size; step += 1) {
+    cursor = { ...cursor, ...movePeriod(cursor, -1) };
+    walk.push(cursor);
+  }
+  walk.reverse();
+
+  return walk.map((periodSettings, index) => {
+    const entries = budgetRelevantEntries(entriesForSelectedPeriod(snapshot, periodSettings), settings);
+    return {
+      label: compactPeriodLabel(periodSettings),
+      value: entries.length > 0 ? entries.reduce((sum, e) => sum + normalizeEntry(e, snapshot), 0) : null,
+      highlight: index === walk.length - 1,
+    };
+  });
+}
+
+// ─── Cumulative spend & forecast ─────────────────────────────────────────────
+
+export interface ForecastSeries {
+  /** Day-of-period labels. */
+  labels: string[];
+  /** Cumulative actual spend; `null` for days that are not yet known. */
+  actual: (number | null)[];
+  /**
+   * Straight-line projection at the current pace, starting from the last
+   * known day so the two lines meet. `null` everywhere else, and empty when
+   * the period is already complete — there is nothing left to project.
+   */
+  projected: (number | null)[];
+  /** Projected end-of-period total, or `null` when the period is complete. */
+  projectedTotal: number | null;
+  /** Budget ceiling in base currency; `null` when no monthly budget applies. */
+  budget: number | null;
+}
+
+/**
+ * Cumulative spend for the selected period plus a pace-based projection to
+ * its end — the "actual → projected → ceiling" view.
+ *
+ * Returns `null` when there is nothing to draw (year mode, or a period with
+ * no records at all).
+ */
+export function cumulativeForecast(
+  entries: SpendingEntry[],
+  snapshot: BudgetSnapshot,
+  settings: Settings,
+  now = new Date(),
+): ForecastSeries | null {
+  const calendar = dailySpendingCalendar(entries, snapshot, settings, now);
+  if (!calendar || calendar.every((cell) => cell.value == null)) return null;
+
+  let running = 0;
+  let lastKnown = -1;
+  const actual = calendar.map((cell, index) => {
+    if (cell.value == null) return null;
+    running += cell.value;
+    lastKnown = index;
+    return running;
+  });
+
+  const total = calendar.length;
+  const elapsed = lastKnown + 1;
+  const projected = new Array<number | null>(total).fill(null);
+  let projectedTotal: number | null = null;
+
+  if (lastKnown >= 0 && elapsed < total) {
+    const perDay = running / elapsed;
+    projectedTotal = perDay * total;
+    for (let index = lastKnown; index < total; index += 1) {
+      projected[index] = running + perDay * (index - lastKnown);
+    }
+  }
+
+  const mode = settings.selectedPeriodMode ?? "month";
+  const budgetBase =
+    mode === "month" ? normalizeAmount(settings.monthlyBudget, settings.monthlyBudgetCurrency, settings) : 0;
+
+  return {
+    labels: calendar.map((cell) => String(cell.day)),
+    actual,
+    projected,
+    projectedTotal,
+    budget: budgetBase > 0 ? budgetBase : null,
+  };
+}
+
+// ─── Financial health score ──────────────────────────────────────────────────
+
+export interface HealthFactor {
+  id: string;
+  label: string;
+  /** 0–100 for this factor alone. */
+  score: number;
+  /** Relative importance within the composite. */
+  weight: number;
+  detail: string;
+}
+
+export type HealthGrade = "Excellent" | "Good" | "Fair" | "At risk";
+
+export interface FinancialHealth {
+  /** 0–100, or `null` when nothing measurable is available for the period. */
+  score: number | null;
+  grade: HealthGrade | null;
+  /** Only the factors that could actually be computed. */
+  factors: HealthFactor[];
+}
+
+function clampScore(value: number): number {
+  return Math.min(100, Math.max(0, value));
+}
+
+/**
+ * Composite 0–100 health score for the selected period.
+ *
+ * Takes already-derived figures rather than the snapshot so it stays pure and
+ * cheap. Only computable factors contribute, and the weights are renormalised
+ * over them — a period without a budget is scored on what is known, never on
+ * an invented budget of zero. When nothing is computable the score is `null`,
+ * not 0.
+ */
+export function financialHealth(input: {
+  pacing: BudgetPacing | null;
+  categories: CategoryStat[];
+  comparison: PeriodComparison;
+  stats: SpendingStats;
+}): FinancialHealth {
+  const { pacing, categories, comparison, stats } = input;
+  const factors: HealthFactor[] = [];
+
+  // `budgetPacing` reports spend 0 for a period with no records at all, which
+  // would score a blank period as perfect adherence. A period we know nothing
+  // about is not a well-run one, so it earns no factor.
+  if (pacing != null && pacing.budget > 0 && stats.total != null) {
+    // Pace matters more than the snapshot: mid-month, the projection is the
+    // honest signal of where this period lands.
+    const projected = pacing.projectedTotal ?? pacing.spent;
+    const ratio = projected / pacing.budget;
+    const score =
+      ratio <= 0.8
+        ? 100
+        : ratio <= 1
+        ? 100 - ((ratio - 0.8) / 0.2) * 25
+        : ratio >= 1.3
+        ? 0
+        : 75 - ((ratio - 1) / 0.3) * 75;
+    factors.push({
+      id: "budget",
+      label: "Budget adherence",
+      weight: 40,
+      score: clampScore(score),
+      detail: `${(ratio * 100).toFixed(0)}% of budget at the current pace`,
+    });
+  }
+
+  const capped = categories.filter((category) => category.capUsage != null);
+  if (capped.length > 0) {
+    const scores = capped.map((category) => clampScore(100 - Math.max(0, (category.capUsage as number) - 100) * 2));
+    const breaches = capped.filter((category) => category.overCap).length;
+    factors.push({
+      id: "caps",
+      label: "Category caps",
+      weight: 20,
+      score: scores.reduce((sum, value) => sum + value, 0) / scores.length,
+      detail:
+        breaches === 0
+          ? `All ${capped.length} cap${capped.length !== 1 ? "s" : ""} respected`
+          : `${breaches} of ${capped.length} caps exceeded`,
+    });
+  }
+
+  if (comparison.deltaPct != null) {
+    factors.push({
+      id: "trend",
+      label: "Spending trend",
+      weight: 20,
+      score: clampScore(100 - Math.max(0, comparison.deltaPct) * 2),
+      detail: `${comparison.deltaPct > 0 ? "+" : ""}${comparison.deltaPct.toFixed(1)}% vs ${comparison.previousLabel}`,
+    });
+  }
+
+  if (stats.recurringShare != null) {
+    // A period dominated by commitments leaves little room to react.
+    factors.push({
+      id: "flexibility",
+      label: "Flexibility",
+      weight: 20,
+      score: clampScore(((90 - stats.recurringShare) / 50) * 100),
+      detail: `${stats.recurringShare.toFixed(0)}% of spend is recurring`,
+    });
+  }
+
+  if (factors.length === 0) return { score: null, grade: null, factors };
+
+  const totalWeight = factors.reduce((sum, factor) => sum + factor.weight, 0);
+  const score = Math.round(
+    factors.reduce((sum, factor) => sum + factor.score * factor.weight, 0) / totalWeight,
+  );
+
+  return {
+    score,
+    grade: score >= 85 ? "Excellent" : score >= 70 ? "Good" : score >= 50 ? "Fair" : "At risk",
+    factors,
+  };
 }

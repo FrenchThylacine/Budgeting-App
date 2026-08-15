@@ -381,6 +381,99 @@ describeDb("PostgreSQL integration", () => {
     expect(loaded!.auditLog.find((entry) => entry.id === "audit-historical-1")).toBeDefined();
   });
 
+  it("round-trips activity presentation and schedule fields", async () => {
+    // These were previously dropped: the repository upserted a fixed column
+    // list, so an icon, colour or schedule silently vanished on the next sync.
+    const snapshot = (await repo.loadSnapshot("active"))!;
+    const year = Object.values(snapshot.years)[0];
+    const activity = year.activities[0];
+    activity.icon = "Volleyball";
+    activity.color = "#8B5CF6";
+    activity.costModel = "schedule";
+    activity.sessionsPerMonth = 8;
+    activity.weekdays = [1, 3];
+    activity.dayOfMonth = 15;
+    activity.startDate = "2026-03-01";
+    snapshot.revision = 30;
+    await repo.saveSnapshot(snapshot, "active");
+
+    const loaded = await repo.loadSnapshot("active");
+    const restored = loaded!.years[String(year.year)].activities.find((a) => a.id === activity.id)!;
+    expect(restored.icon).toBe("Volleyball");
+    expect(restored.color).toBe("#8B5CF6");
+    expect(restored.costModel).toBe("schedule");
+    expect(restored.sessionsPerMonth).toBe(8);
+    expect(restored.weekdays).toEqual([1, 3]);
+    expect(restored.dayOfMonth).toBe(15);
+    expect(restored.startDate).toBe("2026-03-01");
+  });
+
+  it("leaves schedule fields undefined when an activity has none", async () => {
+    const snapshot = (await repo.loadSnapshot("active"))!;
+    const year = Object.values(snapshot.years)[0];
+    const activity = year.activities[1] ?? year.activities[0];
+    activity.weekdays = [];
+    snapshot.revision = 31;
+    await repo.saveSnapshot(snapshot, "active");
+
+    const loaded = await repo.loadSnapshot("active");
+    const restored = loaded!.years[String(year.year)].activities.find((a) => a.id === activity.id)!;
+    // An empty set is "no schedule", not an empty array to reason about later.
+    expect(restored.weekdays).toBeUndefined();
+  });
+
+  it("round-trips wishlist links and the wishlist↔spending relationship", async () => {
+    const snapshot = (await repo.loadSnapshot("active"))!;
+    const year = Object.values(snapshot.years)[0];
+
+    year.wishlistItems.push({
+      id: "wish-link-1",
+      name: "Headphones",
+      categoryId: snapshot.categories[0].id,
+      actualPrice: 199,
+      effectiveValue: 199,
+      currency: "EUR",
+      bought: false,
+      inWishlist: true,
+      priority: "high",
+      dateAdded: new Date().toISOString(),
+      notes: "",
+      active: true,
+      url: "https://example.com/headphones",
+      color: "#0EA5B7",
+      linkedSpendingId: "spend-link-1",
+    });
+    year.spendingEntries.push({
+      id: "spend-link-1",
+      year: year.year,
+      month: 8,
+      week: 33,
+      date: `${year.year}-08-14`,
+      categoryId: snapshot.categories[0].id,
+      amount: 199,
+      currency: "EUR",
+      recurrenceType: "purchase",
+      isPiloting: false,
+      source: "personal",
+      note: "Headphones",
+      wishlistItemId: "wish-link-1",
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    });
+    snapshot.revision = 32;
+    await repo.saveSnapshot(snapshot, "active");
+
+    const loaded = await repo.loadSnapshot("active");
+    const restoredYear = loaded!.years[String(year.year)];
+    const item = restoredYear.wishlistItems.find((w) => w.id === "wish-link-1")!;
+    const entry = restoredYear.spendingEntries.find((e) => e.id === "spend-link-1")!;
+
+    expect(item.url).toBe("https://example.com/headphones");
+    expect(item.color).toBe("#0EA5B7");
+    expect(item.linkedSpendingId).toBe("spend-link-1");
+    expect(entry.wishlistItemId).toBe("wish-link-1");
+  });
+
   it("exposes the stored revision for optimistic concurrency checks", async () => {
     const snapshot = await repo.loadSnapshot("active");
     snapshot!.revision = 20;
