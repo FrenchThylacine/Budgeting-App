@@ -1,5 +1,5 @@
-import { closeDatabase, initializeDatabase } from "./db/index";
-import { app } from "./app";
+import { closeDatabase, initializeDatabase } from "./db/index.js";
+import { app } from "./app.js";
 
 const PORT = parseInt(process.env.PORT || "3001", 10);
 const HOST = process.env.HOST || "0.0.0.0";

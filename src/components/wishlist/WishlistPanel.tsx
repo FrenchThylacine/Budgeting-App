@@ -265,12 +265,12 @@ export const WishlistPanel: React.FC = () => {
   } as React.CSSProperties);
 
   return (
-    <div className="page-enter" style={{ display: "grid", gap: 20 }}>
+    <div className="page-enter" style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr)", gap: 20 }}>
       <Section title="Wishlist">
         {/* Toolbar */}
         <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: 4 }}>
           {/* View tabs */}
-          <div style={{ display: "flex", gap: 4 }}>
+          <div style={{ display: "flex", gap: 4, flexWrap: "wrap", minWidth: 0 }}>
             {(["active", "all", "bought"] as ViewFilter[]).map((tab) => (
               <button
                 key={tab}
@@ -286,7 +286,7 @@ export const WishlistPanel: React.FC = () => {
               </button>
             ))}
           </div>
-          <div style={{ flex: 1 }} />
+          <div style={{ flex: "1 1 0", minWidth: 0 }} />
           {mutable && !showAddForm && (
             <Button variant="primary" size="sm" onClick={() => setShowAddForm(true)}>
               <Plus size={14} /> Add item

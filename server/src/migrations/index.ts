@@ -34,6 +34,19 @@ export async function runMigrations(
         }
       },
     },
+    {
+      name: "003-add-snapshot-revision",
+      run: async (sql: NeonQueryFunction<any, any>) => {
+        await sql`ALTER TABLE snapshots ADD COLUMN IF NOT EXISTS revision INTEGER NOT NULL DEFAULT 0;`;
+      },
+    },
+    {
+      name: "004-add-audit-historical-edit",
+      run: async (sql: NeonQueryFunction<any, any>) => {
+        await sql`ALTER TABLE audit_log ADD COLUMN IF NOT EXISTS historical_edit BOOLEAN NOT NULL DEFAULT false;`;
+        await sql`ALTER TABLE audit_log ADD COLUMN IF NOT EXISTS historical_period TEXT;`;
+      },
+    },
   ];
 
 

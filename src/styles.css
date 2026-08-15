@@ -95,6 +95,19 @@
   --accent: #0A84FF;
   --accent-soft: rgba(10, 132, 255, 0.12);
 
+  /* Dark surfaces swallow an 8% tint, so semantic fills are strengthened
+     to keep the same perceived emphasis as light mode. */
+  --success: #30D158;
+  --success-soft: rgba(48, 209, 88, 0.16);
+  --warning: #FF9F0A;
+  --warning-soft: rgba(255, 159, 10, 0.16);
+  --danger: #FF453A;
+  --danger-soft: rgba(255, 69, 58, 0.16);
+  --purple: #BF5AF2;
+  --purple-soft: rgba(191, 90, 242, 0.16);
+  --teal: #64D2FF;
+  --teal-soft: rgba(100, 210, 255, 0.16);
+
   --shadow-xs: 0 1px 2px rgba(0,0,0,0.3);
   --shadow-sm: 0 2px 8px rgba(0,0,0,0.3), 0 1px 2px rgba(0,0,0,0.2);
   --shadow-md: 0 4px 16px rgba(0,0,0,0.4), 0 2px 4px rgba(0,0,0,0.2);
@@ -213,7 +226,31 @@ body {
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
+  position: relative;
+  overflow: hidden;
 }
+
+/* A tinted rail plus a soft wash carries the metric's status without
+   colouring the whole card, so status is legible at a glance while the
+   surface stays calm. The rail is a second channel alongside the value
+   colour, so status never depends on hue alone. */
+.metric-card::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: transparent;
+}
+
+.metric-card.tone-positive::before { background: var(--success); }
+.metric-card.tone-negative::before { background: var(--danger); }
+.metric-card.tone-warning::before { background: var(--warning); }
+.metric-card.tone-accent::before { background: var(--accent); }
+
+.metric-card.tone-positive { background: linear-gradient(90deg, var(--success-soft), transparent 60%), var(--bg-elevated); }
+.metric-card.tone-negative { background: linear-gradient(90deg, var(--danger-soft), transparent 60%), var(--bg-elevated); }
+.metric-card.tone-warning { background: linear-gradient(90deg, var(--warning-soft), transparent 60%), var(--bg-elevated); }
+.metric-card.tone-accent { background: linear-gradient(90deg, var(--accent-soft), transparent 60%), var(--bg-elevated); }
 
 .metric-label {
   font-size: 0.8125rem;
@@ -235,6 +272,7 @@ body {
 .metric-value.positive { color: var(--success); }
 .metric-value.negative { color: var(--danger); }
 .metric-value.warning { color: var(--warning); }
+.metric-value.accent { color: var(--accent); }
 
 .metric-delta {
   font-size: 0.8125rem;
@@ -685,44 +723,145 @@ body {
    DASHBOARD — Specific layouts
    ========================================================= */
 
+/* All dashboard grids use minmax(0, …) tracks: an auto/fr track is floored at
+   the largest item's min-content, which lets wide charts push the layout past
+   narrow (portrait mobile) viewports. minmax(0, 1fr) lets items shrink. */
 .dashboard-grid {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--space-5);
 }
 
 .dashboard-hero {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: var(--space-5);
 }
 
 .dashboard-row {
   display: grid;
-  grid-template-columns: 2fr 1fr;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
   gap: var(--space-5);
 }
 
 .dashboard-row-reverse {
   display: grid;
-  grid-template-columns: 1fr 2fr;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
   gap: var(--space-5);
 }
 
 @media (max-width: 1200px) {
-  .dashboard-hero { grid-template-columns: repeat(2, 1fr); }
-  .dashboard-row, .dashboard-row-reverse { grid-template-columns: 1fr; }
+  .dashboard-hero { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .dashboard-row, .dashboard-row-reverse { grid-template-columns: minmax(0, 1fr); }
 }
 
 @media (max-width: 768px) {
-  .app-shell { grid-template-columns: 1fr; }
+  .app-shell { grid-template-columns: minmax(0, 1fr); }
   .sidebar { display: none; }
   .main-area { padding: var(--space-4); }
-  .dashboard-hero { grid-template-columns: 1fr; }
-  .top-header { grid-template-columns: 1fr; }
+  .dashboard-hero { grid-template-columns: minmax(0, 1fr); }
+  .top-header { grid-template-columns: minmax(0, 1fr); }
   .period-selector { justify-items: stretch; width: 100%; }
   .period-mode-toggle { width: 100%; }
   .period-mode { flex: 1; }
-  .period-nav { justify-content: space-between; }
+  .period-nav { justify-content: space-between; flex-wrap: wrap; }
+}
+
+/* Segmented control — section switcher inside a panel */
+.segmented {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  padding: 4px;
+  background: var(--bg-inset);
+  border-radius: var(--radius-md);
+}
+
+.segmented-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--duration-fast) var(--ease-out), color var(--duration-fast) var(--ease-out);
+}
+
+.segmented-item:hover { color: var(--text-primary); }
+
+.segmented-item.active {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-xs);
+}
+
+.segmented-count {
+  padding: 1px 6px;
+  border-radius: var(--radius-full);
+  background: var(--bg-inset);
+  color: var(--text-tertiary);
+  font-size: 0.6875rem;
+  font-weight: 600;
+}
+
+.segmented-item.active .segmented-count {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+/* Filter chip */
+.chip {
+  padding: 5px 12px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--duration-fast) var(--ease-out);
+}
+
+.chip:hover { border-color: var(--border-strong); color: var(--text-primary); }
+
+.chip.active {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+/* Editing a closed period: a deliberately louder, unmistakable state. */
+.historical-banner-unlocked {
+  background: var(--danger-soft);
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.modal-icon-warning {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  flex-shrink: 0;
+  border-radius: var(--radius-md);
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.modal-consequences {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding-left: 18px;
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  line-height: 1.5;
 }
 
 /* Historical period indicator */
@@ -888,6 +1027,58 @@ body {
 
 .mobile-nav-item.active { color: var(--accent); }
 
+/* "More" sheet exposing sections that don't fit in the bottom nav */
+.mobile-more-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 39;
+  background: rgba(0, 0, 0, 0.35);
+  display: flex;
+  align-items: flex-end;
+}
+
+.mobile-more-sheet {
+  width: 100%;
+  background: var(--bg-elevated);
+  border-top: 1px solid var(--border);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  padding: var(--space-4) var(--space-4) calc(72px + env(safe-area-inset-bottom));
+  box-shadow: var(--shadow-lg);
+}
+
+.mobile-more-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-3);
+}
+
+.mobile-more-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+.mobile-more-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: var(--space-4) var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-subtle);
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.mobile-more-item.active {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
 @media (max-width: 768px) {
   .mobile-nav { display: grid; }
   .main-area { padding-bottom: 80px; }
@@ -896,6 +1087,14 @@ body {
 /* Page transitions */
 .page-enter {
   animation: pageEnter 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+  /* Every panel root is a single-column grid; forcing minmax(0, …) stops a
+     wide child (chart, table, long label) from widening the whole page on
+     narrow viewports. */
+  min-width: 0;
+}
+
+.page-enter:where([style*="grid"]) {
+  grid-template-columns: minmax(0, 1fr);
 }
 
 @keyframes pageEnter {

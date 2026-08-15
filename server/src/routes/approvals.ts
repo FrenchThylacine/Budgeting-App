@@ -1,7 +1,7 @@
 import { Router, Request, Response } from "express";
-import { BudgetService } from "../services/BudgetService";
-import { asyncHandler, AppError, validateEnum, validateFiniteNumber, validateRequired } from "../middleware/errorHandler";
-import type { BudgetApproval } from "@/domain/types";
+import { BudgetService } from "../services/BudgetService.js";
+import { asyncHandler, AppError, validateEnum, validateFiniteNumber, validateRequired } from "../middleware/errorHandler.js";
+import type { BudgetApproval } from "../../../src/domain/types.js";
 
 const currencies = ["EUR", "USD", "LBP", "GBP", "CAD", "AUD", "JPY", "TRY", "SAR", "AED"] as const;
 const approvalStatuses = ["approved", "rejected"] as const;
@@ -100,12 +100,12 @@ export function createApprovalRoutes(): Router {
       if (existingApproval) {
         // Update existing proposal
         Object.assign(existingApproval, newApproval);
-        await service.saveSnapshot(snapshot);
+        await service.commitServerChange(snapshot);
         res.json(existingApproval);
       } else {
         // Create new approval
         snapshot.budgetApprovals.push(newApproval);
-        await service.saveSnapshot(snapshot);
+        await service.commitServerChange(snapshot);
         res.status(201).json(newApproval);
       }
     }),
@@ -143,7 +143,7 @@ export function createApprovalRoutes(): Router {
       if (req.body.note !== undefined) approval.note = String(req.body.note);
       if (req.body.decidedAt !== undefined) approval.decidedAt = String(req.body.decidedAt);
 
-      await service.saveSnapshot(snapshot);
+      await service.commitServerChange(snapshot);
       res.json(approval);
     }),
   );

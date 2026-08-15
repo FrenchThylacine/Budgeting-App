@@ -2,63 +2,102 @@ import React, { useMemo } from "react";
 import { useBudgetStore } from "../../store/budgetStore";
 import { calculateYear, calculateSuggestedMonthlyBudget } from "../../domain/calculations";
 import { monthName } from "../../domain/dates";
+import {
+  budgetPacing,
+  budgetRelevantEntries,
+  categoriesOverCap,
+  categoryBreakdown,
+  entriesForSelectedPeriod,
+  monthlyTrendBars,
+  periodComparison,
+  spendingStats,
+  weeklyTrendBars,
+} from "../../domain/analytics";
+import { TrendBarChart } from "../ui/TrendBarChart";
+import { periodLabel } from "../../domain/periods";
 import { isViewingCurrentMonth } from "../../utils/formatters";
 import { formatDualMoney } from "../../utils/formatters";
 import { Metric } from "../ui/Metric";
 import { Progress, CircularProgress } from "../ui/Progress";
 import { Badge } from "../ui/Badge";
 import { Card, CardBody } from "../ui/Card";
-import { Section } from "../ui/Section";
 import { EmptyState } from "../ui/EmptyState";
 import { Button } from "../ui/Button";
 import {
-  Wallet, Zap, PiggyBank, ArrowRight, Calendar,
+  Wallet, Zap, PiggyBank, ArrowRight, Calendar, AlertTriangle,
   TrendingUp, TrendingDown, Activity, CreditCard, BarChart3
 } from "lucide-react";
 
 export const Dashboard: React.FC = () => {
   const snapshot = useBudgetStore((state) => state.snapshot);
   const recordBudgetApproval = useBudgetStore((state) => state.recordBudgetApproval);
+  const { settings } = snapshot;
+  const mode = settings.selectedPeriodMode ?? "month";
+
   const calculation = useMemo(() => calculateYear(snapshot), [snapshot]);
   const suggestion = useMemo(() => calculateSuggestedMonthlyBudget(snapshot), [snapshot]);
 
-  const isCurrent = isViewingCurrentMonth(snapshot.settings);
+  // Shared period-aware analytics (same selectors as the Analytics page)
+  const periodEntries = useMemo(
+    () => budgetRelevantEntries(entriesForSelectedPeriod(snapshot, settings), settings),
+    [snapshot, settings],
+  );
+  const stats = useMemo(() => spendingStats(periodEntries, snapshot), [periodEntries, snapshot]);
+  const pacing = useMemo(() => budgetPacing(snapshot, periodEntries), [snapshot, periodEntries]);
+  const categories = useMemo(() => categoryBreakdown(periodEntries, snapshot), [periodEntries, snapshot]);
+  const comparison = useMemo(() => periodComparison(snapshot, settings), [snapshot, settings]);
+  const overCap = useMemo(() => categoriesOverCap(categories), [categories]);
 
-  const spent = calculation.selectedMonthSpend.total ?? 0;
-  const budget = calculation.monthlyBudgetBase;
-  const remaining = calculation.delta ?? 0;
-  const progress = budget > 0 ? (spent / budget) * 100 : 0;
+  const isCurrent = isViewingCurrentMonth(settings);
+
+  const budget = pacing?.budget ?? calculation.monthlyBudgetBase;
+  const spent = stats.total ?? 0;
+  const remaining = pacing?.remaining ?? null;
+  const progress = pacing?.utilisation ?? 0;
 
   const healthScore = useMemo(() => {
-    if (budget <= 0) return 0;
-    const ratio = remaining / budget;
+    if (pacing == null || pacing.budget <= 0) return 0;
+    const ratio = pacing.remaining / pacing.budget;
     if (ratio > 0.3) return Math.min(100, 70 + ratio * 30);
     if (ratio > 0) return Math.min(70, 30 + ratio * 130);
     return Math.max(0, 30 + ratio * 30);
-  }, [remaining, budget]);
+  }, [pacing]);
 
   const healthTone = healthScore > 70 ? "success" : healthScore > 30 ? "warning" : "danger";
   const healthMessage =
+    pacing == null ? "Budget health applies to month view" :
     healthScore > 70 ? "Excellent — spending is well controlled" :
     healthScore > 30 ? "Caution — monitor your spending" :
     "Critical — immediate action recommended";
 
   const existingApproval = snapshot.budgetApprovals.find(
-    (a) => a.year === snapshot.settings.selectedYear && a.month === snapshot.settings.selectedMonth
+    (a) => a.year === settings.selectedYear && a.month === settings.selectedMonth
   );
 
   const handleApproveBudget = (status: "approved" | "rejected") => {
     recordBudgetApproval({
-      year: snapshot.settings.selectedYear,
-      month: snapshot.settings.selectedMonth,
+      year: settings.selectedYear,
+      month: settings.selectedMonth,
       suggestedAmount: suggestion.suggestedAmount,
       approvedAmount: status === "approved" ? suggestion.suggestedAmount : null,
-      currency: snapshot.settings.baseCurrency,
+      currency: settings.baseCurrency,
       status,
       recurringTotal: suggestion.recurringTotal,
       note: status === "approved" ? "Approved from dashboard" : "Rejected from dashboard",
     });
   };
+
+  const monthlyBars = useMemo(
+    () => monthlyTrendBars(calculation.monthlyTrend, settings.selectedMonth),
+    [calculation.monthlyTrend, settings.selectedMonth],
+  );
+  const weeklyBars = useMemo(
+    () => weeklyTrendBars(calculation.weeklyTrend, settings.selectedWeek, 12),
+    [calculation.weeklyTrend, settings.selectedWeek],
+  );
+
+  const spendingLabel =
+    mode === "week" ? "Week Spending" : mode === "year" ? "Year Spending" : "Monthly Spending";
 
   return (
     <div className="dashboard-grid page-enter">
@@ -66,23 +105,35 @@ export const Dashboard: React.FC = () => {
       <div className="dashboard-hero">
         <Metric
           label="Current Budget"
-          value={formatDualMoney(budget, snapshot.settings)}
+          value={formatDualMoney(budget, settings)}
           tone="neutral"
           detail="Approved monthly budget"
           prefix={<Wallet size={16} style={{ opacity: 0.6 }} />}
         />
         <Metric
           label="Remaining"
-          value={formatDualMoney(remaining, snapshot.settings, { showSign: true })}
-          tone={remaining < 0 ? "negative" : remaining < budget * 0.2 ? "warning" : "positive"}
-          detail={remaining < 0 ? "Over budget" : `${Math.round((remaining / budget) * 100)}% left`}
+          value={remaining != null ? formatDualMoney(remaining, settings, { showSign: true }) : "—"}
+          tone={
+            remaining == null ? "neutral" :
+            remaining < 0 ? "negative" :
+            budget > 0 && remaining < budget * 0.2 ? "warning" : "positive"
+          }
+          detail={
+            remaining == null
+              ? mode !== "month" ? "Budget applies to month view" : "No monthly budget set"
+              : remaining < 0
+              ? "Over budget"
+              : budget > 0
+              ? `${Math.round((remaining / budget) * 100)}% left`
+              : undefined
+          }
           prefix={<PiggyBank size={16} style={{ opacity: 0.6 }} />}
         />
         <Metric
-          label="Monthly Spending"
-          value={formatDualMoney(spent, snapshot.settings)}
+          label={spendingLabel}
+          value={stats.total != null ? formatDualMoney(stats.total, settings) : "No data"}
           tone="neutral"
-          detail={`${calculation.selectedMonthSpend.entryCount} transactions`}
+          detail={`${stats.count} transaction${stats.count !== 1 ? "s" : ""} · ${periodLabel(settings)}`}
           prefix={<Zap size={16} style={{ opacity: 0.6 }} />}
         />
       </div>
@@ -116,14 +167,26 @@ export const Dashboard: React.FC = () => {
               <div>
                 <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
                   <span className="text-caption">Budget used</span>
-                  <span className="text-callout" style={{ fontWeight: 600 }}>{Math.round(progress)}%</span>
+                  <span className="text-callout" style={{ fontWeight: 600 }}>
+                    {pacing != null ? `${Math.round(progress)}%` : "—"}
+                  </span>
                 </div>
                 <Progress
                   value={spent}
-                  max={budget}
+                  max={budget > 0 ? budget : 1}
                   tone={progress > 100 ? "danger" : progress > 80 ? "warning" : "success"}
                 />
               </div>
+
+              {pacing?.projectedRemaining != null && (
+                <div className="text-caption" style={{
+                  color: pacing.projectedRemaining < 0 ? "var(--danger)" : "var(--text-secondary)"
+                }}>
+                  {pacing.projectedRemaining < 0
+                    ? `On this pace you would end ${formatDualMoney(Math.abs(pacing.projectedRemaining), settings)} over budget.`
+                    : `On this pace you would end the month with ${formatDualMoney(pacing.projectedRemaining, settings)} left.`}
+                </div>
+              )}
 
               <div style={{
                 display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12,
@@ -132,13 +195,13 @@ export const Dashboard: React.FC = () => {
                 <div>
                   <div className="text-footnote">General</div>
                   <div className="text-callout" style={{ fontWeight: 600, marginTop: 2 }}>
-                    {formatDualMoney(calculation.generalBudget, snapshot.settings)}
+                    {formatDualMoney(calculation.generalBudget, settings)}
                   </div>
                 </div>
                 <div>
                   <div className="text-footnote">Piloting</div>
                   <div className="text-callout" style={{ fontWeight: 600, marginTop: 2 }}>
-                    {formatDualMoney(calculation.pilotingBudget, snapshot.settings)}
+                    {formatDualMoney(calculation.pilotingBudget, settings)}
                   </div>
                 </div>
               </div>
@@ -153,12 +216,12 @@ export const Dashboard: React.FC = () => {
                 <CreditCard size={14} /> Savings & Wallet
               </div>
               <div className="text-headline" style={{ marginBottom: 4 }}>
-                {formatDualMoney(calculation.wallet.personalWalletTotal, snapshot.settings)}
+                {formatDualMoney(calculation.wallet.personalWalletTotal, settings)}
               </div>
               <div className="text-caption">Personal wallet balance</div>
               {calculation.wallet.rolloverTotal !== 0 && (
                 <div className="text-caption" style={{ marginTop: 4 }}>
-                  Rollover: {formatDualMoney(calculation.wallet.rolloverTotal, snapshot.settings, { showSign: true })}
+                  Rollover: {formatDualMoney(calculation.wallet.rolloverTotal, settings, { showSign: true })}
                 </div>
               )}
             </CardBody>
@@ -170,7 +233,7 @@ export const Dashboard: React.FC = () => {
                 <Activity size={14} /> Recurring Costs
               </div>
               <div className="text-headline" style={{ marginBottom: 4 }}>
-                {formatDualMoney(calculation.generalBudget, snapshot.settings)}
+                {formatDualMoney(calculation.generalBudget, settings)}
               </div>
               <div className="text-caption">{calculation.activityEstimates.length} active activities</div>
             </CardBody>
@@ -179,16 +242,57 @@ export const Dashboard: React.FC = () => {
           <Card>
             <CardBody>
               <div className="text-footnote" style={{ marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}>
-                <BarChart3 size={14} /> YTD Spending
+                {comparison.deltaAbs != null && comparison.deltaAbs > 0
+                  ? <TrendingUp size={14} />
+                  : <TrendingDown size={14} />} vs {comparison.previousLabel}
               </div>
-              <div className="text-headline" style={{ marginBottom: 4 }}>
-                {formatDualMoney(calculation.ytdTotal, snapshot.settings)}
+              <div className="text-headline" style={{
+                marginBottom: 4,
+                color: comparison.deltaAbs == null ? undefined :
+                  comparison.deltaAbs > 0 ? "var(--danger)" : "var(--success)"
+              }}>
+                {comparison.deltaAbs != null
+                  ? formatDualMoney(comparison.deltaAbs, settings, { showSign: true })
+                  : "No data"}
               </div>
-              <div className="text-caption">Year to date total</div>
+              <div className="text-caption">
+                {comparison.deltaPct != null
+                  ? `${comparison.deltaPct > 0 ? "+" : ""}${comparison.deltaPct.toFixed(1)}% vs previous ${mode}`
+                  : "Previous period has no recorded data"}
+              </div>
             </CardBody>
           </Card>
         </div>
       </div>
+
+      {/* Category caps breached — actionable, so it sits above the fold */}
+      {overCap.length > 0 && (
+        <Card style={{ borderColor: "var(--danger)", background: "var(--danger-soft)" }}>
+          <CardBody>
+            <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+              <AlertTriangle size={18} style={{ color: "var(--danger)", flexShrink: 0 }} />
+              <div style={{ minWidth: 0 }}>
+                <div className="text-title">
+                  {overCap.length === 1
+                    ? "1 category is over its monthly cap"
+                    : `${overCap.length} categories are over their monthly caps`}
+                </div>
+                <div className="text-caption" style={{ marginTop: 4 }}>
+                  {overCap
+                    .map(
+                      (stat) =>
+                        `${stat.category?.name ?? "Uncategorized"} (${formatDualMoney(
+                          stat.total - (stat.cap ?? 0),
+                          settings,
+                        )} over)`,
+                    )
+                    .join(" · ")}
+                </div>
+              </div>
+            </div>
+          </CardBody>
+        </Card>
+      )}
 
       {/* Budget Suggestion */}
       {isCurrent && !existingApproval && (
@@ -202,11 +306,11 @@ export const Dashboard: React.FC = () => {
                 <div className="text-title">Suggested Monthly Budget</div>
                 <div className="text-caption" style={{ marginTop: 4 }}>
                   Based on {calculation.activityEstimates.filter(a => a.activity.active && a.activity.visible).length} active recurring expenses
-                  {suggestion.recurringTotal > 0 && ` · Total recurring: ${formatDualMoney(suggestion.recurringTotal, snapshot.settings)}`}
+                  {suggestion.recurringTotal > 0 && ` · Total recurring: ${formatDualMoney(suggestion.recurringTotal, settings)}`}
                 </div>
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-                <div className="text-headline">{formatDualMoney(suggestion.suggestedAmount, snapshot.settings)}</div>
+                <div className="text-headline">{formatDualMoney(suggestion.suggestedAmount, settings)}</div>
                 <Button variant="primary" onClick={() => handleApproveBudget("approved")}>
                   Approve <ArrowRight size={16} />
                 </Button>
@@ -228,7 +332,7 @@ export const Dashboard: React.FC = () => {
                   {existingApproval.status === "approved" ? "Budget Approved" : "Budget Suggestion Rejected"}
                 </div>
                 <div className="text-caption" style={{ marginTop: 4 }}>
-                  {monthName(existingApproval.month)} {existingApproval.year} · Suggested: {formatDualMoney(existingApproval.suggestedAmount, snapshot.settings)}
+                  {monthName(existingApproval.month)} {existingApproval.year} · Suggested: {formatDualMoney(existingApproval.suggestedAmount, settings)}
                 </div>
               </div>
               <Badge tone={existingApproval.status === "approved" ? "success" : "neutral"}>
@@ -250,39 +354,49 @@ export const Dashboard: React.FC = () => {
             <div className="text-footnote" style={{ marginBottom: 16, display: "flex", alignItems: "center", gap: 6 }}>
               <TrendingUp size={14} /> Monthly Trend
             </div>
-            <MonthlyTrendChart data={calculation.monthlyTrend} settings={snapshot.settings} />
+            <TrendBarChart bars={monthlyBars} />
           </CardBody>
         </Card>
 
         <Card>
           <CardBody>
             <div className="text-footnote" style={{ marginBottom: 16, display: "flex", alignItems: "center", gap: 6 }}>
-              <TrendingDown size={14} /> Category Breakdown
+              <BarChart3 size={14} /> Category Breakdown · {periodLabel(settings)}
             </div>
-            {calculation.categoryTotals.length === 0 ? (
+            {categories.length === 0 ? (
               <EmptyState
                 title="No spending yet"
                 description="Add transactions to see your category breakdown"
               />
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-                {calculation.categoryTotals.slice(0, 6).map((cat) => {
-                  const maxTotal = calculation.categoryTotals[0].total === 0 ? 1 : calculation.categoryTotals[0].total;
+                {categories.slice(0, 6).map((cat) => {
+                  const maxTotal = categories[0].total === 0 ? 1 : categories[0].total;
                   return (
                     <div key={cat.categoryId}>
                       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6, alignItems: "center" }}>
                         <span className="text-callout" style={{ display: "flex", alignItems: "center", gap: 8 }}>
                           <span style={{
-                            width: 10, height: 10, borderRadius: "50%", background: cat.color,
+                            width: 10, height: 10, borderRadius: "50%", background: cat.category?.color ?? "#64748B",
                             display: "inline-block", flexShrink: 0
                           }} />
-                          {cat.categoryName}
+                          {cat.category?.name ?? "Uncategorized"}
+                          {cat.share != null && (
+                            <span className="text-footnote" style={{ color: "var(--text-tertiary)" }}>
+                              {cat.share.toFixed(0)}%
+                            </span>
+                          )}
                         </span>
                         <span className="text-callout" style={{ fontWeight: 600 }}>
-                          {formatDualMoney(cat.total, snapshot.settings)}
+                          {formatDualMoney(cat.total, settings)}
                         </span>
                       </div>
-                      <Progress value={cat.total} max={maxTotal} tone="neutral" />
+                      <Progress
+                        value={cat.total}
+                        max={maxTotal}
+                        color={cat.category?.color ?? "var(--accent)"}
+                        label={`${cat.category?.name ?? "Uncategorized"} spending`}
+                      />
                     </div>
                   );
                 })}
@@ -319,7 +433,7 @@ export const Dashboard: React.FC = () => {
                 </div>
               </div>
               <div className="text-callout" style={{ fontWeight: 600, color: "var(--text-secondary)" }}>
-                {formatDualMoney(est.monthlyBase, snapshot.settings)}
+                {formatDualMoney(est.monthlyBase, settings)}
                 <span className="text-footnote" style={{ marginLeft: 4 }}>/mo</span>
               </div>
             </div>
@@ -336,56 +450,9 @@ export const Dashboard: React.FC = () => {
 
       <Card>
         <CardBody>
-          <WeeklyTrendChart data={calculation.weeklyTrend} settings={snapshot.settings} currentWeek={calculation.week} />
+          <TrendBarChart bars={weeklyBars} height={110} />
         </CardBody>
       </Card>
     </div>
   );
 };
-
-/* Simple bar chart using divs - no external lib needed for basic viz */
-function MonthlyTrendChart({ data, settings }: { data: Array<{ label: string; total: number | null; status: string }>; settings: any }) {
-  const values = data.map((d) => d.total ?? 0);
-  const max = Math.max(...values, 1);
-  return (
-    <div className="chart-container" style={{ display: "flex", alignItems: "flex-end", gap: 6, paddingTop: 20 }}>
-      {data.map((d, i) => {
-        const pct = (values[i] / max) * 100;
-        const isCurrent = d.status !== "nan" && d.status !== "pending";
-        return (
-          <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
-            <div style={{
-              width: "100%", height: `${pct}%`, minHeight: 4, maxHeight: "100%",
-              background: isCurrent ? "var(--accent)" : "var(--bg-inset)",
-              borderRadius: "4px 4px 0 0", transition: "height 0.5s ease-out", opacity: isCurrent ? 1 : 0.4
-            }} />
-            <span className="text-footnote" style={{ fontSize: "0.625rem" }}>{d.label.slice(0, 3)}</span>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-function WeeklyTrendChart({ data, settings, currentWeek }: { data: Array<{ label: string; total: number | null }>; settings: any; currentWeek: number }) {
-  const values = data.map((d) => d.total ?? 0);
-  const max = Math.max(...values, 1);
-  return (
-    <div style={{ display: "flex", alignItems: "flex-end", gap: 4, height: 120, paddingTop: 10 }}>
-      {data.slice(0, Math.min(data.length, 12)).map((d, i) => {
-        const pct = (values[i] / max) * 100;
-        const isCurrent = i + 1 === currentWeek;
-        return (
-          <div key={i} style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
-            <div style={{
-              width: "100%", height: `${pct}%`, minHeight: 2,
-              background: isCurrent ? "var(--accent)" : "var(--bg-inset)",
-              borderRadius: 3, transition: "height 0.5s ease-out"
-            }} />
-            <span className="text-footnote" style={{ fontSize: "0.6rem" }}>W{i + 1}</span>
-          </div>
-        );
-      })}
-    </div>
-  );
-}

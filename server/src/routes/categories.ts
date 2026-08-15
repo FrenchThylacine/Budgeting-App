@@ -1,7 +1,7 @@
 import { Router, Request, Response } from "express";
-import { BudgetService } from "../services/BudgetService";
-import { asyncHandler, AppError, validateEnum, validateFiniteNumber, validateRequired } from "../middleware/errorHandler";
-import type { BudgetCategory } from "@/domain/types";
+import { BudgetService } from "../services/BudgetService.js";
+import { asyncHandler, AppError, validateEnum, validateFiniteNumber, validateRequired } from "../middleware/errorHandler.js";
+import type { BudgetCategory } from "../../../src/domain/types.js";
 
 const categoryBuckets = ["general", "piloting", "personal", "wallet"] as const;
 
@@ -62,9 +62,42 @@ export function createCategoryRoutes(): Router {
       };
 
       snapshot.categories.push(newCategory);
-      await service.saveSnapshot(snapshot);
+      await service.commitServerChange(snapshot);
 
       res.status(201).json(newCategory);
+    }),
+  );
+
+  /**
+   * PATCH /api/categories/reorder
+   * Reorder categories.
+   *
+   * Must stay registered before "/:id": Express matches in registration order,
+   * so a later literal route is shadowed by the earlier parameter route and
+   * would be answered with "Category not found: reorder".
+   */
+  router.patch(
+    "/reorder",
+    asyncHandler(async (req: Request, res: Response) => {
+      validateRequired(req.body, "sourceId", "targetId");
+
+      const service = getService();
+      let snapshot = await service.getOrThrow();
+      const { sourceId, targetId } = req.body;
+
+      const cats = snapshot.categories;
+      const sourceIndex = cats.findIndex((c) => c.id === sourceId);
+      const targetIndex = cats.findIndex((c) => c.id === targetId);
+
+      if (sourceIndex < 0 || targetIndex < 0) {
+        throw new AppError(404, "Source or target category not found");
+      }
+
+      const [source] = cats.splice(sourceIndex, 1);
+      cats.splice(targetIndex, 0, source);
+
+      await service.commitServerChange(snapshot);
+      res.json(cats);
     }),
   );
 
@@ -106,13 +139,21 @@ export function createCategoryRoutes(): Router {
       if (req.body.description !== undefined) category.description = req.body.description;
       if (req.body.parentId !== undefined) {
         if (req.body.parentId) {
+          if (req.body.parentId === categoryId) {
+            throw new AppError(400, "A category cannot be its own parent");
+          }
           const parent = snapshot.categories.find((c) => c.id === req.body.parentId);
           if (!parent || parent.archived) throw new AppError(400, "Invalid parent category");
+          // Categories nest one level deep; allowing a child as a parent
+          // creates a cycle that any chain walk would loop on.
+          if (parent.parentId) {
+            throw new AppError(400, "Categories nest one level deep: the chosen parent is already a subcategory");
+          }
         }
         category.parentId = req.body.parentId || undefined;
       }
 
-      await service.saveSnapshot(snapshot);
+      await service.commitServerChange(snapshot);
       res.json(category);
     }),
   );
@@ -134,37 +175,8 @@ export function createCategoryRoutes(): Router {
       }
 
       category.archived = true;
-      await service.saveSnapshot(snapshot);
+      await service.commitServerChange(snapshot);
       res.json(category);
-    }),
-  );
-
-  /**
-   * PATCH /api/categories/reorder
-   * Reorder categories
-   */
-  router.patch(
-    "/reorder",
-    asyncHandler(async (req: Request, res: Response) => {
-      validateRequired(req.body, "sourceId", "targetId");
-
-      const service = getService();
-      let snapshot = await service.getOrThrow();
-      const { sourceId, targetId } = req.body;
-
-      const cats = snapshot.categories;
-      const sourceIndex = cats.findIndex((c) => c.id === sourceId);
-      const targetIndex = cats.findIndex((c) => c.id === targetId);
-
-      if (sourceIndex < 0 || targetIndex < 0) {
-        throw new AppError(404, "Source or target category not found");
-      }
-
-      const [source] = cats.splice(sourceIndex, 1);
-      cats.splice(targetIndex, 0, source);
-
-      await service.saveSnapshot(snapshot);
-      res.json(cats);
     }),
   );
 

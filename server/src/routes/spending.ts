@@ -1,8 +1,8 @@
 import { Router, Request, Response } from "express";
-import { BudgetService } from "../services/BudgetService";
-import { asyncHandler, AppError, validateDateInput, validateEnum, validateFiniteNumber, validateRequired } from "../middleware/errorHandler";
-import type { SpendingEntry } from "@/domain/types";
-import { getIsoWeek } from "@/domain/dates";
+import { BudgetService } from "../services/BudgetService.js";
+import { asyncHandler, AppError, validateDateInput, validateEnum, validateFiniteNumber, validateRequired } from "../middleware/errorHandler.js";
+import type { SpendingEntry } from "../../../src/domain/types.js";
+import { getIsoWeek } from "../../../src/domain/dates.js";
 
 const currencies = ["EUR", "USD", "LBP", "GBP", "CAD", "AUD", "JPY", "TRY", "SAR", "AED"] as const;
 const recurrenceTypes = ["none", "weekly", "monthly", "yearly", "session", "purchase", "custom"] as const;
@@ -79,7 +79,7 @@ export function createSpendingRoutes(): Router {
 
       yearRecord.spendingEntries.push(newEntry);
       yearRecord.updatedAt = now;
-      await service.saveSnapshot(snapshot);
+      await service.commitServerChange(snapshot);
 
       res.status(201).json(newEntry);
     }),
@@ -118,11 +118,28 @@ export function createSpendingRoutes(): Router {
             const date = new Date(`${entry.date}T00:00:00Z`);
             entry.month = date.getUTCMonth() + 1;
             entry.week = getIsoWeek(date);
+            // The year must follow the date too, and the entry has to move to
+            // the matching year record. Without this an entry re-dated across
+            // a year boundary keeps a stale year and stays filed under the
+            // wrong record, matching neither the client store's behaviour nor
+            // the database's year grouping.
+            entry.year = date.getUTCFullYear();
           }
 
           entry.updatedAt = new Date().toISOString();
+
+          if (entry.year !== yearRecord.year) {
+            const targetRecord = snapshot.years[String(entry.year)];
+            if (!targetRecord) {
+              throw new AppError(400, `No data for year ${entry.year}; cannot move entry into it`);
+            }
+            yearRecord.spendingEntries = yearRecord.spendingEntries.filter((e) => e.id !== entryId);
+            targetRecord.spendingEntries.push(entry);
+            targetRecord.updatedAt = entry.updatedAt;
+          }
+
           yearRecord.updatedAt = entry.updatedAt;
-          await service.saveSnapshot(snapshot);
+          await service.commitServerChange(snapshot);
           found = true;
           res.json(entry);
           break;
@@ -152,7 +169,7 @@ export function createSpendingRoutes(): Router {
         if (index >= 0) {
           yearRecord.spendingEntries.splice(index, 1);
           yearRecord.updatedAt = new Date().toISOString();
-          await service.saveSnapshot(snapshot);
+          await service.commitServerChange(snapshot);
           found = true;
           res.json({ success: true, message: "Entry deleted" });
           break;

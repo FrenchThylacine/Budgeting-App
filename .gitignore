@@ -28,3 +28,9 @@ Thumbs.db
 .vercel
 .env*
 *.tsbuildinfo
+# Type/JS artifacts emitted into src by the server build
+src/**/*.js
+src/**/*.js.map
+src/**/*.d.ts
+src/**/*.d.ts.map
+!src/vite-env.d.ts

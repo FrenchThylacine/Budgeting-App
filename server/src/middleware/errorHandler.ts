@@ -19,6 +19,19 @@ export function errorHandler(err: Error, _req: Request, res: Response, _next: Ne
     return;
   }
 
+  // body-parser (express.json) rejects malformed or non-object payloads with an
+  // error carrying its own 4xx status. Without this branch those surface as an
+  // opaque 500, which hides a client-side mistake behind a server fault.
+  const status = (err as { status?: number; statusCode?: number }).status
+    ?? (err as { statusCode?: number }).statusCode;
+  if (typeof status === "number" && status >= 400 && status < 500) {
+    res.status(status).json({
+      error: err.message || "Invalid request payload",
+      statusCode: status,
+    });
+    return;
+  }
+
   console.error("Unexpected error:", err);
   res.status(500).json({
     error: "Internal server error",

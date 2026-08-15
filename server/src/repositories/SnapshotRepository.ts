@@ -1,5 +1,5 @@
-import { getDatabase } from "../db";
-import { query as execQuery } from "../db/queryHelper";
+import { getDatabase } from "../db/index.js";
+import { query as execQuery } from "../db/queryHelper.js";
 import type {
   BudgetSnapshot,
   Activity,
@@ -13,13 +13,50 @@ import type {
   YearRecord,
   SeasonalPreset,
   ScenarioPreset,
-} from "@/domain/types";
+} from "../../../src/domain/types.js";
+
+interface PendingQuery {
+  text: string;
+  params: unknown[];
+}
 
 export class SnapshotRepository {
   constructor(private sql = getDatabase()) {}
 
   private async query(sqlString: string, params: unknown[] = []): Promise<Record<string, any>[]> {
     return execQuery(this.sql, sqlString, params);
+  }
+
+  /** Build an unexecuted Neon query for batched transaction execution. */
+  private buildQuery(text: string, params: unknown[]): unknown {
+    const parts = text.split(/\$\d+/);
+    const strings = Object.assign([...parts], { raw: [...parts] }) as unknown as TemplateStringsArray;
+    return (this.sql as any)(strings, ...params);
+  }
+
+  /**
+   * Execute all pending writes atomically. The Neon HTTP driver exposes
+   * `sql.transaction([...])` which runs the batch inside one transaction.
+   * When the driver (or a test double) has no transaction support, fall back
+   * to sequential execution.
+   */
+  private async executeWrites(writes: PendingQuery[]): Promise<void> {
+    const sqlAny = this.sql as any;
+    if (typeof sqlAny.transaction === "function") {
+      await sqlAny.transaction(writes.map((w) => this.buildQuery(w.text, w.params)));
+      return;
+    }
+    for (const w of writes) {
+      await this.query(w.text, w.params);
+    }
+  }
+
+  /** Read only the stored revision counter (cheap concurrency check). */
+  async loadRevision(snapshotId: string = "active"): Promise<number | null> {
+    const rows = await this.query("SELECT revision FROM snapshots WHERE id = $1", [snapshotId]);
+    if (!rows[0]) return null;
+    const revision = Number(rows[0].revision);
+    return Number.isFinite(revision) ? revision : 0;
   }
 
   async loadSnapshot(snapshotId: string = "active"): Promise<BudgetSnapshot | null> {
@@ -47,6 +84,7 @@ export class SnapshotRepository {
 
     return {
       version: row.version,
+      revision: row.revision != null ? Number(row.revision) : 0,
       settings,
       categories,
       years,
@@ -59,20 +97,41 @@ export class SnapshotRepository {
 
   async saveSnapshot(snapshot: BudgetSnapshot, snapshotId: string = "active"): Promise<void> {
     const now = new Date().toISOString();
+    const writes: PendingQuery[] = [];
 
-    // Upsert snapshot
-    await this.query(`
-      INSERT INTO snapshots (id, version, settings, created_at, updated_at)
-      VALUES ($1, $2, $3, $4, $5)
+    // Resolve stable year-row ids up front so every write below can be
+    // batched into a single transaction.
+    const yearIds = new Map<number, { id: string; exists: boolean }>();
+    for (const yearRecord of Object.values(snapshot.years)) {
+      const existing = await this.query(
+        "SELECT id FROM years WHERE snapshot_id = $1 AND year = $2",
+        [snapshotId, yearRecord.year],
+      );
+      if (existing.length > 0) {
+        yearIds.set(yearRecord.year, { id: existing[0].id, exists: true });
+      } else {
+        yearIds.set(yearRecord.year, { id: `year-${snapshotId}-${yearRecord.year}`, exists: false });
+      }
+    }
+
+    // Snapshot upsert (revision participates in optimistic concurrency).
+    writes.push({
+      text: `
+      INSERT INTO snapshots (id, version, revision, settings, created_at, updated_at)
+      VALUES ($1, $2, $3, $4, $5, $6)
       ON CONFLICT (id) DO UPDATE SET
         version = EXCLUDED.version,
+        revision = EXCLUDED.revision,
         settings = EXCLUDED.settings,
         updated_at = EXCLUDED.updated_at
-    `, [snapshotId, snapshot.version, JSON.stringify(snapshot.settings), now, now]);
+    `,
+      params: [snapshotId, snapshot.version, snapshot.revision ?? 0, JSON.stringify(snapshot.settings), now, now],
+    });
 
     // Categories
     for (const category of snapshot.categories) {
-      await this.query(`
+      writes.push({
+        text: `
         INSERT INTO categories
         (id, snapshot_id, name, bucket, color, monthly_cap, notes, archived, icon, description, parent_id)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
@@ -86,46 +145,49 @@ export class SnapshotRepository {
           icon = EXCLUDED.icon,
           description = EXCLUDED.description,
           parent_id = EXCLUDED.parent_id
-      `, [
-        category.id,
-        snapshotId,
-        category.name,
-        category.bucket,
-        category.color,
-        category.monthlyCap ?? null,
-        category.notes ?? null,
-        category.archived ? 1 : 0,
-        category.icon ?? null,
-        category.description ?? null,
-        category.parentId ?? null,
-      ]);
+      `,
+        params: [
+          category.id,
+          snapshotId,
+          category.name,
+          category.bucket,
+          category.color,
+          category.monthlyCap ?? null,
+          category.notes ?? null,
+          category.archived === true,
+          category.icon ?? null,
+          category.description ?? null,
+          category.parentId ?? null,
+        ],
+      });
     }
     const catIds = snapshot.categories.map((c) => c.id);
     if (catIds.length > 0) {
-      await this.query(
-        `DELETE FROM categories WHERE snapshot_id = $1 AND id NOT IN (${catIds.map((_, i) => `$${i + 2}`).join(", ")})`,
-        [snapshotId, ...catIds]
-      );
+      writes.push({
+        text: `DELETE FROM categories WHERE snapshot_id = $1 AND id NOT IN (${catIds.map((_, i) => `$${i + 2}`).join(", ")})`,
+        params: [snapshotId, ...catIds],
+      });
     } else {
-      await this.query("DELETE FROM categories WHERE snapshot_id = $1", [snapshotId]);
+      writes.push({ text: "DELETE FROM categories WHERE snapshot_id = $1", params: [snapshotId] });
     }
 
     // Years and nested data
     for (const yearRecord of Object.values(snapshot.years)) {
-      await this.saveYearRecord(snapshotId, yearRecord, now);
+      const yearInfo = yearIds.get(yearRecord.year)!;
+      this.collectYearWrites(writes, snapshotId, yearRecord, yearInfo, now);
     }
-    const activeYears = Object.values(snapshot.years);
-    const activeYearNums = activeYears.map((y) => y.year);
+    const activeYearNums = Object.values(snapshot.years).map((y) => y.year);
     if (activeYearNums.length > 0) {
-      await this.query(
-        `DELETE FROM years WHERE snapshot_id = $1 AND year NOT IN (${activeYearNums.map((_, i) => `$${i + 2}`).join(", ")})`,
-        [snapshotId, ...activeYearNums]
-      );
+      writes.push({
+        text: `DELETE FROM years WHERE snapshot_id = $1 AND year NOT IN (${activeYearNums.map((_, i) => `$${i + 2}`).join(", ")})`,
+        params: [snapshotId, ...activeYearNums],
+      });
     }
 
     // Presets
     for (const preset of snapshot.seasonalPresets) {
-      await this.query(`
+      writes.push({
+        text: `
         INSERT INTO seasonal_presets
         (id, snapshot_id, name, season, activity_overrides, notes)
         VALUES ($1, $2, $3, $4, $5, $6)
@@ -134,20 +196,23 @@ export class SnapshotRepository {
           season = EXCLUDED.season,
           activity_overrides = EXCLUDED.activity_overrides,
           notes = EXCLUDED.notes
-      `, [preset.id, snapshotId, preset.name, preset.season, JSON.stringify(preset.activityOverrides), preset.notes]);
+      `,
+        params: [preset.id, snapshotId, preset.name, preset.season, JSON.stringify(preset.activityOverrides), preset.notes],
+      });
     }
     const seasonalIds = snapshot.seasonalPresets.map((p) => p.id);
     if (seasonalIds.length > 0) {
-      await this.query(
-        `DELETE FROM seasonal_presets WHERE snapshot_id = $1 AND id NOT IN (${seasonalIds.map((_, i) => `$${i + 2}`).join(", ")})`,
-        [snapshotId, ...seasonalIds]
-      );
+      writes.push({
+        text: `DELETE FROM seasonal_presets WHERE snapshot_id = $1 AND id NOT IN (${seasonalIds.map((_, i) => `$${i + 2}`).join(", ")})`,
+        params: [snapshotId, ...seasonalIds],
+      });
     } else {
-      await this.query("DELETE FROM seasonal_presets WHERE snapshot_id = $1", [snapshotId]);
+      writes.push({ text: "DELETE FROM seasonal_presets WHERE snapshot_id = $1", params: [snapshotId] });
     }
 
     for (const preset of snapshot.scenarioPresets) {
-      await this.query(`
+      writes.push({
+        text: `
         INSERT INTO scenario_presets
         (id, snapshot_id, name, monthly_budget, pilot_included_in_budget, category_caps, notes)
         VALUES ($1, $2, $3, $4, $5, $6, $7)
@@ -157,29 +222,32 @@ export class SnapshotRepository {
           pilot_included_in_budget = EXCLUDED.pilot_included_in_budget,
           category_caps = EXCLUDED.category_caps,
           notes = EXCLUDED.notes
-      `, [
-        preset.id,
-        snapshotId,
-        preset.name,
-        preset.monthlyBudget ?? null,
-        preset.pilotIncludedInBudget ? 1 : 0,
-        preset.categoryCaps ? JSON.stringify(preset.categoryCaps) : null,
-        preset.notes,
-      ]);
+      `,
+        params: [
+          preset.id,
+          snapshotId,
+          preset.name,
+          preset.monthlyBudget ?? null,
+          preset.pilotIncludedInBudget === true,
+          preset.categoryCaps ? JSON.stringify(preset.categoryCaps) : null,
+          preset.notes,
+        ],
+      });
     }
     const scenarioIds = snapshot.scenarioPresets.map((p) => p.id);
     if (scenarioIds.length > 0) {
-      await this.query(
-        `DELETE FROM scenario_presets WHERE snapshot_id = $1 AND id NOT IN (${scenarioIds.map((_, i) => `$${i + 2}`).join(", ")})`,
-        [snapshotId, ...scenarioIds]
-      );
+      writes.push({
+        text: `DELETE FROM scenario_presets WHERE snapshot_id = $1 AND id NOT IN (${scenarioIds.map((_, i) => `$${i + 2}`).join(", ")})`,
+        params: [snapshotId, ...scenarioIds],
+      });
     } else {
-      await this.query("DELETE FROM scenario_presets WHERE snapshot_id = $1", [snapshotId]);
+      writes.push({ text: "DELETE FROM scenario_presets WHERE snapshot_id = $1", params: [snapshotId] });
     }
 
-    // Budget approvals
+    // Budget approvals are historical records: upsert only, never delete.
     for (const approval of snapshot.budgetApprovals) {
-      await this.query(`
+      writes.push({
+        text: `
         INSERT INTO budget_approvals
         (id, year, month, suggested_amount, approved_amount, currency, status, recurring_total, note, created_at, decided_at)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
@@ -191,52 +259,78 @@ export class SnapshotRepository {
           recurring_total = EXCLUDED.recurring_total,
           note = EXCLUDED.note,
           decided_at = EXCLUDED.decided_at
-      `, [
-        approval.id,
-        approval.year,
-        approval.month,
-        approval.suggestedAmount,
-        approval.approvedAmount ?? null,
-        approval.currency,
-        approval.status,
-        approval.recurringTotal,
-        approval.note ?? null,
-        approval.createdAt,
-        approval.decidedAt,
-      ]);
+      `,
+        params: [
+          approval.id,
+          approval.year,
+          approval.month,
+          approval.suggestedAmount,
+          approval.approvedAmount ?? null,
+          approval.currency,
+          approval.status,
+          approval.recurringTotal,
+          approval.note ?? null,
+          approval.createdAt,
+          approval.decidedAt,
+        ],
+      });
     }
 
-    // Audit log
+    // Audit log (append-style upsert; historical rows are preserved).
     for (const log of snapshot.auditLog) {
-      await this.query(`
+      writes.push({
+        text: `
         INSERT INTO audit_log
-        (id, snapshot_id, type, summary, metadata, created_at)
-        VALUES ($1, $2, $3, $4, $5, $6)
+        (id, snapshot_id, type, summary, metadata, historical_edit, historical_period, created_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
         ON CONFLICT (id) DO UPDATE SET
           summary = EXCLUDED.summary,
-          metadata = EXCLUDED.metadata
-      `, [log.id, snapshotId, log.type, log.summary, log.metadata ? JSON.stringify(log.metadata) : null, log.createdAt]);
+          metadata = EXCLUDED.metadata,
+          historical_edit = EXCLUDED.historical_edit,
+          historical_period = EXCLUDED.historical_period
+      `,
+        params: [
+          log.id,
+          snapshotId,
+          log.type,
+          log.summary,
+          log.metadata ? JSON.stringify(log.metadata) : null,
+          log.historicalEdit === true,
+          log.historicalPeriod ?? null,
+          log.createdAt,
+        ],
+      });
     }
+
+    await this.executeWrites(writes);
   }
 
-  private async saveYearRecord(snapshotId: string, yearRecord: YearRecord, now: string): Promise<void> {
-    const existingYears = await this.query("SELECT id FROM years WHERE snapshot_id = $1 AND year = $2", [snapshotId, yearRecord.year]);
-    let yearId: string;
+  private collectYearWrites(
+    writes: PendingQuery[],
+    snapshotId: string,
+    yearRecord: YearRecord,
+    yearInfo: { id: string; exists: boolean },
+    now: string,
+  ): void {
+    const yearId = yearInfo.id;
 
-    if (existingYears.length === 0) {
-      yearId = `year-${snapshotId}-${yearRecord.year}-${Date.now()}`;
-      await this.query(`
+    if (!yearInfo.exists) {
+      writes.push({
+        text: `
         INSERT INTO years (id, snapshot_id, year, created_at, updated_at)
         VALUES ($1, $2, $3, $4, $5)
-      `, [yearId, snapshotId, yearRecord.year, yearRecord.createdAt, now]);
+        ON CONFLICT (id) DO UPDATE SET updated_at = EXCLUDED.updated_at
+      `,
+        params: [yearId, snapshotId, yearRecord.year, yearRecord.createdAt, now],
+      });
     } else {
-      yearId = existingYears[0].id;
-      await this.query("UPDATE years SET updated_at = $1 WHERE id = $2", [now, yearId]);
+      writes.push({ text: "UPDATE years SET updated_at = $1 WHERE id = $2", params: [now, yearId] });
     }
 
     // Activities - Upsert and delete missing
     for (const activity of yearRecord.activities) {
-      await this.query(`
+      writes.push({
+        text: `
         INSERT INTO activities
         (id, year_id, name, category_id, currency, recurrence_type, recurrence_interval,
          price_per_session, price_per_purchase, price_per_month, estimated_cost, yearly_estimate,
@@ -259,41 +353,44 @@ export class SnapshotRepository {
           "order" = EXCLUDED."order",
           notes = EXCLUDED.notes,
           updated_at = EXCLUDED.updated_at
-      `, [
-        activity.id,
-        yearId,
-        activity.name,
-        activity.categoryId,
-        activity.currency,
-        activity.recurrenceType,
-        activity.recurrenceInterval,
-        activity.pricePerSession ?? null,
-        activity.pricePerPurchase ?? null,
-        activity.pricePerMonth ?? null,
-        activity.estimatedCost ?? null,
-        activity.yearlyEstimate ?? null,
-        activity.active ? 1 : 0,
-        activity.visible ? 1 : 0,
-        activity.seasonalTag,
-        activity.order,
-        activity.notes || "",
-        now,
-        now,
-      ]);
+      `,
+        params: [
+          activity.id,
+          yearId,
+          activity.name,
+          activity.categoryId,
+          activity.currency,
+          activity.recurrenceType,
+          activity.recurrenceInterval,
+          activity.pricePerSession ?? null,
+          activity.pricePerPurchase ?? null,
+          activity.pricePerMonth ?? null,
+          activity.estimatedCost ?? null,
+          activity.yearlyEstimate ?? null,
+          activity.active === true,
+          activity.visible === true,
+          activity.seasonalTag,
+          activity.order,
+          activity.notes || "",
+          now,
+          now,
+        ],
+      });
     }
     const actIds = yearRecord.activities.map((a) => a.id);
     if (actIds.length > 0) {
-      await this.query(
-        `DELETE FROM activities WHERE year_id = $1 AND id NOT IN (${actIds.map((_, i) => `$${i + 2}`).join(", ")})`,
-        [yearId, ...actIds]
-      );
+      writes.push({
+        text: `DELETE FROM activities WHERE year_id = $1 AND id NOT IN (${actIds.map((_, i) => `$${i + 2}`).join(", ")})`,
+        params: [yearId, ...actIds],
+      });
     } else {
-      await this.query("DELETE FROM activities WHERE year_id = $1", [yearId]);
+      writes.push({ text: "DELETE FROM activities WHERE year_id = $1", params: [yearId] });
     }
 
     // Spending entries - Upsert and delete missing
     for (const entry of yearRecord.spendingEntries) {
-      await this.query(`
+      writes.push({
+        text: `
         INSERT INTO spending_entries
         (id, year_id, month, week, date, category_id, activity_id, amount, currency,
          recurrence_type, is_piloting, source, note, created_at, updated_at)
@@ -311,37 +408,40 @@ export class SnapshotRepository {
           source = EXCLUDED.source,
           note = EXCLUDED.note,
           updated_at = EXCLUDED.updated_at
-      `, [
-        entry.id,
-        yearId,
-        entry.month,
-        entry.week,
-        entry.date,
-        entry.categoryId,
-        entry.activityId ?? null,
-        entry.amount,
-        entry.currency,
-        entry.recurrenceType,
-        entry.isPiloting ? 1 : 0,
-        entry.source || "personal",
-        entry.note ?? null,
-        entry.createdAt,
-        entry.updatedAt,
-      ]);
+      `,
+        params: [
+          entry.id,
+          yearId,
+          entry.month,
+          entry.week,
+          entry.date,
+          entry.categoryId,
+          entry.activityId ?? null,
+          entry.amount,
+          entry.currency,
+          entry.recurrenceType,
+          entry.isPiloting === true,
+          entry.source || "personal",
+          entry.note ?? null,
+          entry.createdAt,
+          entry.updatedAt,
+        ],
+      });
     }
     const spendIds = yearRecord.spendingEntries.map((e) => e.id);
     if (spendIds.length > 0) {
-      await this.query(
-        `DELETE FROM spending_entries WHERE year_id = $1 AND id NOT IN (${spendIds.map((_, i) => `$${i + 2}`).join(", ")})`,
-        [yearId, ...spendIds]
-      );
+      writes.push({
+        text: `DELETE FROM spending_entries WHERE year_id = $1 AND id NOT IN (${spendIds.map((_, i) => `$${i + 2}`).join(", ")})`,
+        params: [yearId, ...spendIds],
+      });
     } else {
-      await this.query("DELETE FROM spending_entries WHERE year_id = $1", [yearId]);
+      writes.push({ text: "DELETE FROM spending_entries WHERE year_id = $1", params: [yearId] });
     }
 
     // Wishlist items - Upsert and delete missing
     for (const item of yearRecord.wishlistItems) {
-      await this.query(`
+      writes.push({
+        text: `
         INSERT INTO wishlist_items
         (id, year_id, name, category_id, actual_price, effective_value, currency,
          bought, in_wishlist, priority, date_added, date_purchased, notes, active, created_at, updated_at)
@@ -360,38 +460,41 @@ export class SnapshotRepository {
           notes = EXCLUDED.notes,
           active = EXCLUDED.active,
           updated_at = EXCLUDED.updated_at
-      `, [
-        item.id,
-        yearId,
-        item.name,
-        item.categoryId,
-        item.actualPrice ?? null,
-        item.effectiveValue ?? null,
-        item.currency,
-        item.bought ? 1 : 0,
-        item.inWishlist ? 1 : 0,
-        item.priority,
-        item.dateAdded,
-        item.datePurchased ?? null,
-        item.notes ?? null,
-        item.active ? 1 : 0,
-        now,
-        now,
-      ]);
+      `,
+        params: [
+          item.id,
+          yearId,
+          item.name,
+          item.categoryId,
+          item.actualPrice ?? null,
+          item.effectiveValue ?? null,
+          item.currency,
+          item.bought === true,
+          item.inWishlist === true,
+          item.priority,
+          item.dateAdded,
+          item.datePurchased ?? null,
+          item.notes ?? null,
+          item.active === true,
+          now,
+          now,
+        ],
+      });
     }
     const wishIds = yearRecord.wishlistItems.map((i) => i.id);
     if (wishIds.length > 0) {
-      await this.query(
-        `DELETE FROM wishlist_items WHERE year_id = $1 AND id NOT IN (${wishIds.map((_, i) => `$${i + 2}`).join(", ")})`,
-        [yearId, ...wishIds]
-      );
+      writes.push({
+        text: `DELETE FROM wishlist_items WHERE year_id = $1 AND id NOT IN (${wishIds.map((_, i) => `$${i + 2}`).join(", ")})`,
+        params: [yearId, ...wishIds],
+      });
     } else {
-      await this.query("DELETE FROM wishlist_items WHERE year_id = $1", [yearId]);
+      writes.push({ text: "DELETE FROM wishlist_items WHERE year_id = $1", params: [yearId] });
     }
 
     // Wallet entries - Upsert and delete missing
     for (const entry of yearRecord.walletEntries) {
-      await this.query(`
+      writes.push({
+        text: `
         INSERT INTO wallet_entries (id, year_id, month, amount, currency, source, type, note, created_at)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
         ON CONFLICT (id) DO UPDATE SET
@@ -401,31 +504,34 @@ export class SnapshotRepository {
           source = EXCLUDED.source,
           type = EXCLUDED.type,
           note = EXCLUDED.note
-      `, [
-        entry.id,
-        yearId,
-        entry.month,
-        entry.amount,
-        entry.currency,
-        entry.source,
-        entry.type,
-        entry.note ?? null,
-        entry.createdAt,
-      ]);
+      `,
+        params: [
+          entry.id,
+          yearId,
+          entry.month,
+          entry.amount,
+          entry.currency,
+          entry.source,
+          entry.type,
+          entry.note ?? null,
+          entry.createdAt,
+        ],
+      });
     }
     const walletIds = yearRecord.walletEntries.map((e) => e.id);
     if (walletIds.length > 0) {
-      await this.query(
-        `DELETE FROM wallet_entries WHERE year_id = $1 AND id NOT IN (${walletIds.map((_, i) => `$${i + 2}`).join(", ")})`,
-        [yearId, ...walletIds]
-      );
+      writes.push({
+        text: `DELETE FROM wallet_entries WHERE year_id = $1 AND id NOT IN (${walletIds.map((_, i) => `$${i + 2}`).join(", ")})`,
+        params: [yearId, ...walletIds],
+      });
     } else {
-      await this.query("DELETE FROM wallet_entries WHERE year_id = $1", [yearId]);
+      writes.push({ text: "DELETE FROM wallet_entries WHERE year_id = $1", params: [yearId] });
     }
 
     // Closed months - Upsert and delete missing
     for (const record of yearRecord.closedMonths) {
-      await this.query(`
+      writes.push({
+        text: `
         INSERT INTO closed_months (id, year_id, month, status, spend_total, delta, rollover_wallet_entry_id, confirmed_at, note)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
         ON CONFLICT (id) DO UPDATE SET
@@ -436,26 +542,28 @@ export class SnapshotRepository {
           rollover_wallet_entry_id = EXCLUDED.rollover_wallet_entry_id,
           confirmed_at = EXCLUDED.confirmed_at,
           note = EXCLUDED.note
-      `, [
-        record.id,
-        yearId,
-        record.month,
-        record.status,
-        record.spendTotal ?? null,
-        record.delta ?? null,
-        record.rolloverWalletEntryId ?? null,
-        record.confirmedAt,
-        record.note ?? null,
-      ]);
+      `,
+        params: [
+          record.id,
+          yearId,
+          record.month,
+          record.status,
+          record.spendTotal ?? null,
+          record.delta ?? null,
+          record.rolloverWalletEntryId ?? null,
+          record.confirmedAt,
+          record.note ?? null,
+        ],
+      });
     }
     const closedIds = yearRecord.closedMonths.map((r) => r.id);
     if (closedIds.length > 0) {
-      await this.query(
-        `DELETE FROM closed_months WHERE year_id = $1 AND id NOT IN (${closedIds.map((_, i) => `$${i + 2}`).join(", ")})`,
-        [yearId, ...closedIds]
-      );
+      writes.push({
+        text: `DELETE FROM closed_months WHERE year_id = $1 AND id NOT IN (${closedIds.map((_, i) => `$${i + 2}`).join(", ")})`,
+        params: [yearId, ...closedIds],
+      });
     } else {
-      await this.query("DELETE FROM closed_months WHERE year_id = $1", [yearId]);
+      writes.push({ text: "DELETE FROM closed_months WHERE year_id = $1", params: [yearId] });
     }
   }
 
@@ -465,6 +573,8 @@ export class SnapshotRepository {
 
     if (!yearRow) return null;
 
+    const year = Number(yearRow.year);
+
     const activities = await this.query('SELECT * FROM activities WHERE year_id = $1 ORDER BY "order"', [yearId]);
     const spendingEntries = await this.query("SELECT * FROM spending_entries WHERE year_id = $1", [yearId]);
     const wishlistItems = await this.query("SELECT * FROM wishlist_items WHERE year_id = $1", [yearId]);
@@ -472,12 +582,12 @@ export class SnapshotRepository {
     const closedMonths = await this.query("SELECT * FROM closed_months WHERE year_id = $1", [yearId]);
 
     return {
-      year: yearRow.year,
+      year,
       activities: activities.map((a) => this.parseActivity(a)),
-      spendingEntries: spendingEntries.map((e) => this.parseSpendingEntry(e)),
+      spendingEntries: spendingEntries.map((e) => this.parseSpendingEntry(e, year)),
       wishlistItems: wishlistItems.map((i) => this.parseWishlistItem(i)),
-      walletEntries: walletEntries.map((e) => this.parseWalletEntry(e)),
-      closedMonths: closedMonths.map((r) => this.parseMonthCloseRecord(r)),
+      walletEntries: walletEntries.map((e) => this.parseWalletEntry(e, year)),
+      closedMonths: closedMonths.map((r) => this.parseMonthCloseRecord(r, year)),
       monthlyNotes: {},
       createdAt: yearRow.created_at,
       updatedAt: yearRow.updated_at,
@@ -552,6 +662,8 @@ export class SnapshotRepository {
       type: r.type,
       summary: r.summary,
       createdAt: r.created_at,
+      historicalEdit: r.historical_edit === true || r.historical_edit === 1,
+      historicalPeriod: r.historical_period ?? undefined,
       metadata: r.metadata ? JSON.parse(r.metadata) : undefined,
     }));
   }
@@ -577,10 +689,10 @@ export class SnapshotRepository {
     };
   }
 
-  private parseSpendingEntry(row: any): SpendingEntry {
+  private parseSpendingEntry(row: any, year: number): SpendingEntry {
     return {
       id: row.id,
-      year: Number(row.year_id.split("-").pop()) || 2026,
+      year,
       month: Number(row.month),
       week: Number(row.week),
       date: row.date,
@@ -615,10 +727,10 @@ export class SnapshotRepository {
     };
   }
 
-  private parseWalletEntry(row: any): WalletEntry {
+  private parseWalletEntry(row: any, year: number): WalletEntry {
     return {
       id: row.id,
-      year: Number(row.year_id.split("-").pop()) || 2026,
+      year,
       month: Number(row.month),
       amount: Number(row.amount),
       currency: row.currency,
@@ -629,10 +741,10 @@ export class SnapshotRepository {
     };
   }
 
-  private parseMonthCloseRecord(row: any): MonthCloseRecord {
+  private parseMonthCloseRecord(row: any, year: number): MonthCloseRecord {
     return {
       id: row.id,
-      year: Number(row.year_id.split("-").pop()) || 2026,
+      year,
       month: Number(row.month),
       status: row.status,
       spendTotal: row.spend_total != null ? Number(row.spend_total) : null,

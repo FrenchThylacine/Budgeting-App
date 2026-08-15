@@ -22,13 +22,46 @@ Testing is part of development.
 
 Run this checklist before every release.
 
-## Last recorded automated run — 2026-08-10
+## Last recorded automated run — 2026-08-15
 
-- `npm run test`: passed — 4 files, 19 tests, including ISO-week boundaries, week-53 navigation, mode transitions, historical-week detection, and store-level historical write guards.
-- `npm run build`: passed — Vite emitted a bundle-size warning only.
+- `npm run test`: passed — 10 files, 81 tests.
+- `npm run build`: passed — Vite emitted a bundle-size advisory only.
 - `npm run server:build`: passed.
+- `npm run test:db` against local PostgreSQL 17: passed — 21 integration tests.
 
-These commands validate compilation and current domain tests. They do not substitute for browser, mobile, Vercel, or Neon persistence checks, which remain open in `implementation_plan.md`.
+## Test layers
+
+**Domain and store tests** (always run) cover period/ISO-week semantics, currency handling, analytics selectors, historical write guards, and repository SQL shape.
+
+**Database integration** (`tests/db-integration.test.ts`) runs the real schema DDL, migrations, and `SnapshotRepository` against a live PostgreSQL server. Mocked-driver tests cannot catch multi-statement templates, integers bound to BOOLEAN columns, or broken `ON CONFLICT` targets — every one of which was failing in real PostgreSQL and passing against the mock.
+
+**API integration** (`tests/api-integration.test.ts`) boots the real Express app and drives it over HTTP, exercising route → validation → service → repository → PostgreSQL, including the 409 conflict path and a simulated two-device exchange.
+
+Both suites are skipped unless `TEST_DATABASE_URL` is set, so the default `npm test` stays fast and dependency-free.
+
+### Running the database tests
+
+```bash
+# Any disposable PostgreSQL database works.
+TEST_DATABASE_URL=postgres://postgres@127.0.0.1:5432/budget npm run test:db
+```
+
+The Neon serverless driver speaks HTTP to Neon and cannot target a local server, so the suites inject a node-postgres adapter through `setDatabase()` that presents the same interface (tagged template plus `transaction([...])`). The SQL under test is therefore identical to what production sends. Each suite creates its own PostgreSQL schema (`test_repo`, `test_api`) so parallel files do not collide.
+
+### Running the app against local PostgreSQL
+
+```bash
+LOCAL_PG_URL=postgres://postgres@127.0.0.1:5432/budget npm run server:dev:pg   # real API on :3001
+npm run dev                                                                    # Vite proxies /api to it
+```
+
+## What automated tests do not cover
+
+- The Neon HTTP transport itself, notably `sql.transaction([...])`.
+- Production Vercel routing and a production `DATABASE_URL`.
+- Physically separate devices (two isolated browser contexts were used instead).
+
+Browser checks — theme switching, period navigation, historical mode, mobile widths from 320 px, landscape, and tablet — were performed manually this session and are recorded in `implementation_plan.md`. They are not yet automated; a Playwright suite is the obvious next step.
 
 ## General
 

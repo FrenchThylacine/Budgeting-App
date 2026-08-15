@@ -38,11 +38,38 @@ It has now migrated to Neon to support:
 
 SQLite should no longer be considered the reference implementation.
 
-## Current verification status — 2026-08-10
+## Current verification status — 2026-08-15
 
-`SnapshotRepository` uses the Neon serverless driver and all repository calls are asynchronous. The build succeeds, and unit test mocks verify safe upsert execution. In the absence of a live `DATABASE_URL` in the local execution environment, live Neon durability cycles remain unverified.
+The persistence layer has been verified against a **live PostgreSQL server**, not only against mocks. 21 integration tests cover schema DDL, migrations, repository SQL, and the full HTTP API path; a browser session was additionally driven end to end (UI → API → PostgreSQL → UI) including a two-device read/write cycle.
 
-The snapshot save flow has been refactored to perform targeted `ON CONFLICT (id) DO UPDATE SET ...` upserts for all top-level and nested child records (`activities`, `spending_entries`, `wishlist_items`, `wallet_entries`, `closed_months`, `categories`, `seasonal_presets`, `scenario_presets`). Only records that have been removed from memory are deleted using targeted `NOT IN` queries. Whole-table deletions for year records have been completely eliminated.
+The snapshot save flow performs targeted `ON CONFLICT (id) DO UPDATE SET ...` upserts for all top-level and nested child records (`activities`, `spending_entries`, `wishlist_items`, `wallet_entries`, `closed_months`, `categories`, `seasonal_presets`, `scenario_presets`). Only records removed from memory are deleted using targeted `NOT IN` queries. Whole-table deletions for year records have been eliminated.
+
+### Defects found and fixed during live verification
+
+These could not be observed with a mocked driver and were all failing in real PostgreSQL:
+
+1. **Multi-statement DDL templates.** `initializeSchema` grouped `CREATE TABLE` and `CREATE INDEX` in single tagged templates. The Neon HTTP driver executes exactly one command per call, so schema creation failed. Every statement is now its own template.
+2. **Integers bound to BOOLEAN columns.** Flags were written as `1`/`0`. PostgreSQL rejects an integer for `BOOLEAN` (SQLite tolerated it). All flags now bind real booleans.
+3. **Year derived from a row-id suffix.** `parseSpendingEntry` recovered the year with `row.year_id.split("-").pop()`, but year ids embed `Date.now()`, so every loaded entry got a nonsensical year (falling back to a hard-coded `2026`). The year now comes from the `years` table.
+4. **Non-atomic saves.** Each statement ran separately, so a mid-save failure left the database partly written. Writes are collected and executed through one `sql.transaction([...])` batch.
+5. **Approvals and audit rows were subject to deletion passes.** Both are historical records and are now upsert-only.
+
+### Concurrency and multi-device safety
+
+`snapshots.revision` is a monotonically increasing counter (migration `003-add-snapshot-revision`). Each client commit increments it. `PUT /api/snapshot` rejects a write whose revision is not newer than the stored one with **409 Conflict**, returning the current server snapshot so the stale client rebases instead of silently overwriting a newer device's data. Verified in the browser: a stale device's write was rejected, the other device's data was preserved, and the user received an explanatory notice.
+
+### Local development and testing against plain PostgreSQL
+
+The production driver (`@neondatabase/serverless`) speaks HTTP to Neon and cannot target a local server. `server/src/db/index.ts` exposes `setDatabase(driver)`, a small injection seam accepting anything with the driver's shape (tagged template plus optional `transaction([...])`).
+
+- `npm run server:dev:pg` runs the real API server against any local PostgreSQL via `scripts/dev-server-local-pg.mjs`.
+- `npm run test:db` runs the integration suites; they are skipped unless `TEST_DATABASE_URL` is set.
+
+```bash
+TEST_DATABASE_URL=postgres://postgres@127.0.0.1:5432/budget npm run test:db
+```
+
+Each integration suite creates its own PostgreSQL schema (`test_repo`, `test_api`) so the files stay isolated when Vitest runs them in parallel.
 
 ---
 

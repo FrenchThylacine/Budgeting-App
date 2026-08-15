@@ -47,8 +47,25 @@ export function weeksInIsoYear(year: number): number {
   return getIsoWeek(dec28);
 }
 
+/**
+ * Format a UTC-constructed date (e.g. `startOfIsoWeek`) as `YYYY-MM-DD`.
+ * Do not use for "today" — see `todayDateInput`.
+ */
 export function dateInputValue(date: Date): string {
   return date.toISOString().slice(0, 10);
+}
+
+/**
+ * Today's date in the user's own timezone as `YYYY-MM-DD`.
+ *
+ * `new Date().toISOString()` converts to UTC first, so east of UTC it returns
+ * *yesterday* during the early hours — dating a transaction to the wrong day,
+ * and on the 1st of a month to the wrong month and budget period.
+ */
+export function todayDateInput(now = new Date()): string {
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${now.getFullYear()}-${month}-${day}`;
 }
 
 export function monthFromDateInput(value: string): number {

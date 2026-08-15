@@ -4,14 +4,34 @@ interface ProgressProps {
   value: number;
   max?: number;
   tone?: "neutral" | "success" | "warning" | "danger";
+  /** Explicit fill colour, e.g. a category's own colour. Overrides `tone`. */
+  color?: string;
   className?: string;
+  label?: string;
 }
 
-export const Progress: React.FC<ProgressProps> = ({ value, max = 100, tone = "neutral", className = "" }) => {
+export const Progress: React.FC<ProgressProps> = ({
+  value,
+  max = 100,
+  tone = "neutral",
+  color,
+  className = "",
+  label,
+}) => {
   const pct = Math.min(100, Math.max(0, (value / max) * 100));
   return (
-    <div className={`progress-track ${className}`}>
-      <div className={`progress-fill ${tone}`} style={{ width: `${pct}%` }} />
+    <div
+      className={`progress-track ${className}`}
+      role="progressbar"
+      aria-valuenow={Math.round(pct)}
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-label={label}
+    >
+      <div
+        className={`progress-fill ${color ? "" : tone}`}
+        style={{ width: `${pct}%`, ...(color ? { background: color } : {}) }}
+      />
     </div>
   );
 };

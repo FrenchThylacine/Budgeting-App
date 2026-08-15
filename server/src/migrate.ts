@@ -1,6 +1,6 @@
-import { getDatabase } from "./db/index";
-import type { BudgetSnapshot } from "@/domain/types";
-import { SnapshotRepository } from "./repositories/SnapshotRepository";
+import { getDatabase } from "./db/index.js";
+import type { BudgetSnapshot } from "../../src/domain/types.js";
+import { SnapshotRepository } from "./repositories/SnapshotRepository.js";
 
 /**
  * Migrate data from a JSON backup (exported from IndexedDB) into Neon PostgreSQL.

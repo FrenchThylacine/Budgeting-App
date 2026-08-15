@@ -18,19 +18,56 @@ import type {
 import { createSeedBudgetSnapshot } from "../data/seedBudget";
 import { defaultCategories } from "../data/seedBudget";
 import { deleteSnapshot as deleteIdbSnapshot, loadSnapshot as loadIdbSnapshot, saveSnapshot as saveIdbSnapshot } from "../storage/idb";
-import { getApiClient } from "../api/client";
+import { getApiClient, SnapshotConflictError } from "../api/client";
 import { isViewingHistoricalPeriod } from "../utils/formatters";
+import { periodLabel } from "../domain/periods";
+
+/** Settings fields that define which period is being viewed. */
+const PERIOD_SETTING_KEYS = [
+  "selectedYear",
+  "selectedMonth",
+  "selectedWeek",
+  "selectedWeekYear",
+  "selectedPeriodMode",
+] as const satisfies readonly (keyof Settings)[];
 
 type ActivityInput = Omit<Activity, "id" | "order"> & Partial<Pick<Activity, "id" | "order">>;
 type SpendingInput = Omit<SpendingEntry, "id" | "createdAt" | "updatedAt"> & Partial<Pick<SpendingEntry, "id">>;
 type WalletInput = Omit<WalletEntry, "id" | "createdAt"> & Partial<Pick<WalletEntry, "id">>;
 type WishlistInput = Omit<WishlistItem, "id" | "dateAdded"> & Partial<Pick<WishlistItem, "id" | "dateAdded">>;
 
+/**
+ * Audit types that record a change to period-bound financial data. Only these
+ * can constitute an edit to history; navigation and preference changes cannot.
+ */
+const PERIOD_BOUND_AUDIT_TYPES = new Set<AuditType>([
+  "activity",
+  "spending",
+  "wishlist",
+  "wallet",
+  "rollover",
+  "delete",
+]);
+
 interface BudgetStore {
   snapshot: BudgetSnapshot;
   hydrated: boolean;
   undoStack: BudgetSnapshot[];
   redoStack: BudgetSnapshot[];
+  /** User-facing message about cross-device sync (e.g. a rejected stale write). */
+  syncNotice: string | null;
+  clearSyncNotice: () => void;
+  /**
+   * Deliberate, session-only override letting the user edit a closed period.
+   * Never persisted: it is a UI intent, not financial data, and it must not
+   * travel to another device or survive a reload. It clears automatically as
+   * soon as the selected period changes.
+   */
+  historicalEditUnlocked: boolean;
+  unlockHistoricalEditing: () => void;
+  lockHistoricalEditing: () => void;
+  /** True when the selected period is historical AND the override is active. */
+  isEditingHistory: () => boolean;
   isCurrentPeriodMutable: () => boolean;
   hydrate: () => Promise<void>;
   resetToSeed: () => Promise<void>;
@@ -70,7 +107,17 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
   hydrated: false,
   undoStack: [],
   redoStack: [],
-  isCurrentPeriodMutable: () => !isViewingHistoricalPeriod(get().snapshot.settings),
+  syncNotice: null,
+  clearSyncNotice: () => set({ syncNotice: null }),
+
+  historicalEditUnlocked: false,
+  unlockHistoricalEditing: () => set({ historicalEditUnlocked: true }),
+  lockHistoricalEditing: () => set({ historicalEditUnlocked: false }),
+  isEditingHistory: () =>
+    isViewingHistoricalPeriod(get().snapshot.settings) && get().historicalEditUnlocked,
+
+  isCurrentPeriodMutable: () =>
+    !isViewingHistoricalPeriod(get().snapshot.settings) || get().historicalEditUnlocked,
 
   hydrate: async () => {
     try {
@@ -93,6 +140,11 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
   },
 
   updateSettings: (patch) => {
+    // Moving to another period always relocks history: an override granted for
+    // one period must never silently carry over to the next.
+    if (PERIOD_SETTING_KEYS.some((key) => key in patch)) {
+      set({ historicalEditUnlocked: false });
+    }
     commit(
       set,
       get,
@@ -106,6 +158,7 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
   },
 
   selectYear: (year) => {
+    set({ historicalEditUnlocked: false });
     commit(
       set,
       get,
@@ -472,7 +525,12 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
   },
 
   recordBudgetApproval: (approval) => {
-    if (!get().isCurrentPeriodMutable()) return;
+    // Intentionally checks the period directly rather than
+    // `isCurrentPeriodMutable()`: the historical override unlocks *data*, not
+    // decision records. An approval states what was decided at the time, so it
+    // stays immutable even while the rest of the period is unlocked (Rule 6),
+    // and the consent dialog promises exactly this.
+    if (isViewingHistoricalPeriod(get().snapshot.settings)) return;
     if (get().snapshot.budgetApprovals.some((item) => item.year === approval.year && item.month === approval.month && item.status === "approved")) {
       return;
     }
@@ -538,7 +596,15 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
     );
   },
 
-  // Category management
+  // Category management.
+  //
+  // Categories are shared, snapshot-level records rather than period-bound
+  // ones, so they are editable regardless of the selected period. Two fields
+  // are read live when reporting a period — `bucket` by calculateYear, and
+  // `monthlyCap` by the analytics cap tracking — so changing either would
+  // retroactively restate a closed period. Both are guarded below while a
+  // historical period is selected, keeping Rule 3 (history is immutable)
+  // intact without freezing harmless edits like renaming or recolouring.
   addCategory: (category) => {
     commit(
       set,
@@ -554,12 +620,24 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
   },
 
   updateCategory: (idValue, patch) => {
+    const historical = !get().isCurrentPeriodMutable();
     commit(
       set,
       get,
       (snapshot) => {
         const cat = snapshot.categories.find((c) => c.id === idValue);
-        if (cat) Object.assign(cat, patch);
+        if (!cat) return;
+        const safePatch = { ...patch };
+        if (historical) {
+          // These two feed calculateYear directly, so changing them while
+          // viewing history would rewrite that period's reported totals.
+          delete safePatch.bucket;
+          delete safePatch.monthlyCap;
+        }
+        if (safePatch.parentId != null && !isSafeParent(snapshot, idValue, safePatch.parentId)) {
+          delete safePatch.parentId;
+        }
+        Object.assign(cat, safePatch);
       },
       "settings",
       "Updated category.",
@@ -603,24 +681,28 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
     const { undoStack, redoStack, snapshot } = get();
     const previous = undoStack[0];
     if (!previous) return;
+    // Restoring an older state still counts as a *new* revision so the
+    // server accepts it instead of treating it as a stale write.
+    const restored = { ...previous, revision: (snapshot.revision ?? 0) + 1 };
     set({
-      snapshot: previous,
+      snapshot: restored,
       undoStack: undoStack.slice(1),
       redoStack: [snapshot, ...redoStack].slice(0, 40),
     });
-    void saveSnapshot(previous).catch(() => undefined);
+    persistSnapshot(restored, set);
   },
 
   redo: () => {
     const { undoStack, redoStack, snapshot } = get();
     const next = redoStack[0];
     if (!next) return;
+    const restored = { ...next, revision: (snapshot.revision ?? 0) + 1 };
     set({
-      snapshot: next,
+      snapshot: restored,
       undoStack: [snapshot, ...undoStack].slice(0, 40),
       redoStack: redoStack.slice(1),
     });
-    void saveSnapshot(next).catch(() => undefined);
+    persistSnapshot(restored, set);
   },
 }));
 
@@ -636,28 +718,49 @@ function commit(
   const next = clone(before);
   const replacement = recipe(next);
   const finalSnapshot = isBudgetSnapshot(replacement) ? replacement : next;
-  touch(finalSnapshot, type, summary, metadata);
+  finalSnapshot.revision = (before.revision ?? 0) + 1;
+
+  // A change to period-bound data made while the historical override is active
+  // is recorded as such, so the audit trail always shows when the past was
+  // rewritten and which period was affected.
+  const historicalEdit =
+    PERIOD_BOUND_AUDIT_TYPES.has(type) &&
+    get().historicalEditUnlocked &&
+    isViewingHistoricalPeriod(before.settings);
+
+  touch(finalSnapshot, type, summary, metadata, historicalEdit ? periodLabel(before.settings) : null);
   set({
     snapshot: finalSnapshot,
     undoStack: [before, ...get().undoStack].slice(0, 40),
     redoStack: [],
   });
-  void saveSnapshot(finalSnapshot).catch(() => undefined);
+  persistSnapshot(finalSnapshot, set);
 }
 
-function touch(snapshot: BudgetSnapshot, type: AuditType, summary: string, metadata?: unknown): void {
+function touch(
+  snapshot: BudgetSnapshot,
+  type: AuditType,
+  summary: string,
+  metadata?: unknown,
+  historicalPeriodLabel: string | null = null,
+): void {
   const timestamp = new Date().toISOString();
   if (snapshot.settings.saveTimestampEnabled) {
     snapshot.settings.lastUpdated = timestamp;
   }
   const record = snapshot.years[String(snapshot.settings.selectedYear)];
   if (record) record.updatedAt = timestamp;
+
+  const baseMetadata = metadata && typeof metadata === "object" ? (metadata as Record<string, unknown>) : undefined;
+
   snapshot.auditLog.unshift({
     id: id("audit"),
     type,
-    summary,
+    summary: historicalPeriodLabel ? `${summary} (historical edit · ${historicalPeriodLabel})` : summary,
     createdAt: timestamp,
-    metadata: metadata && typeof metadata === "object" ? (metadata as Record<string, unknown>) : undefined,
+    historicalEdit: historicalPeriodLabel != null,
+    historicalPeriod: historicalPeriodLabel ?? undefined,
+    metadata: baseMetadata,
   });
   snapshot.auditLog = snapshot.auditLog.slice(0, 300);
 }
@@ -676,6 +779,20 @@ function ensureYearRecord(snapshot: BudgetSnapshot, year: number): YearRecord {
 
 function nextOrder(activities: Activity[]): number {
   return activities.reduce((max, activity) => Math.max(max, activity.order), -1) + 1;
+}
+
+/**
+ * Categories nest one level deep. A parent is only valid when it exists, is
+ * not the category itself, and is not already a child — otherwise a pair of
+ * categories can be made each other's parent, and any code walking the chain
+ * loops forever.
+ */
+function isSafeParent(snapshot: BudgetSnapshot, categoryId: string, parentId: string): boolean {
+  if (parentId === categoryId) return false;
+  const parent = snapshot.categories.find((c) => c.id === parentId);
+  if (!parent) return false;
+  if (parent.parentId) return false;
+  return true;
 }
 
 function normalizeWishlistPatch<T extends Partial<WishlistItem>>(item: T): T {
@@ -709,6 +826,7 @@ function normalizeSnapshot(snapshot: BudgetSnapshot): BudgetSnapshot {
     snapshot.categories = [...snapshot.categories, ...missingCategories];
   }
   snapshot.budgetApprovals ??= [];
+  snapshot.revision ??= 0;
   snapshot.settings.selectedPeriodMode ??= "month";
   snapshot.settings.selectedWeekYear ??= snapshot.settings.selectedYear;
   return snapshot;
@@ -739,6 +857,7 @@ async function saveSnapshot(snapshot: BudgetSnapshot): Promise<void> {
     // Try saving to API
     await apiClient.saveSnapshot(snapshot);
   } catch (error) {
+    if (error instanceof SnapshotConflictError) throw error;
     console.warn("API save failed, falling back to IndexedDB:", error);
   }
   // Also save to IndexedDB for offline capability
@@ -747,6 +866,29 @@ async function saveSnapshot(snapshot: BudgetSnapshot): Promise<void> {
   } catch (error) {
     console.error("Failed to save snapshot:", error);
   }
+}
+
+/**
+ * Persist a committed snapshot in the background. When the server rejects the
+ * write as stale (another device saved a newer revision first), adopt the
+ * server snapshot so newer remote data is never overwritten by this device.
+ */
+function persistSnapshot(
+  snapshot: BudgetSnapshot,
+  set: (partial: Partial<BudgetStore>) => void,
+): void {
+  void saveSnapshot(snapshot).catch(async (error: unknown) => {
+    if (error instanceof SnapshotConflictError && error.serverSnapshot) {
+      const server = normalizeSnapshot(error.serverSnapshot);
+      set({
+        snapshot: server,
+        undoStack: [],
+        redoStack: [],
+        syncNotice: "This device had outdated data. The latest version from your other device was loaded; please re-apply your last change.",
+      });
+      await saveIdbSnapshot(server).catch(() => undefined);
+    }
+  });
 }
 
 /**

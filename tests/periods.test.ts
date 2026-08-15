@@ -60,3 +60,31 @@ describe("shared period semantics", () => {
     expect(movePeriod(snapshot.settings, -1)).toMatchObject({ selectedWeek: 53, selectedWeekYear: 2020, selectedYear: 2020, selectedMonth: 12 });
   });
 });
+
+describe("local-date handling", () => {
+  it("returns the user's local calendar date, not the UTC date", async () => {
+    const { todayDateInput } = await import("../src/domain/dates");
+
+    // 01:30 on the 1st in UTC+3 is still 22:30 on the previous month's last
+    // day in UTC. Using the UTC date would file the transaction in the wrong
+    // month, and therefore against the wrong budget period.
+    const localFirstOfMonth = new Date(2026, 8, 1, 1, 30, 0);
+    expect(todayDateInput(localFirstOfMonth)).toBe("2026-09-01");
+
+    const localNewYear = new Date(2027, 0, 1, 0, 15, 0);
+    expect(todayDateInput(localNewYear)).toBe("2027-01-01");
+
+    // Zero-padding for single-digit months and days.
+    expect(todayDateInput(new Date(2026, 0, 5, 12, 0, 0))).toBe("2026-01-05");
+  });
+
+  it("keeps the date consistent with the month and ISO week derived from it", async () => {
+    const { todayDateInput, monthFromDateInput, weekFromDateInput } = await import("../src/domain/dates");
+
+    const localDate = new Date(2026, 7, 15, 2, 0, 0);
+    const value = todayDateInput(localDate);
+    expect(value).toBe("2026-08-15");
+    expect(monthFromDateInput(value)).toBe(8);
+    expect(weekFromDateInput(value)).toBe(33);
+  });
+});
