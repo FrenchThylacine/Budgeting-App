@@ -50,6 +50,66 @@ export function isHistoricalPeriod(settings: Settings, now = new Date()): boolea
     || (settings.selectedYear === now.getFullYear() && settings.selectedMonth < now.getMonth() + 1);
 }
 
+/**
+ * Settings patch that jumps to the period containing `now`, staying in the
+ * mode the user is already using rather than switching it for them.
+ */
+export function currentPeriodPatch(settings: Settings, now = new Date()): Partial<Settings> {
+  // `now` sits inside every mode's current period, so all period fields are
+  // set together. Updating only year+month would leave the ISO week pointing
+  // at whatever was selected before, and the header would report a week that
+  // does not belong to the month being shown.
+  const isoWeek = { selectedWeek: getIsoWeek(now), selectedWeekYear: weekYear(now) };
+
+  if (settings.selectedPeriodMode === "year") {
+    return { selectedYear: now.getFullYear(), ...isoWeek };
+  }
+  if (settings.selectedPeriodMode === "week") {
+    return isoWeek;
+  }
+  return { selectedYear: now.getFullYear(), selectedMonth: now.getMonth() + 1, ...isoWeek };
+}
+
+/** True when the selected period already contains `now`. */
+export function isAtCurrentPeriod(settings: Settings, now = new Date()): boolean {
+  if (settings.selectedPeriodMode === "year") return settings.selectedYear === now.getFullYear();
+  if (settings.selectedPeriodMode === "week") {
+    return selectedIsoWeekYear(settings) === weekYear(now) && settings.selectedWeek === getIsoWeek(now);
+  }
+  return settings.selectedYear === now.getFullYear() && settings.selectedMonth === now.getMonth() + 1;
+}
+
+/**
+ * Full date range of a period, e.g. "1–31 August 2026" or "10–16 Aug".
+ * Lets the user tell a selected period apart from the real one at a glance.
+ */
+export function periodRangeLabel(settings: Settings): string {
+  const formatter = new Intl.DateTimeFormat(undefined, {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+
+  if (settings.selectedPeriodMode === "year") {
+    return `1 Jan – 31 Dec ${settings.selectedYear}`;
+  }
+  if (settings.selectedPeriodMode === "week") {
+    const start = startOfIsoWeek(selectedIsoWeekYear(settings), settings.selectedWeek);
+    const end = new Date(start);
+    end.setUTCDate(start.getUTCDate() + 6);
+    return `${formatter.format(start)} – ${formatter.format(end)}`;
+  }
+  const start = new Date(Date.UTC(settings.selectedYear, settings.selectedMonth - 1, 1));
+  const end = new Date(Date.UTC(settings.selectedYear, settings.selectedMonth, 0));
+  return `${formatter.format(start)} – ${formatter.format(end)}`;
+}
+
+/** Label for the real-world period of the same mode, for comparison. */
+export function currentPeriodLabel(settings: Settings, now = new Date()): string {
+  return periodLabel({ ...settings, ...currentPeriodPatch(settings, now) } as Settings);
+}
+
 export function periodLabel(settings: Settings): string {
   if (settings.selectedPeriodMode === "year") return String(settings.selectedYear);
   if (settings.selectedPeriodMode === "month") return `${monthName(settings.selectedMonth)} ${settings.selectedYear}`;

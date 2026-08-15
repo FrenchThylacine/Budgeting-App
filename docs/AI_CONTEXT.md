@@ -88,10 +88,14 @@ The React client provides the core budgeting workflows: transactions, recurring 
 
 Persistence has been verified against a live PostgreSQL database and from a real browser, including refresh durability, server-restart durability, and a two-device read/write/conflict cycle. `snapshots.revision` provides optimistic concurrency: a stale write is rejected with 409 and the client adopts the server snapshot rather than overwriting newer data.
 
-Two things future agents should know before assuming otherwise:
+Four things future agents should know before assuming otherwise:
 
 - **Mocked-driver tests are not sufficient for persistence.** Five SQL-level defects passed a mocked `sql` tag and failed against real PostgreSQL. Run `npm run test:db` with `TEST_DATABASE_URL` set.
 - **A passing `server:build` does not mean the server runs.** It only means `tsc` emitted files; the output was previously unable to start at all. Boot it.
+- **Adding a field to a TypeScript model does not persist it.** `SnapshotRepository` writes a fixed column list, so a new field is silently dropped on the next round-trip unless you also touch `schema.ts`, a migration, the upsert, and the parser. Add a round-trip test.
+- **Never let an API failure look like a success.** The store deliberately reports `offline` rather than falling through to IndexedDB silently. That silent fallback is what made two browsers each appear to work while holding different data.
+
+Charts live in `src/components/charts/` and are dependency-free SVG. Axis ticks come from `niceTicks` — never hardcode an interval. Missing periods must render as gaps or `?`, never as zero.
 
 Consult `implementation_plan.md` for live, verified status rather than treating this document as a release checklist.
 

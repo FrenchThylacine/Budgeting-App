@@ -4,10 +4,17 @@ import { isHistoricalPeriod, periodLabel } from "../../domain/periods";
 import {
   budgetPacing,
   budgetRelevantEntries,
+  categoriesOverCap,
   categoryBreakdown,
+  categoryMonthlySeries,
+  cumulativeForecast,
+  dailySpendingCalendar,
   entriesForSelectedPeriod,
+  financialHealth,
   monthlyTrendBars,
   periodComparison,
+  recentPeriodTotals,
+  recurringMonthlySplit,
   selectedPeriodWindow,
   spendingStats,
   weeklyTrendBars,
@@ -15,10 +22,112 @@ import {
 import { useBudgetStore } from "../../store/budgetStore";
 import { formatDualMoney } from "../../utils/formatters";
 import { EmptyState } from "../ui/EmptyState";
-import { Metric } from "../ui/Metric";
 import { Section } from "../ui/Section";
-import { Progress } from "../ui/Progress";
-import { TrendBarChart } from "../ui/TrendBarChart";
+import {
+  BarChart,
+  ChartPlaceholder,
+  DonutChart,
+  Heatmap,
+  HorizontalBarChart,
+  LineChart,
+  ProgressRing,
+  Sparkline,
+  StackedBarChart,
+  compactNumber,
+  type ChartReferenceLine,
+  type HeatmapCell,
+  type HorizontalBarRow,
+} from "../charts";
+
+/**
+ * Chart-led analytics.
+ *
+ * Every section opens with a visual and lets the numbers underneath supply
+ * the detail. Three rules from the project bible drive the data handling:
+ *  - 0 is a real value; a period with no records is drawn as a gap or "?";
+ *  - piloting spend stays visible but never enters a share percentage;
+ *  - currency conversion is presentation only (formatDualMoney / normalizeEntry).
+ */
+
+// ─── Local layout primitives ─────────────────────────────────────────────────
+
+const ChartCard: React.FC<{
+  title: string;
+  subtitle?: string;
+  children: React.ReactNode;
+}> = ({ title, subtitle, children }) => (
+  <div className="card" style={{ padding: 16, display: "grid", gap: 14, minWidth: 0 }}>
+    <div style={{ display: "grid", gap: 2, minWidth: 0 }}>
+      <span className="text-callout" style={{ fontWeight: 600 }}>
+        {title}
+      </span>
+      {subtitle && (
+        <span className="text-caption" style={{ color: "var(--text-tertiary)" }}>
+          {subtitle}
+        </span>
+      )}
+    </div>
+    {children}
+  </div>
+);
+
+interface Stat {
+  label: string;
+  value: string;
+  detail?: string;
+  tone?: "positive" | "negative" | "warning";
+}
+
+/** Compact context numbers — the counterpoint to a wall of metric cards. */
+const StatRow: React.FC<{ items: Stat[]; columns?: number }> = ({ items, columns = 120 }) => (
+  <dl
+    style={{
+      display: "grid",
+      gridTemplateColumns: `repeat(auto-fit, minmax(${columns}px, 1fr))`,
+      gap: 12,
+      margin: 0,
+      minWidth: 0,
+    }}
+  >
+    {items.map((item) => (
+      <div key={item.label} style={{ minWidth: 0 }}>
+        <dt className="text-footnote" style={{ marginBottom: 2 }}>
+          {item.label}
+        </dt>
+        <dd
+          style={{
+            margin: 0,
+            fontSize: "0.9375rem",
+            fontWeight: 600,
+            color:
+              item.tone === "positive"
+                ? "var(--success)"
+                : item.tone === "negative"
+                ? "var(--danger)"
+                : item.tone === "warning"
+                ? "var(--warning)"
+                : "var(--text-primary)",
+            overflowWrap: "anywhere",
+          }}
+        >
+          {item.value}
+        </dd>
+        {item.detail && (
+          <div className="text-caption" style={{ color: "var(--text-tertiary)" }}>
+            {item.detail}
+          </div>
+        )}
+      </div>
+    ))}
+  </dl>
+);
+
+const GRADE_COLOR: Record<string, string> = {
+  Excellent: "var(--success)",
+  Good: "var(--success)",
+  Fair: "var(--warning)",
+  "At risk": "var(--danger)",
+};
 
 // ─── Main Panel ───────────────────────────────────────────────────────────────
 
@@ -40,8 +149,28 @@ export const AnalyticsPanel: React.FC = () => {
   const stats = useMemo(() => spendingStats(includedEntries, snapshot), [includedEntries, snapshot]);
   const pacing = useMemo(() => budgetPacing(snapshot, includedEntries), [snapshot, includedEntries]);
   const categories = useMemo(() => categoryBreakdown(includedEntries, snapshot), [includedEntries, snapshot]);
+  const overCap = useMemo(() => categoriesOverCap(categories), [categories]);
   const comparison = useMemo(() => periodComparison(snapshot, settings), [snapshot, settings]);
   const window = useMemo(() => selectedPeriodWindow(settings), [settings]);
+  const health = useMemo(
+    () => financialHealth({ pacing, categories, comparison, stats }),
+    [pacing, categories, comparison, stats],
+  );
+
+  const calendar = useMemo(
+    () => dailySpendingCalendar(includedEntries, snapshot, settings),
+    [includedEntries, snapshot, settings],
+  );
+  const forecast = useMemo(
+    () => cumulativeForecast(includedEntries, snapshot, settings),
+    [includedEntries, snapshot, settings],
+  );
+  const categoryEvolution = useMemo(() => categoryMonthlySeries(snapshot, settings, 4), [snapshot, settings]);
+  const recurringSplit = useMemo(() => recurringMonthlySplit(snapshot, settings), [snapshot, settings]);
+  const recentBars = useMemo(
+    () => recentPeriodTotals(snapshot, settings, mode === "year" ? 5 : 8),
+    [snapshot, settings, mode],
+  );
 
   // Same period last year (month mode only)
   const lastYearComparison = useMemo(() => {
@@ -56,22 +185,72 @@ export const AnalyticsPanel: React.FC = () => {
   }, [mode, settings, snapshot]);
 
   const monthlyBars = useMemo(
-    () => monthlyTrendBars(calc.monthlyTrend, settings.selectedMonth),
-    [calc.monthlyTrend, settings.selectedMonth],
+    () => monthlyTrendBars(calc.monthlyTrend, mode === "year" ? -1 : settings.selectedMonth),
+    [calc.monthlyTrend, mode, settings.selectedMonth],
   );
   const weeklyBars = useMemo(
     () => weeklyTrendBars(calc.weeklyTrend, settings.selectedWeek, 12),
     [calc.weeklyTrend, settings.selectedWeek],
   );
 
+  const dayFormatter = useMemo(
+    () => new Intl.DateTimeFormat(undefined, { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" }),
+    [],
+  );
+
+  const money = (value: number | null | undefined) => formatDualMoney(value, settings);
+  const tick = (value: number) => compactNumber(value);
+
   const total = stats.total;
   const utilisation = pacing?.utilisation ?? null;
-  const spendTone =
-    utilisation == null ? "neutral" : utilisation >= 100 ? "negative" : utilisation >= 80 ? "warning" : "neutral";
-
   const currentPeriodLabel = periodLabel(settings);
-  const dailyAvg =
-    total != null && window.elapsedDays > 0 ? total / window.elapsedDays : null;
+  const dailyAvg = total != null && window.elapsedDays > 0 ? total / window.elapsedDays : null;
+
+  // ── Chart inputs ──
+  const trendBars = mode === "week" ? weeklyBars : monthlyBars;
+  const trendEmphasis = trendBars.findIndex((bar) => bar.highlight);
+  const budgetBase = calc.monthlyBudgetBase;
+  const budgetReference: ChartReferenceLine[] =
+    mode !== "week" && budgetBase > 0
+      ? [{ value: budgetBase, label: `Budget ${money(budgetBase)}` }]
+      : [];
+
+  const heatmapCells: HeatmapCell[] = (calendar ?? []).map((cell) => ({
+    key: cell.date,
+    day: cell.day,
+    weekday: cell.weekday,
+    label: dayFormatter.format(new Date(`${cell.date}T00:00:00Z`)),
+    value: cell.value,
+  }));
+
+  const categoryRows: HorizontalBarRow[] = categories.slice(0, 10).map((entry) => {
+    const isPiloting = entry.category?.bucket === "piloting";
+    const caption = [
+      entry.share != null
+        ? `${entry.share.toFixed(1)}% of tracked spend`
+        : isPiloting
+        ? "Piloting — excluded from shares"
+        : null,
+      `${entry.count} transaction${entry.count !== 1 ? "s" : ""}`,
+      entry.cap != null ? `cap ${money(entry.cap)}` : null,
+    ]
+      .filter(Boolean)
+      .join(" · ");
+
+    return {
+      id: entry.categoryId,
+      label: entry.category?.name ?? "Uncategorized",
+      value: entry.total,
+      color: entry.category?.color ?? "#64748B",
+      caption,
+      marker: entry.cap != null && entry.cap > 0 ? { value: entry.cap, label: "Monthly cap" } : undefined,
+      badge: entry.overCap ? "OVER CAP" : undefined,
+      badgeTone: entry.overCap ? "danger" : "neutral",
+    };
+  });
+
+  const recurringTone = "var(--accent)";
+  const oneOffTone = "var(--teal)";
 
   return (
     <div className="page-enter" style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr)", gap: 24 }}>
@@ -91,356 +270,473 @@ export const AnalyticsPanel: React.FC = () => {
         </div>
       )}
 
-      {/* ── Overview ── */}
+      {/* ── Overview ───────────────────────────────────────────────────────── */}
       <Section title={`Overview · ${currentPeriodLabel}`}>
-        <div className="dashboard-hero">
-          <Metric
-            label="Period spending"
-            value={total != null ? formatDualMoney(total, settings) : "No data"}
-            detail={`${stats.count} transaction${stats.count !== 1 ? "s" : ""}`}
-            tone={spendTone}
-          />
-          <Metric
-            label="Budget remaining"
-            value={pacing != null ? formatDualMoney(pacing.remaining, settings) : "—"}
-            detail={mode !== "month" ? "Monthly context only" : `of ${formatDualMoney(pacing?.budget, settings)}`}
-            tone={
-              pacing == null
-                ? "neutral"
-                : pacing.remaining < 0
-                ? "negative"
-                : pacing.remaining < pacing.budget * 0.2
-                ? "warning"
-                : "positive"
-            }
-          />
-          <Metric
-            label="Burn rate"
-            value={utilisation != null ? `${utilisation.toFixed(1)}%` : "—"}
-            detail={mode !== "month" ? "Month mode only" : "Of monthly budget"}
-            tone={
-              utilisation == null
-                ? "neutral"
-                : utilisation >= 100
-                ? "negative"
-                : utilisation >= 80
-                ? "warning"
-                : "positive"
-            }
-          />
-          <Metric
-            label="Daily average"
-            value={dailyAvg != null ? formatDualMoney(dailyAvg, settings) : "—"}
-            tone={dailyAvg != null ? "accent" : "neutral"}
-            detail={window.elapsedDays > 0 ? `Over ${window.elapsedDays} day${window.elapsedDays !== 1 ? "s" : ""}` : "Period not started"}
-          />
-        </div>
-      </Section>
-
-      {/* ── Transactions ── */}
-      {stats.count > 0 && (
-        <Section title="Transactions">
-          <div className="dashboard-hero">
-            <Metric
-              label="Average transaction"
-              value={formatDualMoney(stats.average, settings)}
-              detail="Mean of recorded transactions"
-            />
-            <Metric
-              label="Median transaction"
-              value={formatDualMoney(stats.median, settings)}
-              detail="Half of transactions are below this"
-            />
-            <Metric
-              label="Largest transaction"
-              value={formatDualMoney(stats.largest, settings)}
-              detail="Biggest single spend this period"
-            />
-          </div>
-        </Section>
-      )}
-
-      {/* ── Budget vs Actual + Forecast (month mode) ── */}
-      {pacing != null && (
-        <Section title="Budget vs Actual">
-          <div className="card card-body" style={{ display: "grid", gap: 12 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-              <span style={{ color: "var(--text-secondary)", fontSize: 13 }}>Budget</span>
-              <strong>{formatDualMoney(pacing.budget, settings)}</strong>
-            </div>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-              <span style={{ color: "var(--text-secondary)", fontSize: 13 }}>Actual spend</span>
-              <strong>{formatDualMoney(pacing.spent, settings)}</strong>
-            </div>
-            <Progress
-              value={pacing.spent}
-              max={pacing.budget}
-              tone={
-                utilisation == null
-                  ? "neutral"
-                  : utilisation >= 100
-                  ? "danger"
-                  : utilisation >= 80
-                  ? "warning"
-                  : "success"
+        <div className="card" style={{ padding: 20, display: "grid", gap: 20, minWidth: 0 }}>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 220px), 1fr))",
+              gap: 20,
+              alignItems: "center",
+              minWidth: 0,
+            }}
+          >
+            <ProgressRing
+              value={health.score}
+              valueText={health.score != null ? String(health.score) : "—"}
+              label={health.grade ?? "Not enough data"}
+              caption="Financial health"
+              ariaLabel={
+                health.score != null
+                  ? `Financial health score ${health.score} out of 100 — ${health.grade}`
+                  : "Financial health score unavailable for this period"
               }
+              color={health.grade ? GRADE_COLOR[health.grade] : "var(--text-tertiary)"}
+              size={190}
+              scaleLabels={["0", "100"]}
             />
-            <div
-              style={{
-                fontSize: 13,
-                color: pacing.remaining < 0 ? "var(--danger)" : "var(--success)",
-                fontWeight: 600,
-              }}
-            >
-              {pacing.remaining < 0
-                ? `${formatDualMoney(Math.abs(pacing.remaining), settings)} over budget`
-                : `${formatDualMoney(pacing.remaining, settings)} remaining`}
-            </div>
 
-            {pacing.projectedTotal != null && (
-              <div
+            <div style={{ display: "grid", gap: 8, minWidth: 0 }}>
+              <span className="text-footnote">Spent · {currentPeriodLabel}</span>
+              <span style={{ fontSize: "clamp(1.75rem, 7vw, 2.5rem)", fontWeight: 700, lineHeight: 1.1 }}>
+                {total != null ? money(total) : "No data"}
+              </span>
+              <span
+                className="text-caption"
                 style={{
-                  display: "grid",
-                  gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
-                  gap: 12,
-                  padding: 12,
-                  background: "var(--bg-subtle)",
-                  borderRadius: 12,
+                  color:
+                    comparison.deltaAbs == null
+                      ? "var(--text-tertiary)"
+                      : comparison.deltaAbs > 0
+                      ? "var(--danger)"
+                      : "var(--success)",
+                  fontWeight: 600,
                 }}
               >
-                <div>
-                  <div className="text-footnote">Projected total</div>
-                  <div className="text-callout" style={{ fontWeight: 600, marginTop: 2 }}>
-                    {formatDualMoney(pacing.projectedTotal, settings)}
+                {comparison.deltaAbs != null
+                  ? `${comparison.deltaAbs > 0 ? "▲" : "▼"} ${money(Math.abs(comparison.deltaAbs))} vs ${comparison.previousLabel}`
+                  : `No comparable data for ${comparison.previousLabel}`}
+              </span>
+              <Sparkline
+                values={recentBars.map((bar) => bar.value)}
+                ariaLabel={`Spending across the last ${recentBars.length} ${mode}s`}
+                fluid
+                height={38}
+              />
+              <span className="text-footnote">Last {recentBars.length} {mode}s</span>
+            </div>
+          </div>
+
+          <StatRow
+            items={[
+              {
+                label: "Transactions",
+                value: String(stats.count),
+                detail: window.elapsedDays > 0 ? `over ${window.elapsedDays} day${window.elapsedDays !== 1 ? "s" : ""}` : "period not started",
+              },
+              { label: "Daily average", value: dailyAvg != null ? money(dailyAvg) : "—" },
+              {
+                label: "Budget left",
+                value: pacing != null ? money(pacing.remaining) : "—",
+                detail: pacing != null ? `of ${money(pacing.budget)}` : "month view only",
+                tone: pacing == null ? undefined : pacing.remaining < 0 ? "negative" : "positive",
+              },
+              {
+                label: "Burn rate",
+                value: utilisation != null ? `${utilisation.toFixed(0)}%` : "—",
+                detail: "of monthly budget",
+                tone:
+                  utilisation == null ? undefined : utilisation >= 100 ? "negative" : utilisation >= 80 ? "warning" : "positive",
+              },
+              { label: "Wallet", value: money(calc.wallet.walletTotal) },
+              {
+                label: "Wishlist",
+                value: money(calc.wishlist.activeTotal),
+                detail: `${calc.wishlist.activeCount} active item${calc.wishlist.activeCount !== 1 ? "s" : ""}`,
+              },
+            ]}
+          />
+
+          {health.factors.length > 0 && (
+            <div style={{ display: "grid", gap: 8, minWidth: 0 }}>
+              {health.factors.map((factor) => (
+                <div key={factor.id} style={{ display: "grid", gap: 4, minWidth: 0 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 12 }}>
+                    <span style={{ color: "var(--text-secondary)", fontWeight: 600 }}>{factor.label}</span>
+                    <span style={{ color: "var(--text-tertiary)", textAlign: "right", minWidth: 0 }}>
+                      {factor.detail}
+                    </span>
+                  </div>
+                  <div style={{ height: 6, borderRadius: 99, background: "var(--bg-inset)", overflow: "hidden" }}>
+                    <div
+                      style={{
+                        width: `${Math.round(factor.score)}%`,
+                        height: "100%",
+                        borderRadius: 99,
+                        background:
+                          factor.score >= 70 ? "var(--success)" : factor.score >= 45 ? "var(--warning)" : "var(--danger)",
+                      }}
+                    />
                   </div>
                 </div>
-                <div>
-                  <div className="text-footnote">Projected end-of-month</div>
-                  <div
-                    className="text-callout"
-                    style={{
-                      fontWeight: 600,
-                      marginTop: 2,
-                      color:
-                        pacing.projectedRemaining != null && pacing.projectedRemaining < 0
-                          ? "var(--danger)"
-                          : "var(--success)",
-                    }}
-                  >
-                    {pacing.projectedRemaining != null && pacing.projectedRemaining < 0
-                      ? `${formatDualMoney(Math.abs(pacing.projectedRemaining), settings)} over`
-                      : `${formatDualMoney(pacing.projectedRemaining, settings)} left`}
-                  </div>
-                </div>
-                {pacing.requiredDailyPace != null && pacing.daysLeft > 0 && (
-                  <div>
-                    <div className="text-footnote">Stay-on-budget pace</div>
-                    <div className="text-callout" style={{ fontWeight: 600, marginTop: 2 }}>
-                      {formatDualMoney(pacing.requiredDailyPace, settings)}/day
-                    </div>
-                    <div className="text-footnote" style={{ marginTop: 2 }}>
-                      {pacing.daysLeft} day{pacing.daysLeft !== 1 ? "s" : ""} left
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        </Section>
-      )}
+              ))}
+            </div>
+          )}
+        </div>
+      </Section>
 
-      {/* ── Recurring vs One-off ── */}
-      {stats.count > 0 && (
-        <Section title="Recurring vs One-off">
-          <div className="dashboard-hero">
-            <Metric
-              label="Recurring spend"
-              value={formatDualMoney(stats.recurringTotal, settings)}
-              tone="accent"
-              detail={
-                stats.recurringShare != null
-                  ? `${stats.recurringShare.toFixed(1)}% of total · ${stats.recurringCount} transaction${stats.recurringCount !== 1 ? "s" : ""}`
-                  : "weekly / monthly / yearly / session"
-              }
-            />
-            <Metric
-              label="One-off spend"
-              value={formatDualMoney(stats.oneOffTotal, settings)}
-              detail={
-                stats.recurringShare != null
-                  ? `${(100 - stats.recurringShare).toFixed(1)}% of total · ${stats.oneOffCount} transaction${stats.oneOffCount !== 1 ? "s" : ""}`
-                  : "purchase / custom / ad-hoc"
-              }
-            />
-          </div>
-        </Section>
-      )}
-
-      {/* ── Spending trend chart ── */}
-      <Section title={mode === "week" ? "Weekly trend" : "Monthly trend"}>
-        <div className="card card-body" style={{ overflowX: "hidden", padding: "16px 12px 8px" }}>
-          {mode === "week" ? (
-            weeklyBars.length === 0 ? (
-              <EmptyState title="No weekly data" description="Record spending to see the weekly trend." />
+      {/* ── Spending ───────────────────────────────────────────────────────── */}
+      <Section title="Spending">
+        <div style={{ display: "grid", gap: 16, minWidth: 0 }}>
+          <ChartCard
+            title={mode === "week" ? "Weekly trend" : `Spending through ${settings.selectedYear}`}
+            subtitle={
+              mode === "week"
+                ? "Twelve weeks around the selected week · unrecorded weeks are left blank"
+                : "Monthly totals · unrecorded months break the line rather than reading as zero"
+            }
+          >
+            {trendBars.length === 0 || trendBars.every((bar) => bar.value == null) ? (
+              <ChartPlaceholder height={180} message="No spending recorded yet for this window." />
             ) : (
-              <TrendBarChart bars={weeklyBars} height={120} />
-            )
-          ) : monthlyBars.every((b) => b.value == null) ? (
-            <EmptyState title="No spending data" description="Record spending entries to see monthly trends." />
+              <LineChart
+                title={`Spending trend in ${settings.baseCurrency}`}
+                labels={trendBars.map((bar) => bar.label)}
+                series={[
+                  {
+                    id: "spend",
+                    name: "Spend",
+                    color: "var(--accent)",
+                    values: trendBars.map((bar) => bar.value),
+                    area: true,
+                  },
+                ]}
+                referenceLines={budgetReference}
+                emphasisIndex={trendEmphasis >= 0 ? trendEmphasis : undefined}
+                formatValue={money}
+                formatTick={tick}
+                height={220}
+                showLegend={budgetReference.length > 0}
+              />
+            )}
+          </ChartCard>
+
+          {calendar && (
+            <ChartCard
+              title={mode === "week" ? "Daily spending this week" : "Daily spending"}
+              subtitle="Darker days cost more · dashed days are not recorded yet"
+            >
+              <Heatmap
+                cells={heatmapCells}
+                title={`Daily spending calendar for ${currentPeriodLabel}`}
+                formatValue={money}
+              />
+            </ChartCard>
+          )}
+
+          {stats.count > 0 && (
+            <div className="card" style={{ padding: 16, minWidth: 0 }}>
+              <StatRow
+                items={[
+                  { label: "Average transaction", value: money(stats.average) },
+                  { label: "Median transaction", value: money(stats.median) },
+                  { label: "Largest transaction", value: money(stats.largest) },
+                  { label: "Transactions", value: String(stats.count) },
+                ]}
+              />
+            </div>
+          )}
+        </div>
+      </Section>
+
+      {/* ── Budget ─────────────────────────────────────────────────────────── */}
+      <Section title="Budget">
+        <div style={{ display: "grid", gap: 16, minWidth: 0 }}>
+          <ChartCard
+            title="Budget vs actual"
+            subtitle={
+              budgetBase > 0
+                ? `Monthly budget of ${money(budgetBase)} shown as the dashed reference`
+                : "Set a monthly budget in Settings to see the reference line"
+            }
+          >
+            {monthlyBars.every((bar) => bar.value == null) ? (
+              <ChartPlaceholder height={180} message="No monthly spending recorded for this year." />
+            ) : (
+              <BarChart
+                title={`Monthly spend against budget in ${settings.baseCurrency}`}
+                bars={monthlyBars.map((bar) => ({
+                  label: bar.label,
+                  value: bar.value,
+                  highlight: bar.highlight,
+                }))}
+                referenceLines={budgetBase > 0 ? [{ value: budgetBase, label: `Budget ${money(budgetBase)}` }] : []}
+                formatValue={money}
+                formatTick={tick}
+                height={200}
+              />
+            )}
+          </ChartCard>
+
+          {forecast ? (
+            <ChartCard
+              title="Forecast"
+              subtitle="Cumulative spend so far, extended at the current pace to the end of the period"
+            >
+              <LineChart
+                title={`Cumulative spend and projection in ${settings.baseCurrency}`}
+                labels={forecast.labels}
+                series={[
+                  {
+                    id: "actual",
+                    name: "Actual so far",
+                    color: "var(--accent)",
+                    values: forecast.actual,
+                    area: true,
+                  },
+                  {
+                    id: "projected",
+                    name: "Projected at this pace",
+                    color: "var(--warning)",
+                    values: forecast.projected,
+                    dashed: true,
+                  },
+                ]}
+                referenceLines={
+                  forecast.budget != null ? [{ value: forecast.budget, label: `Budget ${money(forecast.budget)}` }] : []
+                }
+                formatValue={money}
+                formatTick={tick}
+                height={220}
+              />
+              {pacing != null && (
+                <StatRow
+                  items={[
+                    {
+                      label: "Projected total",
+                      value: pacing.projectedTotal != null ? money(pacing.projectedTotal) : "—",
+                    },
+                    {
+                      label: "Projected end of month",
+                      value:
+                        pacing.projectedRemaining != null
+                          ? pacing.projectedRemaining < 0
+                            ? `${money(Math.abs(pacing.projectedRemaining))} over`
+                            : `${money(pacing.projectedRemaining)} left`
+                          : "—",
+                      tone:
+                        pacing.projectedRemaining == null
+                          ? undefined
+                          : pacing.projectedRemaining < 0
+                          ? "negative"
+                          : "positive",
+                    },
+                    {
+                      label: "Stay-on-budget pace",
+                      value: pacing.requiredDailyPace != null ? `${money(pacing.requiredDailyPace)}/day` : "—",
+                      detail: `${pacing.daysLeft} day${pacing.daysLeft !== 1 ? "s" : ""} left`,
+                    },
+                    {
+                      label: "Spent so far",
+                      value: money(pacing.spent),
+                      detail: utilisation != null ? `${utilisation.toFixed(0)}% of budget` : undefined,
+                      tone: utilisation != null && utilisation >= 100 ? "negative" : undefined,
+                    },
+                  ]}
+                />
+              )}
+            </ChartCard>
           ) : (
-            <TrendBarChart bars={monthlyBars} height={120} />
+            <div className="card card-body" style={{ color: "var(--text-secondary)", fontSize: 13 }}>
+              {mode === "year"
+                ? "Forecasting works on month and week views — the budget itself is defined monthly."
+                : "No spending recorded for this period yet, so there is nothing to project."}
+            </div>
           )}
         </div>
       </Section>
 
-      {/* ── Category breakdown ── */}
-      <Section title="Category breakdown">
-        {categories.length === 0 ? (
-          <EmptyState
-            title="No spending for this period"
-            description="Zero recorded spending and unavailable historical data remain distinct."
-          />
-        ) : (
-          <div className="item-list">
-            {categories.map(({ category, categoryId, total: catTotal, count, share, cap, capUsage, overCap }) => {
-              const isPiloting = category?.bucket === "piloting";
-              return (
-                <div
-                  key={categoryId}
-                  className="item-row"
-                  style={{ flexDirection: "column", alignItems: "stretch", gap: 6 }}
-                >
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
-                    <div style={{ display: "flex", gap: 8, alignItems: "center", minWidth: 0 }}>
-                      <span
-                        style={{
-                          width: 10,
-                          height: 10,
-                          borderRadius: 99,
-                          background: category?.color ?? "#64748B",
-                          flexShrink: 0,
-                        }}
-                      />
-                      <span style={{ fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                        {category?.name ?? "Uncategorized"}
-                      </span>
-                      {isPiloting && (
-                        <span className="text-footnote" style={{ color: "var(--text-tertiary)", whiteSpace: "nowrap" }}>
-                          Excluded from shares
-                        </span>
-                      )}
-                      {overCap && (
-                        <span className="badge badge-danger" style={{ whiteSpace: "nowrap" }}>
-                          Over cap
-                        </span>
-                      )}
-                    </div>
-                    <div style={{ textAlign: "right", flexShrink: 0 }}>
-                      <strong style={overCap ? { color: "var(--danger)" } : undefined}>
-                        {formatDualMoney(catTotal, settings)}
-                      </strong>
-                      <div className="text-footnote" style={{ color: "var(--text-secondary)" }}>
-                        {cap != null
-                          ? `of ${formatDualMoney(cap, settings)} cap · ${count} transaction${count !== 1 ? "s" : ""}`
-                          : `${share != null ? `${share.toFixed(1)}% · ` : ""}${count} transaction${count !== 1 ? "s" : ""}`}
-                      </div>
-                    </div>
-                  </div>
+      {/* ── Categories ─────────────────────────────────────────────────────── */}
+      <Section title="Categories">
+        <div style={{ display: "grid", gap: 16, minWidth: 0 }}>
+          <ChartCard
+            title="Where the money went"
+            subtitle="Each bar carries its category's own colour · piloting stays visible but never enters a share"
+          >
+            {categoryRows.length === 0 ? (
+              <EmptyState
+                title="No spending for this period"
+                description="Zero recorded spending and unavailable historical data remain distinct."
+              />
+            ) : (
+              <>
+                <HorizontalBarChart
+                  title={`Spending by category in ${settings.baseCurrency}`}
+                  rows={categoryRows}
+                  formatValue={money}
+                />
+                {categories.length > categoryRows.length && (
+                  <span className="text-caption" style={{ color: "var(--text-tertiary)" }}>
+                    +{categories.length - categoryRows.length} smaller categor
+                    {categories.length - categoryRows.length === 1 ? "y" : "ies"} not shown
+                  </span>
+                )}
+                {overCap.length > 0 && (
+                  <span className="text-caption" style={{ color: "var(--danger)", fontWeight: 600 }}>
+                    {overCap.length} categor{overCap.length === 1 ? "y is" : "ies are"} over cap
+                  </span>
+                )}
+              </>
+            )}
+          </ChartCard>
 
-                  {/* With a cap set, progress tracks the cap — the number the
-                      user actually committed to — rather than share of spend. */}
-                  {cap != null && capUsage != null ? (
-                    <>
-                      <Progress
-                        value={Math.min(capUsage, 100)}
-                        max={100}
-                        tone={overCap ? "danger" : capUsage >= 80 ? "warning" : "success"}
-                        label={`${category?.name ?? "Uncategorized"} against its monthly cap`}
-                      />
-                      <div
-                        className="text-footnote"
-                        style={{ color: overCap ? "var(--danger)" : "var(--text-tertiary)" }}
-                      >
-                        {overCap
-                          ? `${formatDualMoney(catTotal - cap, settings)} over cap`
-                          : `${capUsage.toFixed(0)}% of cap used · ${formatDualMoney(cap - catTotal, settings)} left`}
-                      </div>
-                    </>
-                  ) : (
-                    share != null && (
-                      <Progress
-                        value={share}
-                        max={100}
-                        color={category?.color ?? "var(--accent)"}
-                        label={`${category?.name ?? "Uncategorized"} share of spending`}
-                      />
-                    )
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
+          <ChartCard
+            title="Category evolution"
+            subtitle={`Top ${categoryEvolution.series.length || 4} categories across ${settings.selectedYear}`}
+          >
+            {categoryEvolution.series.length === 0 ? (
+              <ChartPlaceholder height={180} message="No category history recorded for this year." />
+            ) : (
+              <LineChart
+                title={`Monthly spend per category in ${settings.baseCurrency}`}
+                labels={categoryEvolution.labels}
+                series={categoryEvolution.series.map((series) => ({
+                  id: series.categoryId,
+                  name: series.name,
+                  color: series.color,
+                  values: series.values,
+                }))}
+                emphasisIndex={mode === "year" ? undefined : settings.selectedMonth - 1}
+                formatValue={money}
+                formatTick={tick}
+                height={230}
+              />
+            )}
+          </ChartCard>
+        </div>
       </Section>
 
-      {/* ── History: period-over-period ── */}
-      <Section title="History">
-        <div className="dashboard-hero">
-          <Metric
-            label={`vs ${comparison.previousLabel}`}
-            value={
-              comparison.deltaAbs != null
-                ? formatDualMoney(comparison.deltaAbs, settings, { showSign: true })
-                : "No data"
-            }
-            detail={
-              comparison.deltaPct != null
-                ? `${comparison.deltaPct > 0 ? "+" : ""}${comparison.deltaPct.toFixed(1)}% vs previous ${mode}`
-                : comparison.previousTotal == null
-                ? "Previous period has no recorded data"
-                : "Current period has no recorded data"
-            }
-            tone={
-              comparison.deltaAbs == null ? "neutral" : comparison.deltaAbs > 0 ? "negative" : "positive"
-            }
-          />
-          <Metric
-            label="Previous period"
-            value={
-              comparison.previousTotal != null ? formatDualMoney(comparison.previousTotal, settings) : "No data"
-            }
-            detail={comparison.previousLabel}
-          />
-          {lastYearComparison && (
-            <Metric
-              label="Same month last year"
-              value={formatDualMoney(lastYearComparison.total, settings)}
-              detail={lastYearComparison.label}
+      {/* ── Recurring ──────────────────────────────────────────────────────── */}
+      <Section title="Recurring">
+        <div style={{ display: "grid", gap: 16, minWidth: 0 }}>
+          <ChartCard
+            title="Committed vs discretionary"
+            subtitle="Recurring covers weekly, monthly, yearly and session costs"
+          >
+            <DonutChart
+              title={`Recurring versus one-off spending for ${currentPeriodLabel}`}
+              segments={[
+                { id: "recurring", label: "Recurring", value: stats.recurringTotal, color: recurringTone },
+                { id: "oneoff", label: "One-off", value: stats.oneOffTotal, color: oneOffTone },
+              ]}
+              centerValue={total != null ? money(total) : "—"}
+              centerLabel="total spend"
+              formatValue={money}
+              size={200}
+              emptyMessage="No spending recorded for this period."
             />
-          )}
+            {stats.count > 0 && (
+              <StatRow
+                items={[
+                  {
+                    label: "Recurring",
+                    value: money(stats.recurringTotal),
+                    detail: `${stats.recurringCount} transaction${stats.recurringCount !== 1 ? "s" : ""}${
+                      stats.recurringShare != null ? ` · ${stats.recurringShare.toFixed(0)}%` : ""
+                    }`,
+                  },
+                  {
+                    label: "One-off",
+                    value: money(stats.oneOffTotal),
+                    detail: `${stats.oneOffCount} transaction${stats.oneOffCount !== 1 ? "s" : ""}${
+                      stats.recurringShare != null ? ` · ${(100 - stats.recurringShare).toFixed(0)}%` : ""
+                    }`,
+                  },
+                ]}
+                columns={140}
+              />
+            )}
+          </ChartCard>
+
+          <ChartCard
+            title={`Commitment load through ${settings.selectedYear}`}
+            subtitle="How much of each month was already spoken for"
+          >
+            {recurringSplit.recurring.every((value) => value == null) ? (
+              <ChartPlaceholder height={180} message="No spending recorded for this year." />
+            ) : (
+              <StackedBarChart
+                title={`Recurring and one-off spend per month in ${settings.baseCurrency}`}
+                labels={recurringSplit.labels}
+                series={[
+                  { id: "recurring", name: "Recurring", color: recurringTone, values: recurringSplit.recurring },
+                  { id: "oneoff", name: "One-off", color: oneOffTone, values: recurringSplit.oneOff },
+                ]}
+                emphasisIndex={mode === "year" ? undefined : settings.selectedMonth - 1}
+                referenceLines={budgetBase > 0 ? [{ value: budgetBase, label: `Budget ${money(budgetBase)}` }] : []}
+                formatValue={money}
+                formatTick={tick}
+                height={220}
+              />
+            )}
+          </ChartCard>
         </div>
       </Section>
 
-      {/* ── Savings & Wallet ── */}
-      <Section title="Savings & Wallet">
-        <div className="dashboard-hero">
-          <Metric
-            label="Wallet balance"
-            value={formatDualMoney(calc.wallet.walletTotal, settings)}
-            detail="All wallet entries for year"
-            tone={calc.wallet.walletTotal >= 0 ? "positive" : "negative"}
-          />
-          <Metric
-            label="Rollover total"
-            value={formatDualMoney(calc.wallet.rolloverTotal, settings, { showSign: true })}
-            detail="Accumulated month-end rollovers"
-            tone={calc.wallet.rolloverTotal >= 0 ? "positive" : "negative"}
-          />
-          <Metric
-            label="Wishlist total"
-            value={formatDualMoney(calc.wishlist.activeTotal, settings)}
-            detail={`${calc.wishlist.activeCount} active item${calc.wishlist.activeCount !== 1 ? "s" : ""}`}
-          />
+      {/* ── History ────────────────────────────────────────────────────────── */}
+      <Section title="History">
+        <div style={{ display: "grid", gap: 16, minWidth: 0 }}>
+          <ChartCard
+            title="Period comparison"
+            subtitle={`The last ${recentBars.length} ${mode}s · "?" marks periods with no records`}
+          >
+            <BarChart
+              title={`Spending across the last ${recentBars.length} ${mode}s in ${settings.baseCurrency}`}
+              bars={recentBars.map((bar) => ({ label: bar.label, value: bar.value, highlight: bar.highlight }))}
+              formatValue={money}
+              formatTick={tick}
+              height={200}
+            />
+            <StatRow
+              items={[
+                {
+                  label: `vs ${comparison.previousLabel}`,
+                  value:
+                    comparison.deltaAbs != null
+                      ? formatDualMoney(comparison.deltaAbs, settings, { showSign: true })
+                      : "No data",
+                  detail:
+                    comparison.deltaPct != null
+                      ? `${comparison.deltaPct > 0 ? "+" : ""}${comparison.deltaPct.toFixed(1)}% vs previous ${mode}`
+                      : comparison.previousTotal == null
+                      ? "previous period has no records"
+                      : "current period has no records",
+                  tone: comparison.deltaAbs == null ? undefined : comparison.deltaAbs > 0 ? "negative" : "positive",
+                },
+                {
+                  label: "Previous period",
+                  value: comparison.previousTotal != null ? money(comparison.previousTotal) : "No data",
+                  detail: comparison.previousLabel,
+                },
+                ...(lastYearComparison
+                  ? [
+                      {
+                        label: "Same month last year",
+                        value: money(lastYearComparison.total),
+                        detail: lastYearComparison.label,
+                      },
+                    ]
+                  : []),
+                {
+                  label: "Rollover to date",
+                  value: formatDualMoney(calc.wallet.rolloverTotal, settings, { showSign: true }),
+                  detail: "accumulated month-end rollovers",
+                  tone: calc.wallet.rolloverTotal >= 0 ? "positive" : "negative",
+                },
+              ]}
+            />
+          </ChartCard>
         </div>
       </Section>
     </div>

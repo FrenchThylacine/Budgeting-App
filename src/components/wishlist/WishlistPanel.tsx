@@ -1,81 +1,144 @@
-import React, { useState, useMemo } from "react";
-import { Check, Pencil, Plus, Trash2, X, ShoppingBag } from "lucide-react";
+import React, { useMemo, useState } from "react";
+import {
+  Check,
+  ExternalLink,
+  Link2Off,
+  Pencil,
+  Plus,
+  Receipt,
+  ShoppingBag,
+  Trash2,
+  X,
+} from "lucide-react";
 import { CURRENCY_OPTIONS, formatMoney } from "../../domain/currency";
+import { todayDateInput } from "../../domain/dates";
+import {
+  PRIORITY_META,
+  PRIORITY_ORDER,
+  faviconUrl,
+  itemDomain,
+  normalizeItemUrl,
+  parseItemUrl,
+  purchaseDefaults,
+  sortWishlistItems,
+  wishlistCardBorder,
+  wishlistCardGradient,
+  wishlistItemAccent,
+  withAlpha,
+} from "../../domain/wishlist";
+import type { WishlistLinkResult } from "../../domain/wishlist";
 import { useBudgetStore } from "../../store/budgetStore";
 import {
-  wishlistToDraft,
-  parseAmount,
-  wishlistViewMatches,
   formatDualMoney,
-  priorityRank,
+  parseAmount,
+  valueToInput,
+  wishlistPayloadFromDraft,
+  wishlistToDraft,
+  wishlistViewMatches,
 } from "../../utils/formatters";
+import type { WishlistDraft } from "../../utils/formatters";
 import { Button } from "../ui/Button";
 import { EmptyState } from "../ui/EmptyState";
 import { Section } from "../ui/Section";
-import type { WishlistItem } from "../../domain/types";
+import type { CurrencyCode, SpendingEntry, WishlistItem } from "../../domain/types";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 type ViewFilter = "all" | "active" | "bought";
 
-interface EditDraft {
-  name: string;
-  actualPrice: string;
-  currency: string;
-  priority: WishlistItem["priority"];
-  notes: string;
-  inWishlist: boolean;
+interface PurchaseDraft {
+  amount: string;
+  date: string;
+  categoryId: string;
 }
 
-const PRIORITY_COLORS: Record<string, string> = {
-  low: "#0071E3",
-  medium: "#FF9500",
-  high: "#FF3B30",
-  dream: "#AF52DE",
+interface Notice {
+  tone: "info" | "warning" | "success";
+  message: string;
+}
+
+const WISHLIST_CATEGORY_ID = "cat-wishlist";
+
+function emptyDraft(baseCurrency: string): WishlistDraft {
+  return { ...wishlistToDraft(null), currency: baseCurrency, categoryId: WISHLIST_CATEGORY_ID };
+}
+
+// ─── Favicon with a fallback that can never break the layout ─────────────────
+
+/**
+ * Site icon for a wishlist item.
+ *
+ * The favicon service answers for any domain, including ones with no icon, so
+ * a failed load falls back to a neutral mark rather than leaving a broken
+ * image box in the card. The image is never given a referrer: the wishlist
+ * should not tell a third party which page the user is looking at.
+ */
+const ItemMark: React.FC<{ domain: string | null; accent: string; size?: number }> = ({
+  domain,
+  accent,
+  size = 34,
+}) => {
+  const [failed, setFailed] = useState(false);
+  const showFavicon = domain != null && !failed;
+  return (
+    <span
+      aria-hidden="true"
+      style={{
+        display: "grid",
+        placeItems: "center",
+        width: size,
+        height: size,
+        flex: "0 0 auto",
+        borderRadius: 10,
+        background: withAlpha(accent, 0.18),
+        border: `1px solid ${withAlpha(accent, 0.28)}`,
+        overflow: "hidden",
+      }}
+    >
+      {showFavicon ? (
+        <img
+          src={faviconUrl(domain, 64)}
+          alt=""
+          width={size - 14}
+          height={size - 14}
+          loading="lazy"
+          referrerPolicy="no-referrer"
+          onError={() => setFailed(true)}
+          style={{ display: "block", width: size - 14, height: size - 14, objectFit: "contain" }}
+        />
+      ) : (
+        <ShoppingBag size={size - 18} color={accent} />
+      )}
+    </span>
+  );
 };
-
-const PRIORITY_OPTIONS: WishlistItem["priority"][] = ["low", "medium", "high", "dream"];
-
-function emptyDraft(baseCurrency: string): EditDraft {
-  return {
-    name: "",
-    actualPrice: "",
-    currency: baseCurrency,
-    priority: "medium",
-    notes: "",
-    inWishlist: true,
-  };
-}
-
-function draftFromItem(item: WishlistItem): EditDraft {
-  const d = wishlistToDraft(item);
-  return {
-    name: d.name,
-    actualPrice: d.actualPrice,
-    currency: d.currency,
-    priority: d.priority,
-    notes: d.notes,
-    inWishlist: d.inWishlist,
-  };
-}
 
 // ─── Shared edit form ────────────────────────────────────────────────────────
 
 interface EditFormProps {
-  draft: EditDraft;
-  onChange: (patch: Partial<EditDraft>) => void;
+  draft: WishlistDraft;
+  onChange: (patch: Partial<WishlistDraft>) => void;
   onSave: () => void;
   onCancel: () => void;
   submitLabel: string;
 }
 
 const EditForm: React.FC<EditFormProps> = ({ draft, onChange, onSave, onCancel, submitLabel }) => {
-  const valid = draft.name.trim().length > 0;
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const urlError = draft.url.trim().length > 0 && normalizeItemUrl(draft.url) == null;
+  const valid = draft.name.trim().length > 0 && !urlError;
+  const accent = wishlistItemAccent({
+    id: "draft",
+    name: draft.name || "draft",
+    url: normalizeItemUrl(draft.url),
+    color: draft.color,
+  });
+
+  const handleSubmit = (event: React.FormEvent) => {
+    event.preventDefault();
     if (!valid) return;
     onSave();
   };
+
   return (
     <form
       onSubmit={handleSubmit}
@@ -86,6 +149,7 @@ const EditForm: React.FC<EditFormProps> = ({ draft, onChange, onSave, onCancel, 
         padding: 16,
         display: "grid",
         gap: 10,
+        minWidth: 0,
       }}
     >
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -93,9 +157,10 @@ const EditForm: React.FC<EditFormProps> = ({ draft, onChange, onSave, onCancel, 
           className="input"
           required
           placeholder="Item name *"
+          aria-label="Item name"
           value={draft.name}
           onChange={(e) => onChange({ name: e.target.value })}
-          style={{ flex: "2 1 160px", minWidth: 140 }}
+          style={{ flex: "2 1 160px", minWidth: 120 }}
           autoFocus
         />
         <input
@@ -104,41 +169,88 @@ const EditForm: React.FC<EditFormProps> = ({ draft, onChange, onSave, onCancel, 
           step="any"
           min="0"
           placeholder="Price (optional)"
+          aria-label="Price"
           value={draft.actualPrice}
           onChange={(e) => onChange({ actualPrice: e.target.value })}
           style={{ flex: "1 1 110px", minWidth: 100 }}
         />
         <select
           className="select"
+          aria-label="Currency"
           value={draft.currency}
           onChange={(e) => onChange({ currency: e.target.value })}
           style={{ flex: "1 1 80px", minWidth: 70 }}
         >
-          {CURRENCY_OPTIONS.map((c) => (
-            <option key={c}>{c}</option>
+          {CURRENCY_OPTIONS.map((currency) => (
+            <option key={currency}>{currency}</option>
           ))}
         </select>
         <select
           className="select"
+          aria-label="Priority"
           value={draft.priority}
           onChange={(e) => onChange({ priority: e.target.value as WishlistItem["priority"] })}
-          style={{ flex: "1 1 90px", minWidth: 80 }}
+          style={{ flex: "1 1 110px", minWidth: 100 }}
         >
-          {PRIORITY_OPTIONS.map((p) => (
-            <option key={p} value={p}>
-              {p.charAt(0).toUpperCase() + p.slice(1)}
+          {PRIORITY_ORDER.map((priority) => (
+            <option key={priority} value={priority}>
+              {PRIORITY_META[priority].label}
             </option>
           ))}
         </select>
       </div>
+
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+        <input
+          className="input"
+          type="url"
+          inputMode="url"
+          placeholder="Link (optional) — e.g. store.com/product"
+          aria-label="Product link"
+          value={draft.url}
+          onChange={(e) => onChange({ url: e.target.value })}
+          style={{
+            flex: "3 1 180px",
+            minWidth: 140,
+            borderColor: urlError ? "var(--danger)" : undefined,
+          }}
+        />
+        <label
+          className="text-caption"
+          style={{ display: "flex", alignItems: "center", gap: 6, flex: "0 0 auto" }}
+        >
+          Colour
+          <input
+            type="color"
+            aria-label="Item colour"
+            value={/^#[0-9a-f]{6}$/i.test(draft.color) ? draft.color : accent}
+            onChange={(e) => onChange({ color: e.target.value })}
+            style={{ width: 34, height: 34, border: "none", background: "none", cursor: "pointer", padding: 2 }}
+          />
+        </label>
+        {draft.color && (
+          <Button type="button" variant="ghost" size="sm" onClick={() => onChange({ color: "" })}>
+            Auto colour
+          </Button>
+        )}
+      </div>
+
+      {urlError && (
+        <div className="text-caption" style={{ color: "var(--danger)" }}>
+          Enter a valid web address (http or https only).
+        </div>
+      )}
+
       <textarea
         className="input"
         placeholder="Notes (optional)"
+        aria-label="Notes"
         value={draft.notes}
         onChange={(e) => onChange({ notes: e.target.value })}
         rows={2}
-        style={{ resize: "vertical", minWidth: 0 }}
+        style={{ resize: "vertical", minWidth: 0, height: "auto", padding: 10 }}
       />
+
       <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, cursor: "pointer" }}>
         <input
           type="checkbox"
@@ -147,7 +259,8 @@ const EditForm: React.FC<EditFormProps> = ({ draft, onChange, onSave, onCancel, 
         />
         In wishlist
       </label>
-      <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+
+      <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", flexWrap: "wrap" }}>
         <Button type="button" variant="ghost" size="sm" onClick={onCancel}>
           <X size={14} /> Cancel
         </Button>
@@ -166,123 +279,241 @@ export const WishlistPanel: React.FC = () => {
   const add = useBudgetStore((s) => s.addWishlistItem);
   const update = useBudgetStore((s) => s.updateWishlistItem);
   const remove = useBudgetStore((s) => s.removeWishlistItem);
+  const recordPurchase = useBudgetStore((s) => s.recordWishlistPurchase);
+  const setBought = useBudgetStore((s) => s.setWishlistItemBought);
+  const unlinkPurchase = useBudgetStore((s) => s.unlinkWishlistPurchase);
+  const findLinkedEntry = useBudgetStore((s) => s.findLinkedSpendingEntry);
   const mutable = useBudgetStore((s) => s.isCurrentPeriodMutable)();
 
   const { settings } = snapshot;
-  const allItems: WishlistItem[] =
-    snapshot.years[String(settings.selectedYear)]?.wishlistItems ?? [];
+  const allItems: WishlistItem[] = snapshot.years[String(settings.selectedYear)]?.wishlistItems ?? [];
 
   const [view, setView] = useState<ViewFilter>("active");
   const [showAddForm, setShowAddForm] = useState(false);
-  const [addDraft, setAddDraft] = useState<EditDraft>(() => emptyDraft(settings.baseCurrency));
+  const [addDraft, setAddDraft] = useState<WishlistDraft>(() => emptyDraft(settings.baseCurrency));
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [editDraft, setEditDraft] = useState<EditDraft | null>(null);
+  const [editDraft, setEditDraft] = useState<WishlistDraft | null>(null);
+  const [purchasingId, setPurchasingId] = useState<string | null>(null);
+  const [purchaseDraft, setPurchaseDraft] = useState<PurchaseDraft | null>(null);
+  const [expandedLinkId, setExpandedLinkId] = useState<string | null>(null);
+  const [notice, setNotice] = useState<Notice | null>(null);
 
+  // Urgent first, dream last, bought at the bottom.
   const filteredItems = useMemo(
-    () => [...allItems].filter((item) => wishlistViewMatches(item, view)).sort(
-      (a, b) => priorityRank(b.priority) - priorityRank(a.priority),
-    ),
+    () => sortWishlistItems(allItems.filter((item) => wishlistViewMatches(item, view))),
     [allItems, view],
   );
 
-  const activeItems = useMemo(() => allItems.filter((i) => i.active && i.inWishlist && !i.bought), [allItems]);
-  const boughtItems = useMemo(() => allItems.filter((i) => i.bought), [allItems]);
+  const activeItems = useMemo(() => allItems.filter((item) => wishlistViewMatches(item, "active")), [allItems]);
+  const boughtItems = useMemo(() => allItems.filter((item) => item.bought), [allItems]);
 
-  // Totals
   const activeTotal = useMemo(
-    () =>
-      activeItems.reduce(
-        (sum, i) =>
-          sum + (i.actualPrice != null ? parseFloat(String(i.actualPrice)) || 0 : 0),
-        0,
-      ),
+    () => activeItems.reduce((sum, item) => sum + (item.actualPrice ?? 0), 0),
     [activeItems],
   );
 
+  const categoryOptions = useMemo(
+    () => snapshot.categories.filter((category) => !category.archived),
+    [snapshot.categories],
+  );
+
+  /** Entries by id, so rendering N cards does not re-scan every year. */
+  const entriesById = useMemo(() => {
+    const map = new Map<string, SpendingEntry>();
+    for (const record of Object.values(snapshot.years)) {
+      for (const entry of record.spendingEntries) map.set(entry.id, entry);
+    }
+    return map;
+  }, [snapshot.years]);
+
   // --- Handlers ---
 
+  const resetForms = () => {
+    setEditingId(null);
+    setEditDraft(null);
+    setPurchasingId(null);
+    setPurchaseDraft(null);
+  };
+
   const handleAdd = () => {
-    const price = parseAmount(addDraft.actualPrice);
     if (!addDraft.name.trim()) return;
     add({
-      name: addDraft.name.trim(),
-      categoryId: "cat-wishlist",
-      actualPrice: price,
-      effectiveValue: price,
-      currency: addDraft.currency as any,
-      priority: addDraft.priority,
-      notes: addDraft.notes,
-      inWishlist: addDraft.inWishlist,
+      ...wishlistPayloadFromDraft(addDraft),
+      categoryId: addDraft.categoryId || WISHLIST_CATEGORY_ID,
+      currency: addDraft.currency as CurrencyCode,
       bought: false,
       active: true,
     });
     setAddDraft(emptyDraft(settings.baseCurrency));
     setShowAddForm(false);
     setView("active");
+    setNotice(null);
   };
 
   const startEdit = (item: WishlistItem) => {
+    resetForms();
     setEditingId(item.id);
-    setEditDraft(draftFromItem(item));
-  };
-
-  const cancelEdit = () => {
-    setEditingId(null);
-    setEditDraft(null);
+    setEditDraft(wishlistToDraft(item));
   };
 
   const saveEdit = () => {
     if (!editingId || !editDraft || !editDraft.name.trim()) return;
-    const price = parseAmount(editDraft.actualPrice);
     update(editingId, {
-      name: editDraft.name.trim(),
-      actualPrice: price,
-      effectiveValue: price,
-      currency: editDraft.currency as any,
-      priority: editDraft.priority,
-      notes: editDraft.notes,
-      inWishlist: editDraft.inWishlist,
+      ...wishlistPayloadFromDraft(editDraft),
+      currency: editDraft.currency as CurrencyCode,
     });
-    cancelEdit();
+    resetForms();
   };
 
-  const handleDelete = (id: string, name: string) => {
-    if (window.confirm(`Delete "${name}" from your wishlist?`)) {
-      remove(id);
+  const handleDelete = (item: WishlistItem) => {
+    const linked = findLinkedEntry(item.id);
+    const warning = linked
+      ? `\n\nThe linked transaction (${formatMoney(linked.amount, linked.currency, settings.currencyDisplayMode)} on ${linked.date}) stays in your spending.`
+      : "";
+    if (window.confirm(`Delete "${item.name}" from your wishlist?${warning}`)) {
+      remove(item.id);
+      resetForms();
     }
   };
 
+  /** Explains an outcome instead of letting the UI silently do nothing. */
+  const reportResult = (result: WishlistLinkResult, item: WishlistItem): void => {
+    switch (result.status) {
+      case "created":
+        setNotice({ tone: "success", message: `Recorded the purchase of ${item.name} in your spending.` });
+        resetForms();
+        break;
+      case "already-linked":
+        setNotice({
+          tone: "warning",
+          message: `${item.name} is already linked to a transaction — showing it instead of adding a second one.`,
+        });
+        setExpandedLinkId(item.id);
+        resetForms();
+        break;
+      case "unlinked":
+        setNotice({
+          tone: "info",
+          message: result.spendingId
+            ? `${item.name} is no longer marked bought. The transaction it was linked to is still in your spending — delete it there if it was a mistake.`
+            : `${item.name} is no longer marked bought.`,
+        });
+        break;
+      case "locked":
+        setNotice({ tone: "warning", message: "This period is historical and read-only." });
+        break;
+      case "invalid-amount":
+        setNotice({ tone: "warning", message: "Enter an amount before recording this purchase (0 is allowed)." });
+        break;
+      case "not-found":
+        setNotice({ tone: "warning", message: "That item no longer exists." });
+        break;
+      default:
+        setNotice(null);
+    }
+  };
+
+  const startPurchase = (item: WishlistItem) => {
+    setNotice(null);
+    // Never a second transaction for the same item: if the link still
+    // resolves, show that entry rather than opening the form.
+    const linked = findLinkedEntry(item.id);
+    if (linked) {
+      reportResult({ status: "already-linked", spendingId: linked.id }, item);
+      return;
+    }
+    const defaults = purchaseDefaults(item, todayDateInput());
+    resetForms();
+    setPurchasingId(item.id);
+    setPurchaseDraft({
+      amount: valueToInput(defaults.amount),
+      date: defaults.date,
+      categoryId: defaults.categoryId || WISHLIST_CATEGORY_ID,
+    });
+  };
+
+  const submitPurchase = (item: WishlistItem) => {
+    if (!purchaseDraft) return;
+    const amount = parseAmount(purchaseDraft.amount);
+    if (amount == null) {
+      setNotice({ tone: "warning", message: "Enter an amount before recording this purchase (0 is allowed)." });
+      return;
+    }
+    reportResult(
+      recordPurchase(item.id, {
+        amount,
+        date: purchaseDraft.date,
+        categoryId: purchaseDraft.categoryId,
+        currency: item.currency,
+        note: item.name,
+      }),
+      item,
+    );
+  };
+
+  const markBoughtOnly = (item: WishlistItem) => {
+    const result = setBought(item.id, true);
+    resetForms();
+    if (result.status === "updated") {
+      setNotice({ tone: "info", message: `${item.name} is marked bought. No transaction was recorded.` });
+    } else {
+      reportResult(result, item);
+    }
+  };
+
+  const markNotBought = (item: WishlistItem) => {
+    const linked = findLinkedEntry(item.id);
+    if (
+      linked &&
+      !window.confirm(
+        `"${item.name}" is linked to a transaction of ${formatMoney(linked.amount, linked.currency, settings.currencyDisplayMode)} on ${linked.date}.\n\nUnmark it as bought and unlink them? The transaction stays in your spending — delete it there if it never happened.`,
+      )
+    ) {
+      return;
+    }
+    reportResult(setBought(item.id, false), item);
+    setExpandedLinkId(null);
+  };
+
+  const unlinkOnly = (item: WishlistItem) => {
+    reportResult(unlinkPurchase(item.id), item);
+    setExpandedLinkId(null);
+  };
+
   // --- View tab button ---
-  const viewTabStyle = (tab: ViewFilter) => ({
-    padding: "4px 12px",
-    borderRadius: "var(--radius-full)",
-    border: "1px solid var(--border)",
-    background: view === tab ? "var(--accent-soft)" : "transparent",
-    color: view === tab ? "var(--accent)" : "var(--text-secondary)",
-    fontWeight: view === tab ? 600 : 400,
-    fontSize: 13,
-    cursor: "pointer",
-  } as React.CSSProperties);
+  const viewTabStyle = (tab: ViewFilter) =>
+    ({
+      padding: "4px 12px",
+      borderRadius: "var(--radius-full)",
+      border: "1px solid var(--border)",
+      background: view === tab ? "var(--accent-soft)" : "transparent",
+      color: view === tab ? "var(--accent)" : "var(--text-secondary)",
+      fontWeight: view === tab ? 600 : 400,
+      fontSize: 13,
+      cursor: "pointer",
+    }) as React.CSSProperties;
+
+  const noticeTone = {
+    info: { background: "var(--accent-soft)", color: "var(--accent)" },
+    success: { background: "var(--success-soft)", color: "var(--success)" },
+    warning: { background: "var(--warning-soft)", color: "var(--warning)" },
+  };
 
   return (
     <div className="page-enter" style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr)", gap: 20 }}>
       <Section title="Wishlist">
+        {!mutable && <div className="historical-banner">Historical periods are read-only.</div>}
+
         {/* Toolbar */}
         <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: 4 }}>
-          {/* View tabs */}
           <div style={{ display: "flex", gap: 4, flexWrap: "wrap", minWidth: 0 }}>
             {(["active", "all", "bought"] as ViewFilter[]).map((tab) => (
-              <button
-                key={tab}
-                type="button"
-                style={viewTabStyle(tab)}
-                onClick={() => setView(tab)}
-              >
+              <button key={tab} type="button" style={viewTabStyle(tab)} onClick={() => setView(tab)}>
                 {tab === "active"
                   ? `Active (${activeItems.length})`
                   : tab === "bought"
-                  ? `Bought (${boughtItems.length})`
-                  : `All (${allItems.length})`}
+                    ? `Bought (${boughtItems.length})`
+                    : `All (${allItems.length})`}
               </button>
             ))}
           </div>
@@ -294,160 +525,356 @@ export const WishlistPanel: React.FC = () => {
           )}
         </div>
 
+        {notice && (
+          <div
+            role="status"
+            className="text-caption"
+            style={{
+              ...noticeTone[notice.tone],
+              display: "flex",
+              alignItems: "flex-start",
+              gap: 8,
+              padding: "8px 12px",
+              borderRadius: "var(--radius-md)",
+              marginTop: 10,
+            }}
+          >
+            <span style={{ flex: 1, minWidth: 0 }}>{notice.message}</span>
+            <button
+              type="button"
+              onClick={() => setNotice(null)}
+              aria-label="Dismiss message"
+              style={{ background: "none", border: "none", color: "inherit", cursor: "pointer", padding: 0 }}
+            >
+              <X size={13} />
+            </button>
+          </div>
+        )}
+
         {/* Add form */}
         {mutable && showAddForm && (
-          <EditForm
-            draft={addDraft}
-            onChange={(patch) => setAddDraft((d) => ({ ...d, ...patch }))}
-            onSave={handleAdd}
-            onCancel={() => { setShowAddForm(false); setAddDraft(emptyDraft(settings.baseCurrency)); }}
-            submitLabel="Add item"
-          />
+          <div style={{ marginTop: 12 }}>
+            <EditForm
+              draft={addDraft}
+              onChange={(patch) => setAddDraft((draft) => ({ ...draft, ...patch }))}
+              onSave={handleAdd}
+              onCancel={() => {
+                setShowAddForm(false);
+                setAddDraft(emptyDraft(settings.baseCurrency));
+              }}
+              submitLabel="Add item"
+            />
+          </div>
         )}
       </Section>
 
-      {/* Item list */}
+      {/* Item cards */}
       {filteredItems.length === 0 ? (
         <EmptyState
           title={
             view === "active"
               ? "No active wishlist items"
               : view === "bought"
-              ? "Nothing bought yet"
-              : "Your wishlist is empty"
+                ? "Nothing bought yet"
+                : "Your wishlist is empty"
           }
           description="Save future purchases without mixing them with monthly spending."
         />
       ) : (
-        <div className="item-list">
+        <div
+          style={{
+            display: "grid",
+            // `min(...)` keeps a single column from demanding more width than
+            // the screen has, so a 320px phone never scrolls sideways.
+            gridTemplateColumns: "repeat(auto-fill, minmax(min(260px, 100%), 1fr))",
+            gap: 12,
+          }}
+        >
           {filteredItems.map((item) => {
+            const accent = wishlistItemAccent(item);
+            const domain = itemDomain(item.url);
+            const href = parseItemUrl(item.url)?.toString();
+            const priority = PRIORITY_META[item.priority] ?? PRIORITY_META.low;
             const isEditing = editingId === item.id;
-            const priorityColor = PRIORITY_COLORS[item.priority] ?? "#64748B";
+            const isPurchasing = purchasingId === item.id;
+            const linked: SpendingEntry | null = item.linkedSpendingId
+              ? (entriesById.get(item.linkedSpendingId) ?? null)
+              : null;
+            const showLink = expandedLinkId === item.id && linked != null;
+
             return (
-              <div key={item.id}>
-                {/* Item row */}
-                <div
-                  className="item-row"
-                  style={{ opacity: item.bought ? 0.6 : 1, alignItems: "flex-start" }}
-                >
-                  {/* Left: priority dot + info */}
-                  <div style={{ display: "flex", gap: 10, alignItems: "flex-start", flex: 1, minWidth: 0 }}>
-                    <span
+              <div
+                key={item.id}
+                style={{
+                  display: "grid",
+                  gap: 10,
+                  alignContent: "start",
+                  padding: 14,
+                  minWidth: 0,
+                  borderRadius: "var(--radius-lg)",
+                  border: `1px solid ${wishlistCardBorder(accent)}`,
+                  background: wishlistCardGradient(accent),
+                  boxShadow: "var(--shadow-xs)",
+                  opacity: item.bought ? 0.72 : 1,
+                }}
+              >
+                {/* Header: mark, name, price */}
+                <div style={{ display: "flex", gap: 10, alignItems: "flex-start", minWidth: 0 }}>
+                  <ItemMark domain={domain} accent={accent} />
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div
+                      className="text-callout"
                       style={{
-                        width: 10,
-                        height: 10,
-                        borderRadius: 99,
-                        background: priorityColor,
-                        flexShrink: 0,
-                        marginTop: 4,
+                        fontWeight: 600,
+                        color: "var(--text-primary)",
+                        textDecoration: item.bought ? "line-through" : "none",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
                       }}
-                    />
-                    <div style={{ minWidth: 0 }}>
-                      <div
-                        className="text-callout"
+                      title={item.name}
+                    >
+                      {item.name}
+                    </div>
+                    {/* `domain` and `href` come from the same validated URL, so
+                        the link is only ever http(s). */}
+                    {domain && href && (
+                      <a
+                        className="text-caption"
+                        href={href}
+                        target="_blank"
+                        rel="noreferrer noopener"
                         style={{
-                          fontWeight: 600,
-                          textDecoration: item.bought ? "line-through" : "none",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: 4,
+                          maxWidth: "100%",
+                          color: "var(--text-secondary)",
+                          textDecoration: "none",
                           overflow: "hidden",
-                          textOverflow: "ellipsis",
-                          whiteSpace: "nowrap",
                         }}
                       >
-                        {item.name}
-                      </div>
-                      <div className="text-footnote" style={{ display: "flex", gap: 8, marginTop: 2, flexWrap: "wrap" }}>
-                        <span
-                          style={{
-                            color: priorityColor,
-                            fontWeight: 500,
-                            textTransform: "capitalize",
-                          }}
-                        >
-                          {item.priority}
+                        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {domain}
                         </span>
-                        {item.bought && item.datePurchased && (
-                          <span style={{ color: "var(--text-tertiary)" }}>
-                            Bought {new Date(item.datePurchased).toLocaleDateString()}
-                          </span>
-                        )}
-                        {!item.inWishlist && (
-                          <span style={{ color: "var(--text-tertiary)" }}>Not in wishlist</span>
-                        )}
-                        {item.notes && (
-                          <span
-                            style={{
-                              color: "var(--text-tertiary)",
-                              overflow: "hidden",
-                              textOverflow: "ellipsis",
-                              whiteSpace: "nowrap",
-                              maxWidth: 200,
-                            }}
-                          >
-                            {item.notes}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Right: price + actions */}
-                  <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
-                    <strong style={{ fontSize: 14 }}>
-                      {item.actualPrice != null
-                        ? formatMoney(item.actualPrice, item.currency, settings.currencyDisplayMode)
-                        : "—"}
-                    </strong>
-                    {mutable && !item.bought && (
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        icon
-                        onClick={() => update(item.id, { bought: true })}
-                        aria-label="Mark bought"
-                        title="Mark as bought"
-                      >
-                        <Check size={14} />
-                      </Button>
-                    )}
-                    {mutable && (
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        icon
-                        onClick={() => (isEditing ? cancelEdit() : startEdit(item))}
-                        aria-label={isEditing ? "Cancel edit" : "Edit item"}
-                        title={isEditing ? "Cancel" : "Edit"}
-                      >
-                        {isEditing ? <X size={14} /> : <Pencil size={14} />}
-                      </Button>
-                    )}
-                    {mutable && (
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        icon
-                        onClick={() => handleDelete(item.id, item.name)}
-                        aria-label="Delete wishlist item"
-                        title="Delete"
-                        style={{ color: "var(--danger)" }}
-                      >
-                        <Trash2 size={14} />
-                      </Button>
+                        <ExternalLink size={11} style={{ flexShrink: 0 }} />
+                      </a>
                     )}
                   </div>
+                  <strong style={{ fontSize: 14, whiteSpace: "nowrap", color: "var(--text-primary)" }}>
+                    {item.actualPrice != null
+                      ? formatMoney(item.actualPrice, item.currency, settings.currencyDisplayMode)
+                      : "—"}
+                  </strong>
                 </div>
+
+                {/* Meta row */}
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                  <span
+                    className="badge"
+                    style={{ background: priority.soft, color: priority.color }}
+                    title={priority.hint}
+                  >
+                    {priority.label}
+                  </span>
+                  {item.bought && (
+                    <span className="badge badge-success">
+                      {item.datePurchased
+                        ? `Bought ${new Date(item.datePurchased).toLocaleDateString()}`
+                        : "Bought"}
+                    </span>
+                  )}
+                  {linked && (
+                    <button
+                      type="button"
+                      className="badge badge-info"
+                      onClick={() => setExpandedLinkId(showLink ? null : item.id)}
+                      style={{ border: "none", cursor: "pointer", fontFamily: "inherit" }}
+                      aria-expanded={showLink}
+                    >
+                      <Receipt size={11} /> {showLink ? "Hide transaction" : "View transaction"}
+                    </button>
+                  )}
+                  {!item.inWishlist && <span className="badge badge-neutral">Not in wishlist</span>}
+                </div>
+
+                {item.notes && (
+                  <div
+                    className="text-caption"
+                    style={{ color: "var(--text-secondary)", overflowWrap: "anywhere" }}
+                  >
+                    {item.notes}
+                  </div>
+                )}
+
+                {/* Linked transaction detail */}
+                {showLink && linked && (
+                  <div
+                    className="text-caption"
+                    style={{
+                      display: "grid",
+                      gap: 2,
+                      padding: "8px 10px",
+                      borderRadius: "var(--radius-sm)",
+                      background: "var(--bg-inset)",
+                      color: "var(--text-secondary)",
+                      minWidth: 0,
+                    }}
+                  >
+                    <span style={{ color: "var(--text-primary)", fontWeight: 600 }}>
+                      {formatMoney(linked.amount, linked.currency, settings.currencyDisplayMode)} · {linked.date}
+                    </span>
+                    <span style={{ overflowWrap: "anywhere" }}>
+                      {snapshot.categories.find((category) => category.id === linked.categoryId)?.name ??
+                        "Uncategorized"}
+                      {linked.note ? ` · ${linked.note}` : ""}
+                    </span>
+                    <span>Find it in Spending to edit or delete it.</span>
+                  </div>
+                )}
+
+                {/* Purchase form */}
+                {mutable && isPurchasing && purchaseDraft && (
+                  <form
+                    onSubmit={(event) => {
+                      event.preventDefault();
+                      submitPurchase(item);
+                    }}
+                    style={{
+                      display: "grid",
+                      gap: 8,
+                      padding: 10,
+                      borderRadius: "var(--radius-sm)",
+                      background: "var(--bg-inset)",
+                      minWidth: 0,
+                    }}
+                  >
+                    <div className="text-caption" style={{ color: "var(--text-secondary)" }}>
+                      Record this as spending
+                    </div>
+                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                      <input
+                        className="input"
+                        type="number"
+                        step="any"
+                        required
+                        aria-label="Purchase amount"
+                        placeholder="Amount"
+                        value={purchaseDraft.amount}
+                        onChange={(e) =>
+                          setPurchaseDraft((draft) => (draft ? { ...draft, amount: e.target.value } : draft))
+                        }
+                        style={{ flex: "1 1 120px", minWidth: 90 }}
+                      />
+                      <input
+                        className="input"
+                        type="date"
+                        required
+                        aria-label="Purchase date"
+                        value={purchaseDraft.date}
+                        onChange={(e) =>
+                          setPurchaseDraft((draft) => (draft ? { ...draft, date: e.target.value } : draft))
+                        }
+                        // Wide enough that the native control never clips the
+                        // year; on a narrow card it wraps to its own row.
+                        style={{ flex: "1 1 155px", minWidth: 150 }}
+                      />
+                    </div>
+                    <select
+                      className="select"
+                      aria-label="Purchase category"
+                      value={purchaseDraft.categoryId}
+                      onChange={(e) =>
+                        setPurchaseDraft((draft) => (draft ? { ...draft, categoryId: e.target.value } : draft))
+                      }
+                      style={{ minWidth: 0 }}
+                    >
+                      {categoryOptions.map((category) => (
+                        <option key={category.id} value={category.id}>
+                          {category.name}
+                        </option>
+                      ))}
+                    </select>
+                    <div className="text-caption" style={{ color: "var(--text-tertiary)" }}>
+                      Amount is in {item.currency}.
+                    </div>
+                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
+                      <Button type="button" variant="ghost" size="sm" onClick={resetForms}>
+                        Cancel
+                      </Button>
+                      <Button type="button" variant="secondary" size="sm" onClick={() => markBoughtOnly(item)}>
+                        Just mark bought
+                      </Button>
+                      <Button type="submit" variant="primary" size="sm">
+                        <Check size={14} /> Record purchase
+                      </Button>
+                    </div>
+                  </form>
+                )}
+
+                {/* Actions */}
+                {mutable && !isPurchasing && (
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                    {!item.bought ? (
+                      <Button size="sm" variant="secondary" onClick={() => startPurchase(item)}>
+                        <ShoppingBag size={14} /> Buy
+                      </Button>
+                    ) : (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => markNotBought(item)}
+                        title="Unmark as bought"
+                      >
+                        <X size={14} /> Not bought
+                      </Button>
+                    )}
+                    {linked && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        icon
+                        onClick={() => unlinkOnly(item)}
+                        aria-label="Unlink transaction"
+                        title="Unlink the transaction, keeping both records"
+                      >
+                        <Link2Off size={14} />
+                      </Button>
+                    )}
+                    <div style={{ flex: "1 1 0", minWidth: 0 }} />
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      icon
+                      onClick={() => (isEditing ? resetForms() : startEdit(item))}
+                      aria-label={isEditing ? "Cancel edit" : "Edit item"}
+                      title={isEditing ? "Cancel" : "Edit"}
+                    >
+                      {isEditing ? <X size={14} /> : <Pencil size={14} />}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      icon
+                      onClick={() => handleDelete(item)}
+                      aria-label="Delete wishlist item"
+                      title="Delete"
+                      style={{ color: "var(--danger)" }}
+                    >
+                      <Trash2 size={14} />
+                    </Button>
+                  </div>
+                )}
 
                 {/* Inline edit form */}
                 {isEditing && editDraft && (
-                  <div style={{ marginTop: -4, marginBottom: 4 }}>
-                    <EditForm
-                      draft={editDraft}
-                      onChange={(patch) => setEditDraft((d) => ({ ...(d ?? emptyDraft("")), ...patch }))}
-                      onSave={saveEdit}
-                      onCancel={cancelEdit}
-                      submitLabel="Save changes"
-                    />
-                  </div>
+                  <EditForm
+                    draft={editDraft}
+                    onChange={(patch) => setEditDraft((draft) => (draft ? { ...draft, ...patch } : draft))}
+                    onSave={saveEdit}
+                    onCancel={resetForms}
+                    submitLabel="Save changes"
+                  />
                 )}
               </div>
             );
@@ -457,10 +884,7 @@ export const WishlistPanel: React.FC = () => {
 
       {/* Summary footer */}
       {allItems.length > 0 && (
-        <div
-          className="card card-body"
-          style={{ display: "flex", gap: 24, flexWrap: "wrap", fontSize: 13 }}
-        >
+        <div className="card card-body" style={{ display: "flex", gap: 24, flexWrap: "wrap", fontSize: 13 }}>
           <div>
             <span style={{ color: "var(--text-secondary)" }}>Active items: </span>
             <strong>{activeItems.length}</strong>

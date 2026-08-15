@@ -1,7 +1,9 @@
-import type { BudgetSnapshot, Settings, Activity, WishlistItem, BudgetCategory } from "../domain/types";
+import type { BudgetSnapshot, Settings, Activity, WishlistItem, BudgetCategory, CostModel, IsoWeekday } from "../domain/types";
 import { normalizeAmount, formatMoney } from "../domain/currency";
 import { monthName } from "../domain/dates";
 import { isHistoricalPeriod } from "../domain/periods";
+import { normalizeWeekdays } from "../domain/schedule";
+import { isActiveWishlistItem, normalizeItemUrl } from "../domain/wishlist";
 
 export interface ActivityDraft {
   name: string;
@@ -18,6 +20,15 @@ export interface ActivityDraft {
   visible: boolean;
   seasonalTag: string;
   notes: string;
+  /** Lucide icon name, empty when the activity uses the default mark. */
+  icon: string;
+  /** Accent colour, empty when the card stays neutral. */
+  color: string;
+  costModel: CostModel;
+  sessionsPerMonth: string;
+  weekdays: IsoWeekday[];
+  dayOfMonth: string;
+  startDate: string;
 }
 
 export interface WishlistDraft {
@@ -29,6 +40,10 @@ export interface WishlistDraft {
   notes: string;
   inWishlist: boolean;
   active: boolean;
+  /** Product link as typed; validated on save, never trusted as-is. */
+  url: string;
+  /** Accent colour, empty when the card falls back to its hashed colour. */
+  color: string;
 }
 
 export function statusLabel(status: string): string {
@@ -81,10 +96,18 @@ export function activityToDraft(activity: Activity | null, snapshot: BudgetSnaps
     visible: activity?.visible ?? true,
     seasonalTag: activity?.seasonalTag ?? "",
     notes: activity?.notes ?? "",
+    icon: activity?.icon ?? "",
+    color: activity?.color ?? "",
+    costModel: activity?.costModel ?? "auto",
+    sessionsPerMonth: valueToInput(activity?.sessionsPerMonth),
+    weekdays: normalizeWeekdays(activity?.weekdays),
+    dayOfMonth: valueToInput(activity?.dayOfMonth),
+    startDate: activity?.startDate ?? "",
   };
 }
 
 export function activityPayloadFromDraft(draft: ActivityDraft): Omit<Activity, "id" | "order"> {
+  const weekdays = normalizeWeekdays(draft.weekdays);
   return {
     name: draft.name.trim(),
     categoryId: draft.categoryId,
@@ -100,7 +123,36 @@ export function activityPayloadFromDraft(draft: ActivityDraft): Omit<Activity, "
     visible: draft.visible,
     seasonalTag: draft.seasonalTag,
     notes: draft.notes,
+    icon: draft.icon.trim() || undefined,
+    color: draft.color.trim() || undefined,
+    // `auto` is the absence of a cost model: storing it would only add noise to
+    // records that already behave that way.
+    costModel: draft.costModel === "auto" ? undefined : draft.costModel,
+    sessionsPerMonth: parseAmount(draft.sessionsPerMonth),
+    weekdays: weekdays.length > 0 ? weekdays : undefined,
+    dayOfMonth: clampDayOfMonth(parseAmount(draft.dayOfMonth)),
+    startDate: draft.startDate.trim() || undefined,
   };
+}
+
+/**
+ * A throwaway Activity built from an in-progress form, so the panel can price a
+ * draft through the same calculations that price a saved activity. Never
+ * persisted: the id exists only to satisfy the type.
+ */
+export function draftToActivity(draft: ActivityDraft, base?: Activity | null): Activity {
+  return {
+    ...activityPayloadFromDraft(draft),
+    id: base?.id ?? "activity-draft-preview",
+    order: base?.order ?? 0,
+  };
+}
+
+function clampDayOfMonth(value: number | null): number | null {
+  if (value == null) return null;
+  const day = Math.round(value);
+  if (day < 1 || day > 31) return null;
+  return day;
 }
 
 export function wishlistToDraft(item: WishlistItem | null): WishlistDraft {
@@ -113,6 +165,29 @@ export function wishlistToDraft(item: WishlistItem | null): WishlistDraft {
     notes: item?.notes ?? "",
     inWishlist: item?.inWishlist ?? true,
     active: item?.active ?? true,
+    url: item?.url ?? "",
+    color: item?.color ?? "",
+  };
+}
+
+/**
+ * The persistable half of a wishlist draft. The URL is validated here rather
+ * than at render time, so an unusable or unsafe link is never stored.
+ */
+export function wishlistPayloadFromDraft(
+  draft: WishlistDraft,
+): Pick<WishlistItem, "name" | "actualPrice" | "effectiveValue" | "currency" | "priority" | "notes" | "inWishlist" | "url" | "color"> {
+  const price = parseAmount(draft.actualPrice);
+  return {
+    name: draft.name.trim(),
+    actualPrice: price,
+    effectiveValue: price,
+    currency: draft.currency,
+    priority: draft.priority,
+    notes: draft.notes,
+    inWishlist: draft.inWishlist,
+    url: normalizeItemUrl(draft.url),
+    color: draft.color.trim() || undefined,
   };
 }
 
@@ -167,15 +242,17 @@ export function matchesWishlistFilters(item: WishlistItem, filters: { search?: s
 }
 
 export function wishlistViewMatches(item: WishlistItem, view: "all" | "active" | "bought"): boolean {
-  if (view === "active") return item.active && item.inWishlist && !item.bought;
+  if (view === "active") return isActiveWishlistItem(item);
   if (view === "bought") return item.bought;
   return true;
 }
 
-export function priorityRank(p: string): number {
-  const map: Record<string, number> = { low: 1, medium: 2, high: 3, dream: 4 };
-  return map[p] ?? 0;
-}
+/**
+ * Re-exported from the wishlist domain so every consumer ranks priorities the
+ * same way. **0 is the most urgent** (high), and "dream" ranks last: it is an
+ * aspiration, not a claim on this month's budget.
+ */
+export { priorityRank, comparePriority, sortWishlistItems } from "../domain/wishlist";
 
 export function sortActivities(
   a: Activity,

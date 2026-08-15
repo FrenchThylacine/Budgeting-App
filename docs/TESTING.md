@@ -22,12 +22,22 @@ Testing is part of development.
 
 Run this checklist before every release.
 
-## Last recorded automated run — 2026-08-15
+## Last recorded automated run — 2026-08-16
 
-- `npm run test`: passed — 10 files, 81 tests.
-- `npm run build`: passed — Vite emitted a bundle-size advisory only.
-- `npm run server:build`: passed.
-- `npm run test:db` against local PostgreSQL 17: passed — 21 integration tests.
+- `npm test`: passed — 240+ tests.
+- `npm run build` and `npm run server:build`: passed.
+- `npm run test:db` against local PostgreSQL 17: passed.
+
+New suites this pass: chart scales and axis ticks, activity schedule maths, exchange rates, reports, wishlist linking, and multi-device concurrency.
+
+### Multi-device concurrency
+
+`tests/api-integration.test.ts` covers the cases that matter for two devices:
+
+- the server assigns the revision, so a client claiming `revision: 9999` cannot set it;
+- a write built on a stale base is rejected **even when its own revision is higher** — the offline-device case that could previously overwrite another device;
+- two devices reading the same base: the first write wins, the second gets 409 with the current snapshot;
+- after adopting the server revision, the loser's retry succeeds.
 
 ## Test layers
 

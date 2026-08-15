@@ -98,20 +98,34 @@ Answers even when the database is unreachable, so a misconfigured database is di
 - `200 {"status":"ok","database":"connected"}`
 - `503 {"status":"degraded","database":"unavailable","message":"..."}`
 
-### `PUT /api/snapshot` — optimistic concurrency
+### `GET /api/snapshot/revision`
+
+Cheap freshness probe — `{ "revision": 12 }` — so a client can detect another device's write without transferring the whole snapshot. Used on window focus.
+
+### `PUT /api/snapshot` — compare-and-swap concurrency
 
 The body must be an object carrying `settings` (object), `categories` (array), and `years` (object keyed by year); `seasonalPresets`, `scenarioPresets`, `budgetApprovals`, and `auditLog` must be arrays when present, and `revision` must be a finite number when present. A partially-shaped payload is rejected rather than applied, because the targeted-delete pass would otherwise truncate the collections it omits.
 
-When `revision` is present and is **not newer** than the stored revision, the write is rejected:
+Send `baseRevision` — the revision the client last read from the server — either in the body or as an `x-base-revision` header. The write is accepted only when it still matches the stored revision, and the **server** assigns the next one:
+
+```
+200 OK
+{ "success": true, "message": "Snapshot saved", "revision": 13 }
+```
+
+Otherwise:
 
 ```
 409 Conflict
 { "error": "Snapshot conflict",
-  "message": "Rejected stale write (incoming revision 3, stored revision 4).",
+  "message": "Rejected stale write (based on revision 11, server is at 13).",
+  "revision": 13,
   "snapshot": { ...current server snapshot... } }
 ```
 
-Clients should adopt the returned snapshot and re-apply their change. Omitting `revision` skips the check, which keeps older clients working but forfeits the protection.
+Clients adopt the returned snapshot and re-apply their change.
+
+The client's own `revision` field is **not** trusted for concurrency. A device that edited while offline keeps incrementing its counter, so it could return with a higher number than the server and overwrite another device's work; `baseRevision` cannot be inflated to win, because a stale base is precisely what is rejected. Requests without `baseRevision` fall back to the older monotonic check so legacy clients keep working, but they forfeit the stronger guarantee.
 
 ### Error semantics
 

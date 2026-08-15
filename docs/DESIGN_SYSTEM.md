@@ -5,6 +5,73 @@
 
 ---
 
+# Implemented system — 2026-08-15
+
+The sections below describe the tokens that actually exist in `src/styles.css`. Use them; do not restyle individual components with ad-hoc values.
+
+## Typography
+
+One scale, defined once as CSS custom properties and consumed through the `.text-*` utilities. Headings and financial figures are tightened; body copy is not.
+
+| Token | Utility | Use |
+| --- | --- | --- |
+| `--text-display` | `.text-display` | Page-level figure or period title |
+| `--text-headline` | `.text-headline` | Card headline, large money |
+| `--text-title` | `.text-title` | Section and card titles |
+| `--text-body` | `.text-body` | Paragraphs |
+| `--text-callout` | `.text-callout` | Dense UI text, list rows |
+| `--text-caption` | `.text-caption` | Secondary explanation |
+| `--text-footnote` | `.text-footnote` | Uppercase labels above values |
+
+Weights (`--weight-regular` … `--weight-bold`), line heights (`--leading-tight/snug/normal`) and tracking (`--tracking-tight/snug/wide`) are tokens too.
+
+**Financial figures use tabular numerals.** `.text-display`, `.text-headline`, `.metric-value`, `.money`, `.chart-value` and `strong` all set `font-variant-numeric: tabular-nums`, so amounts in a column line up and a changing value does not shift the elements next to it. Any new component showing money should carry `.money`.
+
+## Colour
+
+Semantic first: colour states a meaning, it does not decorate.
+
+| Token | Meaning |
+| --- | --- |
+| `--accent` | Information, the current selection, neutral emphasis |
+| `--success` | Healthy, positive, under budget |
+| `--warning` | Approaching a limit, needs attention |
+| `--danger` | Over budget, over cap, destructive |
+| `--purple`, `--teal`, `--pink` | Analytical accents |
+
+Each has a `-soft` companion for fills and tints. Dark mode redefines both: a light tint disappears against a dark surface, so dark values are lighter in hue and stronger in alpha to keep the same perceived emphasis.
+
+**Charts** use `--series-1` … `--series-8`, ordered so neighbouring series stay distinguishable, including for the most common colour-vision deficiencies — blue and orange lead, and red and green are never adjacent.
+
+**Category and activity colours** are user data. A category's own colour drives its bar in every chart, and an activity's colour themes its whole card (tinted background, coloured icon chip, accent border), not just a dot.
+
+**Status is never colour alone.** Metric cards pair a tinted rail with the value colour; charts pair colour with labels and shape; deltas add a direction icon.
+
+## Surfaces
+
+- `.card` — the standard container.
+- `.tone-card-accent` / `-success` / `-warning` / `-danger` — a card with a soft directional gradient, used when the card itself carries a status.
+- `.metric-card.tone-*` — adds a 3px semantic rail plus a soft wash.
+
+## Charts
+
+Dependency-free SVG in `src/components/charts/`. Shared rules:
+
+- Gridlines and axis ticks come from `niceTicks`, which picks 1/2/5×10ⁿ steps from the data range. Never hardcode an interval: a 0–20,000 range must not produce 200 lines.
+- Budget-related charts take a labelled reference line, drawn subtly (dashed, muted) so it guides without dominating: `──── Budget €2,000`.
+- Missing data is drawn as missing — a broken line, a `?` marker, a dashed heatmap cell — never as zero. A recorded zero is drawn as a real zero.
+- Every chart carries `role="img"` with a descriptive `aria-label`, and scrolls inside its own container rather than widening the page.
+
+## Motion
+
+`--duration-fast/normal/slow` with `--ease-out`. Page and tab changes use a short translate-and-fade; the loading screen uses a pulsing brand mark and an indeterminate bar. Everything meaningful is wrapped in `@media (prefers-reduced-motion: reduce)`.
+
+## Responsive
+
+Verified at 320, 375, 834 and 844 px, in light and dark. Two rules prevent the recurring overflow bug: page-level grids use `minmax(0, 1fr)` tracks — an `auto`/`1fr` track is floored at its largest item's min-content, so a wide chart widens the whole page — and every scrollable wide element owns its own `overflow-x`.
+
+---
+
 # Philosophy
 
 This application should feel like premium software.

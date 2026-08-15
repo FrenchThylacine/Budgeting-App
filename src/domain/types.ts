@@ -44,7 +44,18 @@ export type AuditType =
 export interface ExchangeRates {
   eurUsd: number;
   usdLbp: number;
+  /** Manual override: units of the base currency per 1 unit of the key. */
   customToBase: Partial<Record<CurrencyCode, number>>;
+  /**
+   * Units of each currency per 1 EUR, as published by the rate provider.
+   * Base-independent, so changing the display currency does not invalidate
+   * them — unlike `customToBase`, which is relative to the current base.
+   */
+  perEur?: Partial<Record<CurrencyCode, number>>;
+  /** When `perEur` was last refreshed, for display and staleness checks. */
+  ratesUpdatedAt?: string;
+  /** Where `perEur` came from, e.g. the provider host. */
+  ratesSource?: string;
 }
 
 export interface Settings {
@@ -90,6 +101,19 @@ export interface BudgetCategory {
   parentId?: string;
 }
 
+/**
+ * How an activity's monthly cost is derived.
+ *  - `auto`      : legacy behaviour, inferred from recurrenceType and prices.
+ *  - `perSession`: price per session × sessions per month.
+ *  - `schedule`  : price per session × real occurrences in the actual month,
+ *                  counted from weekdays or a day-of-month rule.
+ *  - `fixed`     : an explicit monthly amount.
+ */
+export type CostModel = "auto" | "perSession" | "schedule" | "fixed";
+
+/** 1 = Monday … 7 = Sunday, matching ISO weekday numbering. */
+export type IsoWeekday = 1 | 2 | 3 | 4 | 5 | 6 | 7;
+
 export interface Activity {
   id: string;
   name: string;
@@ -107,6 +131,20 @@ export interface Activity {
   seasonalTag: string;
   order: number;
   notes: string;
+  /** Lucide icon name shown on the activity card. */
+  icon?: string;
+  /** Accent colour that themes the whole activity widget. */
+  color?: string;
+  /** Which model drives the monthly estimate. Defaults to `auto`. */
+  costModel?: CostModel;
+  /** Sessions per month for the `perSession` model. */
+  sessionsPerMonth?: number | null;
+  /** ISO weekdays the activity occurs on, for the `schedule` model. */
+  weekdays?: IsoWeekday[];
+  /** Day of month (1-31) for monthly schedules, e.g. a subscription renewal. */
+  dayOfMonth?: number | null;
+  /** First date the schedule applies from (YYYY-MM-DD). */
+  startDate?: string;
 }
 
 export interface SpendingEntry {
@@ -127,9 +165,17 @@ export interface SpendingEntry {
    */
   source?: "personal" | "external" | "shared" | string;
   note: string;
+  /** Wishlist item this purchase fulfilled, when the two were linked. */
+  wishlistItemId?: string;
   createdAt: string;
   updatedAt: string;
 }
+
+/**
+ * Ordered most to least urgent. "dream" sits below "low": it is an aspiration
+ * rather than something competing for this month's budget.
+ */
+export type WishlistPriority = "high" | "medium" | "low" | "dream";
 
 export interface WishlistItem {
   id: string;
@@ -140,11 +186,17 @@ export interface WishlistItem {
   currency: CurrencyCode;
   bought: boolean;
   inWishlist: boolean;
-  priority: "low" | "medium" | "high" | "dream";
+  priority: WishlistPriority;
   dateAdded: string;
   datePurchased?: string;
   notes: string;
   active: boolean;
+  /** Product or reference URL; the domain drives the item's visual identity. */
+  url?: string;
+  /** Accent colour for the item card. */
+  color?: string;
+  /** Spending entry created when this item was bought, when linked. */
+  linkedSpendingId?: string;
 }
 
 export interface WalletEntry {

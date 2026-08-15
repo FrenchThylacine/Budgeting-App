@@ -8,6 +8,30 @@
   --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
   --font-mono: "SF Mono", SFMono-Regular, ui-monospace, monospace;
 
+  /* Type scale — one ratio for the whole app.
+     Financial figures use tabular, slightly tightened numerals so columns of
+     amounts line up and large sums read as one block rather than loose digits. */
+  --text-display: clamp(2rem, 1.4rem + 2.4vw, 3rem);
+  --text-headline: clamp(1.375rem, 1.15rem + 0.9vw, 1.75rem);
+  --text-title: 1.0625rem;
+  --text-body: 0.9375rem;
+  --text-callout: 0.875rem;
+  --text-caption: 0.8125rem;
+  --text-footnote: 0.75rem;
+
+  --leading-tight: 1.1;
+  --leading-snug: 1.3;
+  --leading-normal: 1.5;
+
+  --tracking-tight: -0.022em;
+  --tracking-snug: -0.012em;
+  --tracking-wide: 0.05em;
+
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+  --weight-bold: 700;
+
   /* Colors — Light mode (calm, warm neutrals) */
   --bg: #F5F5F7;
   --bg-elevated: #FFFFFF;
@@ -23,21 +47,37 @@
   --border-strong: rgba(0, 0, 0, 0.1);
   --separator: rgba(0, 0, 0, 0.04);
 
-  /* Accents — muted, professional */
+  /* Accents — semantic, and used generously enough that the app reads as
+     colourful rather than grey. Each has a soft tint for fills and a strong
+     value for text/strokes, so contrast stays predictable in both themes. */
   --accent: #0071E3;
-  --accent-soft: rgba(0, 113, 227, 0.08);
+  --accent-soft: rgba(0, 113, 227, 0.10);
   --accent-hover: #0077ED;
 
-  --success: #34C759;
-  --success-soft: rgba(52, 199, 89, 0.08);
-  --warning: #FF9500;
-  --warning-soft: rgba(255, 149, 0, 0.08);
-  --danger: #FF3B30;
-  --danger-soft: rgba(255, 59, 48, 0.08);
-  --purple: #AF52DE;
-  --purple-soft: rgba(175, 82, 222, 0.08);
-  --teal: #5AC8FA;
-  --teal-soft: rgba(90, 200, 250, 0.08);
+  --success: #1DA45A;
+  --success-soft: rgba(29, 164, 90, 0.12);
+  --warning: #E8850C;
+  --warning-soft: rgba(232, 133, 12, 0.12);
+  --danger: #E5342A;
+  --danger-soft: rgba(229, 52, 42, 0.12);
+  --purple: #8B5CF6;
+  --purple-soft: rgba(139, 92, 246, 0.12);
+  --teal: #0EA5B7;
+  --teal-soft: rgba(14, 165, 183, 0.12);
+  --pink: #DB2777;
+  --pink-soft: rgba(219, 39, 119, 0.12);
+
+  /* Coordinated series palette for charts. Ordered so neighbouring series
+     stay distinguishable, including for the most common colour-vision
+     deficiencies (blue/orange lead, red and green never adjacent). */
+  --series-1: #0071E3;
+  --series-2: #E8850C;
+  --series-3: #8B5CF6;
+  --series-4: #0EA5B7;
+  --series-5: #DB2777;
+  --series-6: #1DA45A;
+  --series-7: #6366F1;
+  --series-8: #B45309;
 
   /* Shadows — layered, subtle */
   --shadow-xs: 0 1px 2px rgba(0,0,0,0.04);
@@ -95,18 +135,29 @@
   --accent: #0A84FF;
   --accent-soft: rgba(10, 132, 255, 0.12);
 
-  /* Dark surfaces swallow an 8% tint, so semantic fills are strengthened
-     to keep the same perceived emphasis as light mode. */
-  --success: #30D158;
-  --success-soft: rgba(48, 209, 88, 0.16);
-  --warning: #FF9F0A;
-  --warning-soft: rgba(255, 159, 10, 0.16);
-  --danger: #FF453A;
-  --danger-soft: rgba(255, 69, 58, 0.16);
-  --purple: #BF5AF2;
-  --purple-soft: rgba(191, 90, 242, 0.16);
-  --teal: #64D2FF;
-  --teal-soft: rgba(100, 210, 255, 0.16);
+  /* Dark surfaces swallow a light tint, so fills are strengthened and hues
+     lightened to keep the same perceived emphasis and contrast as light mode. */
+  --success: #34D073;
+  --success-soft: rgba(52, 208, 115, 0.18);
+  --warning: #FFA726;
+  --warning-soft: rgba(255, 167, 38, 0.18);
+  --danger: #FF5B52;
+  --danger-soft: rgba(255, 91, 82, 0.18);
+  --purple: #A78BFA;
+  --purple-soft: rgba(167, 139, 250, 0.18);
+  --teal: #22D3EE;
+  --teal-soft: rgba(34, 211, 238, 0.18);
+  --pink: #F472B6;
+  --pink-soft: rgba(244, 114, 182, 0.18);
+
+  --series-1: #4DA3FF;
+  --series-2: #FFA726;
+  --series-3: #A78BFA;
+  --series-4: #22D3EE;
+  --series-5: #F472B6;
+  --series-6: #34D073;
+  --series-7: #818CF8;
+  --series-8: #FBBF24;
 
   --shadow-xs: 0 1px 2px rgba(0,0,0,0.3);
   --shadow-sm: 0 2px 8px rgba(0,0,0,0.3), 0 1px 2px rgba(0,0,0,0.2);
@@ -137,14 +188,50 @@ body {
 ::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--text-tertiary); }
 
-/* Typography utilities */
-.text-display { font-size: clamp(2rem, 4vw, 3rem); font-weight: 700; letter-spacing: -0.02em; line-height: 1.1; }
-.text-headline { font-size: 1.5rem; font-weight: 600; letter-spacing: -0.01em; line-height: 1.2; }
-.text-title { font-size: 1.125rem; font-weight: 600; line-height: 1.3; }
-.text-body { font-size: 0.9375rem; font-weight: 400; line-height: 1.5; }
-.text-callout { font-size: 0.875rem; font-weight: 500; line-height: 1.4; }
-.text-caption { font-size: 0.8125rem; font-weight: 500; line-height: 1.4; color: var(--text-secondary); }
-.text-footnote { font-size: 0.75rem; font-weight: 500; line-height: 1.4; color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.05em; }
+/* Typography utilities — the single type system for the whole app */
+.text-display {
+  font-size: var(--text-display);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--tracking-tight);
+  line-height: var(--leading-tight);
+}
+.text-headline {
+  font-size: var(--text-headline);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-snug);
+  line-height: var(--leading-tight);
+}
+.text-title {
+  font-size: var(--text-title);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-snug);
+  line-height: var(--leading-snug);
+}
+.text-body { font-size: var(--text-body); font-weight: var(--weight-regular); line-height: var(--leading-normal); }
+.text-callout { font-size: var(--text-callout); font-weight: var(--weight-medium); line-height: 1.4; }
+.text-caption { font-size: var(--text-caption); font-weight: var(--weight-medium); line-height: 1.4; color: var(--text-secondary); }
+.text-footnote {
+  font-size: var(--text-footnote);
+  font-weight: var(--weight-semibold);
+  line-height: 1.4;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wide);
+}
+
+/**
+ * Money and other figures. Tabular numerals keep digits on a fixed width, so
+ * amounts in a column align and a changing value does not shift its neighbours.
+ */
+.text-display,
+.text-headline,
+.metric-value,
+.money,
+.chart-value,
+strong {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
 
 /* =========================================================
    LAYOUT
@@ -262,11 +349,11 @@ body {
 }
 
 .metric-value {
-  font-size: clamp(1.5rem, 2.5vw, 2rem);
-  font-weight: 700;
-  letter-spacing: -0.02em;
+  font-size: clamp(1.5rem, 1.2rem + 1.2vw, 2rem);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--tracking-tight);
   color: var(--text-primary);
-  line-height: 1.1;
+  line-height: var(--leading-tight);
 }
 
 .metric-value.positive { color: var(--success); }
@@ -767,6 +854,61 @@ body {
   .period-nav { justify-content: space-between; flex-wrap: wrap; }
 }
 
+/* Sync status — persistence state must be visible, never implied */
+.sync-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--border);
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.sync-status-success { color: var(--success); background: var(--success-soft); border-color: transparent; }
+.sync-status-neutral { color: var(--text-secondary); background: var(--bg-inset); border-color: transparent; }
+.sync-status-warning { color: var(--warning); background: var(--warning-soft); border-color: transparent; }
+.sync-status-danger { color: var(--danger); background: var(--danger-soft); border-color: transparent; }
+
+.sync-status-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border: none;
+  border-radius: var(--radius-full);
+  background: rgba(0, 0, 0, 0.06);
+  color: inherit;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+:root.dark .sync-status-action { background: rgba(255, 255, 255, 0.1); }
+.sync-status-action:disabled { opacity: 0.5; cursor: default; }
+
+@keyframes spin { to { transform: rotate(360deg); } }
+.spin { animation: spin 1s linear infinite; }
+
+/* Visually hidden but announced by screen readers */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spin { animation: none; }
+}
+
 /* Segmented control — section switcher inside a panel */
 .segmented {
   display: flex;
@@ -958,12 +1100,22 @@ body {
   padding: var(--space-3) var(--space-4);
   background: var(--bg-subtle);
   border-radius: var(--radius-md);
-  transition: all var(--duration-fast);
+  transition: background var(--duration-fast), transform var(--duration-fast);
+  /* Rows hold a label and a value. Without wrapping, a long label and a long
+     amount overlap on narrow screens instead of stacking. */
+  flex-wrap: wrap;
+  min-width: 0;
 }
+
+.item-row > * { min-width: 0; }
 
 .item-row:hover {
   background: var(--bg-inset);
   transform: translateX(2px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .item-row:hover { transform: none; }
 }
 
 /* Quick add bar */
@@ -1082,6 +1234,97 @@ body {
 @media (max-width: 768px) {
   .mobile-nav { display: grid; }
   .main-area { padding-bottom: 80px; }
+}
+
+/* Health centrepiece: gauge beside its contributing factors */
+.health-layout {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--space-6);
+  align-items: center;
+}
+
+@media (max-width: 760px) {
+  .health-layout {
+    grid-template-columns: minmax(0, 1fr);
+    justify-items: center;
+    text-align: center;
+  }
+  .health-layout > *:last-child { text-align: left; width: 100%; }
+}
+
+/* Tinted cards — colour carries meaning without shouting */
+.tone-card-accent { background: linear-gradient(160deg, var(--accent-soft), transparent 70%), var(--bg-elevated); }
+.tone-card-success { background: linear-gradient(160deg, var(--success-soft), transparent 70%), var(--bg-elevated); }
+.tone-card-warning { background: linear-gradient(160deg, var(--warning-soft), transparent 70%), var(--bg-elevated); }
+.tone-card-danger { background: linear-gradient(160deg, var(--danger-soft), transparent 70%), var(--bg-elevated); }
+
+/* Tab switching */
+.tab-panel {
+  animation: tabEnter 0.28s var(--ease-out);
+  min-width: 0;
+}
+
+@keyframes tabEnter {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tab-panel, .page-enter { animation: none; }
+}
+
+/* Brand loading screen */
+.boot-screen {
+  display: grid;
+  place-items: center;
+  min-height: 100vh;
+  background: radial-gradient(120% 120% at 50% 0%, var(--accent-soft) 0%, var(--bg) 55%);
+}
+
+.boot-inner { display: grid; justify-items: center; gap: 18px; }
+
+.boot-mark {
+  width: 68px;
+  height: 68px;
+  display: grid;
+  place-items: center;
+  border-radius: 20px;
+  color: #fff;
+  background: linear-gradient(135deg, var(--accent), var(--purple));
+  box-shadow: var(--shadow-lg);
+  animation: bootPulse 1.6s var(--ease-out) infinite;
+}
+
+.boot-track {
+  width: 168px;
+  height: 3px;
+  border-radius: 99px;
+  background: var(--bg-inset);
+  overflow: hidden;
+}
+
+.boot-fill {
+  height: 100%;
+  width: 40%;
+  border-radius: 99px;
+  background: linear-gradient(90deg, var(--accent), var(--purple));
+  animation: bootSlide 1.15s var(--ease-out) infinite;
+}
+
+@keyframes bootPulse {
+  0%, 100% { transform: scale(1); box-shadow: var(--shadow-md); }
+  50% { transform: scale(1.05); box-shadow: var(--shadow-lg); }
+}
+
+@keyframes bootSlide {
+  0% { transform: translateX(-110%); }
+  100% { transform: translateX(310%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .boot-mark, .boot-fill { animation: none; }
+  .boot-fill { width: 100%; }
 }
 
 /* Page transitions */

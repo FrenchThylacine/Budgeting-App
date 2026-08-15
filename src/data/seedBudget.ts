@@ -109,7 +109,10 @@ export function createSeedBudgetSnapshot(now = new Date()): BudgetSnapshot {
       darkMode: false,
       ignoreNonBudgetSpending: false,
     },
-    categories: defaultCategories,
+    // Deep-copied: handing out the module-level array would let any snapshot
+    // mutation (adding or editing a category) rewrite the shared defaults for
+    // every snapshot created afterwards in the same process.
+    categories: defaultCategories.map((category) => ({ ...category })),
     years: {
       [SOURCE_YEAR]: {
         year: SOURCE_YEAR,

@@ -20,7 +20,7 @@ import { Notifications } from "./components/Notifications";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { isViewingHistoricalPeriod } from "./utils/formatters";
 import { periodLabel } from "./domain/periods";
-import { Lock, Unlock } from "lucide-react";
+import { Lock, Plane, Unlock } from "lucide-react";
 
 type TabKey = "dashboard" | "activities" | "spending" | "wishlist" | "wallet" | "analytics" | "scenarios" | "history" | "settings" | "categories";
 
@@ -93,14 +93,18 @@ export default function App() {
 
   if (!hydrated) {
     return (
-      <div style={{
-        display: "grid", placeItems: "center", height: "100vh", color: "var(--text-secondary)", background: "var(--bg)"
-      }}>
-        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 16 }}>
-          <div className="brand-icon" style={{ width: 56, height: 56 }}>
-            <span style={{ fontSize: 28 }}>✈</span>
+      <div className="boot-screen" role="status" aria-live="polite">
+        <div className="boot-inner">
+          <div className="boot-mark">
+            <Plane size={30} strokeWidth={2.2} aria-hidden="true" />
           </div>
-          <div className="text-callout">Loading your finances...</div>
+          <div style={{ display: "grid", justifyItems: "center", gap: 4 }}>
+            <div className="text-title">Budget OS</div>
+            <div className="text-caption">Loading your finances…</div>
+          </div>
+          <div className="boot-track" aria-hidden="true">
+            <div className="boot-fill" />
+          </div>
         </div>
       </div>
     );
@@ -179,7 +183,11 @@ export default function App() {
             )
           )}
 
-          {tabs[activeTab]}
+          {/* Keying on the tab restarts the enter animation, so switching
+              views reads as a transition rather than an instant swap. */}
+          <div key={activeTab} className="tab-panel">
+            {tabs[activeTab]}
+          </div>
         </main>
 
         <MobileNav activeTab={activeTab} setActiveTab={setActiveTab} />

@@ -179,36 +179,106 @@ describeApi("API integration over HTTP", () => {
     expect(entry.year).toBe(Number(yearKey));
   });
 
-  it("rejects a stale write with 409 and returns the current server snapshot", async () => {
-    const stale = (await api("/api/snapshot")).body;
-    stale.revision = 1; // older than the stored revision 2
+  it("assigns the revision server-side rather than trusting the client", async () => {
+    const snapshot = (await api("/api/snapshot")).body;
+    const before = snapshot.revision;
+
+    // A client claiming an absurd revision must not be able to set it.
+    snapshot.revision = 9999;
+    const res = await putSnapshot({ ...snapshot, baseRevision: before });
+    expect(res.status).toBe(200);
+    expect(res.body.revision).toBe(before + 1);
+
+    const stored = (await api("/api/snapshot")).body;
+    expect(stored.revision).toBe(before + 1);
+  });
+
+  it("rejects a write built on a stale base even when its own revision is higher", async () => {
+    // This is the offline-device case: it kept incrementing its counter while
+    // disconnected, so its revision outruns the server's even though its data
+    // is older. Trusting that number would erase the other device's work.
+    const current = (await api("/api/snapshot")).body;
+    const serverRevision = current.revision;
+
+    const staleDevice = {
+      ...current,
+      revision: serverRevision + 50,
+      baseRevision: serverRevision - 1,
+    };
+
+    const res = await putSnapshot(staleDevice);
+    expect(res.status).toBe(409);
+    expect(res.body.revision).toBe(serverRevision);
+    expect(res.body.snapshot).toBeTruthy();
+
+    const after = (await api("/api/snapshot")).body;
+    expect(after.revision).toBe(serverRevision);
+  });
+
+  it("accepts a write whose base matches, then rejects a second write reusing that base", async () => {
+    const shared = (await api("/api/snapshot")).body;
+    const base = shared.revision;
+
+    // Two devices both read revision `base` and both edit.
+    const deviceA = { ...structuredClone(shared), baseRevision: base };
+    const deviceB = { ...structuredClone(shared), baseRevision: base };
+
+    const first = await putSnapshot(deviceA);
+    expect(first.status).toBe(200);
+
+    // The second device's base is now stale — it must not silently win.
+    const second = await putSnapshot(deviceB);
+    expect(second.status).toBe(409);
+    expect(second.body.snapshot.revision).toBe(base + 1);
+  });
+
+  it("lets the loser of a conflict succeed after adopting the server revision", async () => {
+    const server = (await api("/api/snapshot")).body;
+    const rebased = { ...server, baseRevision: server.revision };
+    const res = await putSnapshot(rebased);
+    expect(res.status).toBe(200);
+    expect(res.body.revision).toBe(server.revision + 1);
+  });
+
+  it("exposes a cheap revision probe for freshness checks", async () => {
+    const full = (await api("/api/snapshot")).body;
+    const probe = await api("/api/snapshot/revision");
+    expect(probe.status).toBe(200);
+    expect(probe.body.revision).toBe(full.revision);
+  });
+
+  it("rejects a legacy client whose revision is not newer than the stored one", async () => {
+    // Clients that predate baseRevision still get the monotonic guard rather
+    // than being allowed to clobber.
+    const stored = (await api("/api/snapshot")).body;
+    const stale = { ...stored, revision: stored.revision - 1 };
+    delete (stale as Record<string, unknown>).baseRevision;
 
     const conflict = await putSnapshot(stale);
     expect(conflict.status).toBe(409);
     expect(conflict.body.snapshot).toBeTruthy();
-    expect(conflict.body.snapshot.revision).toBe(2);
+    expect(conflict.body.revision).toBe(stored.revision);
 
-    // Stored data is unchanged by the rejected write.
     const after = (await api("/api/snapshot")).body;
-    expect(after.revision).toBe(2);
+    expect(after.revision).toBe(stored.revision);
   });
 
-  it("accepts a newer revision from a second device", async () => {
+  it("propagates a second device's edit to the first device", async () => {
     const deviceB = (await api("/api/snapshot")).body;
     const yearKey = Object.keys(deviceB.years)[0];
     const entry = deviceB.years[yearKey].spendingEntries.find((e: any) => e.id === "api-spend-1");
     entry.amount = 77.25;
     entry.note = "edited on device B";
-    deviceB.revision = 3;
 
-    expect((await putSnapshot(deviceB)).status).toBe(200);
+    const write = await putSnapshot({ ...deviceB, baseRevision: deviceB.revision });
+    expect(write.status).toBe(200);
 
     // Device A reloads and sees device B's edit.
     const deviceA = (await api("/api/snapshot")).body;
     const seen = deviceA.years[yearKey].spendingEntries.find((e: any) => e.id === "api-spend-1");
     expect(seen.amount).toBe(77.25);
     expect(seen.note).toBe("edited on device B");
-    expect(deviceA.revision).toBe(3);
+    expect(deviceA.revision).toBe(write.body.revision);
   });
 
   it("patches settings and bumps the revision", async () => {

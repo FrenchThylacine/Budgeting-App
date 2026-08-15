@@ -1,5 +1,6 @@
 import { monthName, weeksInIsoYear, isMonthClosed, isWeekClosed } from "./dates";
 import { normalizeAmount, roundAmount } from "./currency";
+import { monthlyEstimateFromSchedule, yearlyEstimateFromSchedule } from "./schedule";
 import type {
   Activity,
   ActivityEstimate,
@@ -80,11 +81,30 @@ export function calculateYear(snapshot: BudgetSnapshot, now = new Date()): YearC
   };
 }
 
-export function estimateActivity(activity: Activity, snapshot: BudgetSnapshot): ActivityEstimate {
+/**
+ * The calendar month an estimate is asked about. Schedule-driven activities
+ * cost different amounts in different months, so the month is an input rather
+ * than an assumption.
+ */
+export interface EstimatePeriod {
+  year: number;
+  month: number;
+}
+
+export function estimateActivity(
+  activity: Activity,
+  snapshot: BudgetSnapshot,
+  period?: EstimatePeriod,
+): ActivityEstimate {
   const category = snapshot.categories.find((item) => item.id === activity.categoryId);
   const bucket = category?.bucket ?? "general";
-  const monthlyNative = monthlyEstimateNative(activity);
-  const yearlyNative = yearlyEstimateNative(activity, monthlyNative);
+  // Estimates describe the period the user is looking at, not today.
+  const reference = period ?? {
+    year: snapshot.settings.selectedYear,
+    month: snapshot.settings.selectedMonth,
+  };
+  const monthlyNative = monthlyEstimateNative(activity, reference);
+  const yearlyNative = yearlyEstimateNative(activity, monthlyNative, reference);
 
   return {
     activity,
@@ -94,8 +114,57 @@ export function estimateActivity(activity: Activity, snapshot: BudgetSnapshot): 
   };
 }
 
-export function monthlyEstimateNative(activity: Activity): number {
+/**
+ * Monthly cost in the activity's own currency.
+ *
+ * `costModel` selects the maths:
+ *  - `perSession`: price per session × sessions per month.
+ *  - `schedule`  : price per session × the occurrences that really fall in the
+ *                  given month.
+ *  - `fixed`     : the explicit monthly amount.
+ *  - `auto`      : the historical inference, kept byte-for-byte. Activities
+ *                  saved before cost models existed have no `costModel` and so
+ *                  land here, unchanged.
+ */
+export function monthlyEstimateNative(activity: Activity, period: EstimatePeriod = currentPeriod()): number {
   if (!activity.active) return 0;
+  switch (activity.costModel ?? "auto") {
+    case "perSession":
+      return (activity.pricePerSession ?? 0) * (activity.sessionsPerMonth ?? 0);
+    case "schedule":
+      return monthlyEstimateFromSchedule(activity, period.year, period.month) ?? 0;
+    case "fixed":
+      return activity.pricePerMonth ?? 0;
+    case "auto":
+    default:
+      return autoMonthlyEstimate(activity);
+  }
+}
+
+export function yearlyEstimateNative(
+  activity: Activity,
+  monthlyNative = monthlyEstimateNative(activity),
+  period: EstimatePeriod = currentPeriod(),
+): number {
+  if (!activity.active) return 0;
+  switch (activity.costModel ?? "auto") {
+    case "schedule":
+      // Twelve real months. A weekday schedule does not repeat evenly, so
+      // multiplying one month by twelve would be wrong by up to a month's cost.
+      return yearlyEstimateFromSchedule(activity, period.year) ?? 0;
+    case "perSession":
+    case "fixed":
+      return monthlyNative * 12;
+    case "auto":
+    default:
+      if (activity.yearlyEstimate != null) return activity.yearlyEstimate;
+      if (activity.recurrenceType === "purchase") return activity.pricePerPurchase ?? activity.estimatedCost ?? 0;
+      return monthlyNative * 12;
+  }
+}
+
+/** The pre-cost-model inference, preserved exactly as it always behaved. */
+function autoMonthlyEstimate(activity: Activity): number {
   if (activity.pricePerMonth != null) return activity.pricePerMonth;
   switch (activity.recurrenceType) {
     case "weekly":
@@ -115,11 +184,8 @@ export function monthlyEstimateNative(activity: Activity): number {
   }
 }
 
-export function yearlyEstimateNative(activity: Activity, monthlyNative = monthlyEstimateNative(activity)): number {
-  if (!activity.active) return 0;
-  if (activity.yearlyEstimate != null) return activity.yearlyEstimate;
-  if (activity.recurrenceType === "purchase") return activity.pricePerPurchase ?? activity.estimatedCost ?? 0;
-  return monthlyNative * 12;
+function currentPeriod(now = new Date()): EstimatePeriod {
+  return { year: now.getFullYear(), month: now.getMonth() + 1 };
 }
 
 export function summarizeMonth(

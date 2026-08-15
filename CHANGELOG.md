@@ -1,5 +1,67 @@
 # Changelog
 
+## 2026-08-16 — V3
+
+### Multi-device synchronization was broken. This is the fix.
+
+Testing in a normal window and a private window showed changes not syncing. The cause was not the conflict guard — it was that **an unreachable API was silently indistinguishable from a successful save**.
+
+Both `loadSnapshot` and `saveSnapshot` caught API failures and fell through to IndexedDB. A browser with a broken or unconfigured backend therefore looked exactly like a healthy one, while each browser quietly accumulated its own private dataset. Nothing in the UI ever said otherwise.
+
+- **The server is now authoritative whenever reachable**, and IndexedDB is an explicit offline cache. Hydration asks the server first, so a device never boots from a stale cache and then overwrites newer remote data.
+- **Persistence state is visible**: `Saved`, `Saving…`, `Offline — this device only`, `Sync conflict`, `Sync failed`, each with a Retry action, in the header and in Settings. "API unavailable" is never presented as "saved".
+- **Returning to a tab re-checks the server**, so a change made on another device appears without a manual reload (`GET /api/snapshot/revision` is a cheap probe).
+
+### The concurrency guard was itself unsafe
+
+The previous scheme trusted a client-supplied `revision` and accepted anything higher than stored. A device that edited while offline keeps incrementing its own counter, so it could reconnect with a larger number and **overwrite whatever the other device had done in the meantime**.
+
+Writes are now a compare-and-swap on `baseRevision` — the revision the client last read — and the **server** assigns the next revision. A client cannot inflate its way to winning, because a stale base is exactly what gets rejected. Legacy requests without `baseRevision` keep the old monotonic check so they still work.
+
+Verified end to end with two isolated browser contexts against a live PostgreSQL database: A wrote → B read it → B edited → A saw the edit on focus without reloading → a stale write from A was rejected with B's data intact. Then with the server stopped: the UI reported Offline, and Retry after restart delivered the change.
+
+### New fields were being silently dropped
+
+The repository writes a **fixed column list**, so several model fields never survived a round-trip. Migration `005` adds them and the integration suite now has a round-trip test per group: activity `icon`/`color`/`costModel`/`sessionsPerMonth`/`weekdays`/`dayOfMonth`/`startDate`, wishlist `url`/`color`/`linkedSpendingId`, and spending `wishlistItemId`.
+
+### Analytics are now charts, not number walls
+
+A dependency-free SVG chart library (`src/components/charts/`): line, bar, stacked bar, donut, heatmap, sparkline, horizontal bars, and a large gauge. Every chart is theme-aware, accessible (`role="img"` with a description), and scrolls inside its own container.
+
+- **Intelligent gridlines.** `niceTicks` picks 1/2/5×10ⁿ steps from the data range — a 0–20,000 range produces five lines, not two hundred.
+- **Labelled budget reference lines** on budget-related charts, drawn subtly so they guide without dominating.
+- Both the Analytics page and the Dashboard were rebuilt chart-led: spending trend, budget vs actual, cumulative forecast against the budget ceiling, category bars with cap markers, category evolution, recurring/one-off donut, daily heatmap, and period comparisons.
+- **Missing data is drawn as missing** — broken lines, `?` markers, dashed cells — never as a fabricated zero.
+
+### Budget health became the centrepiece
+
+A composite 0–100 score with its contributing factors shown as bars, rendered in a large gauge. The score corrects an honesty bug found while building it: `budgetPacing` reports spend 0 for a period with *no records*, which scored an empty month as perfect adherence. A period we know nothing about now earns no factor at all.
+
+### Recurring expenses became flexible
+
+Four cost models: `auto` (unchanged legacy inference), `perSession` (price × sessions per month), `schedule` (price × **real occurrences in that calendar month** — some months have five Mondays), and `fixed`. Yearly figures follow the same model rather than assuming monthly × 12. Activities gained a searchable, categorised icon picker (84 lucide icons across 11 categories) and a colour that themes the entire card, not just a dot.
+
+### Currency
+
+- **Live exchange rates** from a keyless public provider, cached with a staleness window, with a manual override that a refresh never overwrites and a fallback that leaves existing rates untouched when the provider is unreachable.
+- **Fixed a silent conversion fault**: `rateToBase` returned `1` for any pair it did not know, so a GBP amount was counted as if it were EUR. Rates now pivot through EUR when provider data exists, non-positive rates are ignored rather than zeroing amounts, and `canConvert` lets callers detect the fallback instead of trusting it.
+
+### Reports
+
+Printable monthly and annual reports, generated from the same shared selectors as the screen, opened in a new window with a print/save-as-PDF action (falling back to a download if pop-ups are blocked). Self-contained HTML with no external assets, user text escaped, and unknown months marked rather than drawn as empty bars.
+
+### Typography and colour
+
+A single type scale defined as tokens and consumed through `.text-*` utilities, with **tabular numerals on every financial figure** so amounts align in columns and a changing value does not shift its neighbours. Semantic colours were strengthened and given a coordinated eight-colour chart series ordered for colour-vision safety; dark mode redefines both hue and alpha, because a light tint disappears on a dark surface. Status is never carried by colour alone.
+
+### Also fixed
+
+- **Period navigation**: a "Go to current month/week/year" action that appears only when you are not there, and the header now states the selected period's full date range alongside the real current period, so a historical view can never be mistaken for today.
+- The header showed an ISO week number in month mode that often belonged to a different month.
+- `createSeedBudgetSnapshot()` returned the shared module-level `defaultCategories` array, so adding a category mutated the seed for every snapshot created afterwards in the same process.
+- A lucide `Map` icon import shadowed the global `Map` constructor and crashed the app with "Map is not a constructor".
+- New loading screen and tab transitions, both respecting `prefers-reduced-motion`.
+
 ## 2026-08-15 (later)
 
 ### Consent-gated historical editing, a real audit trail, and working category caps
