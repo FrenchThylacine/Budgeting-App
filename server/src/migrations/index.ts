@@ -34,6 +34,12 @@ export async function runMigrations(
         }
       },
     },
+    {
+      name: "003-add-snapshot-revision",
+      run: async (sql: NeonQueryFunction<any, any>) => {
+        await sql`ALTER TABLE snapshots ADD COLUMN IF NOT EXISTS revision INTEGER NOT NULL DEFAULT 0;`;
+      },
+    },
   ];
 
 

@@ -1,7 +1,7 @@
 import { Router, Request, Response } from "express";
-import { BudgetService } from "../services/BudgetService";
-import { asyncHandler, AppError, validateEnum, validateFiniteNumber, validateRequired } from "../middleware/errorHandler";
-import type { BudgetApproval } from "@/domain/types";
+import { BudgetService } from "../services/BudgetService.js";
+import { asyncHandler, AppError, validateEnum, validateFiniteNumber, validateRequired } from "../middleware/errorHandler.js";
+import type { BudgetApproval } from "../../../src/domain/types.js";
 
 const currencies = ["EUR", "USD", "LBP", "GBP", "CAD", "AUD", "JPY", "TRY", "SAR", "AED"] as const;
 const approvalStatuses = ["approved", "rejected"] as const;

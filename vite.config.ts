@@ -8,6 +8,14 @@ export default defineConfig({
     host: true,
     port: 5173,
     strictPort: false,
+    // Forward API calls to the local Express server so development uses the
+    // same store → API → repository → database flow as production.
+    proxy: {
+      "/api": {
+        target: process.env.VITE_API_PROXY_TARGET || "http://localhost:3001",
+        changeOrigin: true,
+      },
+    },
   },
   preview: {
     host: true,

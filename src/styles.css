@@ -685,44 +685,48 @@ body {
    DASHBOARD — Specific layouts
    ========================================================= */
 
+/* All dashboard grids use minmax(0, …) tracks: an auto/fr track is floored at
+   the largest item's min-content, which lets wide charts push the layout past
+   narrow (portrait mobile) viewports. minmax(0, 1fr) lets items shrink. */
 .dashboard-grid {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--space-5);
 }
 
 .dashboard-hero {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: var(--space-5);
 }
 
 .dashboard-row {
   display: grid;
-  grid-template-columns: 2fr 1fr;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
   gap: var(--space-5);
 }
 
 .dashboard-row-reverse {
   display: grid;
-  grid-template-columns: 1fr 2fr;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
   gap: var(--space-5);
 }
 
 @media (max-width: 1200px) {
-  .dashboard-hero { grid-template-columns: repeat(2, 1fr); }
-  .dashboard-row, .dashboard-row-reverse { grid-template-columns: 1fr; }
+  .dashboard-hero { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .dashboard-row, .dashboard-row-reverse { grid-template-columns: minmax(0, 1fr); }
 }
 
 @media (max-width: 768px) {
-  .app-shell { grid-template-columns: 1fr; }
+  .app-shell { grid-template-columns: minmax(0, 1fr); }
   .sidebar { display: none; }
   .main-area { padding: var(--space-4); }
-  .dashboard-hero { grid-template-columns: 1fr; }
-  .top-header { grid-template-columns: 1fr; }
+  .dashboard-hero { grid-template-columns: minmax(0, 1fr); }
+  .top-header { grid-template-columns: minmax(0, 1fr); }
   .period-selector { justify-items: stretch; width: 100%; }
   .period-mode-toggle { width: 100%; }
   .period-mode { flex: 1; }
-  .period-nav { justify-content: space-between; }
+  .period-nav { justify-content: space-between; flex-wrap: wrap; }
 }
 
 /* Historical period indicator */
@@ -888,6 +892,58 @@ body {
 
 .mobile-nav-item.active { color: var(--accent); }
 
+/* "More" sheet exposing sections that don't fit in the bottom nav */
+.mobile-more-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 39;
+  background: rgba(0, 0, 0, 0.35);
+  display: flex;
+  align-items: flex-end;
+}
+
+.mobile-more-sheet {
+  width: 100%;
+  background: var(--bg-elevated);
+  border-top: 1px solid var(--border);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  padding: var(--space-4) var(--space-4) calc(72px + env(safe-area-inset-bottom));
+  box-shadow: var(--shadow-lg);
+}
+
+.mobile-more-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-3);
+}
+
+.mobile-more-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+.mobile-more-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: var(--space-4) var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-subtle);
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.mobile-more-item.active {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
 @media (max-width: 768px) {
   .mobile-nav { display: grid; }
   .main-area { padding-bottom: 80px; }
@@ -896,6 +952,14 @@ body {
 /* Page transitions */
 .page-enter {
   animation: pageEnter 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+  /* Every panel root is a single-column grid; forcing minmax(0, …) stops a
+     wide child (chart, table, long label) from widening the whole page on
+     narrow viewports. */
+  min-width: 0;
+}
+
+.page-enter:where([style*="grid"]) {
+  grid-template-columns: minmax(0, 1fr);
 }
 
 @keyframes pageEnter {

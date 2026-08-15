@@ -1,6 +1,6 @@
-import type { BudgetSnapshot } from "@/domain/types";
-import { SnapshotRepository } from "../repositories/SnapshotRepository";
-import { getDatabase } from "../db";
+import type { BudgetSnapshot } from "../../../src/domain/types.js";
+import { SnapshotRepository } from "../repositories/SnapshotRepository.js";
+import { getDatabase } from "../db/index.js";
 
 export class BudgetService {
   private repository: SnapshotRepository;
@@ -24,11 +24,20 @@ export class BudgetService {
   }
 
   /**
+   * Read the stored revision counter for optimistic-concurrency checks.
+   * Returns null when no snapshot exists yet.
+   */
+  async loadRevision(): Promise<number | null> {
+    return await this.repository.loadRevision("active");
+  }
+
+  /**
    * Update only the settings (top-level configuration)
    */
   async updateSettings(snapshot: BudgetSnapshot, patch: Partial<any>): Promise<BudgetSnapshot> {
     snapshot.settings = { ...snapshot.settings, ...patch };
     snapshot.settings.lastUpdated = new Date().toISOString();
+    snapshot.revision = (snapshot.revision ?? 0) + 1;
     await this.saveSnapshot(snapshot);
     return snapshot;
   }

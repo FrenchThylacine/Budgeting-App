@@ -1,8 +1,8 @@
 import { Router, Request, Response } from "express";
-import { BudgetService } from "../services/BudgetService";
-import { asyncHandler, AppError, validateDateInput, validateEnum, validateFiniteNumber, validateRequired } from "../middleware/errorHandler";
-import type { SpendingEntry } from "@/domain/types";
-import { getIsoWeek } from "@/domain/dates";
+import { BudgetService } from "../services/BudgetService.js";
+import { asyncHandler, AppError, validateDateInput, validateEnum, validateFiniteNumber, validateRequired } from "../middleware/errorHandler.js";
+import type { SpendingEntry } from "../../../src/domain/types.js";
+import { getIsoWeek } from "../../../src/domain/dates.js";
 
 const currencies = ["EUR", "USD", "LBP", "GBP", "CAD", "AUD", "JPY", "TRY", "SAR", "AED"] as const;
 const recurrenceTypes = ["none", "weekly", "monthly", "yearly", "session", "purchase", "custom"] as const;

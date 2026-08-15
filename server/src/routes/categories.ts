@@ -1,7 +1,7 @@
 import { Router, Request, Response } from "express";
-import { BudgetService } from "../services/BudgetService";
-import { asyncHandler, AppError, validateEnum, validateFiniteNumber, validateRequired } from "../middleware/errorHandler";
-import type { BudgetCategory } from "@/domain/types";
+import { BudgetService } from "../services/BudgetService.js";
+import { asyncHandler, AppError, validateEnum, validateFiniteNumber, validateRequired } from "../middleware/errorHandler.js";
+import type { BudgetCategory } from "../../../src/domain/types.js";
 
 const categoryBuckets = ["general", "piloting", "personal", "wallet"] as const;
 

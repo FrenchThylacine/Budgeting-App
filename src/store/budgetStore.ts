@@ -18,7 +18,7 @@ import type {
 import { createSeedBudgetSnapshot } from "../data/seedBudget";
 import { defaultCategories } from "../data/seedBudget";
 import { deleteSnapshot as deleteIdbSnapshot, loadSnapshot as loadIdbSnapshot, saveSnapshot as saveIdbSnapshot } from "../storage/idb";
-import { getApiClient } from "../api/client";
+import { getApiClient, SnapshotConflictError } from "../api/client";
 import { isViewingHistoricalPeriod } from "../utils/formatters";
 
 type ActivityInput = Omit<Activity, "id" | "order"> & Partial<Pick<Activity, "id" | "order">>;
@@ -31,6 +31,9 @@ interface BudgetStore {
   hydrated: boolean;
   undoStack: BudgetSnapshot[];
   redoStack: BudgetSnapshot[];
+  /** User-facing message about cross-device sync (e.g. a rejected stale write). */
+  syncNotice: string | null;
+  clearSyncNotice: () => void;
   isCurrentPeriodMutable: () => boolean;
   hydrate: () => Promise<void>;
   resetToSeed: () => Promise<void>;
@@ -70,6 +73,8 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
   hydrated: false,
   undoStack: [],
   redoStack: [],
+  syncNotice: null,
+  clearSyncNotice: () => set({ syncNotice: null }),
   isCurrentPeriodMutable: () => !isViewingHistoricalPeriod(get().snapshot.settings),
 
   hydrate: async () => {
@@ -603,24 +608,28 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
     const { undoStack, redoStack, snapshot } = get();
     const previous = undoStack[0];
     if (!previous) return;
+    // Restoring an older state still counts as a *new* revision so the
+    // server accepts it instead of treating it as a stale write.
+    const restored = { ...previous, revision: (snapshot.revision ?? 0) + 1 };
     set({
-      snapshot: previous,
+      snapshot: restored,
       undoStack: undoStack.slice(1),
       redoStack: [snapshot, ...redoStack].slice(0, 40),
     });
-    void saveSnapshot(previous).catch(() => undefined);
+    persistSnapshot(restored, set);
   },
 
   redo: () => {
     const { undoStack, redoStack, snapshot } = get();
     const next = redoStack[0];
     if (!next) return;
+    const restored = { ...next, revision: (snapshot.revision ?? 0) + 1 };
     set({
-      snapshot: next,
+      snapshot: restored,
       undoStack: [snapshot, ...undoStack].slice(0, 40),
       redoStack: redoStack.slice(1),
     });
-    void saveSnapshot(next).catch(() => undefined);
+    persistSnapshot(restored, set);
   },
 }));
 
@@ -636,13 +645,14 @@ function commit(
   const next = clone(before);
   const replacement = recipe(next);
   const finalSnapshot = isBudgetSnapshot(replacement) ? replacement : next;
+  finalSnapshot.revision = (before.revision ?? 0) + 1;
   touch(finalSnapshot, type, summary, metadata);
   set({
     snapshot: finalSnapshot,
     undoStack: [before, ...get().undoStack].slice(0, 40),
     redoStack: [],
   });
-  void saveSnapshot(finalSnapshot).catch(() => undefined);
+  persistSnapshot(finalSnapshot, set);
 }
 
 function touch(snapshot: BudgetSnapshot, type: AuditType, summary: string, metadata?: unknown): void {
@@ -709,6 +719,7 @@ function normalizeSnapshot(snapshot: BudgetSnapshot): BudgetSnapshot {
     snapshot.categories = [...snapshot.categories, ...missingCategories];
   }
   snapshot.budgetApprovals ??= [];
+  snapshot.revision ??= 0;
   snapshot.settings.selectedPeriodMode ??= "month";
   snapshot.settings.selectedWeekYear ??= snapshot.settings.selectedYear;
   return snapshot;
@@ -739,6 +750,7 @@ async function saveSnapshot(snapshot: BudgetSnapshot): Promise<void> {
     // Try saving to API
     await apiClient.saveSnapshot(snapshot);
   } catch (error) {
+    if (error instanceof SnapshotConflictError) throw error;
     console.warn("API save failed, falling back to IndexedDB:", error);
   }
   // Also save to IndexedDB for offline capability
@@ -747,6 +759,29 @@ async function saveSnapshot(snapshot: BudgetSnapshot): Promise<void> {
   } catch (error) {
     console.error("Failed to save snapshot:", error);
   }
+}
+
+/**
+ * Persist a committed snapshot in the background. When the server rejects the
+ * write as stale (another device saved a newer revision first), adopt the
+ * server snapshot so newer remote data is never overwritten by this device.
+ */
+function persistSnapshot(
+  snapshot: BudgetSnapshot,
+  set: (partial: Partial<BudgetStore>) => void,
+): void {
+  void saveSnapshot(snapshot).catch(async (error: unknown) => {
+    if (error instanceof SnapshotConflictError && error.serverSnapshot) {
+      const server = normalizeSnapshot(error.serverSnapshot);
+      set({
+        snapshot: server,
+        undoStack: [],
+        redoStack: [],
+        syncNotice: "This device had outdated data. The latest version from your other device was loaded; please re-apply your last change.",
+      });
+      await saveIdbSnapshot(server).catch(() => undefined);
+    }
+  });
 }
 
 /**

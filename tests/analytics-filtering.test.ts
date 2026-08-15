@@ -8,8 +8,7 @@
 
 import { describe, expect, it } from "vitest";
 import { normalizeEntry } from "../src/domain/calculations";
-import { selectedIsoWeekYear } from "../src/domain/periods";
-import { weekYear } from "../src/domain/dates";
+import { entriesForSelectedPeriod } from "../src/domain/analytics";
 import { createSeedBudgetSnapshot } from "../src/data/seedBudget";
 import type { BudgetSnapshot, SpendingEntry } from "../src/domain/types";
 
@@ -52,28 +51,13 @@ function snapshotWith(entries: SpendingEntry[]): BudgetSnapshot {
   return snap;
 }
 
-// ─── The same filter logic used in AnalyticsPanel ────────────────────────────
+// ─── Delegates to the shared selector used by Dashboard and Analytics ────────
 
 function filterForMode(
   snapshot: BudgetSnapshot,
   mode: "month" | "week" | "year",
 ): SpendingEntry[] {
-  const { settings } = snapshot;
-  const allEntries = Object.values(snapshot.years).flatMap((yr) => yr.spendingEntries);
-  if (mode === "week") {
-    const isoYear = selectedIsoWeekYear(settings);
-    return allEntries.filter(
-      (e) =>
-        e.week === settings.selectedWeek &&
-        weekYear(new Date(`${e.date}T12:00:00`)) === isoYear,
-    );
-  }
-  if (mode === "year") {
-    return allEntries.filter((e) => e.year === settings.selectedYear);
-  }
-  return allEntries.filter(
-    (e) => e.year === settings.selectedYear && e.month === settings.selectedMonth,
-  );
+  return entriesForSelectedPeriod(snapshot, { ...snapshot.settings, selectedPeriodMode: mode });
 }
 
 // ─── Tests ────────────────────────────────────────────────────────────────────

@@ -1,13 +1,35 @@
 import type { BudgetSnapshot, SpendingEntry, Activity, BudgetCategory } from "../domain/types";
 
 /**
+ * Thrown when the server rejects a snapshot write because another device
+ * already stored a newer revision. Carries the current server snapshot so
+ * the caller can adopt it instead of overwriting it.
+ */
+export class SnapshotConflictError extends Error {
+  constructor(public readonly serverSnapshot: BudgetSnapshot | null) {
+    super("Snapshot conflict: the server holds a newer revision.");
+    this.name = "SnapshotConflictError";
+  }
+}
+
+function defaultBaseUrl(): string {
+  try {
+    const fromEnv = import.meta.env?.VITE_API_URL as string | undefined;
+    if (fromEnv) return fromEnv;
+  } catch {
+    /* import.meta.env unavailable (tests) */
+  }
+  return "/api";
+}
+
+/**
  * API Client for the budget backend
  * Replaces direct IndexedDB access with HTTP calls
  */
 export class BudgetApiClient {
   private baseUrl: string;
 
-  constructor(baseUrl: string = process.env.VITE_API_URL || "/api") {
+  constructor(baseUrl: string = defaultBaseUrl()) {
     this.baseUrl = baseUrl;
   }
 
@@ -36,9 +58,21 @@ export class BudgetApiClient {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(snapshot),
       });
+      if (response.status === 409) {
+        let serverSnapshot: BudgetSnapshot | null = null;
+        try {
+          const body = await response.json();
+          serverSnapshot = body?.snapshot ?? null;
+        } catch {
+          /* body unavailable */
+        }
+        throw new SnapshotConflictError(serverSnapshot);
+      }
       if (!response.ok) throw new Error(`Failed to save snapshot: ${response.statusText}`);
     } catch (error) {
-      console.error("Error saving snapshot:", error);
+      if (!(error instanceof SnapshotConflictError)) {
+        console.error("Error saving snapshot:", error);
+      }
       throw error;
     }
   }

@@ -233,6 +233,13 @@ export interface YearRecord {
 
 export interface BudgetSnapshot {
   version: 1;
+  /**
+   * Monotonically increasing sync counter used for optimistic concurrency.
+   * Each client commit increments it; the server rejects writes whose
+   * revision is not newer than the stored one so a stale device cannot
+   * silently overwrite data written from another device.
+   */
+  revision?: number;
   settings: Settings;
   categories: BudgetCategory[];
   years: Record<string, YearRecord>;

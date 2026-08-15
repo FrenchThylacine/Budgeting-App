@@ -1,87 +1,24 @@
 import React, { useMemo } from "react";
-import { calculateYear, normalizeEntry } from "../../domain/calculations";
-import { selectedIsoWeekYear, isHistoricalPeriod, periodLabel } from "../../domain/periods";
-import { weekYear } from "../../domain/dates";
+import { calculateYear } from "../../domain/calculations";
+import { isHistoricalPeriod, periodLabel } from "../../domain/periods";
+import {
+  budgetPacing,
+  budgetRelevantEntries,
+  categoryBreakdown,
+  entriesForSelectedPeriod,
+  monthlyTrendBars,
+  periodComparison,
+  selectedPeriodWindow,
+  spendingStats,
+  weeklyTrendBars,
+} from "../../domain/analytics";
 import { useBudgetStore } from "../../store/budgetStore";
 import { formatDualMoney } from "../../utils/formatters";
 import { EmptyState } from "../ui/EmptyState";
 import { Metric } from "../ui/Metric";
 import { Section } from "../ui/Section";
 import { Progress } from "../ui/Progress";
-
-// ─── SVG Sparkline Bar Chart ─────────────────────────────────────────────────
-
-interface BarChartProps {
-  bars: { label: string; value: number | null; highlight?: boolean }[];
-  height?: number;
-}
-
-const BarChart: React.FC<BarChartProps> = ({ bars, height = 80 }) => {
-  const maxVal = Math.max(...bars.map((b) => b.value ?? 0), 1);
-  const barWidth = 100 / bars.length;
-
-  return (
-    <svg
-      viewBox={`0 0 100 ${height + 18}`}
-      preserveAspectRatio="none"
-      style={{ width: "100%", height: height + 18, display: "block", overflow: "visible" }}
-      aria-label="Spending trend chart"
-    >
-      {bars.map((bar, i) => {
-        const hasValue = bar.value != null && bar.value >= 0;
-        const barH = hasValue ? Math.max(2, (bar.value! / maxVal) * height) : 0;
-        const x = i * barWidth + barWidth * 0.1;
-        const w = barWidth * 0.8;
-        const y = height - barH;
-        return (
-          <g key={i}>
-            {hasValue ? (
-              <rect
-                x={x}
-                y={y}
-                width={w}
-                height={barH}
-                rx="1.5"
-                fill={bar.highlight ? "var(--accent)" : "var(--bg-inset)"}
-                opacity={bar.highlight ? 1 : 0.7}
-              />
-            ) : (
-              <text
-                x={x + w / 2}
-                y={height - 4}
-                textAnchor="middle"
-                fontSize="5"
-                fill="var(--text-tertiary)"
-              >
-                ?
-              </text>
-            )}
-            <text
-              x={x + w / 2}
-              y={height + 14}
-              textAnchor="middle"
-              fontSize="5"
-              fill={bar.highlight ? "var(--accent)" : "var(--text-tertiary)"}
-              fontWeight={bar.highlight ? "600" : "400"}
-            >
-              {bar.label}
-            </text>
-          </g>
-        );
-      })}
-    </svg>
-  );
-};
-
-// ─── Priority / Tone helpers ──────────────────────────────────────────────────
-
-function burnRateTone(pct: number): "success" | "warning" | "danger" | "neutral" {
-  if (pct < 80) return "success";
-  if (pct < 100) return "warning";
-  return "danger";
-}
-
-const RECURRING_TYPES = new Set(["weekly", "monthly", "yearly", "session"]);
+import { TrendBarChart } from "../ui/TrendBarChart";
 
 // ─── Main Panel ───────────────────────────────────────────────────────────────
 
@@ -94,116 +31,50 @@ export const AnalyticsPanel: React.FC = () => {
   // calculateYear drives budget/trend data for the selected calendar year
   const calc = useMemo(() => calculateYear(snapshot), [snapshot]);
 
-  // Collect entries for the selected period across ALL year records
-  const periodEntries = useMemo(() => {
-    const allEntries = Object.values(snapshot.years).flatMap((yr) => yr.spendingEntries);
-    if (mode === "week") {
-      const isoYear = selectedIsoWeekYear(settings);
-      return allEntries.filter(
-        (e) =>
-          e.week === settings.selectedWeek &&
-          weekYear(new Date(`${e.date}T12:00:00`)) === isoYear,
-      );
-    }
-    if (mode === "year") {
-      return allEntries.filter((e) => e.year === settings.selectedYear);
-    }
-    // month
-    return allEntries.filter(
-      (e) => e.year === settings.selectedYear && e.month === settings.selectedMonth,
-    );
+  const periodEntries = useMemo(() => entriesForSelectedPeriod(snapshot, settings), [snapshot, settings]);
+  const includedEntries = useMemo(
+    () => budgetRelevantEntries(periodEntries, settings),
+    [periodEntries, settings],
+  );
+
+  const stats = useMemo(() => spendingStats(includedEntries, snapshot), [includedEntries, snapshot]);
+  const pacing = useMemo(() => budgetPacing(snapshot, includedEntries), [snapshot, includedEntries]);
+  const categories = useMemo(() => categoryBreakdown(includedEntries, snapshot), [includedEntries, snapshot]);
+  const comparison = useMemo(() => periodComparison(snapshot, settings), [snapshot, settings]);
+  const window = useMemo(() => selectedPeriodWindow(settings), [settings]);
+
+  // Same period last year (month mode only)
+  const lastYearComparison = useMemo(() => {
+    if (mode !== "month") return null;
+    const lastYearSettings = { ...settings, selectedYear: settings.selectedYear - 1 };
+    const entries = budgetRelevantEntries(entriesForSelectedPeriod(snapshot, lastYearSettings), settings);
+    if (entries.length === 0) return null;
+    return {
+      label: periodLabel(lastYearSettings),
+      total: spendingStats(entries, snapshot).total,
+    };
   }, [mode, settings, snapshot]);
 
-  // Optionally filter out non-personal spend
-  const includedEntries = useMemo(() => {
-    return settings.ignoreNonBudgetSpending
-      ? periodEntries.filter((e) => (e.source ?? "personal") === "personal")
-      : periodEntries;
-  }, [periodEntries, settings.ignoreNonBudgetSpending]);
-
-  // Total spend (base currency)
-  const periodTotal = useMemo(
-    () => includedEntries.reduce((s, e) => s + normalizeEntry(e, snapshot), 0),
-    [includedEntries, snapshot],
+  const monthlyBars = useMemo(
+    () => monthlyTrendBars(calc.monthlyTrend, settings.selectedMonth),
+    [calc.monthlyTrend, settings.selectedMonth],
+  );
+  const weeklyBars = useMemo(
+    () => weeklyTrendBars(calc.weeklyTrend, settings.selectedWeek, 12),
+    [calc.weeklyTrend, settings.selectedWeek],
   );
 
-  // Category breakdown
-  const categoryMap = useMemo(
-    () => new Map(snapshot.categories.map((c) => [c.id, c])),
-    [snapshot.categories],
-  );
-
-  const categoryTotals = useMemo(() => {
-    const totals = new Map<string, number>();
-    for (const e of includedEntries) {
-      totals.set(e.categoryId, (totals.get(e.categoryId) ?? 0) + normalizeEntry(e, snapshot));
-    }
-    return [...totals.entries()]
-      .map(([id, value]) => ({ category: categoryMap.get(id), value }))
-      .sort((a, b) => b.value - a.value);
-  }, [includedEntries, categoryMap, snapshot]);
-
-  const normalTotal = useMemo(
-    () =>
-      categoryTotals
-        .filter(({ category }) => category?.bucket !== "piloting")
-        .reduce((s, { value }) => s + value, 0),
-    [categoryTotals],
-  );
-
-  // Recurring vs non-recurring
-  const { recurringTotal, nonRecurringTotal } = useMemo(() => {
-    let rec = 0;
-    let nonRec = 0;
-    for (const e of includedEntries) {
-      const norm = normalizeEntry(e, snapshot);
-      if (RECURRING_TYPES.has(e.recurrenceType)) rec += norm;
-      else nonRec += norm;
-    }
-    return { recurringTotal: rec, nonRecurringTotal: nonRec };
-  }, [includedEntries, snapshot]);
-
-  // Average transaction
-  const avgTransaction =
-    includedEntries.length > 0 ? periodTotal / includedEntries.length : null;
-
-  // Budget remaining (month mode only — other modes show '—')
-  const budgetRemaining = useMemo(() => {
-    if (mode !== "month") return null;
-    const summary = calc.selectedMonthSpend;
-    if (summary.status !== "value" && summary.status !== "zero") return null;
-    return calc.monthlyBudgetBase - (summary.total ?? 0);
-  }, [mode, calc]);
-
-  // Burn rate (% of budget consumed, month mode only)
-  const burnRatePct = useMemo(() => {
-    if (mode !== "month" || calc.monthlyBudgetBase <= 0) return null;
-    return (periodTotal / calc.monthlyBudgetBase) * 100;
-  }, [mode, periodTotal, calc.monthlyBudgetBase]);
-
-  // Monthly trend bars (12 months)
-  const monthlyBars = useMemo(() => {
-    const shortMonths = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-    return calc.monthlyTrend.map((summary, i) => ({
-      label: shortMonths[i],
-      value: summary.status === "value" || summary.status === "zero" ? (summary.total ?? 0) : null,
-      highlight: i + 1 === settings.selectedMonth,
-    }));
-  }, [calc.monthlyTrend, settings.selectedMonth]);
-
-  // Weekly trend bars (first 26 weeks)
-  const weeklyBars = useMemo(() => {
-    return calc.weeklyTrend.slice(0, 26).map((summary, i) => ({
-      label: String(i + 1),
-      value: summary.status === "value" || summary.status === "zero" ? (summary.total ?? 0) : null,
-      highlight: i + 1 === settings.selectedWeek,
-    }));
-  }, [calc.weeklyTrend, settings.selectedWeek]);
+  const total = stats.total;
+  const utilisation = pacing?.utilisation ?? null;
+  const spendTone =
+    utilisation == null ? "neutral" : utilisation >= 100 ? "negative" : utilisation >= 80 ? "warning" : "neutral";
 
   const currentPeriodLabel = periodLabel(settings);
+  const dailyAvg =
+    total != null && window.elapsedDays > 0 ? total / window.elapsedDays : null;
 
   return (
-    <div className="page-enter" style={{ display: "grid", gap: 24 }}>
+    <div className="page-enter" style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr)", gap: 24 }}>
       {/* Historical banner */}
       {isHistorical && (
         <div
@@ -220,120 +91,182 @@ export const AnalyticsPanel: React.FC = () => {
         </div>
       )}
 
-      {/* KPI metrics */}
-      <Section title={`Analytics · ${currentPeriodLabel}`}>
+      {/* ── Overview ── */}
+      <Section title={`Overview · ${currentPeriodLabel}`}>
         <div className="dashboard-hero">
           <Metric
             label="Period spending"
-            value={formatDualMoney(periodTotal, settings)}
-            detail={`${includedEntries.length} transaction${includedEntries.length !== 1 ? "s" : ""}`}
-            tone={
-              burnRatePct == null
-                ? "neutral"
-                : burnRatePct >= 100
-                ? "negative"
-                : burnRatePct >= 80
-                ? "warning"
-                : "neutral"
-            }
+            value={total != null ? formatDualMoney(total, settings) : "No data"}
+            detail={`${stats.count} transaction${stats.count !== 1 ? "s" : ""}`}
+            tone={spendTone}
           />
           <Metric
             label="Budget remaining"
-            value={budgetRemaining != null ? formatDualMoney(budgetRemaining, settings) : "—"}
-            detail={mode !== "month" ? "Monthly context only" : undefined}
+            value={pacing != null ? formatDualMoney(pacing.remaining, settings) : "—"}
+            detail={mode !== "month" ? "Monthly context only" : `of ${formatDualMoney(pacing?.budget, settings)}`}
             tone={
-              budgetRemaining == null
+              pacing == null
                 ? "neutral"
-                : budgetRemaining < 0
+                : pacing.remaining < 0
                 ? "negative"
-                : budgetRemaining < calc.monthlyBudgetBase * 0.2
+                : pacing.remaining < pacing.budget * 0.2
                 ? "warning"
                 : "positive"
             }
-          />
-          <Metric
-            label="Avg transaction"
-            value={avgTransaction != null ? formatDualMoney(avgTransaction, settings) : "—"}
-            detail="Recorded transactions only"
           />
           <Metric
             label="Burn rate"
-            value={burnRatePct != null ? `${burnRatePct.toFixed(1)}%` : "—"}
+            value={utilisation != null ? `${utilisation.toFixed(1)}%` : "—"}
             detail={mode !== "month" ? "Month mode only" : "Of monthly budget"}
             tone={
-              burnRatePct == null
+              utilisation == null
                 ? "neutral"
-                : burnRatePct >= 100
+                : utilisation >= 100
                 ? "negative"
-                : burnRatePct >= 80
+                : utilisation >= 80
                 ? "warning"
                 : "positive"
             }
+          />
+          <Metric
+            label="Daily average"
+            value={dailyAvg != null ? formatDualMoney(dailyAvg, settings) : "—"}
+            detail={window.elapsedDays > 0 ? `Over ${window.elapsedDays} day${window.elapsedDays !== 1 ? "s" : ""}` : "Period not started"}
           />
         </div>
       </Section>
 
-      {/* Budget vs Actual (month mode only) */}
-      {mode === "month" && calc.monthlyBudgetBase > 0 && (
+      {/* ── Transactions ── */}
+      {stats.count > 0 && (
+        <Section title="Transactions">
+          <div className="dashboard-hero">
+            <Metric
+              label="Average transaction"
+              value={formatDualMoney(stats.average, settings)}
+              detail="Mean of recorded transactions"
+            />
+            <Metric
+              label="Median transaction"
+              value={formatDualMoney(stats.median, settings)}
+              detail="Half of transactions are below this"
+            />
+            <Metric
+              label="Largest transaction"
+              value={formatDualMoney(stats.largest, settings)}
+              detail="Biggest single spend this period"
+            />
+          </div>
+        </Section>
+      )}
+
+      {/* ── Budget vs Actual + Forecast (month mode) ── */}
+      {pacing != null && (
         <Section title="Budget vs Actual">
           <div className="card card-body" style={{ display: "grid", gap: 12 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
               <span style={{ color: "var(--text-secondary)", fontSize: 13 }}>Budget</span>
-              <strong>{formatDualMoney(calc.monthlyBudgetBase, settings)}</strong>
+              <strong>{formatDualMoney(pacing.budget, settings)}</strong>
             </div>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
               <span style={{ color: "var(--text-secondary)", fontSize: 13 }}>Actual spend</span>
-              <strong>{formatDualMoney(periodTotal, settings)}</strong>
+              <strong>{formatDualMoney(pacing.spent, settings)}</strong>
             </div>
             <Progress
-              value={periodTotal}
-              max={calc.monthlyBudgetBase}
+              value={pacing.spent}
+              max={pacing.budget}
               tone={
-                burnRatePct == null
+                utilisation == null
                   ? "neutral"
-                  : burnRatePct >= 100
+                  : utilisation >= 100
                   ? "danger"
-                  : burnRatePct >= 80
+                  : utilisation >= 80
                   ? "warning"
                   : "success"
               }
             />
-            {budgetRemaining != null && (
+            <div
+              style={{
+                fontSize: 13,
+                color: pacing.remaining < 0 ? "var(--danger)" : "var(--success)",
+                fontWeight: 600,
+              }}
+            >
+              {pacing.remaining < 0
+                ? `${formatDualMoney(Math.abs(pacing.remaining), settings)} over budget`
+                : `${formatDualMoney(pacing.remaining, settings)} remaining`}
+            </div>
+
+            {pacing.projectedTotal != null && (
               <div
                 style={{
-                  fontSize: 13,
-                  color: budgetRemaining < 0 ? "var(--danger)" : "var(--success)",
-                  fontWeight: 600,
+                  display: "grid",
+                  gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
+                  gap: 12,
+                  padding: 12,
+                  background: "var(--bg-subtle)",
+                  borderRadius: 12,
                 }}
               >
-                {budgetRemaining < 0
-                  ? `${formatDualMoney(Math.abs(budgetRemaining), settings)} over budget`
-                  : `${formatDualMoney(budgetRemaining, settings)} remaining`}
+                <div>
+                  <div className="text-footnote">Projected total</div>
+                  <div className="text-callout" style={{ fontWeight: 600, marginTop: 2 }}>
+                    {formatDualMoney(pacing.projectedTotal, settings)}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-footnote">Projected end-of-month</div>
+                  <div
+                    className="text-callout"
+                    style={{
+                      fontWeight: 600,
+                      marginTop: 2,
+                      color:
+                        pacing.projectedRemaining != null && pacing.projectedRemaining < 0
+                          ? "var(--danger)"
+                          : "var(--success)",
+                    }}
+                  >
+                    {pacing.projectedRemaining != null && pacing.projectedRemaining < 0
+                      ? `${formatDualMoney(Math.abs(pacing.projectedRemaining), settings)} over`
+                      : `${formatDualMoney(pacing.projectedRemaining, settings)} left`}
+                  </div>
+                </div>
+                {pacing.requiredDailyPace != null && pacing.daysLeft > 0 && (
+                  <div>
+                    <div className="text-footnote">Stay-on-budget pace</div>
+                    <div className="text-callout" style={{ fontWeight: 600, marginTop: 2 }}>
+                      {formatDualMoney(pacing.requiredDailyPace, settings)}/day
+                    </div>
+                    <div className="text-footnote" style={{ marginTop: 2 }}>
+                      {pacing.daysLeft} day{pacing.daysLeft !== 1 ? "s" : ""} left
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
         </Section>
       )}
 
-      {/* Recurring vs Non-Recurring */}
-      {includedEntries.length > 0 && (
+      {/* ── Recurring vs One-off ── */}
+      {stats.count > 0 && (
         <Section title="Recurring vs One-off">
           <div className="dashboard-hero">
             <Metric
               label="Recurring spend"
-              value={formatDualMoney(recurringTotal, settings)}
+              value={formatDualMoney(stats.recurringTotal, settings)}
               detail={
-                periodTotal > 0
-                  ? `${((recurringTotal / periodTotal) * 100).toFixed(1)}% of total`
+                stats.recurringShare != null
+                  ? `${stats.recurringShare.toFixed(1)}% of total · ${stats.recurringCount} transaction${stats.recurringCount !== 1 ? "s" : ""}`
                   : "weekly / monthly / yearly / session"
               }
             />
             <Metric
               label="One-off spend"
-              value={formatDualMoney(nonRecurringTotal, settings)}
+              value={formatDualMoney(stats.oneOffTotal, settings)}
               detail={
-                periodTotal > 0
-                  ? `${((nonRecurringTotal / periodTotal) * 100).toFixed(1)}% of total`
+                stats.recurringShare != null
+                  ? `${(100 - stats.recurringShare).toFixed(1)}% of total · ${stats.oneOffCount} transaction${stats.oneOffCount !== 1 ? "s" : ""}`
                   : "purchase / custom / ad-hoc"
               }
             />
@@ -341,47 +274,42 @@ export const AnalyticsPanel: React.FC = () => {
         </Section>
       )}
 
-      {/* Spending trend chart */}
-      <Section title={mode === "week" ? "Weekly trend (first 26 weeks)" : "Monthly trend"}>
-        <div
-          className="card card-body"
-          style={{ overflowX: "hidden", padding: "16px 12px 8px" }}
-        >
+      {/* ── Spending trend chart ── */}
+      <Section title={mode === "week" ? "Weekly trend" : "Monthly trend"}>
+        <div className="card card-body" style={{ overflowX: "hidden", padding: "16px 12px 8px" }}>
           {mode === "week" ? (
             weeklyBars.length === 0 ? (
               <EmptyState title="No weekly data" description="Record spending to see the weekly trend." />
             ) : (
-              <BarChart bars={weeklyBars} height={80} />
+              <TrendBarChart bars={weeklyBars} height={120} />
             )
           ) : monthlyBars.every((b) => b.value == null) ? (
             <EmptyState title="No spending data" description="Record spending entries to see monthly trends." />
           ) : (
-            <BarChart bars={monthlyBars} height={80} />
+            <TrendBarChart bars={monthlyBars} height={120} />
           )}
         </div>
       </Section>
 
-      {/* Category breakdown */}
+      {/* ── Category breakdown ── */}
       <Section title="Category breakdown">
-        {categoryTotals.length === 0 ? (
+        {categories.length === 0 ? (
           <EmptyState
             title="No spending for this period"
             description="Zero recorded spending and unavailable historical data remain distinct."
           />
         ) : (
           <div className="item-list">
-            {categoryTotals.map(({ category, value }) => {
+            {categories.map(({ category, categoryId, total: catTotal, count, share }) => {
               const isPiloting = category?.bucket === "piloting";
-              const share =
-                !isPiloting && normalTotal > 0 ? (value / normalTotal) * 100 : null;
               const progressTone: "neutral" | "warning" | "danger" =
-                share != null && share > 50
-                  ? "danger"
-                  : share != null && share > 30
-                  ? "warning"
-                  : "neutral";
+                share != null && share > 50 ? "danger" : share != null && share > 30 ? "warning" : "neutral";
               return (
-                <div key={category?.id ?? "uncategorized"} className="item-row" style={{ flexDirection: "column", alignItems: "stretch", gap: 6 }}>
+                <div
+                  key={categoryId}
+                  className="item-row"
+                  style={{ flexDirection: "column", alignItems: "stretch", gap: 6 }}
+                >
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
                     <div style={{ display: "flex", gap: 8, alignItems: "center", minWidth: 0 }}>
                       <span
@@ -403,17 +331,13 @@ export const AnalyticsPanel: React.FC = () => {
                       )}
                     </div>
                     <div style={{ textAlign: "right", flexShrink: 0 }}>
-                      <strong>{formatDualMoney(value, settings)}</strong>
-                      {share != null && (
-                        <div className="text-footnote" style={{ color: "var(--text-secondary)" }}>
-                          {share.toFixed(1)}%
-                        </div>
-                      )}
+                      <strong>{formatDualMoney(catTotal, settings)}</strong>
+                      <div className="text-footnote" style={{ color: "var(--text-secondary)" }}>
+                        {share != null ? `${share.toFixed(1)}% · ` : ""}{count} transaction{count !== 1 ? "s" : ""}
+                      </div>
                     </div>
                   </div>
-                  {share != null && (
-                    <Progress value={share} max={100} tone={progressTone} />
-                  )}
+                  {share != null && <Progress value={share} max={100} tone={progressTone} />}
                 </div>
               );
             })}
@@ -421,7 +345,45 @@ export const AnalyticsPanel: React.FC = () => {
         )}
       </Section>
 
-      {/* Savings & Wallet */}
+      {/* ── History: period-over-period ── */}
+      <Section title="History">
+        <div className="dashboard-hero">
+          <Metric
+            label={`vs ${comparison.previousLabel}`}
+            value={
+              comparison.deltaAbs != null
+                ? formatDualMoney(comparison.deltaAbs, settings, { showSign: true })
+                : "No data"
+            }
+            detail={
+              comparison.deltaPct != null
+                ? `${comparison.deltaPct > 0 ? "+" : ""}${comparison.deltaPct.toFixed(1)}% vs previous ${mode}`
+                : comparison.previousTotal == null
+                ? "Previous period has no recorded data"
+                : "Current period has no recorded data"
+            }
+            tone={
+              comparison.deltaAbs == null ? "neutral" : comparison.deltaAbs > 0 ? "negative" : "positive"
+            }
+          />
+          <Metric
+            label="Previous period"
+            value={
+              comparison.previousTotal != null ? formatDualMoney(comparison.previousTotal, settings) : "No data"
+            }
+            detail={comparison.previousLabel}
+          />
+          {lastYearComparison && (
+            <Metric
+              label="Same month last year"
+              value={formatDualMoney(lastYearComparison.total, settings)}
+              detail={lastYearComparison.label}
+            />
+          )}
+        </div>
+      </Section>
+
+      {/* ── Savings & Wallet ── */}
       <Section title="Savings & Wallet">
         <div className="dashboard-hero">
           <Metric
@@ -429,6 +391,12 @@ export const AnalyticsPanel: React.FC = () => {
             value={formatDualMoney(calc.wallet.walletTotal, settings)}
             detail="All wallet entries for year"
             tone={calc.wallet.walletTotal >= 0 ? "positive" : "negative"}
+          />
+          <Metric
+            label="Rollover total"
+            value={formatDualMoney(calc.wallet.rolloverTotal, settings, { showSign: true })}
+            detail="Accumulated month-end rollovers"
+            tone={calc.wallet.rolloverTotal >= 0 ? "positive" : "negative"}
           />
           <Metric
             label="Wishlist total"

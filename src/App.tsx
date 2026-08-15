@@ -34,6 +34,8 @@ export default function App() {
   const snapshot = useBudgetStore((s) => s.snapshot);
   const hydrated = useBudgetStore((s) => s.hydrated);
   const hydrate = useBudgetStore((s) => s.hydrate);
+  const syncNotice = useBudgetStore((s) => s.syncNotice);
+  const clearSyncNotice = useBudgetStore((s) => s.clearSyncNotice);
 
   const calculation = useMemo(() => calculateYear(snapshot), [snapshot]);
 
@@ -108,6 +110,13 @@ export default function App() {
             <div className="notice-bar">
               <span>{notice}</span>
               <button className="btn btn-ghost btn-sm" onClick={() => setNotice("")}>Dismiss</button>
+            </div>
+          )}
+
+          {syncNotice && (
+            <div className="notice-bar" role="alert">
+              <span>{syncNotice}</span>
+              <button className="btn btn-ghost btn-sm" onClick={clearSyncNotice}>Dismiss</button>
             </div>
           )}
 
