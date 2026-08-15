@@ -78,17 +78,53 @@ Settings
 
 Recurring Expenses
 
-## Implemented routes — 2026-08-10
+## Implemented routes — 2026-08-15
 
-The current Express app exposes the following unversioned routes beneath `/api`:
+The Express app exposes these unversioned routes beneath `/api`, served identically in local development and through `api/[...path].ts` on Vercel:
 
+- `GET /health`
 - `GET`, `PUT /snapshot` and `PATCH /snapshot/settings`
-- `GET`, `POST /spending/:year/:month` / `/spending` plus `PATCH`, `DELETE /spending/:id`
-- `GET`, `POST /categories` plus category `PATCH` and archive/reorder routes
-- `GET /activities/:year`, `POST /activities`, and activity `PATCH`/`DELETE`
+- `GET /spending/:year/:month`, `POST /spending`, `PATCH`/`DELETE /spending/:id`
+- `GET`, `POST /categories`, `PATCH /categories/reorder`, `PATCH /categories/:id`, `PATCH /categories/:id/archive`
+- `GET /activities/:year`, `POST /activities`, `PATCH`/`DELETE /activities/:id`
 - approval read/create/update routes under `/approvals`
 
-The API is served by the same Express app in local development and through `api/[...path].ts` on Vercel. Approved budget records reject subsequent PATCH updates. Spending writes validate finite amounts, date/month consistency, active category references, supported currencies, and recurrence values; a transaction date edit recalculates both its month and ISO week. Validation for the remaining route families is still being expanded.
+> **Which routes the client actually uses.** `src/store/budgetStore.ts` persists exclusively through `GET`/`PUT /snapshot`. The per-entity routes are implemented and validated but are not on the live write path today, so their validation does not constrain the app. Treat `PUT /snapshot` as the endpoint that must be correct.
+
+### `GET /api/health`
+
+Answers even when the database is unreachable, so a misconfigured database is distinguishable from a dead server.
+
+- `200 {"status":"ok","database":"connected"}`
+- `503 {"status":"degraded","database":"unavailable","message":"..."}`
+
+### `PUT /api/snapshot` — optimistic concurrency
+
+The body must be an object carrying `settings` (object), `categories` (array), and `years` (object keyed by year); `seasonalPresets`, `scenarioPresets`, `budgetApprovals`, and `auditLog` must be arrays when present, and `revision` must be a finite number when present. A partially-shaped payload is rejected rather than applied, because the targeted-delete pass would otherwise truncate the collections it omits.
+
+When `revision` is present and is **not newer** than the stored revision, the write is rejected:
+
+```
+409 Conflict
+{ "error": "Snapshot conflict",
+  "message": "Rejected stale write (incoming revision 3, stored revision 4).",
+  "snapshot": { ...current server snapshot... } }
+```
+
+Clients should adopt the returned snapshot and re-apply their change. Omitting `revision` skips the check, which keeps older clients working but forfeits the protection.
+
+### Error semantics
+
+- `400` — malformed JSON, wrong payload shape, or a failed field validation. Body-parser failures are surfaced as 400 rather than as an opaque 500.
+- `404` — no snapshot stored yet, or unknown entity id.
+- `409` — stale snapshot write (see above).
+- `503` — database unavailable; the message names the missing `DATABASE_URL`.
+
+### Validation coverage
+
+Spending writes validate finite amounts, date format, date/month agreement, active category references, supported currencies, and recurrence values; a date edit recalculates month, ISO week, **and year**, moving the entry into the matching year record. Category writes validate name, bucket enum, colour, non-negative cap, and parent references, rejecting self-parenting and cycles. Activity writes validate year, category reference, currency, recurrence type and interval, and non-negative prices. Approvals reject any re-proposal or mutation of an already-approved month.
+
+Known gaps are tracked in `docs/KNOWN_ISSUES.md` — most notably that `PATCH /snapshot/settings` spreads the request body without per-field validation, and that no route enforces historical/closed-period write protection.
 
 Future:
 

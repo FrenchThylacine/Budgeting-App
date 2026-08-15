@@ -1,5 +1,69 @@
 # Changelog
 
+## 2026-08-15
+
+### Verified persistence against a real database, shared analytics, and mobile repairs
+
+#### Persistence — five defects found by testing against real PostgreSQL
+
+The persistence layer had only ever been tested with a mocked driver, so SQL-level faults went unnoticed. Running it against a live PostgreSQL server surfaced five failures, all fixed:
+
+- **Multi-statement DDL.** `initializeSchema` grouped `CREATE TABLE` with `CREATE INDEX` in single tagged templates; the Neon HTTP driver executes one command per call, so schema creation failed outright. Every statement is now its own template.
+- **Integers bound to BOOLEAN columns.** Flags were written as `1`/`0`, which PostgreSQL rejects for `BOOLEAN` (SQLite tolerated it). All flags now bind real booleans.
+- **Corrupted entry years.** `parseSpendingEntry` recovered the year from the year-row id suffix, but those ids embed `Date.now()`, so every loaded entry received a nonsensical year that fell back to a hard-coded `2026`. The year now comes from the `years` table.
+- **Non-atomic saves.** Statements ran one by one, so a mid-save failure left the database partly written. All writes are collected and executed in a single `sql.transaction([...])` batch.
+- **Historical records exposed to deletion.** Budget approvals and audit rows took part in the delete pass; both are now upsert-only.
+
+#### Multi-device synchronization
+
+- Added `snapshots.revision` (migration `003-add-snapshot-revision`), a counter incremented by each client commit.
+- `PUT /api/snapshot` rejects a write whose revision is not newer than the stored one with **409 Conflict**, returning the current server snapshot. The client adopts it and asks the user to re-apply their change instead of silently overwriting a newer device's data.
+- Verified in the browser across two isolated sessions: device A wrote, device B read it, device B edited, device A saw the edit, and a stale write from device A was rejected without data loss.
+
+#### The server could not actually run
+
+`npm run server:build` only proved that `tsc` emitted files. The output had never been executable:
+
+- Relative imports lacked the `.js` extensions Node's ESM loader requires, and `@/domain/*` was emitted verbatim with nothing to resolve it. Both are now real relative paths.
+- `server:prod` pointed at `dist/index.js`, which does not exist (the emitted path is `dist/server/src/index.js`).
+- `server:dev` invoked `ts-node`, which is not a dependency. It now uses `tsx`, which is.
+- `/api/health` required the database, so a misconfigured database looked identical to a dead server. It now answers `503 degraded` with the reason, and API errors name the missing `DATABASE_URL` instead of returning an opaque 500.
+
+#### Analytics — one shared calculation layer
+
+- Added `src/domain/analytics.ts` holding every period-aware selector. The Dashboard and the Analytics page now read from it instead of maintaining separate, divergent implementations.
+- **The Dashboard previously ignored the global period selector**, always reporting the selected month even in week or year mode. It now follows the selected period everywhere.
+- New figures: median and largest transaction, daily average, projected end-of-period total, required daily pace to stay on budget, and previous-period comparison (including across year boundaries).
+- Weekly trend charts now show a window containing the selected week; previously they always rendered weeks 1–12 and hid the current week for most of the year.
+- Missing periods render as `?` or "No data" and never as a fabricated zero.
+
+#### Data-loss fixes
+
+- **Editing any transaction reset its recurrence to one-off.** `SpendingPanel` hardcoded `recurrenceType: "none"` on both add and edit, so changing an unrelated field silently destroyed the recurrence of a recurring expense. Recurrence is now an editable field and is preserved.
+- Category `bucket` and `monthlyCap` are read live by budget calculations, so changing them rewrites how past periods are reported. Both are now locked while a historical period is selected, and the misleading "does not change historical records" note has been corrected.
+- Category parent assignment now rejects self-parenting and cycles in both the store and the API.
+- `PATCH /api/spending/:id` now recalculates the year and moves the entry into the matching year record when its date crosses a year boundary, matching the client store.
+- `PATCH /api/categories/reorder` was permanently shadowed by `PATCH /:id` and always answered "Category not found: reorder". It is now registered first.
+- Transactions dated with `new Date().toISOString()` used the **UTC** date, so east of UTC an entry made after midnight was filed to the previous day — and on the 1st of a month, to the previous month and budget period. Local calendar dates are now used.
+
+#### Mobile
+
+- Fixed horizontal overflow at 320–430 px. Grid tracks default to `auto`/`1fr`, which are floored at the largest item's min-content, so wide charts widened the whole page. All page grids now use `minmax(0, ...)`. Verified zero overflow across all ten views at 320 px and 375 px, plus landscape and tablet.
+- **Wishlist, Activities, Categories, History and Scenarios were unreachable on mobile** — the "More" tab opened Settings directly. Added a More sheet exposing all six sections.
+
+#### Colour and accessibility
+
+- Semantic tinted rails and soft washes on metric cards; category bars now use each category's own colour.
+- Status is carried by rail, value colour, and icon together, so it never depends on hue alone. Progress bars expose `role="progressbar"` with values and labels, and charts carry descriptive `aria-label`s.
+- Strengthened dark-mode semantic tints, which were washing out against dark surfaces at 8% alpha.
+
+#### Testing and tooling
+
+- 81 tests (up from 31), including `db-integration` and `api-integration` suites that exercise real PostgreSQL — schema, migrations, transaction rollback, boolean round-trips, approval immutability, conflict rejection, and zero-preservation. Each suite owns a PostgreSQL schema so they stay isolated in parallel.
+- `setDatabase()` injection seam plus `scripts/dev-server-local-pg.mjs` let the backend run and be tested without a Neon account (`npm run server:dev:pg`, `npm run test:db`).
+- Vite now proxies `/api` so development exercises the real API path rather than falling back to IndexedDB.
+- Removed dead code: `ActivityEditor`, `WishlistEditor`, `src/api/hooks.ts` (all zero-importer), the unused `recharts` dependency, and stale compiled artifacts committed under `src/domain/`.
+
 ## 2026-08-11
 
 ### Analytics panel rebuilt, wishlist editing, and category editing

@@ -23,29 +23,31 @@ A Vite + React budget dashboard focused on fast local use, recurring budget appr
 
 The main application workflows are implemented in the current React client: recurring activities, transactions, categories, wallet entries, wishlist items, analytics, historical summaries, scenarios, settings, month close, and exports. The header uses one shared period state: calendar year/month for monthly records, and an explicit ISO week-year for weekly records. Historical months, weeks, and years are read-only in the client so viewing the past cannot change period-bound transactions, close records, or approved budgets.
 
-Neon remains the intended remote source of truth and IndexedDB is retained as an offline fallback. A working `DATABASE_URL` and a Node.js 18+ runtime are required to verify the API persistence path.
+The database is the source of truth; IndexedDB is an offline fallback that is only consulted when the API is unreachable, so a stale local cache cannot overwrite server data. The same account can be used from several devices: each save carries a `revision`, and a write from a device holding outdated data is rejected with `409` rather than silently overwriting the newer version.
 
 ### Deployment
 
-Vercel deploys the Vite build from `dist/` and routes `/api/*` requests through `api/[...path].ts`, which exports the same Express application used locally. Configure `DATABASE_URL` in Vercel before deployment. The configuration and function entrypoint compile locally, but an authenticated Vercel preview and a Neon persistence cycle are still required before treating deployment as verified.
+Vercel serves the Vite build from `dist/` and routes `/api/*` through `api/[...path].ts`, which exports the same Express app used locally. Set `DATABASE_URL` in the Vercel project before deploying.
+
+**Not yet verified:** no authenticated Vercel deployment has been run from this repository, so production routing and a production `DATABASE_URL` remain unconfirmed. After the first deploy, add a transaction, reload, and confirm it persists.
 
 ### Verification status
 
-The repository currently has 17 passing automated tests plus passing frontend and server TypeScript builds. Browser/mobile checks, a Neon persistence cycle, and an authenticated Vercel preview have not yet been verified. Before deploying, change data, refresh the app, restart the server, and confirm the change remains. The live implementation tracker contains the remaining verification tasks.
+81 automated tests pass, both builds pass, and the compiled server boots. Persistence has been verified end to end against a live PostgreSQL database from a real browser session, including refresh durability, server-restart durability, and a two-device read/write/conflict cycle. Remaining gaps — the Neon HTTP transport itself and a production Vercel deployment — are tracked in `implementation_plan.md`.
 
 ## Architecture
 
-- **Frontend:** Vite + React (TSX), Zustand state management, Recharts analytics, Lucide icons
+- **Frontend:** Vite + React (TSX), Zustand state management, dependency-free SVG/CSS charts, Lucide icons
 - **Backend:** Express.js + Neon PostgreSQL (@neondatabase/serverless), TypeScript
-- **Storage:** Neon PostgreSQL database (backend) + IndexedDB (frontend fallback for offline)
-- **Deployment:** Vercel / Netlify (Frontend) + Express serverless API (Backend)
+- **Storage:** PostgreSQL (source of truth) + IndexedDB (offline fallback)
+- **Deployment:** Vercel — static frontend plus the Express app as a serverless function
 
 ## Local development
 
 ### Prerequisites
 
 1. Node.js 18+ and npm
-2. Neon PostgreSQL Database Connection string (`DATABASE_URL`)
+2. A PostgreSQL database — either a Neon connection string (`DATABASE_URL`) or any local PostgreSQL server (see *Running against local PostgreSQL* below)
 
 ### Run both frontend and backend together
 
@@ -76,6 +78,17 @@ npm run server:dev
 
 The backend will listen on `http://0.0.0.0:3001` and bind to all network interfaces for LAN access.
 
+### Running against local PostgreSQL (no Neon account needed)
+
+The production driver (`@neondatabase/serverless`) speaks HTTP to Neon and cannot connect to a local server. To develop against any local PostgreSQL instead:
+
+```bash
+LOCAL_PG_URL=postgres://postgres@127.0.0.1:5432/budget npm run server:dev:pg
+npm run dev    # Vite proxies /api to the API server
+```
+
+This runs the real routes, services, and repository — only the driver differs, via the `setDatabase()` seam in `server/src/db/index.ts`.
+
 ### Build for production
 
 ```bash
@@ -105,12 +118,15 @@ cp .env.example .env
 
 ## Development scripts
 
-- `npm run dev` — Frontend dev server (Vite)
-- `npm run server:dev` — Backend dev server (Node.js with tsx)
-- `npm run dev:all` — Both frontend and backend together
-- `npm run build` — Build frontend + server for production
-- `npm run server:build` — Build backend only
-- `npm run test` — Run tests (vitest)
+- `npm run dev` — Frontend dev server (Vite; proxies `/api` to `localhost:3001`)
+- `npm run server:dev` — Backend dev server against Neon (`DATABASE_URL`)
+- `npm run server:dev:pg` — Backend dev server against local PostgreSQL (`LOCAL_PG_URL`)
+- `npm run dev:all` — Frontend and backend together
+- `npm run build` — Build the frontend
+- `npm run server:build` — Typecheck and emit the backend
+- `npm run server:prod` — Run the compiled backend
+- `npm test` — Run the test suite
+- `npm run test:db` — Run the PostgreSQL integration suites (needs `TEST_DATABASE_URL`)
 
 ## Testing
 
@@ -118,8 +134,14 @@ cp .env.example .env
 npm test
 ```
 
-Includes safety-net tests for:
-- Value handling (0 as valid, null/NaN as missing)
-- Currency conversion determinism
-- Historical data immutability
-- Budget calculations (piloting separation, rollover, suggestions)
+Covers value handling (0 is a real value; null/NaN mean missing), currency conversion determinism, historical immutability, budget calculations (piloting separation, rollover, suggestions), ISO week and period semantics, and the shared analytics selectors.
+
+### Database integration tests
+
+```bash
+TEST_DATABASE_URL=postgres://postgres@127.0.0.1:5432/budget npm run test:db
+```
+
+These run the real schema, migrations, repository SQL, and the Express API against a live PostgreSQL server — covering transaction rollback, boolean round-trips, approval immutability, the 409 conflict path, and zero-preservation.
+
+They are worth running before trusting any persistence change: a mocked driver accepts SQL that real PostgreSQL rejects, which is how five live defects previously went unnoticed.

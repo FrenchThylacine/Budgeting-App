@@ -494,8 +494,10 @@ export const CategoryManager: React.FC = () => {
           borderRadius: "var(--radius-sm)",
         }}
       >
-        ℹ️ Editing a category updates its name and metadata but does not change historical spending records.
-        Archiving hides it from new entries while preserving all existing transactions.
+        ℹ️ Transactions are never rewritten by a category edit, and archiving hides a category from new entries
+        while preserving every existing transaction. Note that <strong>bucket</strong> and <strong>monthly cap</strong>
+        are read live by budget calculations, so changing them also changes how past periods are reported — they are
+        locked while you are viewing a historical period.
       </div>
     </div>
   );

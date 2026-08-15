@@ -83,7 +83,7 @@ export function createActivitiesRoutes(): Router {
 
       yearRecord.activities.push(newActivity);
       yearRecord.updatedAt = new Date().toISOString();
-      await service.saveSnapshot(snapshot);
+      await service.commitServerChange(snapshot);
 
       res.status(201).json(newActivity);
     }),
@@ -141,7 +141,7 @@ export function createActivitiesRoutes(): Router {
           if (req.body.notes !== undefined) activity.notes = String(req.body.notes);
 
           yearRecord.updatedAt = new Date().toISOString();
-          await service.saveSnapshot(snapshot);
+          await service.commitServerChange(snapshot);
           found = true;
           res.json(activity);
           break;
@@ -175,7 +175,7 @@ export function createActivitiesRoutes(): Router {
             a.order = i;
           });
           yearRecord.updatedAt = new Date().toISOString();
-          await service.saveSnapshot(snapshot);
+          await service.commitServerChange(snapshot);
           found = true;
           res.json({ success: true, message: "Activity deleted" });
           break;

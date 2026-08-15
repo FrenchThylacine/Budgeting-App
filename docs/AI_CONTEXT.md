@@ -80,9 +80,20 @@ The architecture already exists.
 
 Future work should improve it rather than replacing it.
 
-## Implementation status (2026-08-10)
+## Implementation status (2026-08-15)
 
-The React client provides the core budgeting workflows, including transaction, recurring activity, category, wallet, wishlist, scenario, settings, analytics, and historical-summary views. Period state is shared: month/year selections use calendar years, while week selections retain an explicit ISO week-year so cross-year weeks are not lost. The application shell derives historical state once and displays it across period-aware views; store guards block period-bound mutations for historical weeks, months, and years. Analytics and spending filter real entries by that same selected period. Remote Neon persistence is configured through the Express API, with IndexedDB used as an offline fallback; persistence must still be verified against a configured database. The reusable Express app is served locally by `server/src/index.ts` and on Vercel through `api/[...path].ts`. Consult `implementation_plan.md` for the live, verified status rather than treating this context document as a release checklist.
+The React client provides the core budgeting workflows: transactions, recurring activities, categories, wallet, wishlist, scenarios, settings, analytics, and historical summaries. Period state is shared — month/year selections use calendar years while week selections retain an explicit ISO week-year, so cross-year weeks are not lost. The shell derives historical state once and applies it across period-aware views; store guards block period-bound mutations in historical periods.
+
+**All financial figures come from `src/domain/analytics.ts`.** The Dashboard and the Analytics page are presentation layers over that one module. Do not compute a financial figure inside a component, and do not add a second implementation for a surface — that is exactly how the Dashboard previously drifted into ignoring the global period selector.
+
+Persistence has been verified against a live PostgreSQL database and from a real browser, including refresh durability, server-restart durability, and a two-device read/write/conflict cycle. `snapshots.revision` provides optimistic concurrency: a stale write is rejected with 409 and the client adopts the server snapshot rather than overwriting newer data.
+
+Two things future agents should know before assuming otherwise:
+
+- **Mocked-driver tests are not sufficient for persistence.** Five SQL-level defects passed a mocked `sql` tag and failed against real PostgreSQL. Run `npm run test:db` with `TEST_DATABASE_URL` set.
+- **A passing `server:build` does not mean the server runs.** It only means `tsc` emitted files; the output was previously unable to start at all. Boot it.
+
+Consult `implementation_plan.md` for live, verified status rather than treating this document as a release checklist.
 
 ---
 

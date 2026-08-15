@@ -1,7 +1,7 @@
 import * as XLSX from "xlsx";
 import { calculateYear, estimateActivity } from "./calculations";
 import { parseAmount } from "./currency";
-import { dateInputValue, getIsoWeek, startOfIsoWeek } from "./dates";
+import { dateInputValue, getIsoWeek, startOfIsoWeek, todayDateInput } from "./dates";
 import type {
   Activity,
   BudgetSnapshot,
@@ -319,7 +319,7 @@ function slugId(prefix: string, value: string): string {
 }
 
 function safeDate(): string {
-  return new Date().toISOString().slice(0, 10);
+  return todayDateInput();
 }
 
 function downloadBlob(content: string, fileName: string, type: string): void {

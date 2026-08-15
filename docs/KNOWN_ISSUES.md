@@ -29,12 +29,28 @@ Do not solve the same problem twice.
 
 These issues have the highest priority.
 
-## Verification gaps — 2026-08-10
+## Verification status — 2026-08-15
 
-- Neon persistence is not yet exercised in this environment because `DATABASE_URL` is unavailable. Do not claim refresh or restart durability until a live database cycle has passed.
-- Browser verification is pending because local dev-server execution has not yet been approved in this environment. This includes dark mode, the redesigned period selector, historical contour, analytics, and mobile checks.
-- Vercel configuration and a catch-all API function now exist, but an authenticated preview deployment remains required.
-- Snapshot writes delete and reinsert nested year records. This is a concurrency and auditability risk that should be replaced with targeted transactional writes.
+Resolved since the previous entry (all verified against a live PostgreSQL server and a real browser session):
+
+- Persistence, refresh durability, server-restart durability, and two-device read/write are verified. See `docs/DATABASE.md` for the five SQL-level defects this uncovered.
+- Browser verification is complete for dark/light switching, the period selector, historical mode, analytics, and mobile layouts at 320–430 px plus landscape and tablet.
+- Snapshot writes are targeted, transactional upserts.
+
+Still open:
+
+- **A production Vercel deployment has not been verified.** The build compiles and `api/[...path].ts` mounts the Express app, but no authenticated deployment has been run from this environment, so production routing and a production `DATABASE_URL` remain unconfirmed.
+- **The Neon HTTP driver itself has not been exercised.** Integration coverage runs the identical SQL through node-postgres against real PostgreSQL. Neon's wire transport is therefore assumed, not proven. `sql.transaction([...])` in particular should be confirmed once a Neon instance is available.
+
+## Back-dating and historical protection — 2026-08-15
+
+`isCurrentPeriodMutable()` derives from the *selected view period*, not from the date on the record being written. While viewing the current month a user can still enter or re-date a transaction into a past month, which changes that month's reported totals.
+
+This is deliberately left permissive: entering a receipt a few days late is a normal, legitimate action, and because historical periods are read-only, blocking back-dated entry outright would make late entry impossible. The product decision — warn, block, or allow with an audit note — is open. Category `bucket` and `monthlyCap` are already blocked while a historical period is selected, since those retroactively rewrite reported history rather than adding to it.
+
+## Granular REST routes are not on the live write path — 2026-08-15
+
+The client persists exclusively through `GET`/`PUT /api/snapshot` (see `src/store/budgetStore.ts`). The per-entity routes under `server/src/routes/` (spending, categories, activities, approvals) are fully implemented and validated but are not called by the UI. Their validation therefore protects nothing today; snapshot-level validation in `routes/snapshot.ts` is what guards the real path. Either wire the client to the granular routes or treat them as an external API surface — but do not assume their validation constrains the app.
 
 ## Financial calculations
 

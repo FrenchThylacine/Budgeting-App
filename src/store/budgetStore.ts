@@ -543,7 +543,14 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
     );
   },
 
-  // Category management
+  // Category management.
+  //
+  // Categories are shared, snapshot-level records rather than period-bound
+  // ones, so they are editable regardless of the selected period. The fields
+  // that *would* retroactively rewrite historical figures — `bucket` and
+  // `monthlyCap`, which calculations read live — are guarded below while a
+  // historical period is selected, keeping Rule 3 (history is immutable)
+  // intact without freezing harmless edits like renaming or recolouring.
   addCategory: (category) => {
     commit(
       set,
@@ -559,12 +566,24 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
   },
 
   updateCategory: (idValue, patch) => {
+    const historical = !get().isCurrentPeriodMutable();
     commit(
       set,
       get,
       (snapshot) => {
         const cat = snapshot.categories.find((c) => c.id === idValue);
-        if (cat) Object.assign(cat, patch);
+        if (!cat) return;
+        const safePatch = { ...patch };
+        if (historical) {
+          // These two feed calculateYear directly, so changing them while
+          // viewing history would rewrite that period's reported totals.
+          delete safePatch.bucket;
+          delete safePatch.monthlyCap;
+        }
+        if (safePatch.parentId != null && !isSafeParent(snapshot, idValue, safePatch.parentId)) {
+          delete safePatch.parentId;
+        }
+        Object.assign(cat, safePatch);
       },
       "settings",
       "Updated category.",
@@ -686,6 +705,20 @@ function ensureYearRecord(snapshot: BudgetSnapshot, year: number): YearRecord {
 
 function nextOrder(activities: Activity[]): number {
   return activities.reduce((max, activity) => Math.max(max, activity.order), -1) + 1;
+}
+
+/**
+ * Categories nest one level deep. A parent is only valid when it exists, is
+ * not the category itself, and is not already a child — otherwise a pair of
+ * categories can be made each other's parent, and any code walking the chain
+ * loops forever.
+ */
+function isSafeParent(snapshot: BudgetSnapshot, categoryId: string, parentId: string): boolean {
+  if (parentId === categoryId) return false;
+  const parent = snapshot.categories.find((c) => c.id === parentId);
+  if (!parent) return false;
+  if (parent.parentId) return false;
+  return true;
 }
 
 function normalizeWishlistPatch<T extends Partial<WishlistItem>>(item: T): T {

@@ -131,6 +131,7 @@ export const AnalyticsPanel: React.FC = () => {
           <Metric
             label="Daily average"
             value={dailyAvg != null ? formatDualMoney(dailyAvg, settings) : "—"}
+            tone={dailyAvg != null ? "accent" : "neutral"}
             detail={window.elapsedDays > 0 ? `Over ${window.elapsedDays} day${window.elapsedDays !== 1 ? "s" : ""}` : "Period not started"}
           />
         </div>
@@ -255,6 +256,7 @@ export const AnalyticsPanel: React.FC = () => {
             <Metric
               label="Recurring spend"
               value={formatDualMoney(stats.recurringTotal, settings)}
+              tone="accent"
               detail={
                 stats.recurringShare != null
                   ? `${stats.recurringShare.toFixed(1)}% of total · ${stats.recurringCount} transaction${stats.recurringCount !== 1 ? "s" : ""}`
@@ -302,8 +304,6 @@ export const AnalyticsPanel: React.FC = () => {
           <div className="item-list">
             {categories.map(({ category, categoryId, total: catTotal, count, share }) => {
               const isPiloting = category?.bucket === "piloting";
-              const progressTone: "neutral" | "warning" | "danger" =
-                share != null && share > 50 ? "danger" : share != null && share > 30 ? "warning" : "neutral";
               return (
                 <div
                   key={categoryId}
@@ -337,7 +337,14 @@ export const AnalyticsPanel: React.FC = () => {
                       </div>
                     </div>
                   </div>
-                  {share != null && <Progress value={share} max={100} tone={progressTone} />}
+                  {share != null && (
+                    <Progress
+                      value={share}
+                      max={100}
+                      color={category?.color ?? "var(--accent)"}
+                      label={`${category?.name ?? "Uncategorized"} share of spending`}
+                    />
+                  )}
                 </div>
               );
             })}

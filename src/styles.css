@@ -95,6 +95,19 @@
   --accent: #0A84FF;
   --accent-soft: rgba(10, 132, 255, 0.12);
 
+  /* Dark surfaces swallow an 8% tint, so semantic fills are strengthened
+     to keep the same perceived emphasis as light mode. */
+  --success: #30D158;
+  --success-soft: rgba(48, 209, 88, 0.16);
+  --warning: #FF9F0A;
+  --warning-soft: rgba(255, 159, 10, 0.16);
+  --danger: #FF453A;
+  --danger-soft: rgba(255, 69, 58, 0.16);
+  --purple: #BF5AF2;
+  --purple-soft: rgba(191, 90, 242, 0.16);
+  --teal: #64D2FF;
+  --teal-soft: rgba(100, 210, 255, 0.16);
+
   --shadow-xs: 0 1px 2px rgba(0,0,0,0.3);
   --shadow-sm: 0 2px 8px rgba(0,0,0,0.3), 0 1px 2px rgba(0,0,0,0.2);
   --shadow-md: 0 4px 16px rgba(0,0,0,0.4), 0 2px 4px rgba(0,0,0,0.2);
@@ -213,7 +226,31 @@ body {
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
+  position: relative;
+  overflow: hidden;
 }
+
+/* A tinted rail plus a soft wash carries the metric's status without
+   colouring the whole card, so status is legible at a glance while the
+   surface stays calm. The rail is a second channel alongside the value
+   colour, so status never depends on hue alone. */
+.metric-card::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: transparent;
+}
+
+.metric-card.tone-positive::before { background: var(--success); }
+.metric-card.tone-negative::before { background: var(--danger); }
+.metric-card.tone-warning::before { background: var(--warning); }
+.metric-card.tone-accent::before { background: var(--accent); }
+
+.metric-card.tone-positive { background: linear-gradient(90deg, var(--success-soft), transparent 60%), var(--bg-elevated); }
+.metric-card.tone-negative { background: linear-gradient(90deg, var(--danger-soft), transparent 60%), var(--bg-elevated); }
+.metric-card.tone-warning { background: linear-gradient(90deg, var(--warning-soft), transparent 60%), var(--bg-elevated); }
+.metric-card.tone-accent { background: linear-gradient(90deg, var(--accent-soft), transparent 60%), var(--bg-elevated); }
 
 .metric-label {
   font-size: 0.8125rem;
@@ -235,6 +272,7 @@ body {
 .metric-value.positive { color: var(--success); }
 .metric-value.negative { color: var(--danger); }
 .metric-value.warning { color: var(--warning); }
+.metric-value.accent { color: var(--accent); }
 
 .metric-delta {
   font-size: 0.8125rem;

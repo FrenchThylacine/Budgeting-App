@@ -32,6 +32,17 @@ export class BudgetService {
   }
 
   /**
+   * Persist a change made by the server itself (the granular REST routes rather
+   * than a client snapshot PUT). The revision is bumped so the change takes
+   * part in the same optimistic-concurrency protocol; otherwise a client
+   * holding the previous revision could overwrite it without a conflict.
+   */
+  async commitServerChange(snapshot: BudgetSnapshot): Promise<void> {
+    snapshot.revision = (snapshot.revision ?? 0) + 1;
+    await this.saveSnapshot(snapshot);
+  }
+
+  /**
    * Update only the settings (top-level configuration)
    */
   async updateSettings(snapshot: BudgetSnapshot, patch: Partial<any>): Promise<BudgetSnapshot> {

@@ -100,12 +100,12 @@ export function createApprovalRoutes(): Router {
       if (existingApproval) {
         // Update existing proposal
         Object.assign(existingApproval, newApproval);
-        await service.saveSnapshot(snapshot);
+        await service.commitServerChange(snapshot);
         res.json(existingApproval);
       } else {
         // Create new approval
         snapshot.budgetApprovals.push(newApproval);
-        await service.saveSnapshot(snapshot);
+        await service.commitServerChange(snapshot);
         res.status(201).json(newApproval);
       }
     }),
@@ -143,7 +143,7 @@ export function createApprovalRoutes(): Router {
       if (req.body.note !== undefined) approval.note = String(req.body.note);
       if (req.body.decidedAt !== undefined) approval.decidedAt = String(req.body.decidedAt);
 
-      await service.saveSnapshot(snapshot);
+      await service.commitServerChange(snapshot);
       res.json(approval);
     }),
   );

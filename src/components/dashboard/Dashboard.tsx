@@ -360,7 +360,12 @@ export const Dashboard: React.FC = () => {
                           {formatDualMoney(cat.total, settings)}
                         </span>
                       </div>
-                      <Progress value={cat.total} max={maxTotal} tone="neutral" />
+                      <Progress
+                        value={cat.total}
+                        max={maxTotal}
+                        color={cat.category?.color ?? "var(--accent)"}
+                        label={`${cat.category?.name ?? "Uncategorized"} spending`}
+                      />
                     </div>
                   );
                 })}
