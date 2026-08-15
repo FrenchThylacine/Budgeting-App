@@ -225,9 +225,29 @@ export interface CategoryStat {
   count: number;
   /** % of non-piloting spend; null for piloting categories (excluded from shares). */
   share: number | null;
+  /**
+   * The category's monthly cap in base currency, or null when none is set.
+   * Caps are defined per month, so they only apply in month mode.
+   */
+  cap: number | null;
+  /** Spend as a % of the cap; null when no cap applies. */
+  capUsage: number | null;
+  /** True when spending has exceeded the cap. */
+  overCap: boolean;
 }
 
-export function categoryBreakdown(entries: SpendingEntry[], snapshot: BudgetSnapshot): CategoryStat[] {
+/**
+ * Category totals for a period, including cap tracking.
+ *
+ * `applyCaps` should be false for week and year views: a monthly cap cannot be
+ * meaningfully compared against a week's or a year's spend, and pretending
+ * otherwise would report a false breach.
+ */
+export function categoryBreakdown(
+  entries: SpendingEntry[],
+  snapshot: BudgetSnapshot,
+  applyCaps = (snapshot.settings.selectedPeriodMode ?? "month") === "month",
+): CategoryStat[] {
   const categoryMap = new Map(snapshot.categories.map((c) => [c.id, c]));
   const totals = new Map<string, { total: number; count: number }>();
   for (const e of entries) {
@@ -249,14 +269,31 @@ export function categoryBreakdown(entries: SpendingEntry[], snapshot: BudgetSnap
     .reduce((sum, s) => sum + s.total, 0);
 
   return stats
-    .map((s) => ({
-      ...s,
-      share:
-        s.category?.bucket === "piloting" || normalTotal <= 0
-          ? null
-          : (s.total / normalTotal) * 100,
-    }))
+    .map((s) => {
+      // A cap of 0 is a real limit ("spend nothing here"), so only a missing
+      // cap disables tracking.
+      const rawCap = s.category?.monthlyCap;
+      const cap = applyCaps && rawCap != null && Number.isFinite(rawCap) ? rawCap : null;
+      return {
+        ...s,
+        share:
+          s.category?.bucket === "piloting" || normalTotal <= 0
+            ? null
+            : (s.total / normalTotal) * 100,
+        cap,
+        capUsage: cap != null && cap > 0 ? (s.total / cap) * 100 : cap === 0 ? (s.total > 0 ? 100 : 0) : null,
+        overCap: cap != null && s.total > cap,
+      };
+    })
     .sort((a, b) => b.total - a.total);
+}
+
+/**
+ * Categories that have a cap set and are at or over it, for the selected
+ * period. Drives the dashboard alert.
+ */
+export function categoriesOverCap(stats: CategoryStat[]): CategoryStat[] {
+  return stats.filter((s) => s.overCap);
 }
 
 // ─── Period-over-period comparison ───────────────────────────────────────────

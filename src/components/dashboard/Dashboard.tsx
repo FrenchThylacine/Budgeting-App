@@ -5,6 +5,7 @@ import { monthName } from "../../domain/dates";
 import {
   budgetPacing,
   budgetRelevantEntries,
+  categoriesOverCap,
   categoryBreakdown,
   entriesForSelectedPeriod,
   monthlyTrendBars,
@@ -23,7 +24,7 @@ import { Card, CardBody } from "../ui/Card";
 import { EmptyState } from "../ui/EmptyState";
 import { Button } from "../ui/Button";
 import {
-  Wallet, Zap, PiggyBank, ArrowRight, Calendar,
+  Wallet, Zap, PiggyBank, ArrowRight, Calendar, AlertTriangle,
   TrendingUp, TrendingDown, Activity, CreditCard, BarChart3
 } from "lucide-react";
 
@@ -45,6 +46,7 @@ export const Dashboard: React.FC = () => {
   const pacing = useMemo(() => budgetPacing(snapshot, periodEntries), [snapshot, periodEntries]);
   const categories = useMemo(() => categoryBreakdown(periodEntries, snapshot), [periodEntries, snapshot]);
   const comparison = useMemo(() => periodComparison(snapshot, settings), [snapshot, settings]);
+  const overCap = useMemo(() => categoriesOverCap(categories), [categories]);
 
   const isCurrent = isViewingCurrentMonth(settings);
 
@@ -262,6 +264,35 @@ export const Dashboard: React.FC = () => {
           </Card>
         </div>
       </div>
+
+      {/* Category caps breached — actionable, so it sits above the fold */}
+      {overCap.length > 0 && (
+        <Card style={{ borderColor: "var(--danger)", background: "var(--danger-soft)" }}>
+          <CardBody>
+            <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+              <AlertTriangle size={18} style={{ color: "var(--danger)", flexShrink: 0 }} />
+              <div style={{ minWidth: 0 }}>
+                <div className="text-title">
+                  {overCap.length === 1
+                    ? "1 category is over its monthly cap"
+                    : `${overCap.length} categories are over their monthly caps`}
+                </div>
+                <div className="text-caption" style={{ marginTop: 4 }}>
+                  {overCap
+                    .map(
+                      (stat) =>
+                        `${stat.category?.name ?? "Uncategorized"} (${formatDualMoney(
+                          stat.total - (stat.cap ?? 0),
+                          settings,
+                        )} over)`,
+                    )
+                    .join(" · ")}
+                </div>
+              </div>
+            </div>
+          </CardBody>
+        </Card>
+      )}
 
       {/* Budget Suggestion */}
       {isCurrent && !existingApproval && (

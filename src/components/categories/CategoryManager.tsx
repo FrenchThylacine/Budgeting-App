@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { Archive, Pencil, Plus, X, Check, RotateCcw } from "lucide-react";
 import type { BudgetBucket, BudgetCategory } from "../../domain/types";
 import { useBudgetStore } from "../../store/budgetStore";
+import { formatDualMoney } from "../../utils/formatters";
 import { Button } from "../ui/Button";
 import { Section } from "../ui/Section";
 import { EmptyState } from "../ui/EmptyState";
@@ -343,7 +344,7 @@ export const CategoryManager: React.FC = () => {
                 )}
                 {cat.monthlyCap != null && (
                   <span style={{ color: "var(--text-tertiary)" }}>
-                    Cap: {cat.monthlyCap}
+                    Cap: {formatDualMoney(cat.monthlyCap, snapshot.settings)}/mo
                   </span>
                 )}
                 {cat.archived && (

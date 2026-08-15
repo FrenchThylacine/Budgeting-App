@@ -42,11 +42,20 @@ Still open:
 - **A production Vercel deployment has not been verified.** The build compiles and `api/[...path].ts` mounts the Express app, but no authenticated deployment has been run from this environment, so production routing and a production `DATABASE_URL` remain unconfirmed.
 - **The Neon HTTP driver itself has not been exercised.** Integration coverage runs the identical SQL through node-postgres against real PostgreSQL. Neon's wire transport is therefore assumed, not proven. `sql.transaction([...])` in particular should be confirmed once a Neon instance is available.
 
-## Back-dating and historical protection — 2026-08-15
+## Historical editing — resolved 2026-08-15
 
-`isCurrentPeriodMutable()` derives from the *selected view period*, not from the date on the record being written. While viewing the current month a user can still enter or re-date a transaction into a past month, which changes that month's reported totals.
+Previously open as a product question; now decided and implemented as **allow with explicit consent and a full audit trail**.
 
-This is deliberately left permissive: entering a receipt a few days late is a normal, legitimate action, and because historical periods are read-only, blocking back-dated entry outright would make late entry impossible. The product decision — warn, block, or allow with an audit note — is open. Category `bucket` and `monthlyCap` are already blocked while a historical period is selected, since those retroactively rewrite reported history rather than adding to it.
+A closed period stays read-only by default. The historical banner offers "Edit this period", which opens a consent dialog stating the consequences and requiring an explicit acknowledgement before unlocking. While unlocked:
+
+- The banner switches to a loud danger state naming the period being edited.
+- Every period-bound change is written to the audit trail with `historicalEdit: true` and the period label, and the History panel surfaces and filters them.
+- Approved budgets remain immutable. The override unlocks *data*, never decision records, so Rule 6 is preserved and `recordBudgetApproval` deliberately checks the period directly rather than `isCurrentPeriodMutable()`.
+- The unlock is session-only. It is never persisted, never travels to another device, and clears automatically as soon as the selected period changes.
+
+Category `bucket` and `monthlyCap` remain blocked while viewing a historical period. Those are read live when reporting any period, so changing them restates closed periods wholesale rather than editing one period's data.
+
+Still permissive by design: back-dating a transaction from the current period. Entering a receipt a few days late is normal, and blocking it would make late entry impossible now that the dedicated, audited path exists for rewriting a closed period.
 
 ## Granular REST routes are not on the live write path — 2026-08-15
 

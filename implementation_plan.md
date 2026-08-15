@@ -2,7 +2,7 @@
 
 This is the active engineering tracker. A checkbox is marked complete only after implementation **and** the relevant verification have both succeeded. "Code exists" is never sufficient.
 
-**Last updated:** 2026-08-15 — Persistence verified against real PostgreSQL (5 SQL defects fixed), multi-device conflict guard added and browser-verified, analytics unified behind shared selectors, mobile overflow and unreachable-section navigation fixed, dead code removed. 81 tests, both builds clean.
+**Last updated:** 2026-08-15 — Consent-gated historical editing with full audit trail, History panel rebuilt (approvals never rendered — fixed), category caps made functional (were stored but unused by any calculation), wallet balances and settings coverage restored, Ctrl+Z no longer breaks typing. Earlier the same day: persistence verified against real PostgreSQL (5 SQL defects fixed), multi-device conflict guard, analytics unified behind shared selectors, mobile overflow and unreachable-section navigation fixed. 94 tests, both builds clean.
 
 ## How this session verified things
 
@@ -17,6 +17,44 @@ Anything that could not be verified this way is listed under *Not verified* belo
 
 - [ ] Verify a production Vercel deployment (build compiles and `api/[...path].ts` mounts the Express app, but no authenticated deploy has been run from this environment).
 - [ ] Exercise the Neon HTTP driver itself, in particular `sql.transaction([...])`. Integration tests prove the SQL against real PostgreSQL; Neon's transport is assumed, not proven.
+
+## Completed — historical editing and product gaps (2026-08-15, later)
+
+### Editing a closed period (product decision: allow with consent + audit)
+
+- [x] Consent dialog stating consequences, with the confirm button disabled until explicitly acknowledged (2026-08-15; browser-verified, including at 375 px).
+- [x] Danger-state banner naming the unlocked period, with one-click relock (2026-08-15; browser-verified).
+- [x] Every period-bound change flagged in the audit trail with the period it rewrote (2026-08-15; verified in the browser and by test).
+- [x] Approved budgets remain immutable while the override is active — it unlocks data, never decision records (2026-08-15; regression test).
+- [x] Override is session-only and clears automatically when the period changes (2026-08-15; verified in the browser: navigating away relocked, and returning stayed locked).
+- [x] Audit flags persist through PostgreSQL via migration `004-add-audit-historical-edit` (2026-08-15; integration-tested).
+
+### History panel rebuilt
+
+- [x] **Fixed: budget approvals never rendered.** `{approvals.length === 0 && <EmptyState/>}` had no else branch, so approvals were invisible whenever they existed (2026-08-15).
+- [x] Audit trail surfaced for the first time — the store keeps 300 entries and exactly one was visible anywhere in the app (2026-08-15).
+- [x] Month close records surfaced (status, total, delta, rollover) (2026-08-15).
+- [x] Type filters plus a dedicated historical-edits filter and count banner (2026-08-15; browser-verified).
+
+### Category caps made functional
+
+- [x] `monthlyCap` was stored and editable but read by no calculation — setting a cap did nothing. Cap usage, headroom, and breach detection added to the shared analytics selectors (2026-08-15; 6 regression tests).
+- [x] Analytics shows spend against cap with colour-coded progress and an over-cap badge (2026-08-15; browser-verified: €55 against a €20 cap reported €35 over).
+- [x] Dashboard breach alert naming each category and the overage (2026-08-15; browser-verified).
+- [x] Caps apply in month mode only, so a year's spend cannot report a false breach against a monthly cap (2026-08-15; regression test).
+- [x] A cap of 0 is honoured as a real limit rather than treated as unset (2026-08-15; regression test).
+
+### Wallet and settings
+
+- [x] Wallet panel now shows balances (wallet, personal, rollover, opening) — previously computed but displayed only on other pages (2026-08-15).
+- [x] Wallet entry type is selectable (was hardcoded to `personal`), with notes, inline editing via the previously-uncalled `updateWalletEntry`, month names, and base-currency equivalents (2026-08-15).
+- [x] Settings expanded from 5 to 12 fields, including `monthlyBudgetCurrency` — the budget amount was being interpreted in a currency the user could neither see nor change (2026-08-15).
+- [x] Exchange rates are editable in the UI; previously they could only be changed by importing a spreadsheet through a UI that does not exist (2026-08-15).
+
+### Bug fixes
+
+- [x] Ctrl+Z called `preventDefault()` and did nothing, disabling native undo in every text field while the header advertised the shortcut. Now performs undo/redo and stays out of the way while typing (2026-08-15).
+- [x] Corrected a stale code comment claiming calculations read `monthlyCap` — they did not until caps were implemented (2026-08-15).
 
 ## Completed this session (2026-08-15)
 
@@ -130,9 +168,21 @@ Anything that could not be verified this way is listed under *Not verified* belo
 - [x] Horizontal overflow on every view at portrait widths (2026-08-15).
 - [x] `PATCH /api/categories/reorder` was permanently unreachable (2026-08-15).
 - [x] "Today" resolved to the UTC date, mis-filing after-midnight entries east of UTC (2026-08-15).
-- [ ] **Back-dating bypasses historical protection.** `isCurrentPeriodMutable()` checks the selected *view* period, not the date on the record, so a transaction can be entered or re-dated into a past month while viewing the current one. Left permissive on purpose: late receipt entry is legitimate, and historical periods being read-only means blocking it outright would make late entry impossible. The product decision (warn / block / allow with an audit note) is open — see `docs/KNOWN_ISSUES.md`.
+- [x] **Historical editing** — was an open product question, now decided and implemented as allow-with-consent plus a full audit trail (2026-08-15). Back-dating from the current period stays permissive by design, since a dedicated audited path now exists for rewriting a closed period.
+- [x] Budget approvals were never rendered in the History panel (2026-08-15).
+- [x] `monthlyCap` was stored and editable but used by no calculation (2026-08-15).
+- [x] The wallet panel showed no balance (2026-08-15).
+- [x] Ctrl+Z broke native undo in every text field while providing no undo (2026-08-15).
 - [ ] **The granular REST routes are not on the live write path.** The client persists only through `GET`/`PUT /api/snapshot`; the per-entity routes are implemented and validated but unused by the UI, so their validation constrains nothing today. Either wire the client to them or treat them explicitly as an external API surface.
 - [ ] `PATCH /api/snapshot/settings` spreads the request body into settings with no per-field validation. Not on the client's write path today, but it is reachable.
 - [ ] Wishlist totals sum `actualPrice` across mixed currencies without conversion before formatting the result as a single currency.
 - [ ] `POST /api/snapshot/reset` is a stub that reports success without doing anything.
 - [ ] The main bundle exceeds 500 kB; code-splitting has not been attempted.
+- [ ] **Import is unreachable.** `importBudgetWorkbook` and `importJsonBackup` are implemented but no component calls them, and there is no file input anywhere in the app. Export works, so data can leave but not return.
+- [ ] **Seasonal presets are unreachable.** `applySeasonalPreset` and `SeasonalPreset.activityOverrides` are implemented and seeded but no component calls them; this is also the only writer of `settings.selectedSeason`.
+- [ ] `ScenarioLab` applies a preset destructively with no preview or diff, and presets cannot be created, edited, or deleted — the store has only `applyScenarioPreset`.
+- [ ] `ActivityPanel` covers 10 of 15 `Activity` fields. `pricePerPurchase` and `yearlyEstimate` are missing even though "purchase" and "yearly" are selectable recurrence types, so those costs cannot be entered. `duplicateActivity`, `reorderActivity`, `matchesActivityFilters`, and `sortActivities` all exist and are called by nothing.
+- [ ] `calculation.categoryTotals` is computed on every recalculation and consumed by nothing; analytics computes its own breakdown.
+- [ ] Four settings are seeded but read by no code path: `autoWalletRollupEnabled`, `promptBeforeMonthClose`, `liveClockEnabled`, `nanPolicy`. Either wire them up or remove them.
+- [ ] `YearRecord.monthlyNotes` exists as a type with no store action and no UI.
+- [ ] No component tests exist; panels are verified manually in the browser. A Playwright suite would lock in the flows checked by hand this session.

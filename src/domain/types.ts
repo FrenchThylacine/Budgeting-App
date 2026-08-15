@@ -196,6 +196,10 @@ export interface AuditLog {
   type: AuditType;
   summary: string;
   createdAt: string;
+  /** True when this change rewrote a closed period via the explicit override. */
+  historicalEdit?: boolean;
+  /** Label of the closed period that was edited, when `historicalEdit` is set. */
+  historicalPeriod?: string;
   metadata?: Record<string, unknown>;
 }
 

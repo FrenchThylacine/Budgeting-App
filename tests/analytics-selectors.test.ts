@@ -8,6 +8,7 @@ import { describe, expect, it } from "vitest";
 import {
   budgetPacing,
   budgetRelevantEntries,
+  categoriesOverCap,
   categoryBreakdown,
   entriesForSelectedPeriod,
   monthlyTrendBars,
@@ -283,5 +284,77 @@ describe("selectedPeriodWindow", () => {
     const w = selectedPeriodWindow(snap.settings, new Date("2026-07-08T12:00:00Z"));
     expect(w.elapsedDays).toBe(0);
     expect(w.totalDays).toBe(31);
+  });
+});
+
+describe("category caps", () => {
+  function snapshotWithCap(cap: number | undefined, spend: number) {
+    const snap = snapshotWith([entry({ amount: spend, categoryId: "cat-capped" })]);
+    snap.categories.push({
+      id: "cat-capped",
+      name: "Capped",
+      bucket: "general",
+      color: "#ff8800",
+      monthlyCap: cap,
+    });
+    return snap;
+  }
+
+  it("reports usage and remaining headroom below the cap", () => {
+    const snap = snapshotWithCap(200, 50);
+    const stat = categoryBreakdown(snap.years["2026"].spendingEntries, snap).find(
+      (s) => s.categoryId === "cat-capped",
+    )!;
+    expect(stat.cap).toBe(200);
+    expect(stat.capUsage).toBeCloseTo(25);
+    expect(stat.overCap).toBe(false);
+  });
+
+  it("flags a breach once spending passes the cap", () => {
+    const snap = snapshotWithCap(100, 150);
+    const stats = categoryBreakdown(snap.years["2026"].spendingEntries, snap);
+    const stat = stats.find((s) => s.categoryId === "cat-capped")!;
+    expect(stat.overCap).toBe(true);
+    expect(stat.capUsage).toBeCloseTo(150);
+    expect(categoriesOverCap(stats).map((s) => s.categoryId)).toContain("cat-capped");
+  });
+
+  it("does not flag spending exactly at the cap", () => {
+    const snap = snapshotWithCap(100, 100);
+    const stat = categoryBreakdown(snap.years["2026"].spendingEntries, snap).find(
+      (s) => s.categoryId === "cat-capped",
+    )!;
+    expect(stat.overCap).toBe(false);
+    expect(stat.capUsage).toBeCloseTo(100);
+  });
+
+  it("treats a zero cap as a real limit, not a missing one", () => {
+    const snap = snapshotWithCap(0, 10);
+    const stat = categoryBreakdown(snap.years["2026"].spendingEntries, snap).find(
+      (s) => s.categoryId === "cat-capped",
+    )!;
+    expect(stat.cap).toBe(0);
+    expect(stat.overCap).toBe(true);
+  });
+
+  it("leaves cap fields null when no cap is set", () => {
+    const snap = snapshotWithCap(undefined, 50);
+    const stat = categoryBreakdown(snap.years["2026"].spendingEntries, snap).find(
+      (s) => s.categoryId === "cat-capped",
+    )!;
+    expect(stat.cap).toBeNull();
+    expect(stat.capUsage).toBeNull();
+    expect(stat.overCap).toBe(false);
+  });
+
+  it("ignores monthly caps outside month mode, where they cannot apply", () => {
+    const snap = snapshotWithCap(100, 500);
+    snap.settings.selectedPeriodMode = "year";
+    const stats = categoryBreakdown(snap.years["2026"].spendingEntries, snap);
+    const stat = stats.find((s) => s.categoryId === "cat-capped")!;
+    // A year's spend must not be reported as breaching a monthly cap.
+    expect(stat.cap).toBeNull();
+    expect(stat.overCap).toBe(false);
+    expect(categoriesOverCap(stats)).toHaveLength(0);
   });
 });

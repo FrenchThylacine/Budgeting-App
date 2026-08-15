@@ -302,7 +302,7 @@ export const AnalyticsPanel: React.FC = () => {
           />
         ) : (
           <div className="item-list">
-            {categories.map(({ category, categoryId, total: catTotal, count, share }) => {
+            {categories.map(({ category, categoryId, total: catTotal, count, share, cap, capUsage, overCap }) => {
               const isPiloting = category?.bucket === "piloting";
               return (
                 <div
@@ -329,21 +329,52 @@ export const AnalyticsPanel: React.FC = () => {
                           Excluded from shares
                         </span>
                       )}
+                      {overCap && (
+                        <span className="badge badge-danger" style={{ whiteSpace: "nowrap" }}>
+                          Over cap
+                        </span>
+                      )}
                     </div>
                     <div style={{ textAlign: "right", flexShrink: 0 }}>
-                      <strong>{formatDualMoney(catTotal, settings)}</strong>
+                      <strong style={overCap ? { color: "var(--danger)" } : undefined}>
+                        {formatDualMoney(catTotal, settings)}
+                      </strong>
                       <div className="text-footnote" style={{ color: "var(--text-secondary)" }}>
-                        {share != null ? `${share.toFixed(1)}% · ` : ""}{count} transaction{count !== 1 ? "s" : ""}
+                        {cap != null
+                          ? `of ${formatDualMoney(cap, settings)} cap · ${count} transaction${count !== 1 ? "s" : ""}`
+                          : `${share != null ? `${share.toFixed(1)}% · ` : ""}${count} transaction${count !== 1 ? "s" : ""}`}
                       </div>
                     </div>
                   </div>
-                  {share != null && (
-                    <Progress
-                      value={share}
-                      max={100}
-                      color={category?.color ?? "var(--accent)"}
-                      label={`${category?.name ?? "Uncategorized"} share of spending`}
-                    />
+
+                  {/* With a cap set, progress tracks the cap — the number the
+                      user actually committed to — rather than share of spend. */}
+                  {cap != null && capUsage != null ? (
+                    <>
+                      <Progress
+                        value={Math.min(capUsage, 100)}
+                        max={100}
+                        tone={overCap ? "danger" : capUsage >= 80 ? "warning" : "success"}
+                        label={`${category?.name ?? "Uncategorized"} against its monthly cap`}
+                      />
+                      <div
+                        className="text-footnote"
+                        style={{ color: overCap ? "var(--danger)" : "var(--text-tertiary)" }}
+                      >
+                        {overCap
+                          ? `${formatDualMoney(catTotal - cap, settings)} over cap`
+                          : `${capUsage.toFixed(0)}% of cap used · ${formatDualMoney(cap - catTotal, settings)} left`}
+                      </div>
+                    </>
+                  ) : (
+                    share != null && (
+                      <Progress
+                        value={share}
+                        max={100}
+                        color={category?.color ?? "var(--accent)"}
+                        label={`${category?.name ?? "Uncategorized"} share of spending`}
+                      />
+                    )
                   )}
                 </div>
               );

@@ -5,7 +5,7 @@ import { useBudgetStore } from "../src/store/budgetStore";
 const NOW = new Date("2026-08-10T12:00:00Z");
 
 function setSnapshot(snapshot = createSeedBudgetSnapshot(NOW)) {
-  useBudgetStore.setState({ snapshot, hydrated: true, undoStack: [], redoStack: [] });
+  useBudgetStore.setState({ snapshot, hydrated: true, undoStack: [], redoStack: [], historicalEditUnlocked: false });
   return snapshot;
 }
 
@@ -180,5 +180,143 @@ describe("category edits and historical integrity", () => {
     // Self-parenting is likewise rejected.
     useBudgetStore.getState().updateCategory("cat-child", { parentId: "cat-child" });
     expect(useBudgetStore.getState().snapshot.categories.find((c) => c.id === "cat-child")!.parentId).toBe("cat-parent");
+  });
+});
+
+describe("historical editing override", () => {
+  it("blocks period-bound writes while a closed period is locked", () => {
+    const snapshot = setSnapshot();
+    snapshot.settings.selectedPeriodMode = "month";
+    snapshot.settings.selectedYear = 2026;
+    snapshot.settings.selectedMonth = 7; // historical relative to NOW (August)
+    useBudgetStore.setState({ snapshot, historicalEditUnlocked: false });
+
+    expect(useBudgetStore.getState().isCurrentPeriodMutable()).toBe(false);
+    expect(useBudgetStore.getState().isEditingHistory()).toBe(false);
+  });
+
+  it("allows period-bound writes once explicitly unlocked", () => {
+    const snapshot = setSnapshot();
+    snapshot.settings.selectedPeriodMode = "month";
+    snapshot.settings.selectedYear = 2026;
+    snapshot.settings.selectedMonth = 7;
+    useBudgetStore.setState({ snapshot });
+    const before = useBudgetStore.getState().snapshot.years["2026"].spendingEntries.length;
+
+    useBudgetStore.getState().unlockHistoricalEditing();
+    expect(useBudgetStore.getState().isCurrentPeriodMutable()).toBe(true);
+    expect(useBudgetStore.getState().isEditingHistory()).toBe(true);
+
+    useBudgetStore.getState().addSpendingEntry({
+      year: 2026,
+      month: 7,
+      week: 30,
+      date: "2026-07-20",
+      categoryId: "cat-spending",
+      amount: 33,
+      currency: "EUR",
+      recurrenceType: "none",
+      isPiloting: false,
+      note: "Late receipt",
+    });
+
+    expect(useBudgetStore.getState().snapshot.years["2026"].spendingEntries).toHaveLength(before + 1);
+  });
+
+  it("flags a historical change in the audit trail with its period", () => {
+    const snapshot = setSnapshot();
+    snapshot.settings.selectedPeriodMode = "month";
+    snapshot.settings.selectedYear = 2026;
+    snapshot.settings.selectedMonth = 7;
+    useBudgetStore.setState({ snapshot, historicalEditUnlocked: true });
+
+    useBudgetStore.getState().addSpendingEntry({
+      year: 2026,
+      month: 7,
+      week: 30,
+      date: "2026-07-20",
+      categoryId: "cat-spending",
+      amount: 10,
+      currency: "EUR",
+      recurrenceType: "none",
+      isPiloting: false,
+      note: "",
+    });
+
+    const latest = useBudgetStore.getState().snapshot.auditLog[0];
+    expect(latest.historicalEdit).toBe(true);
+    expect(latest.historicalPeriod).toBe("July 2026");
+    expect(latest.summary).toContain("historical edit");
+  });
+
+  it("does not flag ordinary current-period changes", () => {
+    const snapshot = setSnapshot();
+    snapshot.settings.selectedPeriodMode = "month";
+    snapshot.settings.selectedYear = 2026;
+    snapshot.settings.selectedMonth = 8; // current
+    useBudgetStore.setState({ snapshot, historicalEditUnlocked: true });
+
+    useBudgetStore.getState().addSpendingEntry({
+      year: 2026,
+      month: 8,
+      week: 33,
+      date: "2026-08-12",
+      categoryId: "cat-spending",
+      amount: 10,
+      currency: "EUR",
+      recurrenceType: "none",
+      isPiloting: false,
+      note: "",
+    });
+
+    const latest = useBudgetStore.getState().snapshot.auditLog[0];
+    expect(latest.historicalEdit).toBe(false);
+    expect(latest.summary).not.toContain("historical edit");
+  });
+
+  it("relocks automatically when the selected period changes", () => {
+    const snapshot = setSnapshot();
+    snapshot.settings.selectedPeriodMode = "month";
+    snapshot.settings.selectedYear = 2026;
+    snapshot.settings.selectedMonth = 7;
+    useBudgetStore.setState({ snapshot, historicalEditUnlocked: true });
+
+    useBudgetStore.getState().updateSettings({ selectedMonth: 6 });
+
+    expect(useBudgetStore.getState().historicalEditUnlocked).toBe(false);
+    expect(useBudgetStore.getState().isCurrentPeriodMutable()).toBe(false);
+  });
+
+  it("does not relock for a non-period setting change", () => {
+    const snapshot = setSnapshot();
+    snapshot.settings.selectedMonth = 7;
+    useBudgetStore.setState({ snapshot, historicalEditUnlocked: true });
+
+    useBudgetStore.getState().updateSettings({ darkMode: true });
+
+    expect(useBudgetStore.getState().historicalEditUnlocked).toBe(true);
+  });
+
+  it("keeps approved budgets immutable even while history is unlocked", () => {
+    const snapshot = setSnapshot();
+    snapshot.settings.selectedPeriodMode = "month";
+    snapshot.settings.selectedYear = 2026;
+    snapshot.settings.selectedMonth = 7;
+    useBudgetStore.setState({ snapshot, historicalEditUnlocked: true });
+    const before = useBudgetStore.getState().snapshot.budgetApprovals.length;
+
+    // The override unlocks data, never decision records.
+    useBudgetStore.getState().recordBudgetApproval({
+      year: 2026,
+      month: 7,
+      suggestedAmount: 500,
+      approvedAmount: 500,
+      currency: "EUR",
+      status: "approved",
+      recurringTotal: 300,
+      note: "Must not be written",
+    });
+
+    expect(useBudgetStore.getState().snapshot.budgetApprovals).toHaveLength(before);
   });
 });

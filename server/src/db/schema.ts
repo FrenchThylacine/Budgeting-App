@@ -255,6 +255,8 @@ export async function initializeSchema(
       type TEXT NOT NULL,
       summary TEXT NOT NULL,
       metadata TEXT,
+      historical_edit BOOLEAN NOT NULL DEFAULT false,
+      historical_period TEXT,
       created_at TEXT NOT NULL,
       FOREIGN KEY(snapshot_id)
         REFERENCES snapshots(id)

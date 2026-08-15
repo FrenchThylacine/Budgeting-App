@@ -338,6 +338,49 @@ describeDb("PostgreSQL integration", () => {
     expect(afterYear.spendingEntries.find((e) => e.id === "spend-integration-1")).toBeDefined();
   });
 
+  it("round-trips the historical-edit audit flag through the database", async () => {
+    const snapshot = (await repo.loadSnapshot("active"))!;
+    snapshot.auditLog.unshift(
+      {
+        id: "audit-historical-1",
+        type: "spending",
+        summary: "Added spending entry. (historical edit · July 2026)",
+        createdAt: new Date().toISOString(),
+        historicalEdit: true,
+        historicalPeriod: "July 2026",
+      },
+      {
+        id: "audit-normal-1",
+        type: "spending",
+        summary: "Added spending entry.",
+        createdAt: new Date().toISOString(),
+        historicalEdit: false,
+      },
+    );
+    snapshot.revision = 15;
+    await repo.saveSnapshot(snapshot, "active");
+
+    const loaded = await repo.loadSnapshot("active");
+    const flagged = loaded!.auditLog.find((entry) => entry.id === "audit-historical-1")!;
+    const normal = loaded!.auditLog.find((entry) => entry.id === "audit-normal-1")!;
+
+    expect(flagged.historicalEdit).toBe(true);
+    expect(flagged.historicalPeriod).toBe("July 2026");
+    expect(normal.historicalEdit).toBe(false);
+    expect(normal.historicalPeriod).toBeUndefined();
+  });
+
+  it("keeps audit entries when a later save omits them", async () => {
+    const snapshot = (await repo.loadSnapshot("active"))!;
+    snapshot.auditLog = [];
+    snapshot.revision = 16;
+    await repo.saveSnapshot(snapshot, "active");
+
+    // The audit trail is history: dropping it from a payload must not erase it.
+    const loaded = await repo.loadSnapshot("active");
+    expect(loaded!.auditLog.find((entry) => entry.id === "audit-historical-1")).toBeDefined();
+  });
+
   it("exposes the stored revision for optimistic concurrency checks", async () => {
     const snapshot = await repo.loadSnapshot("active");
     snapshot!.revision = 20;

@@ -1,5 +1,51 @@
 # Changelog
 
+## 2026-08-15 (later)
+
+### Consent-gated historical editing, a real audit trail, and working category caps
+
+#### Editing a closed period
+
+Closed periods were strictly read-only, which made a late receipt or a miscategorised expense impossible to correct. They are now editable through a deliberate, audited path:
+
+- The historical banner offers **Edit this period**, opening a consent dialog that states the consequences and requires an explicit acknowledgement before the confirm button enables.
+- While unlocked the banner switches to a danger state naming the period, with a one-click **Relock**.
+- Every period-bound change is recorded in the audit trail flagged as a historical edit, along with the period it rewrote.
+- **Approved budgets stay immutable.** The override unlocks data, never decision records, so `recordBudgetApproval` checks the period directly rather than the override.
+- The unlock is session-only: never persisted, never synced to another device, and cleared automatically as soon as the period changes.
+
+#### History panel rebuilt — the audit trail was invisible
+
+The panel was 11 lines showing a 12-month list. The store keeps **300 audit entries**; exactly one was visible anywhere in the app (the latest, in the header).
+
+- Four sections: Periods, Month closes, Budget approvals, Audit trail.
+- **Fixed a real bug: budget approvals never rendered.** The old code was `{approvals.length === 0 && <EmptyState/>}` with no else branch, so approvals showed an empty state when empty and nothing at all when populated. Their amounts, decisions, and dates had never been visible.
+- Month close records — status, final total, delta, rollover — are surfaced for the first time.
+- Audit trail with type filters, a dedicated "Historical edits" filter, and a banner counting changes that rewrote a closed period.
+
+#### Category caps now do something
+
+`monthlyCap` was editable and stored but read by **no calculation anywhere** — setting a cap had no effect.
+
+- Cap tracking added to the shared analytics selectors: usage percentage, remaining headroom, and breach detection.
+- The analytics category breakdown shows spend against cap with a colour-coded bar and an "Over cap" badge; without a cap it still shows share of spending.
+- The dashboard surfaces a breach alert naming each category and the amount over.
+- Caps apply in month mode only — comparing a year's spend against a monthly cap would report a false breach.
+- A cap of `0` is honoured as a real limit ("spend nothing here"), not treated as unset.
+
+#### Wallet and Settings
+
+- **The wallet showed no balance.** It was computed and displayed on other pages but not on the Wallet panel itself. It now leads with wallet, personal, rollover, and opening balances, gains entry-type selection (previously hardcoded to `personal`), notes, inline editing (`updateWalletEntry` existed but nothing called it), month names instead of `month 7`, and a base-currency equivalent for foreign-currency entries.
+- **Settings exposed 5 of 20 fields.** Most notably `monthlyBudgetCurrency` was missing, so the budget amount was interpreted in a currency the user could neither see nor change. Added currency format, rounding rule, budget currency, year-end wishlist behaviour, save-timestamp, and editable exchange rates — which previously could only be changed by importing a spreadsheet through a UI that does not exist.
+
+#### Ctrl+Z no longer breaks typing
+
+The global handler called `preventDefault()` on Ctrl+Z and then did nothing, disabling native undo inside every text field while providing no undo of its own — despite the header advertising the shortcut. It now performs undo/redo and stays out of the way while the user is typing.
+
+#### Testing
+
+94 tests (up from 81), including 13 new ones covering the historical-editing override, audit flagging, auto-relock, approval immutability under override, and category cap behaviour. Two new database integration tests confirm the audit flags round-trip through PostgreSQL (migration `004-add-audit-historical-edit`) and that omitting the audit log from a payload cannot erase it.
+
 ## 2026-08-15
 
 ### Verified persistence against a real database, shared analytics, and mobile repairs

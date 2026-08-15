@@ -281,13 +281,24 @@ export class SnapshotRepository {
       writes.push({
         text: `
         INSERT INTO audit_log
-        (id, snapshot_id, type, summary, metadata, created_at)
-        VALUES ($1, $2, $3, $4, $5, $6)
+        (id, snapshot_id, type, summary, metadata, historical_edit, historical_period, created_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
         ON CONFLICT (id) DO UPDATE SET
           summary = EXCLUDED.summary,
-          metadata = EXCLUDED.metadata
+          metadata = EXCLUDED.metadata,
+          historical_edit = EXCLUDED.historical_edit,
+          historical_period = EXCLUDED.historical_period
       `,
-        params: [log.id, snapshotId, log.type, log.summary, log.metadata ? JSON.stringify(log.metadata) : null, log.createdAt],
+        params: [
+          log.id,
+          snapshotId,
+          log.type,
+          log.summary,
+          log.metadata ? JSON.stringify(log.metadata) : null,
+          log.historicalEdit === true,
+          log.historicalPeriod ?? null,
+          log.createdAt,
+        ],
       });
     }
 
@@ -651,6 +662,8 @@ export class SnapshotRepository {
       type: r.type,
       summary: r.summary,
       createdAt: r.created_at,
+      historicalEdit: r.historical_edit === true || r.historical_edit === 1,
+      historicalPeriod: r.historical_period ?? undefined,
       metadata: r.metadata ? JSON.parse(r.metadata) : undefined,
     }));
   }
