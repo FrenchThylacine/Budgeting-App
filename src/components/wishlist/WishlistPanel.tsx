@@ -19,6 +19,7 @@ import {
 } from "../../domain/wishlist";
 import type { WishlistLinkResult } from "../../domain/wishlist";
 import { seedCategoryIdOrFallback } from "../../domain/seedCategories";
+import { SwipeRow } from "../ui/SwipeRow";
 import { useBudgetStore } from "../../store/budgetStore";
 import {
   formatDualMoney,
@@ -638,8 +639,36 @@ export const WishlistPanel: React.FC = () => {
             const showLink = expandedLinkId === item.id && linked != null;
 
             return (
-              <div
+              <SwipeRow
                 key={item.id}
+                label={item.name}
+                // Right-to-left reveals the destructive action, matching the
+                // platform convention people already have.
+                trailing={
+                  mutable && !isEditing
+                    ? [
+                        {
+                          label: "Delete",
+                          icon: <Trash2 size={18} />,
+                          destructive: true,
+                          onAction: () => remove(item.id),
+                        },
+                      ]
+                    : []
+                }
+                leading={
+                  mutable && !item.bought && !isEditing
+                    ? [
+                        {
+                          label: "Buy",
+                          icon: <ShoppingBag size={18} />,
+                          onAction: () => startPurchase(item),
+                        },
+                      ]
+                    : []
+                }
+              >
+              <div
                 style={{
                   display: "grid",
                   gap: 10,
@@ -912,6 +941,7 @@ export const WishlistPanel: React.FC = () => {
                   />
                 )}
               </div>
+              </SwipeRow>
             );
           })}
         </div>

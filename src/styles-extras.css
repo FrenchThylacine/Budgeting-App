@@ -604,3 +604,86 @@
   outline-offset: 2px;
   border-radius: var(--radius-sm);
 }
+
+/* ─── Swipe to reveal ─────────────────────────────────────────────────────── */
+
+.swipe-row {
+  position: relative;
+  /* The panels sit behind the content and must not spill out of the card. */
+  overflow: hidden;
+  border-radius: var(--radius-lg);
+  /* Vertical panning stays with the browser, so a list of swipeable rows is
+     still scrollable; horizontal movement is ours to interpret. */
+  touch-action: pan-y;
+}
+
+.swipe-content {
+  position: relative;
+  z-index: 1;
+  background: var(--bg-elevated);
+  transition: transform var(--duration-normal) var(--ease-out);
+  will-change: transform;
+}
+
+.swipe-panel {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  display: flex;
+  align-items: stretch;
+}
+
+.swipe-panel-trailing { right: 0; }
+.swipe-panel-leading { left: 0; }
+
+.swipe-action {
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 4px;
+  width: 84px;
+  border: 0;
+  cursor: pointer;
+  padding: 0 8px;
+  background: var(--accent);
+  color: var(--accent-contrast);
+  font-size: var(--text-footnote);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+}
+
+.swipe-action-destructive {
+  background: var(--danger);
+  color: #FFFFFF;
+}
+
+.swipe-action-label {
+  /* The word matters more than the icon: an icon alone is a guess, and a
+     destructive action is the worst place to make someone guess. */
+  line-height: 1.1;
+  text-align: center;
+}
+
+.swipe-action:focus-visible {
+  outline: 2px solid var(--text-primary);
+  outline-offset: -4px;
+}
+
+/* An open row is lifted, so it reads as temporarily out of the flow rather
+   than as a rendering glitch. */
+.swipe-row[data-open] .swipe-content {
+  box-shadow: var(--shadow-md);
+}
+
+/* A row that slides is motion the user did not ask for. Reduced motion keeps
+   the reveal — it is the function — and drops the animation. */
+@media (prefers-reduced-motion: reduce) {
+  .swipe-content { transition: none; }
+}
+
+/* Pointer-based devices get the buttons already on the card, so the swipe
+   affordance is touch-only and the panels never take up room. */
+@media (hover: hover) and (pointer: fine) {
+  .swipe-panel { display: none; }
+}

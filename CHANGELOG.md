@@ -1,5 +1,31 @@
 # Changelog
 
+## 2026-08-16 — Swipe actions
+
+### The gesture reveals; it never acts
+
+Swiping a wishlist item or an activity slides the card aside to expose its actions. **The swipe itself does nothing.** A gesture that deletes on release has no confirmation and no way to see what it is about to do, which is the wrong shape for an action that destroys a financial record. Revealing gives a visible target, a second deliberate tap, and a label to read first.
+
+- **Wishlist**: swipe left for Delete, right for Buy.
+- **Activities**: swipe left to Hide or Show.
+
+### The accessible alternative is the same control
+
+The revealed buttons are real buttons in the DOM at all times — reachable with Tab, announced normally, named for the row they act on ("Delete: Steam Frame"). Nothing here is available only to a finger. They leave the tab order while hidden, so Tab never stops on a control nobody can see, and the same actions remain on the card itself.
+
+Escape closes an open row, and so does a tap anywhere outside it, so a revealed Delete cannot sit waiting to be hit by accident.
+
+### Choices that make it behave
+
+- **Touch only.** A mouse drag across a card is far more often a text selection or the start of a scroll; hijacking it would break both. On a pointer device the panels are not rendered at all — verified: a mouse drag moves nothing.
+- **Vertical intent wins ties.** The page must stay scrollable through a list of swipeable rows, which is most of what anyone does with one. A page that will not scroll is a worse failure than a swipe that does not open.
+- **The row snaps fully open or fully shut**, never part-way, where half a label is unreadable and looks broken.
+- **Gesture state lives in refs, not in `useState`.** Pointer events for one gesture can arrive within a single tick, and a state flag read inside those handlers is still the value from the last render — so the first moves of every swipe were being dropped. Found by driving the gesture in a browser.
+- On the activity cards it coexists with drag-to-reorder: that is mouse-driven, and `dragstart` never fires from a finger.
+
+**Verification** — `npx tsc -b` clean · **421 tests passing**, 65 against real PostgreSQL 17 · both builds clean. Driven with touch emulation at 390 px: a swipe opens the panel, the revealed Delete removes the item and it reaches PostgreSQL, Hide toggles an activity's visibility and persists, a vertical drag leaves the row alone, and Escape closes it. At 1440 px the panels are absent and a mouse drag does nothing.
+
+
 ## 2026-08-16 — Where an item is bought, and what it looks like
 
 ### One field could not carry both facts
