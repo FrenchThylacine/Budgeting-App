@@ -29,6 +29,7 @@ import {
 } from "../charts";
 import { Badge } from "../ui/Badge";
 import { Card, CardBody } from "../ui/Card";
+import { UpcomingSchedule } from "./UpcomingSchedule";
 import { EmptyState } from "../ui/EmptyState";
 import { Button } from "../ui/Button";
 import {
@@ -154,10 +155,6 @@ export const Dashboard: React.FC = () => {
       note: status === "approved" ? "Approved from dashboard" : "Rejected from dashboard",
     });
   };
-
-  const upcoming = calculation.activityEstimates
-    .filter((est) => est.activity.active && est.activity.visible)
-    .slice(0, 5);
 
   return (
     <div className="dashboard-grid page-enter">
@@ -471,43 +468,8 @@ export const Dashboard: React.FC = () => {
       <div className="dashboard-row">
         <Card>
           <CardBody>
-            <h2 className="text-title" style={{ margin: "0 0 12px" }}>Upcoming recurring</h2>
-            {upcoming.length === 0 ? (
-              <EmptyState title="No active activities" description="Add recurring activities to plan your budget." />
-            ) : (
-              <div className="item-list">
-                {upcoming.map((est) => (
-                  <div key={est.activity.id} className="item-row">
-                    <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
-                      <div
-                        style={{
-                          width: 38,
-                          height: 38,
-                          borderRadius: 10,
-                          display: "grid",
-                          placeItems: "center",
-                          flexShrink: 0,
-                          background: est.activity.color ? `${est.activity.color}22` : "var(--bg-inset)",
-                          color: est.activity.color ?? "var(--text-tertiary)",
-                        }}
-                      >
-                        <Calendar size={16} />
-                      </div>
-                      <div style={{ minWidth: 0 }}>
-                        <div className="text-callout" style={{ fontWeight: 600 }}>{est.activity.name}</div>
-                        <div className="text-footnote">
-                          {est.activity.recurrenceType} · every {est.activity.recurrenceInterval}×
-                        </div>
-                      </div>
-                    </div>
-                    <div className="text-callout money" style={{ fontWeight: 600, flexShrink: 0 }}>
-                      {money(est.monthlyBase)}
-                      <span className="text-footnote" style={{ marginLeft: 4 }}>/mo</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
+            <h2 className="text-title" style={{ margin: "0 0 12px" }}>Upcoming</h2>
+            <UpcomingSchedule snapshot={snapshot} money={money} />
           </CardBody>
         </Card>
 

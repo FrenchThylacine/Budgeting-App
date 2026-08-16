@@ -32,27 +32,49 @@
   --weight-semibold: 600;
   --weight-bold: 700;
 
-  /* Colors — Light mode (calm, warm neutrals) */
-  --bg: #F5F5F7;
+  /* Colours — light mode.
+     Cool neutrals rather than warm ones, so the navy below sits on them as a
+     deepening of the same family instead of a foreign hue. */
+  --bg: #F2F4F7;
   --bg-elevated: #FFFFFF;
-  --bg-subtle: #FAFAFA;
-  --bg-inset: #EEEEEF;
+  --bg-subtle: #F8F9FB;
+  --bg-inset: #E8ECF2;
 
-  --text-primary: #1D1D1F;
-  --text-secondary: #6E6E73;
-  --text-tertiary: #A1A1A6;
+  --text-primary: #0B1B33;
+  --text-secondary: #55637A;
+  --text-tertiary: #8D99AC;
   --text-inverse: #FFFFFF;
 
-  --border: rgba(0, 0, 0, 0.06);
-  --border-strong: rgba(0, 0, 0, 0.1);
-  --separator: rgba(0, 0, 0, 0.04);
+  --border: rgba(11, 27, 51, 0.08);
+  --border-strong: rgba(11, 27, 51, 0.14);
+  --separator: rgba(11, 27, 51, 0.05);
 
   /* Accents — semantic, and used generously enough that the app reads as
      colourful rather than grey. Each has a soft tint for fills and a strong
      value for text/strokes, so contrast stays predictable in both themes. */
-  --accent: #0071E3;
-  --accent-soft: rgba(0, 113, 227, 0.10);
-  --accent-hover: #0077ED;
+  /* Deep navy carries the identity: it is the primary action colour, the
+     active navigation state, and the ink of every heading.
+
+     The signature red is a MARK, not an interactive colour. It appears on the
+     brand rule and nowhere else, because it is a shade away from --danger and
+     a red button would read as a warning rather than as a brand. Keeping the
+     two apart is what lets both stay legible. */
+  --accent: #002157;
+  --accent-soft: rgba(0, 33, 87, 0.08);
+  --accent-hover: #003C8F;
+  --accent-contrast: #FFFFFF;
+
+  --brand-red: #E4002B;
+  --brand-red-soft: rgba(228, 0, 43, 0.10);
+
+  /* Fixed brand values, deliberately NOT redefined for dark mode.
+     --accent and --brand-red are interface tokens: they lighten on a dark
+     ground so text and controls stay legible. A logo is not an interface
+     control — it is the same mark everywhere, and letting it follow the theme
+     turned the navy-and-red gradient into blue-and-pink. These two carry the
+     mark; the tokens above carry the UI. */
+  --brand-mark-from: #002157;
+  --brand-mark-to: #E4002B;
 
   --success: #1DA45A;
   --success-soft: rgba(29, 164, 90, 0.12);
@@ -70,7 +92,7 @@
   /* Coordinated series palette for charts. Ordered so neighbouring series
      stay distinguishable, including for the most common colour-vision
      deficiencies (blue/orange lead, red and green never adjacent). */
-  --series-1: #0071E3;
+  --series-1: #1E5AA8;
   --series-2: #E8850C;
   --series-3: #8B5CF6;
   --series-4: #0EA5B7;
@@ -119,21 +141,30 @@
 
 /* Dark mode — deep, calm */
 :root.dark {
-  --bg: #0C0E12;
-  --bg-elevated: #16181D;
-  --bg-subtle: #12141A;
-  --bg-inset: #1C1E24;
+  /* The same navy family, pulled toward blue-black rather than neutral grey. */
+  --bg: #080D17;
+  --bg-elevated: #121A28;
+  --bg-subtle: #0D1421;
+  --bg-inset: #1A2434;
 
-  --text-primary: #F5F5F7;
-  --text-secondary: #8E8E93;
-  --text-tertiary: #636366;
+  --text-primary: #EEF2F8;
+  --text-secondary: #93A1B8;
+  --text-tertiary: #64748B;
 
-  --border: rgba(255, 255, 255, 0.08);
-  --border-strong: rgba(255, 255, 255, 0.12);
-  --separator: rgba(255, 255, 255, 0.05);
+  --border: rgba(255, 255, 255, 0.09);
+  --border-strong: rgba(255, 255, 255, 0.16);
+  --separator: rgba(255, 255, 255, 0.06);
 
-  --accent: #0A84FF;
-  --accent-soft: rgba(10, 132, 255, 0.12);
+  /* #002157 is invisible on a dark ground, so the accent lightens to a tint of
+     the same hue. The identity is the hue, not the exact value — a token that
+     kept its light-mode value here would simply be unreadable. */
+  --accent: #6BA5FF;
+  --accent-soft: rgba(107, 165, 255, 0.16);
+  --accent-hover: #8CBAFF;
+  --accent-contrast: #08101F;
+
+  --brand-red: #FF4D6A;
+  --brand-red-soft: rgba(255, 77, 106, 0.16);
 
   /* Dark surfaces swallow a light tint, so fills are strengthened and hues
      lightened to keep the same perceived emphasis and contrast as light mode. */
@@ -150,7 +181,7 @@
   --pink: #F472B6;
   --pink-soft: rgba(244, 114, 182, 0.18);
 
-  --series-1: #4DA3FF;
+  --series-1: #6BA5FF;
   --series-2: #FFA726;
   --series-3: #A78BFA;
   --series-4: #22D3EE;
@@ -393,8 +424,10 @@ strong {
 
 .btn-primary {
   background: var(--accent);
-  color: white;
-  box-shadow: 0 1px 2px rgba(0,113,227,0.3);
+  /* Not a fixed white: the accent is near-black navy in light mode and a pale
+     blue in dark mode, so one of the two would fail contrast outright. */
+  color: var(--accent-contrast);
+  box-shadow: var(--shadow-xs);
 }
 .btn-primary:hover { background: var(--accent-hover); }
 
@@ -728,10 +761,13 @@ strong {
   width: 40px;
   height: 40px;
   border-radius: var(--radius-md);
-  background: linear-gradient(135deg, var(--accent), var(--purple));
+  /* Navy into the signature red: the one place the red appears, where it
+     reads unmistakably as a logo rather than as an error. Fixed values, so the
+     mark is identical in both themes. */
+  background: linear-gradient(135deg, var(--brand-mark-from), var(--brand-mark-to));
   display: grid;
   place-items: center;
-  color: white;
+  color: #FFFFFF;
   flex-shrink: 0;
   box-shadow: var(--shadow-sm);
 }
@@ -1290,8 +1326,8 @@ strong {
   display: grid;
   place-items: center;
   border-radius: 20px;
-  color: #fff;
-  background: linear-gradient(135deg, var(--accent), var(--purple));
+  color: #FFFFFF;
+  background: linear-gradient(135deg, var(--brand-mark-from), var(--brand-mark-to));
   box-shadow: var(--shadow-lg);
   animation: bootPulse 1.6s var(--ease-out) infinite;
 }

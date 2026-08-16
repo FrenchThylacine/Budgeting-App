@@ -1,4 +1,4 @@
-import * as XLSX from "xlsx";
+import type * as XLSXTypes from "xlsx";
 import { dateInputValue, getIsoWeek, startOfIsoWeek, weeksInIsoYear, weekYear } from "./dates";
 import { seedCategoryIdOrFallback } from "./seedCategories";
 import { createSeedBudgetSnapshot } from "../data/seedBudget";
@@ -59,6 +59,20 @@ export class WorkbookShapeError extends Error {
 }
 
 type SheetRows = unknown[][];
+
+/**
+ * Sheet helpers for callers that already have the library — the tests, which
+ * build a workbook in memory and pass it straight to `parseWorkbook`.
+ *
+ * Production always goes through `importBudgetWorkbook`, which imports `xlsx`
+ * dynamically and hands its `utils` in, so the library still stays out of the
+ * initial bundle.
+ */
+function requireUtils(): typeof XLSXTypes.utils {
+  throw new Error(
+    "parseWorkbook needs XLSX.utils. Call importBudgetWorkbook(), or pass utils explicitly.",
+  );
+}
 
 /**
  * Identifiers for the rows an import creates.
@@ -182,7 +196,7 @@ function valueAfterLabel(row: unknown[], labels: string[]): unknown {
   return undefined;
 }
 
-function readSheet(workbook: XLSX.WorkBook, sheetName: string): SheetRows {
+function readSheet(workbook: XLSXTypes.WorkBook, sheetName: string, utils: typeof XLSXTypes.utils): SheetRows {
   const sheet = workbook.Sheets[sheetName];
   if (!sheet) {
     // The old code fell back to the first sheet, which produced confident
@@ -194,7 +208,7 @@ function readSheet(workbook: XLSX.WorkBook, sheetName: string): SheetRows {
   // blankrows preserved: the layout has blank separator rows, and dropping them
   // shifts everything below. Nothing here depends on absolute row numbers any
   // more, but keeping them makes the sheet match what the user sees.
-  return XLSX.utils.sheet_to_json(sheet, {
+  return utils.sheet_to_json(sheet, {
     header: 1,
     raw: true,
     blankrows: true,
@@ -209,20 +223,25 @@ export async function importBudgetWorkbook(
   now = new Date(),
   makeId: ImportIdFactory = defaultImportId,
 ): Promise<WorkbookImportResult> {
+  // Loaded here rather than at module scope: `xlsx` is the largest dependency
+  // in the bundle and is needed only when a file is actually opened.
+  const XLSX = await import("xlsx");
   const workbook = XLSX.read(await file.arrayBuffer(), { type: "array", cellDates: true });
-  return parseWorkbook(workbook, now, file.name, makeId);
+  return parseWorkbook(workbook, now, file.name, makeId, XLSX.utils);
 }
 
 /** Split out from the file read so tests can drive it from a buffer. */
 export function parseWorkbook(
-  workbook: XLSX.WorkBook,
+  workbook: XLSXTypes.WorkBook,
   now = new Date(),
   sourceName = "workbook",
   makeId: ImportIdFactory = defaultImportId,
+  /** Passed in so the caller owns the dynamic import of the library. */
+  utils: typeof XLSXTypes.utils = requireUtils(),
 ): WorkbookImportResult {
   const warnings: string[] = [];
-  const budgetRows = readSheet(workbook, "Budget");
-  const spendingRows = readSheet(workbook, "Spending");
+  const budgetRows = readSheet(workbook, "Budget", utils);
+  const spendingRows = readSheet(workbook, "Spending", utils);
   const timestamp = now.toISOString();
 
   // Categories come from a fresh seed so their ids belong to this budget.
