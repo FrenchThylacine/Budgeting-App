@@ -96,3 +96,56 @@ describe("Vercel API entrypoint", () => {
     expect(typeof (handler as unknown as { listen?: unknown }).listen).toBe("function");
   });
 });
+
+describe("database connection string resolution", () => {
+  const KEYS = [
+    "DATABASE_URL",
+    "POSTGRES_URL",
+    "POSTGRES_PRISMA_URL",
+    "DATABASE_URL_UNPOOLED",
+    "POSTGRES_URL_NON_POOLING",
+  ];
+  let saved: Record<string, string | undefined>;
+
+  beforeAll(async () => {
+    saved = Object.fromEntries(KEYS.map((k) => [k, process.env[k]]));
+  });
+
+  afterAll(() => {
+    for (const k of KEYS) {
+      if (saved[k] === undefined) delete process.env[k];
+      else process.env[k] = saved[k];
+    }
+  });
+
+  const clear = () => KEYS.forEach((k) => delete process.env[k]);
+
+  it("reports which known variables are set, and never their values", async () => {
+    const { connectionStringSources } = await import("../server/src/db/index");
+    clear();
+    process.env.POSTGRES_URL = "postgres://secret:hunter2@example.com/db";
+
+    const sources = connectionStringSources();
+    expect(sources.find((s) => s.name === "POSTGRES_URL")?.present).toBe(true);
+    expect(sources.find((s) => s.name === "DATABASE_URL")?.present).toBe(false);
+    // The report must be names and booleans only.
+    expect(JSON.stringify(sources)).not.toContain("hunter2");
+  });
+
+  it("treats a blank variable as absent", async () => {
+    const { connectionStringSources } = await import("../server/src/db/index");
+    clear();
+    process.env.DATABASE_URL = "   ";
+    expect(connectionStringSources().find((s) => s.name === "DATABASE_URL")?.present).toBe(false);
+  });
+
+  it("accepts the aliases the Neon and Vercel integrations provision", async () => {
+    // A project wired up through the marketplace can end up with POSTGRES_URL
+    // and no DATABASE_URL at all; that must still connect.
+    const { connectionStringSources } = await import("../server/src/db/index");
+    clear();
+    process.env.POSTGRES_URL_NON_POOLING = "postgres://example";
+    const present = connectionStringSources().filter((s) => s.present).map((s) => s.name);
+    expect(present).toEqual(["POSTGRES_URL_NON_POOLING"]);
+  });
+});
