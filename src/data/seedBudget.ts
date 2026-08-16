@@ -110,6 +110,62 @@ const spendingWeeks: Array<[number, number | null, number | null]> = [
  */
 export const defaultCategories = SEED_CATEGORIES;
 
+/**
+ * A budget with nothing in it.
+ *
+ * What a new account gets. The demo budget below is a fixture — someone else's
+ * gym membership, someone else's wishlist — and starting a real account on it
+ * means deleting ten things before recording the first real one, with no way to
+ * tell which figures were yours.
+ *
+ * Categories are kept, because a budget with none cannot record anything: they
+ * are the structure, not the data. Everything that represents a decision or a
+ * transaction starts empty.
+ */
+export function createEmptyBudgetSnapshot(
+  now = new Date(),
+  makeId: SeedIdFactory = defaultSeedId,
+): BudgetSnapshot {
+  const base = createSeedBudgetSnapshot(now, makeId);
+  const year = base.settings.selectedYear;
+  const timestamp = now.toISOString();
+
+  return {
+    ...base,
+    settings: {
+      ...base.settings,
+      // No inherited budget figure either: a number nobody chose is worse than
+      // an empty field, because it looks like a decision.
+      monthlyBudget: 0,
+      lastUpdated: timestamp,
+    },
+    years: {
+      [year]: {
+        year,
+        activities: [],
+        spendingEntries: [],
+        wishlistItems: [],
+        walletEntries: [],
+        closedMonths: [],
+        monthlyNotes: {},
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      },
+    },
+    seasonalPresets: [],
+    scenarioPresets: [],
+    budgetApprovals: [],
+    auditLog: [
+      {
+        id: makeId("audit"),
+        type: "import",
+        summary: "Account created.",
+        createdAt: timestamp,
+      },
+    ],
+  };
+}
+
 export function createSeedBudgetSnapshot(
   now = new Date(),
   makeId: SeedIdFactory = defaultSeedId,

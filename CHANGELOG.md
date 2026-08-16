@@ -1,5 +1,38 @@
 # Changelog
 
+## 2026-08-16 — Dedicated editors, a clean start, and a header that gets out of the way
+
+### A new account starts empty
+
+Signing up used to hand you the demo budget — someone else's gym membership, someone else's wishlist — and, for the very first account, whatever budget existed before accounts did. Both are wrong: you then delete ten things before recording the first real one, with no way to tell afterwards which figures were yours.
+
+Every account now starts with **categories and nothing else**. Categories are the structure a budget needs to record anything; everything representing a decision or a transaction starts empty. Data from before accounts existed is recovered by **importing** it — a deliberate act with a preview, not a side effect of signing up.
+
+### Editing is no longer another card
+
+Tapping an activity opens a **dedicated editor**: a centred dialog on a large screen, a full-screen sheet on a phone. The whole card opens it, so the small icon buttons stop being the only way in.
+
+Editing used to unfold inside the card, pushing the rest of the list out of view; on a phone the fields ended up in a column narrower than their own labels and the save button was often below the fold. The footer is now sticky, and the page behind cannot scroll while a sheet covers it.
+
+Season, notes and visibility sit behind **Advanced**. Recurrence, schedule and prices stay visible — the schedule fields already appear only when the chosen cost model needs them, so hiding them would have hidden exactly what the user had just asked for.
+
+### The period selector is a widget, not a fixture
+
+It occupied the most valuable strip of every page — a mode toggle, two dropdowns and two arrows — to serve an action most sessions perform once. On a phone it took a third of the first viewport before any figure appeared.
+
+It is now a compact pill stating the selected period, which is the part needed continuously. The controls open on demand, and a selection that is **not** the real current period is marked without opening anything.
+
+### The tab transition was broken by code splitting
+
+The animation still existed, but lazily loaded panels made it useless: the wrapper mounted with the loading placeholder inside it, the transition played over an empty box, and the real content then swapped in without remounting. The animation now lives on the content itself, so it fires when the content actually arrives.
+
+### Also
+
+- Excel import is reachable from **Settings → Data**, where anyone looking for it would go first. The flow was extracted into one component rather than duplicated.
+
+**Verification** — `npx tsc -b` clean · **427 tests passing**, 65 against real PostgreSQL 17 · both builds clean. Checked in a browser at 1440 px: the period selector collapses and opens, the tab animation runs on real content, the activity editor opens from the card.
+
+
 ## 2026-08-16 — Swipe actions
 
 ### The gesture reveals; it never acts

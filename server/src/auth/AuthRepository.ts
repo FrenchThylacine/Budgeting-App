@@ -79,18 +79,14 @@ export class AuthRepository {
   /**
    * The budget id a new account should own.
    *
-   * The very first account adopts the pre-existing `active` budget instead of
-   * starting empty. Without this, introducing accounts would orphan the data
-   * the app has been accumulating since before they existed — it would still be
-   * in the database, and permanently unreachable.
-   *
-   * Every later account gets a fresh id.
+   * Always a fresh one. An earlier version had the first account adopt the
+   * pre-existing `active` budget so the pre-accounts data would not be
+   * orphaned, but that makes the first account different from every other one
+   * and hands whoever signs up first a budget they did not create. Data from
+   * before accounts existed is recovered by importing it, which is a deliberate
+   * act with a preview rather than a side effect of signing up.
    */
   async snapshotIdForNewUser(): Promise<string> {
-    if ((await this.countUsers()) === 0) {
-      const existing = await this.query(`SELECT id FROM snapshots WHERE id = 'active'`);
-      if (existing.length > 0) return "active";
-    }
     return createId("snap");
   }
 

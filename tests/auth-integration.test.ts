@@ -415,4 +415,14 @@ describeAuth("authentication", () => {
     // the server doing the work.
     expect(sawRateLimit).toBe(true);
   });
+  it("gives every account a fresh budget, including the first", async () => {
+    // An earlier version had the first account adopt a pre-existing "active"
+    // budget. That made the first account different from every other one and
+    // handed whoever signed up first a budget they had not created.
+    const rows = await client.query(`SELECT snapshot_id FROM users ORDER BY created_at`);
+    const ids = rows.rows.map((r) => r.snapshot_id as string);
+    expect(ids.length).toBeGreaterThan(1);
+    expect(ids).not.toContain("active");
+    expect(new Set(ids).size).toBe(ids.length);
+  });
 });

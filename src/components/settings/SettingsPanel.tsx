@@ -5,6 +5,7 @@ import { formatDateTime } from "../../domain/dates";
 import { applyRatesToSettings, fetchExchangeRates } from "../../domain/exchangeRates";
 import { useBudgetStore } from "../../store/budgetStore";
 import type { CurrencyCode, CurrencyDisplayMode, RoundingRule } from "../../domain/types";
+import { ImportControl } from "../data/ImportControl";
 import { Section } from "../ui/Section";
 import { SyncStatus } from "../layout/SyncStatus";
 
@@ -232,6 +233,14 @@ export const SettingsPanel: React.FC = () => {
             )}
           </div>
         </div>
+      </Section>
+
+      <Section title="Data">
+        <p className="text-note" style={{ margin: "0 0 12px" }}>
+          Importing <strong>replaces</strong> your budget rather than merging into it. The preview shows
+          what changes, and offers a backup, before anything is written.
+        </p>
+        <ImportControl />
       </Section>
 
       <Section title="Exchange rates">
