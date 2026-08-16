@@ -123,6 +123,24 @@ describeDb("PostgreSQL integration", () => {
     expect(cols.rows.map((r) => r.column_name)).toContain("revision");
   });
 
+  it("survives concurrent migration runs", async () => {
+    // The startup hook and the first HTTP request both call initializeDatabase.
+    // "Check then insert" let both see no row, both insert, and the loser crash
+    // on the unique constraint — which took the whole API down with a 503 and
+    // showed as "offline" in the UI even though the database was fine.
+    await Promise.all([
+      runMigrations(sql),
+      runMigrations(sql),
+      runMigrations(sql),
+    ]);
+
+    const rows = await client.query(`SELECT name, count(*)::int AS n FROM migrations GROUP BY name`);
+    expect(rows.rows.length).toBeGreaterThan(0);
+    for (const row of rows.rows) {
+      expect(row.n).toBe(1);
+    }
+  });
+
   it("is idempotent when schema initialization runs twice", async () => {
     await initializeSchema(sql);
     await runMigrations(sql);

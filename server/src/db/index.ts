@@ -16,6 +16,15 @@ export type SqlDriver = ((strings: TemplateStringsArray, ...params: unknown[]) =
 let sqlClient: SqlDriver | null = null;
 let injected = false;
 let initialized = false;
+/**
+ * The in-flight initialization, shared by every concurrent caller.
+ *
+ * A plain boolean is not enough: it is only set *after* the awaits finish, so
+ * the server's startup call and the first HTTP request both saw `false`, both
+ * ran the migrations, and the loser crashed on the migrations table's unique
+ * constraint — surfacing as a 503 and an "offline" badge in the UI.
+ */
+let initPromise: Promise<void> | null = null;
 
 /**
  * Inject a driver instead of connecting to Neon. Intended for integration tests
@@ -42,18 +51,31 @@ export function getDatabase(): SqlDriver {
   return sqlClient;
 }
 
-export async function initializeDatabase() {
+export async function initializeDatabase(): Promise<void> {
   if (initialized) return;
+  // Concurrent callers await the same run instead of starting their own.
+  if (initPromise) return initPromise;
 
   const sql = getDatabase();
 
-  await initializeSchema(sql as never);
-  await runMigrations(sql as never);
+  initPromise = (async () => {
+    await initializeSchema(sql as never);
+    await runMigrations(sql as never);
+    initialized = true;
+  })();
 
-  initialized = true;
+  try {
+    await initPromise;
+  } finally {
+    // Cleared either way: on success `initialized` short-circuits future
+    // calls, and on failure the next request gets a fresh attempt rather than
+    // being stuck awaiting a promise that already rejected.
+    initPromise = null;
+  }
 }
 
 export function closeDatabase() {
   if (!injected) sqlClient = null;
   initialized = false;
+  initPromise = null;
 }
