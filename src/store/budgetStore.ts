@@ -18,7 +18,7 @@ import type {
   WishlistItem,
   YearRecord,
 } from "../domain/types";
-import { createSeedBudgetSnapshot } from "../data/seedBudget";
+import { createEmptyBudgetSnapshot, createSeedBudgetSnapshot } from "../data/seedBudget";
 import { scenarioFromCurrentState } from "../domain/scenarios";
 import { defaultCategories } from "../data/seedBudget";
 import { deleteSnapshot as deleteIdbSnapshot, loadSnapshot as loadIdbSnapshot, saveSnapshot as saveIdbSnapshot } from "../storage/idb";
@@ -159,7 +159,7 @@ interface BudgetStore {
 }
 
 export const useBudgetStore = create<BudgetStore>((set, get) => ({
-  snapshot: createSeedBudgetSnapshot(),
+  snapshot: createEmptyBudgetSnapshot(),
   hydrated: false,
   undoStack: [],
   redoStack: [],
@@ -218,7 +218,9 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
       // Server reachable but empty: this device seeds it, starting from
       // whatever it already had locally so nothing is lost.
       const local = await loadIdbSnapshot().catch(() => null);
-      const seeded = normalizeSnapshot(local ?? createSeedBudgetSnapshot());
+      // A new account, not a demo. Its first budget is empty; the local cache
+      // is used only if this device genuinely has unsynced work.
+      const seeded = normalizeSnapshot(local ?? createEmptyBudgetSnapshot());
       set({ snapshot: seeded, hydrated: true, baseRevision: null, syncState: "saving" });
       persistSnapshot(seeded, set, get);
       return;
@@ -236,7 +238,7 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
       }
       const local = await loadIdbSnapshot().catch(() => null);
       set({
-        snapshot: normalizeSnapshot(local ?? createSeedBudgetSnapshot()),
+        snapshot: normalizeSnapshot(local ?? createEmptyBudgetSnapshot()),
         hydrated: true,
         baseRevision: null,
         syncState: "offline",
@@ -248,7 +250,7 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
   },
 
   resetToSeed: async () => {
-    const next = normalizeSnapshot(createSeedBudgetSnapshot());
+    const next = normalizeSnapshot(createEmptyBudgetSnapshot());
     await deleteIdbSnapshot().catch(() => undefined);
     set({ snapshot: next, undoStack: [], redoStack: [], hydrated: true });
     // Push the reset through the same guarded path, so it is reported

@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowDown, ArrowUp, Copy, Eye, EyeOff, GripVertical, Pencil, Plus, Trash2 } from "lucide-react";
 import { CURRENCY_OPTIONS, formatMoney } from "../../domain/currency";
 import { SwipeRow } from "../ui/SwipeRow";
+import { AdvancedFields, EditorSheet } from "../ui/EditorSheet";
 import { monthName } from "../../domain/dates";
 import { estimateActivity, monthlyEstimateNative, yearlyEstimateNative } from "../../domain/calculations";
 import {
@@ -180,11 +181,36 @@ export const ActivityPanel: React.FC = () => {
         </div>
 
         {open && (
+          <EditorSheet
+            title={editing ? editing.name || "Edit activity" : "New activity"}
+            subtitle={editing ? "Changes apply from the selected period onward." : undefined}
+            onClose={() => {
+              setOpen(false);
+              setEditing(null);
+            }}
+            footer={
+              <>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => {
+                    setOpen(false);
+                    setEditing(null);
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button type="submit" form="activity-editor-form" variant="primary">
+                  {editing ? "Save changes" : "Add activity"}
+                </Button>
+              </>
+            }
+          >
           <form
+            id="activity-editor-form"
             ref={formRef}
-            className="card card-body"
             onSubmit={save}
-            style={{ display: "grid", gap: 16, marginBottom: 16 }}
+            style={{ display: "grid", gap: 20 }}
           >
             <FieldGroup title="Identity">
               <Field label="Name" span>
@@ -403,6 +429,7 @@ export const ActivityPanel: React.FC = () => {
               )}
             </div>
 
+            <AdvancedFields label="Season, notes and visibility">
             <FieldGroup title="Details">
               <Field label="Seasonal tag" hint="e.g. summer, winter, normal">
                 <input
@@ -434,22 +461,9 @@ export const ActivityPanel: React.FC = () => {
               </Field>
             </FieldGroup>
 
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-              <Button type="submit" variant="primary">
-                {editing ? "Save changes" : "Add activity"}
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={() => {
-                  setOpen(false);
-                  setEditing(null);
-                }}
-              >
-                Cancel
-              </Button>
-            </div>
+            </AdvancedFields>
           </form>
+          </EditorSheet>
         )}
       </Section>
 
@@ -483,7 +497,30 @@ export const ActivityPanel: React.FC = () => {
                 }
               >
               <div
-                className="item-row"
+                className={`item-row${mutable ? " editable-row" : ""}`}
+                // The whole card opens the editor, so the small icon buttons
+                // stop being the only way in — they are a poor target on a
+                // phone and easy to miss entirely.
+                role={mutable ? "button" : undefined}
+                tabIndex={mutable ? 0 : undefined}
+                aria-label={mutable ? `Edit ${activity.name}` : undefined}
+                onClick={(event) => {
+                  // A click that landed on one of the card's own controls, or
+                  // that finished a text selection, is not a request to edit.
+                  if (!mutable) return;
+                  const target = event.target as HTMLElement;
+                  if (target.closest("button, a, input, select, textarea")) return;
+                  if (window.getSelection()?.toString()) return;
+                  begin(activity);
+                }}
+                onKeyDown={(event) => {
+                  if (!mutable) return;
+                  if (event.target !== event.currentTarget) return;
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    begin(activity);
+                  }
+                }}
                 draggable={canReorder}
                 onDragStart={() => setDragId(activity.id)}
                 onDragEnd={() => setDragId(null)}

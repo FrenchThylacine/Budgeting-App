@@ -13,6 +13,7 @@ import {
 } from "../../domain/periods";
 import { Badge } from "../ui/Badge";
 import { Button } from "../ui/Button";
+import { PeriodPopover } from "./PeriodPopover";
 import { SyncStatus } from "./SyncStatus";
 import {
   ChevronLeft, ChevronRight, Sun, Moon, Undo2, Redo2, Save, Wallet,
@@ -98,6 +99,7 @@ export const Header: React.FC<{
       </div>
 
       <div style={{ display: "flex", flexDirection: "column", gap: 12, alignItems: "flex-end" }}>
+        <PeriodPopover summary={periodTitle} historical={periodTitle !== realPeriodTitle}>
         <div className="period-selector" aria-label="Period selector">
           <div className="period-mode-toggle" role="group" aria-label="Period type">
             {(["month", "week", "year"] as const).map((periodMode) => (
@@ -136,6 +138,7 @@ export const Header: React.FC<{
           </Button>
           </div>
         </div>
+        </PeriodPopover>
 
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <Button variant="ghost" icon onClick={() => updateSettings({ darkMode: !snapshot.settings.darkMode })} title="Toggle theme">

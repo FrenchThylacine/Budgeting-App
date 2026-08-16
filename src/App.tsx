@@ -236,7 +236,13 @@ export default function App() {
 
           {/* Keying on the tab restarts the enter animation, so switching
               views reads as a transition rather than an instant swap. */}
-          <div key={activeTab} className="tab-panel">
+          {/* The animation lives on the inner element, not on this one.
+              A lazily loaded panel suspends, so the outer wrapper mounts with
+              the fallback inside it and the transition plays over an empty
+              box — then the real content swaps in without remounting and
+              never animates at all. Keying the inner element means the
+              animation fires when the content actually arrives. */}
+          <div className="tab-panel-frame">
             {/* A lazily loaded panel suspends on first open. The fallback keeps
                 the layout height so the page does not jump, and announces
                 itself rather than flashing an empty region. */}
@@ -248,7 +254,7 @@ export default function App() {
                 </div>
               }
             >
-              {tabs[activeTab]}
+              <div key={activeTab} className="tab-panel">{tabs[activeTab]}</div>
             </Suspense>
           </div>
         </main>
