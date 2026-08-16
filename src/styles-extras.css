@@ -1001,3 +1001,33 @@
 @media (prefers-reduced-motion: reduce) {
   .boot-craft { animation: none; }
 }
+
+/* ─── Gesture preferences ─────────────────────────────────────────────────── */
+
+.gesture-grid { display: grid; gap: var(--space-4); }
+
+.gesture-row {
+  display: grid;
+  /* minmax(0,…) so a long action label cannot widen the column and push the
+     settings page into horizontal scroll. */
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--space-3);
+  align-items: end;
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--separator);
+}
+
+.gesture-row:last-child { border-bottom: 0; padding-bottom: 0; }
+
+.gesture-surface {
+  font-weight: var(--weight-semibold);
+  text-transform: capitalize;
+}
+
+.gesture-choice { display: grid; gap: 4px; min-width: 0; }
+
+/* One column on a phone: three selects side by side leave each one too narrow
+   to read its own value. */
+@media (max-width: 640px) {
+  .gesture-row { grid-template-columns: minmax(0, 1fr); }
+}

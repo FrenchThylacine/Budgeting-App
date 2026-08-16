@@ -11,6 +11,10 @@ import { matchesEntryFilters } from "../../utils/formatters";
 import { Button } from "../ui/Button";
 import { EmptyState } from "../ui/EmptyState";
 import { Section } from "../ui/Section";
+import { EditorSheet } from "../ui/EditorSheet";
+import { SwipeRow } from "../ui/SwipeRow";
+import { gesturesFor } from "../../domain/gestures";
+import type { SwipeActionId } from "../../domain/types";
 
 const today = () => todayDateInput();
 
@@ -65,6 +69,8 @@ export const SpendingPanel: React.FC = () => {
 
   const [search, setSearch] = useState("");
   const [editing, setEditing] = useState<SpendingEntry | null>(null);
+  /** Whether the editor sheet is on screen. Editing implies it. */
+  const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState<Draft>(emptyDraft);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -108,6 +114,27 @@ export const SpendingPanel: React.FC = () => {
   const reset = () => {
     setEditing(null);
     setDraft(emptyDraft());
+    setOpen(false);
+  };
+
+  /** Open the editor for a new transaction. */
+  const beginNew = () => {
+    setEditing(null);
+    setDraft(emptyDraft());
+    setOpen(true);
+  };
+
+  const spendingGestures = gesturesFor(snapshot.settings, "spending");
+
+  const spendingSwipe = (action: SwipeActionId, entry: SpendingEntry) => {
+    if (!mutable || action === "none") return [];
+    if (action === "delete") {
+      return [{ label: "Delete", icon: <Trash2 size={18} />, destructive: true, onAction: () => confirmDelete(entry) }];
+    }
+    if (action === "edit") {
+      return [{ label: "Edit", icon: <Pencil size={18} />, onAction: () => beginEdit(entry) }];
+    }
+    return [];
   };
 
   const selectedCategory = snapshot.categories.find((category) => category.id === draft.categoryId);
@@ -208,6 +235,7 @@ export const SpendingPanel: React.FC = () => {
 
   const beginEdit = (entry: SpendingEntry) => {
     setNotice(null);
+    setOpen(true);
     setEditing(entry);
     setDraft({
       amount: String(entry.amount),
@@ -249,7 +277,7 @@ export const SpendingPanel: React.FC = () => {
       <Section
         title="Spending"
         action={
-          <Button variant="primary" onClick={reset} disabled={!mutable}>
+          <Button variant="primary" onClick={beginNew} disabled={!mutable}>
             <Plus size={16} /> Add transaction
           </Button>
         }
@@ -283,15 +311,27 @@ export const SpendingPanel: React.FC = () => {
           </div>
         )}
 
-        {mutable && (
+        {mutable && open && (
+          <EditorSheet
+            title={editing ? "Edit transaction" : "New transaction"}
+            subtitle={editing ? "Recorded on " + editing.date : undefined}
+            onClose={reset}
+            footer={
+              <>
+                <Button variant="ghost" type="button" onClick={reset}>Cancel</Button>
+                <Button variant="primary" type="submit" form="spending-editor-form">
+                  {editing ? "Save changes" : "Add transaction"}
+                </Button>
+              </>
+            }
+          >
           <form
-            className="card card-body"
+            id="spending-editor-form"
             onSubmit={save}
             style={{
               display: "grid",
-              gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
+              gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 170px), 1fr))",
               gap: 12,
-              marginBottom: 20,
             }}
           >
             <input
@@ -400,17 +440,8 @@ export const SpendingPanel: React.FC = () => {
               value={draft.note}
               onChange={(e) => setDraft({ ...draft, note: e.target.value })}
             />
-            <div style={{ display: "flex", gap: 8 }}>
-              <Button variant="primary" type="submit">
-                {editing ? "Save changes" : "Add transaction"}
-              </Button>
-              {editing && (
-                <Button variant="ghost" type="button" onClick={reset}>
-                  Cancel
-                </Button>
-              )}
-            </div>
           </form>
+          </EditorSheet>
         )}
 
         <input
@@ -433,7 +464,32 @@ export const SpendingPanel: React.FC = () => {
             const category = snapshot.categories.find((c) => c.id === entry.categoryId);
             const isRecurring = entry.recurrenceType && entry.recurrenceType !== "none";
             return (
-              <div key={entry.id} className="item-row">
+              <SwipeRow
+                key={entry.id}
+                label={entry.note || category?.name || "Transaction"}
+                trailing={spendingSwipe(spendingGestures.trailing, entry)}
+                leading={spendingSwipe(spendingGestures.leading, entry)}
+              >
+              <div
+                className={`item-row${mutable ? " editable-row" : ""}`}
+                role={mutable ? "button" : undefined}
+                tabIndex={mutable ? 0 : undefined}
+                aria-label={mutable ? `Edit transaction` : undefined}
+                onClick={(event) => {
+                  if (!mutable) return;
+                  const target = event.target as HTMLElement;
+                  if (target.closest("button, a, input, select, textarea")) return;
+                  if (window.getSelection()?.toString()) return;
+                  beginEdit(entry);
+                }}
+                onKeyDown={(event) => {
+                  if (!mutable || event.target !== event.currentTarget) return;
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    beginEdit(entry);
+                  }
+                }}
+              >
                 <div style={{ minWidth: 0 }}>
                   <div
                     className="text-callout"
@@ -496,6 +552,7 @@ export const SpendingPanel: React.FC = () => {
                   )}
                 </div>
               </div>
+              </SwipeRow>
             );
           })}
         </div>

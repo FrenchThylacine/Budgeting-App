@@ -5,6 +5,7 @@ import { formatDateTime } from "../../domain/dates";
 import { applyRatesToSettings, fetchExchangeRates } from "../../domain/exchangeRates";
 import { useBudgetStore } from "../../store/budgetStore";
 import type { CurrencyCode, CurrencyDisplayMode, RoundingRule } from "../../domain/types";
+import { ACTION_LABELS, AVAILABLE_ACTIONS, gesturesFor } from "../../domain/gestures";
 import { ImportControl } from "../data/ImportControl";
 import { Section } from "../ui/Section";
 import { SyncStatus } from "../layout/SyncStatus";
@@ -232,6 +233,46 @@ export const SettingsPanel: React.FC = () => {
               </button>
             )}
           </div>
+        </div>
+      </Section>
+
+      <Section title="Gestures">
+        <p className="text-note" style={{ margin: "0 0 14px" }}>
+          Swiping a row reveals its actions — it never performs them. The revealed button is a
+          second, deliberate tap, and the same actions stay on the card for a mouse or a keyboard.
+        </p>
+        <div className="gesture-grid">
+          {(["wishlist", "activities", "spending"] as const).map((surface) => {
+            const current = gesturesFor(settings, surface);
+            return (
+              <div key={surface} className="gesture-row">
+                <span className="text-callout gesture-surface">{surface}</span>
+                {(["trailing", "leading"] as const).map((direction) => (
+                  <label key={direction} className="gesture-choice">
+                    <span className="text-footnote">
+                      {direction === "trailing" ? "Swipe left" : "Swipe right"}
+                    </span>
+                    <select
+                      className="select"
+                      value={current[direction]}
+                      onChange={(event) =>
+                        update({
+                          gestures: {
+                            ...settings.gestures,
+                            [surface]: { ...current, [direction]: event.target.value },
+                          },
+                        })
+                      }
+                    >
+                      {AVAILABLE_ACTIONS[surface].map((action) => (
+                        <option key={action} value={action}>{ACTION_LABELS[action]}</option>
+                      ))}
+                    </select>
+                  </label>
+                ))}
+              </div>
+            );
+          })}
         </div>
       </Section>
 
