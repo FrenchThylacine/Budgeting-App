@@ -51,7 +51,7 @@ const REWRITE_DESTINATIONS = new Set(["/api", "/api/", "/api/index"]);
  * the correct URL can be reconstructed under either behaviour without ever
  * double-prefixing `/api`.
  */
-function restoreOriginalPath(req: Request, _res: Response, next: NextFunction): void {
+export function restoreOriginalPath(req: Request, _res: Response, next: NextFunction): void {
   const raw = req.url ?? "/";
   const queryStart = raw.indexOf("?");
   const pathname = queryStart === -1 ? raw : raw.slice(0, queryStart);

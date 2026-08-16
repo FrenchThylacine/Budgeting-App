@@ -68,6 +68,55 @@ export async function runMigrations(
         await sql`ALTER TABLE spending_entries ADD COLUMN IF NOT EXISTS wishlist_item_id TEXT;`;
       },
     },
+    {
+      // Make the data model safe for more than one budget in the same database.
+      //
+      // Two defects made that impossible, and both corrupt data rather than
+      // merely leaking it:
+      //
+      //   1. `budget_approvals` had no owner column, and the repository read it
+      //      with `SELECT * FROM budget_approvals` — no WHERE clause. Every
+      //      budget would load every other budget's approvals, which this
+      //      project treats as permanent historical records.
+      //
+      //   2. The seed hardcoded its row ids (`cat-health`, `act-gym`, `wish-1`,
+      //      …). Those are primary keys in tables shared by all budgets, so the
+      //      second budget created collided with the first on every seeded row,
+      //      and `ON CONFLICT (id) DO UPDATE` overwrote the existing row's
+      //      contents while leaving `snapshot_id` pointing at the original
+      //      owner. The seed now generates ids per budget, and `seed_key`
+      //      carries the stable identity the application matches on.
+      name: "006-tenant-isolation",
+      run: async (sql: NeonQueryFunction<any, any>) => {
+        await sql`ALTER TABLE budget_approvals ADD COLUMN IF NOT EXISTS snapshot_id TEXT;`;
+
+        // Everything written before this point belongs to the single budget
+        // that existed, which the application has always called "active".
+        await sql`UPDATE budget_approvals SET snapshot_id = 'active' WHERE snapshot_id IS NULL;`;
+
+        await sql`
+          CREATE INDEX IF NOT EXISTS idx_budget_approvals_snapshot
+            ON budget_approvals(snapshot_id);
+        `;
+
+        await sql`ALTER TABLE categories ADD COLUMN IF NOT EXISTS seed_key TEXT;`;
+
+        // Rows written by the old seed carry the key value as their id, so the
+        // backfill is exact rather than a guess. The id list is spelled out
+        // instead of matched with LIKE 'cat-%' because user-created categories
+        // use that same prefix and must not be labelled as seeded.
+        await sql`
+          UPDATE categories
+          SET seed_key = id
+          WHERE seed_key IS NULL
+            AND id IN (
+              'cat-health', 'cat-learning', 'cat-piloting', 'cat-utilities',
+              'cat-software', 'cat-tech', 'cat-other', 'cat-spending',
+              'cat-wallet', 'cat-wishlist'
+            );
+        `;
+      },
+    },
   ];
 
 

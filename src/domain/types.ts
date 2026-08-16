@@ -84,8 +84,42 @@ export interface Settings {
   ignoreNonBudgetSpending?: boolean;
 }
 
+/**
+ * Stable keys for the categories every budget is seeded with. The values are
+ * the ids the seed used to hardcode, so data written before seed keys existed
+ * still resolves.
+ */
+export type SeedCategoryKey =
+  | "cat-health"
+  | "cat-learning"
+  | "cat-piloting"
+  | "cat-utilities"
+  | "cat-software"
+  | "cat-tech"
+  | "cat-other"
+  | "cat-spending"
+  | "cat-wallet"
+  | "cat-wishlist";
+
 export interface BudgetCategory {
   id: string;
+  /**
+   * Stable identity of a category that came from the seed, independent of its
+   * row id.
+   *
+   * The seed used to hardcode its ids (`cat-health`, `cat-piloting`, …) and
+   * nine places across the app matched on them directly. That is safe for a
+   * single budget and unsafe for several: `categories.id` is the primary key,
+   * so two budgets seeded from the same list collide on one row, and the
+   * repository's `ON CONFLICT (id) DO UPDATE` then rewrites its contents
+   * without ever changing `snapshot_id` — one budget's categories silently
+   * become another's.
+   *
+   * Row ids are therefore generated per budget, and anything that needs to
+   * find "the wishlist category" resolves it through this key instead. The key
+   * values are the old ids, so existing rows keep resolving unchanged.
+   */
+  seedKey?: SeedCategoryKey;
   name: string;
   bucket: BudgetBucket;
   color: string;

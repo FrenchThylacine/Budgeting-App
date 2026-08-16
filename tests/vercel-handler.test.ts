@@ -16,7 +16,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
-import handler from "../api/index";
+import handler, { restoreOriginalPath } from "../api/index";
 
 describe("Vercel API entrypoint", () => {
   let server: Server;
@@ -56,37 +56,9 @@ describe("Vercel API entrypoint", () => {
     expect(res.status).not.toBe(404);
   });
 
-  it("reconstructs the path when handed the rewrite destination", async () => {
-    const res = await get("/api?__vpath=__routecheck");
-    expect(res.status).toBe(200);
-    const body = await res.json();
-    expect(body.normalizedUrl).toBe("/api/__routecheck");
-  });
-
   it("reconstructs a multi-segment path from __vpath", async () => {
     const res = await get("/api?__vpath=snapshot/revision");
     expect(res.status).not.toBe(404);
-  });
-
-  it("keeps the caller's query string and strips __vpath", async () => {
-    const res = await get("/api?__vpath=__routecheck&foo=bar");
-    const body = await res.json();
-    expect(body.normalizedUrl).toBe("/api/__routecheck?foo=bar");
-    // __vpath is internal plumbing and must never reach the application.
-    expect(body.normalizedUrl).not.toContain("__vpath");
-  });
-
-  it("leaves an already-correct path untouched", async () => {
-    const res = await get("/api/__routecheck");
-    const body = await res.json();
-    expect(body.normalizedUrl).toBe("/api/__routecheck");
-  });
-
-  it("never double-prefixes /api", async () => {
-    const res = await get("/api?__vpath=/__routecheck");
-    const body = await res.json();
-    expect(body.normalizedUrl).toBe("/api/__routecheck");
-    expect(body.normalizedUrl).not.toContain("/api/api");
   });
 
   it("exports an Express app, not a bare handler", () => {
@@ -94,6 +66,59 @@ describe("Vercel API entrypoint", () => {
     // its request helpers for Express. Those helpers buffer and replay the
     // request body, which must not happen in front of express.json().
     expect(typeof (handler as unknown as { listen?: unknown }).listen).toBe("function");
+  });
+});
+
+/**
+ * The `__vpath` shim, tested directly.
+ *
+ * Production was measured after this shipped: Vercel delivers the ORIGINAL
+ * request path, so the shim is a no-op today and there is no longer a probe
+ * route to observe it through. It is kept as a guard — `vercel dev` already
+ * routes on the rewrite destination and Vercel has signalled that production
+ * may follow — which is exactly why it still needs tests. A silent regression
+ * here would only surface as a platform 404 in production.
+ */
+describe("__vpath path restoration", () => {
+  const normalize = (url: string): string => {
+    const req = { url } as unknown as Parameters<typeof restoreOriginalPath>[0];
+    let called = false;
+    restoreOriginalPath(req, {} as never, () => {
+      called = true;
+    });
+    expect(called).toBe(true);
+    return req.url;
+  };
+
+  it("reconstructs the path when handed the rewrite destination", () => {
+    expect(normalize("/api?__vpath=health")).toBe("/api/health");
+  });
+
+  it("reconstructs a multi-segment path", () => {
+    expect(normalize("/api?__vpath=spending/2026/8")).toBe("/api/spending/2026/8");
+  });
+
+  it("keeps the caller's query string and strips __vpath", () => {
+    const result = normalize("/api?__vpath=health&foo=bar");
+    expect(result).toBe("/api/health?foo=bar");
+    // __vpath is internal plumbing and must never reach the application.
+    expect(result).not.toContain("__vpath");
+  });
+
+  it("leaves an already-correct path untouched", () => {
+    expect(normalize("/api/health")).toBe("/api/health");
+  });
+
+  it("never double-prefixes /api", () => {
+    // A leading slash in __vpath must not become /api//... or /api/api/...
+    const result = normalize("/api?__vpath=/health");
+    expect(result).toBe("/api/health");
+    expect(result).not.toContain("/api/api");
+    expect(result).not.toContain("//health");
+  });
+
+  it("passes an unrelated path through unchanged", () => {
+    expect(normalize("/api/snapshot/revision?x=1")).toBe("/api/snapshot/revision?x=1");
   });
 });
 

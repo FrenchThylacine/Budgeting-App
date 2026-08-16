@@ -31,6 +31,11 @@ export async function initializeSchema(
       icon TEXT,
       description TEXT,
       parent_id TEXT,
+      -- Stable identity of a seeded category, independent of its row id. Row
+      -- ids are generated per budget so two budgets cannot collide on this
+      -- table's primary key; anything that needs "the wishlist category"
+      -- matches on this instead.
+      seed_key TEXT,
       FOREIGN KEY (snapshot_id)
         REFERENCES snapshots(id)
         ON DELETE CASCADE
@@ -241,6 +246,11 @@ export async function initializeSchema(
   await sql`
     CREATE TABLE IF NOT EXISTS budget_approvals (
       id TEXT PRIMARY KEY,
+      -- Every other child table carries its owner. This one did not, and
+      -- loadBudgetApprovals() read it with no WHERE clause at all, so a second
+      -- budget in the same database would see the first one's approved budgets
+      -- — which the project treats as permanent financial records.
+      snapshot_id TEXT,
       year INTEGER NOT NULL,
       month INTEGER NOT NULL,
       suggested_amount DOUBLE PRECISION NOT NULL,
@@ -257,6 +267,11 @@ export async function initializeSchema(
   await sql`
     CREATE INDEX IF NOT EXISTS idx_budget_approvals_year_month
       ON budget_approvals(year, month);
+  `;
+
+  await sql`
+    CREATE INDEX IF NOT EXISTS idx_budget_approvals_snapshot
+      ON budget_approvals(snapshot_id);
   `;
 
   await sql`

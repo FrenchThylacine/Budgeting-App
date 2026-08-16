@@ -27,6 +27,7 @@ import {
   withAlpha,
 } from "../../domain/wishlist";
 import type { WishlistLinkResult } from "../../domain/wishlist";
+import { seedCategoryIdOrFallback } from "../../domain/seedCategories";
 import { useBudgetStore } from "../../store/budgetStore";
 import {
   formatDualMoney,
@@ -57,10 +58,8 @@ interface Notice {
   message: string;
 }
 
-const WISHLIST_CATEGORY_ID = "cat-wishlist";
-
-function emptyDraft(baseCurrency: string): WishlistDraft {
-  return { ...wishlistToDraft(null), currency: baseCurrency, categoryId: WISHLIST_CATEGORY_ID };
+function emptyDraft(baseCurrency: string, wishlistCategoryId: string): WishlistDraft {
+  return { ...wishlistToDraft(null), currency: baseCurrency, categoryId: wishlistCategoryId };
 }
 
 // ─── Favicon with a fallback that can never break the layout ─────────────────
@@ -287,10 +286,15 @@ export const WishlistPanel: React.FC = () => {
 
   const { settings } = snapshot;
   const allItems: WishlistItem[] = snapshot.years[String(settings.selectedYear)]?.wishlistItems ?? [];
+  // Category ids are generated per budget, so the wishlist category has to be
+  // looked up by its seed key rather than assumed to be the literal
+  // "cat-wishlist". That id only ever belonged to the first budget created.
+  const wishlistCategoryId =
+    seedCategoryIdOrFallback(snapshot.categories, "cat-wishlist") ?? "";
 
   const [view, setView] = useState<ViewFilter>("active");
   const [showAddForm, setShowAddForm] = useState(false);
-  const [addDraft, setAddDraft] = useState<WishlistDraft>(() => emptyDraft(settings.baseCurrency));
+  const [addDraft, setAddDraft] = useState<WishlistDraft>(() => emptyDraft(settings.baseCurrency, wishlistCategoryId));
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState<WishlistDraft | null>(null);
   const [purchasingId, setPurchasingId] = useState<string | null>(null);
@@ -339,12 +343,12 @@ export const WishlistPanel: React.FC = () => {
     if (!addDraft.name.trim()) return;
     add({
       ...wishlistPayloadFromDraft(addDraft),
-      categoryId: addDraft.categoryId || WISHLIST_CATEGORY_ID,
+      categoryId: addDraft.categoryId || wishlistCategoryId,
       currency: addDraft.currency as CurrencyCode,
       bought: false,
       active: true,
     });
-    setAddDraft(emptyDraft(settings.baseCurrency));
+    setAddDraft(emptyDraft(settings.baseCurrency, wishlistCategoryId));
     setShowAddForm(false);
     setView("active");
     setNotice(null);
@@ -428,7 +432,7 @@ export const WishlistPanel: React.FC = () => {
     setPurchaseDraft({
       amount: valueToInput(defaults.amount),
       date: defaults.date,
-      categoryId: defaults.categoryId || WISHLIST_CATEGORY_ID,
+      categoryId: defaults.categoryId || wishlistCategoryId,
     });
   };
 
@@ -560,7 +564,7 @@ export const WishlistPanel: React.FC = () => {
               onSave={handleAdd}
               onCancel={() => {
                 setShowAddForm(false);
-                setAddDraft(emptyDraft(settings.baseCurrency));
+                setAddDraft(emptyDraft(settings.baseCurrency, wishlistCategoryId));
               }}
               submitLabel="Add item"
             />

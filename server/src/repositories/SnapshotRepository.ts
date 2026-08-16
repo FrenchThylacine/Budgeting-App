@@ -86,7 +86,7 @@ export class SnapshotRepository {
     const categories = await this.loadCategories(snapshotId);
     const seasonalPresets = await this.loadSeasonalPresets(snapshotId);
     const scenarioPresets = await this.loadScenarioPresets(snapshotId);
-    const budgetApprovals = await this.loadBudgetApprovals();
+    const budgetApprovals = await this.loadBudgetApprovals(snapshotId);
     const auditLog = await this.loadAuditLog(snapshotId);
 
     const yearsData = await this.query("SELECT id, year FROM years WHERE snapshot_id = $1", [snapshotId]);
@@ -150,8 +150,8 @@ export class SnapshotRepository {
       writes.push({
         text: `
         INSERT INTO categories
-        (id, snapshot_id, name, bucket, color, monthly_cap, notes, archived, icon, description, parent_id)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        (id, snapshot_id, name, bucket, color, monthly_cap, notes, archived, icon, description, parent_id, seed_key)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
         ON CONFLICT (id) DO UPDATE SET
           name = EXCLUDED.name,
           bucket = EXCLUDED.bucket,
@@ -161,7 +161,9 @@ export class SnapshotRepository {
           archived = EXCLUDED.archived,
           icon = EXCLUDED.icon,
           description = EXCLUDED.description,
-          parent_id = EXCLUDED.parent_id
+          parent_id = EXCLUDED.parent_id,
+          seed_key = EXCLUDED.seed_key
+        WHERE categories.snapshot_id = EXCLUDED.snapshot_id
       `,
         params: [
           category.id,
@@ -175,18 +177,28 @@ export class SnapshotRepository {
           category.icon ?? null,
           category.description ?? null,
           category.parentId ?? null,
+          category.seedKey ?? null,
         ],
       });
     }
+    // Dropping categories has to wait until the rows that point at them have
+    // been rewritten.
+    //
+    // `activities.category_id`, `spending_entries.category_id` and
+    // `wishlist_items.category_id` are all ON DELETE RESTRICT, and PostgreSQL
+    // checks them statement by statement rather than at commit. Deleting a
+    // category here — before the year writes below replace the activities that
+    // reference it — aborts the whole transaction with a bare foreign-key
+    // error. That is exactly what happens when a budget's category set is
+    // wholly replaced, which is what an Excel import or a reset to seed does.
     const catIds = snapshot.categories.map((c) => c.id);
-    if (catIds.length > 0) {
-      writes.push({
-        text: `DELETE FROM categories WHERE snapshot_id = $1 AND id NOT IN (${catIds.map((_, i) => `$${i + 2}`).join(", ")})`,
-        params: [snapshotId, ...catIds],
-      });
-    } else {
-      writes.push({ text: "DELETE FROM categories WHERE snapshot_id = $1", params: [snapshotId] });
-    }
+    const deleteRemovedCategories: PendingQuery =
+      catIds.length > 0
+        ? {
+            text: `DELETE FROM categories WHERE snapshot_id = $1 AND id NOT IN (${catIds.map((_, i) => `$${i + 2}`).join(", ")})`,
+            params: [snapshotId, ...catIds],
+          }
+        : { text: "DELETE FROM categories WHERE snapshot_id = $1", params: [snapshotId] };
 
     // Years and nested data
     for (const yearRecord of Object.values(snapshot.years)) {
@@ -201,6 +213,10 @@ export class SnapshotRepository {
       });
     }
 
+    // Safe now: every row that could reference a category has been rewritten,
+    // and dropping a year cascades to its children.
+    writes.push(deleteRemovedCategories);
+
     // Presets
     for (const preset of snapshot.seasonalPresets) {
       writes.push({
@@ -213,6 +229,7 @@ export class SnapshotRepository {
           season = EXCLUDED.season,
           activity_overrides = EXCLUDED.activity_overrides,
           notes = EXCLUDED.notes
+        WHERE seasonal_presets.snapshot_id = EXCLUDED.snapshot_id
       `,
         params: [preset.id, snapshotId, preset.name, preset.season, JSON.stringify(preset.activityOverrides), preset.notes],
       });
@@ -239,6 +256,7 @@ export class SnapshotRepository {
           pilot_included_in_budget = EXCLUDED.pilot_included_in_budget,
           category_caps = EXCLUDED.category_caps,
           notes = EXCLUDED.notes
+        WHERE scenario_presets.snapshot_id = EXCLUDED.snapshot_id
       `,
         params: [
           preset.id,
@@ -266,8 +284,8 @@ export class SnapshotRepository {
       writes.push({
         text: `
         INSERT INTO budget_approvals
-        (id, year, month, suggested_amount, approved_amount, currency, status, recurring_total, note, created_at, decided_at)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        (id, snapshot_id, year, month, suggested_amount, approved_amount, currency, status, recurring_total, note, created_at, decided_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
         ON CONFLICT (id) DO UPDATE SET
           suggested_amount = EXCLUDED.suggested_amount,
           approved_amount = EXCLUDED.approved_amount,
@@ -276,9 +294,11 @@ export class SnapshotRepository {
           recurring_total = EXCLUDED.recurring_total,
           note = EXCLUDED.note,
           decided_at = EXCLUDED.decided_at
+        WHERE budget_approvals.snapshot_id = EXCLUDED.snapshot_id
       `,
         params: [
           approval.id,
+          snapshotId,
           approval.year,
           approval.month,
           approval.suggestedAmount,
@@ -305,6 +325,7 @@ export class SnapshotRepository {
           metadata = EXCLUDED.metadata,
           historical_edit = EXCLUDED.historical_edit,
           historical_period = EXCLUDED.historical_period
+        WHERE audit_log.snapshot_id = EXCLUDED.snapshot_id
       `,
         params: [
           log.id,
@@ -337,6 +358,7 @@ export class SnapshotRepository {
         INSERT INTO years (id, snapshot_id, year, created_at, updated_at)
         VALUES ($1, $2, $3, $4, $5)
         ON CONFLICT (id) DO UPDATE SET updated_at = EXCLUDED.updated_at
+        WHERE years.snapshot_id = EXCLUDED.snapshot_id
       `,
         params: [yearId, snapshotId, yearRecord.year, yearRecord.createdAt, now],
       });
@@ -380,6 +402,7 @@ export class SnapshotRepository {
           day_of_month = EXCLUDED.day_of_month,
           start_date = EXCLUDED.start_date,
           updated_at = EXCLUDED.updated_at
+        WHERE activities.year_id = EXCLUDED.year_id
       `,
         params: [
           activity.id,
@@ -445,6 +468,7 @@ export class SnapshotRepository {
           note = EXCLUDED.note,
           wishlist_item_id = EXCLUDED.wishlist_item_id,
           updated_at = EXCLUDED.updated_at
+        WHERE spending_entries.year_id = EXCLUDED.year_id
       `,
         params: [
           entry.id,
@@ -502,6 +526,7 @@ export class SnapshotRepository {
           color = EXCLUDED.color,
           linked_spending_id = EXCLUDED.linked_spending_id,
           updated_at = EXCLUDED.updated_at
+        WHERE wishlist_items.year_id = EXCLUDED.year_id
       `,
         params: [
           item.id,
@@ -549,6 +574,7 @@ export class SnapshotRepository {
           source = EXCLUDED.source,
           type = EXCLUDED.type,
           note = EXCLUDED.note
+        WHERE wallet_entries.year_id = EXCLUDED.year_id
       `,
         params: [
           entry.id,
@@ -587,6 +613,7 @@ export class SnapshotRepository {
           rollover_wallet_entry_id = EXCLUDED.rollover_wallet_entry_id,
           confirmed_at = EXCLUDED.confirmed_at,
           note = EXCLUDED.note
+        WHERE closed_months.year_id = EXCLUDED.year_id
       `,
         params: [
           record.id,
@@ -653,6 +680,7 @@ export class SnapshotRepository {
       icon: r.icon ?? undefined,
       description: r.description ?? undefined,
       parentId: r.parent_id ?? undefined,
+      seedKey: r.seed_key ?? undefined,
     }));
   }
 
@@ -681,8 +709,18 @@ export class SnapshotRepository {
     }));
   }
 
-  private async loadBudgetApprovals(): Promise<BudgetApproval[]> {
-    const rows = await this.query("SELECT * FROM budget_approvals ORDER BY decided_at DESC");
+  /**
+   * Approvals belonging to one budget.
+   *
+   * This used to read the whole table with no WHERE clause, which was harmless
+   * while exactly one budget existed and a straight cross-account disclosure of
+   * permanent financial records the moment a second one did.
+   */
+  private async loadBudgetApprovals(snapshotId: string): Promise<BudgetApproval[]> {
+    const rows = await this.query(
+      "SELECT * FROM budget_approvals WHERE snapshot_id = $1 ORDER BY decided_at DESC",
+      [snapshotId],
+    );
 
     return rows.map((r) => ({
       id: r.id,

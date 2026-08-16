@@ -1,40 +1,67 @@
 import { dateInputValue, getIsoWeek, startOfIsoWeek, weekYear } from "../domain/dates";
+import { SEED_CATEGORIES, createSeedCategories } from "../domain/seedCategories";
 import type {
   Activity,
-  BudgetCategory,
   BudgetSnapshot,
   CurrencyCode,
   RecurrenceType,
   ScenarioPreset,
   SeasonalPreset,
+  SeedCategoryKey,
   SpendingEntry,
   WishlistItem,
 } from "../domain/types";
 
 const SOURCE_YEAR = 2026;
 
-export const defaultCategories: BudgetCategory[] = [
-  { id: "cat-health", name: "Health", bucket: "general", color: "#16A34A" },
-  { id: "cat-learning", name: "Learning", bucket: "general", color: "#2563EB" },
-  { id: "cat-piloting", name: "Piloting", bucket: "piloting", color: "#F59E0B" },
-  { id: "cat-utilities", name: "Utilities", bucket: "general", color: "#0D9488" },
-  { id: "cat-software", name: "Software", bucket: "general", color: "#7C3AED" },
-  { id: "cat-tech", name: "Tech & Gear", bucket: "personal", color: "#E11D48" },
-  { id: "cat-other", name: "Other", bucket: "general", color: "#64748B" },
-  { id: "cat-spending", name: "Imported Spending", bucket: "general", color: "#475569" },
-  { id: "cat-wallet", name: "Wallet", bucket: "wallet", color: "#0891B2" },
-  { id: "cat-wishlist", name: "Wishlist", bucket: "personal", color: "#DB2777" },
-];
+/**
+ * Seed identifiers must be unique per budget, not per codebase.
+ *
+ * Every `id` below is a primary key in its own table, and the tables are shared
+ * by all budgets: `categories`, `activities`, `spending_entries`,
+ * `wishlist_items`, `wallet_entries`, `audit_log`, `seasonal_presets` and
+ * `scenario_presets` are all keyed on `id` alone. The seed used to hardcode
+ * them (`cat-health`, `act-gym`, `wish-1`, …), so two budgets seeded from this
+ * file collided on every single row. The repository's
+ * `ON CONFLICT (id) DO UPDATE` then rewrote the existing row's contents while
+ * leaving its owner column untouched — the second budget created would take
+ * over the first one's rows and the first would be left with none.
+ *
+ * The factory is injectable so tests can be deterministic.
+ */
+export type SeedIdFactory = (prefix: string) => string;
 
-const activities: Activity[] = [
-  activity("act-gym", "Gym", "cat-health", "USD", "session", 10, 38.5, null, 385, 385, 4620, "normal", "10 sessions per month from the original workbook."),
-  activity("act-arabic", "Arabic", "cat-learning", "USD", "weekly", 1, 35, null, 140, 140, 1680, "school-term", "Weekly Arabic sessions."),
-  activity("act-aviation", "Aviation (~aprox)", "cat-piloting", "EUR", "monthly", 1, null, null, 1250, 1250, 15000, "travel", "Piloting budget kept separate but included in full totals."),
-  activity("act-pc-maint", "PC Maintenance", "cat-tech", "USD", "purchase", 1, 35, 35, null, 35, 35, "normal", "Occasional one-time maintenance purchase."),
-  activity("act-navigraph", "Navigraph", "cat-piloting", "EUR", "yearly", 1, null, null, null, 81.64, 81.64, "travel", "Annual piloting subscription."),
-  activity("act-alpha-4g", "Alpha 4G", "cat-utilities", "USD", "monthly", 1, null, null, 26, 26, 312, "normal", "Monthly connectivity."),
-  activity("act-ogero", "Ogero", "cat-utilities", "USD", "monthly", 1, null, null, 10, 10, 120, "normal", "Monthly internet bill."),
-  activity("act-nebula", "Nebula", "cat-software", "EUR", "yearly", 1, null, null, null, 43.2, 43.2, "normal", "Annual software subscription."),
+function defaultSeedId(prefix: string): string {
+  if (typeof globalThis.crypto?.randomUUID === "function") {
+    return `${prefix}-${globalThis.crypto.randomUUID()}`;
+  }
+  return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(16).slice(2, 10)}`;
+}
+
+/** Shape of the seed activity list, resolved to real ids at creation time. */
+const activityTemplates: {
+  key: string;
+  name: string;
+  categoryKey: SeedCategoryKey;
+  currency: CurrencyCode;
+  recurrenceType: RecurrenceType;
+  recurrenceInterval: number;
+  pricePerSession: number | null;
+  pricePerPurchase: number | null;
+  pricePerMonth: number | null;
+  estimatedCost: number | null;
+  yearlyEstimate: number | null;
+  seasonalTag: string;
+  notes: string;
+}[] = [
+  { key: "gym", name: "Gym", categoryKey: "cat-health", currency: "USD", recurrenceType: "session", recurrenceInterval: 10, pricePerSession: 38.5, pricePerPurchase: null, pricePerMonth: 385, estimatedCost: 385, yearlyEstimate: 4620, seasonalTag: "normal", notes: "10 sessions per month from the original workbook." },
+  { key: "arabic", name: "Arabic", categoryKey: "cat-learning", currency: "USD", recurrenceType: "weekly", recurrenceInterval: 1, pricePerSession: 35, pricePerPurchase: null, pricePerMonth: 140, estimatedCost: 140, yearlyEstimate: 1680, seasonalTag: "school-term", notes: "Weekly Arabic sessions." },
+  { key: "aviation", name: "Aviation (~aprox)", categoryKey: "cat-piloting", currency: "EUR", recurrenceType: "monthly", recurrenceInterval: 1, pricePerSession: null, pricePerPurchase: null, pricePerMonth: 1250, estimatedCost: 1250, yearlyEstimate: 15000, seasonalTag: "travel", notes: "Piloting budget kept separate but included in full totals." },
+  { key: "pc-maint", name: "PC Maintenance", categoryKey: "cat-tech", currency: "USD", recurrenceType: "purchase", recurrenceInterval: 1, pricePerSession: 35, pricePerPurchase: 35, pricePerMonth: null, estimatedCost: 35, yearlyEstimate: 35, seasonalTag: "normal", notes: "Occasional one-time maintenance purchase." },
+  { key: "navigraph", name: "Navigraph", categoryKey: "cat-piloting", currency: "EUR", recurrenceType: "yearly", recurrenceInterval: 1, pricePerSession: null, pricePerPurchase: null, pricePerMonth: null, estimatedCost: 81.64, yearlyEstimate: 81.64, seasonalTag: "travel", notes: "Annual piloting subscription." },
+  { key: "alpha-4g", name: "Alpha 4G", categoryKey: "cat-utilities", currency: "USD", recurrenceType: "monthly", recurrenceInterval: 1, pricePerSession: null, pricePerPurchase: null, pricePerMonth: 26, estimatedCost: 26, yearlyEstimate: 312, seasonalTag: "normal", notes: "Monthly connectivity." },
+  { key: "ogero", name: "Ogero", categoryKey: "cat-utilities", currency: "USD", recurrenceType: "monthly", recurrenceInterval: 1, pricePerSession: null, pricePerPurchase: null, pricePerMonth: 10, estimatedCost: 10, yearlyEstimate: 120, seasonalTag: "normal", notes: "Monthly internet bill." },
+  { key: "nebula", name: "Nebula", categoryKey: "cat-software", currency: "EUR", recurrenceType: "yearly", recurrenceInterval: 1, pricePerSession: null, pricePerPurchase: null, pricePerMonth: null, estimatedCost: 43.2, yearlyEstimate: 43.2, seasonalTag: "normal", notes: "Annual software subscription." },
 ];
 
 const wishlist: Array<[string, number | null, boolean, boolean, WishlistItem["priority"]]> = [
@@ -73,11 +100,37 @@ const spendingWeeks: Array<[number, number | null, number | null]> = [
   [25, 400, null],
 ];
 
-export function createSeedBudgetSnapshot(now = new Date()): BudgetSnapshot {
+/**
+ * The category list every budget starts with.
+ *
+ * Kept as a named export because callers used it to know *which* categories a
+ * budget should have. It no longer carries ids — those belong to a specific
+ * budget — so use `seedCategoryId()` from `domain/seedCategories` to resolve a
+ * key against a real snapshot.
+ */
+export const defaultCategories = SEED_CATEGORIES;
+
+export function createSeedBudgetSnapshot(
+  now = new Date(),
+  makeId: SeedIdFactory = defaultSeedId,
+): BudgetSnapshot {
   const timestamp = now.toISOString();
   const selectedWeek = now.getFullYear() === SOURCE_YEAR ? getIsoWeek(now) : 1;
-  const spendingEntries = createSpendingEntries(timestamp);
-  const wishlistItems = createWishlistItems(timestamp);
+
+  const categories = createSeedCategories(() => makeId("cat"));
+  const categoryIdFor = (key: SeedCategoryKey): string => {
+    const match = categories.find((category) => category.seedKey === key);
+    // Unreachable: `categories` is built from the same key list this reads.
+    // Throwing beats returning a fabricated id, which would fail later as an
+    // opaque foreign-key violation on ON DELETE RESTRICT.
+    if (!match) throw new Error(`Seed category "${key}" is missing from the seed list.`);
+    return match.id;
+  };
+
+  const activityIds = new Map(activityTemplates.map((template) => [template.key, makeId("act")]));
+  const activities = createActivities(activityIds, categoryIdFor);
+  const spendingEntries = createSpendingEntries(timestamp, makeId, categoryIdFor("cat-spending"));
+  const wishlistItems = createWishlistItems(timestamp, makeId, categoryIdFor("cat-wishlist"));
 
   return {
     version: 1,
@@ -109,10 +162,7 @@ export function createSeedBudgetSnapshot(now = new Date()): BudgetSnapshot {
       darkMode: false,
       ignoreNonBudgetSpending: false,
     },
-    // Deep-copied: handing out the module-level array would let any snapshot
-    // mutation (adding or editing a category) rewrite the shared defaults for
-    // every snapshot created afterwards in the same process.
-    categories: defaultCategories.map((category) => ({ ...category })),
+    categories,
     years: {
       [SOURCE_YEAR]: {
         year: SOURCE_YEAR,
@@ -121,7 +171,7 @@ export function createSeedBudgetSnapshot(now = new Date()): BudgetSnapshot {
         wishlistItems,
         walletEntries: [
           {
-            id: "wallet-opening-2026",
+            id: makeId("wallet"),
             year: SOURCE_YEAR,
             month: now.getFullYear() === SOURCE_YEAR ? now.getMonth() + 1 : 1,
             amount: 339.3864612511669,
@@ -138,74 +188,56 @@ export function createSeedBudgetSnapshot(now = new Date()): BudgetSnapshot {
         updatedAt: timestamp,
       },
     },
-    seasonalPresets: createSeasonalPresets(),
-    scenarioPresets: createScenarioPresets(),
+    seasonalPresets: createSeasonalPresets(makeId, activityIds),
+    scenarioPresets: createScenarioPresets(makeId),
     budgetApprovals: [],
     auditLog: [
       {
-        id: "audit-initial-import",
+        id: makeId("audit"),
         type: "import",
-        summary: "Seeded from Budget Full.xlsx workbook structure.",
+        summary: "Seeded from the Budget Full workbook structure.",
         createdAt: timestamp,
-        metadata: { source: "C:\\Users\\iyadf\\Downloads\\Budget Full.xlsx" },
+        metadata: { source: "Budget Full.xlsx" },
       },
     ],
   };
 }
 
-function activity(
-  id: string,
-  name: string,
-  categoryId: string,
-  currency: CurrencyCode,
-  recurrenceType: RecurrenceType,
-  recurrenceInterval: number,
-  pricePerSession: number | null,
-  pricePerPurchase: number | null,
-  pricePerMonth: number | null,
-  estimatedCost: number | null,
-  yearlyEstimate: number | null,
-  seasonalTag: string,
-  notes: string,
-): Activity {
-  return {
-    id,
-    name,
-    categoryId,
-    currency,
-    recurrenceType,
-    recurrenceInterval,
-    pricePerSession,
-    pricePerPurchase,
-    pricePerMonth,
-    estimatedCost,
-    yearlyEstimate,
+function createActivities(
+  activityIds: Map<string, string>,
+  categoryIdFor: (key: SeedCategoryKey) => string,
+): Activity[] {
+  return activityTemplates.map((template, index) => ({
+    id: activityIds.get(template.key)!,
+    name: template.name,
+    categoryId: categoryIdFor(template.categoryKey),
+    currency: template.currency,
+    recurrenceType: template.recurrenceType,
+    recurrenceInterval: template.recurrenceInterval,
+    pricePerSession: template.pricePerSession,
+    pricePerPurchase: template.pricePerPurchase,
+    pricePerMonth: template.pricePerMonth,
+    estimatedCost: template.estimatedCost,
+    yearlyEstimate: template.yearlyEstimate,
     active: true,
     visible: true,
-    seasonalTag,
-    order: activitiesOrder(id),
-    notes,
-  };
+    seasonalTag: template.seasonalTag,
+    // Previously derived by looking the id up in a hardcoded list, which
+    // returned -1 for anything not in it. The list order is the order.
+    order: index,
+    notes: template.notes,
+  }));
 }
 
-function activitiesOrder(id: string): number {
-  return [
-    "act-gym",
-    "act-arabic",
-    "act-aviation",
-    "act-pc-maint",
-    "act-navigraph",
-    "act-alpha-4g",
-    "act-ogero",
-    "act-nebula",
-  ].indexOf(id);
-}
-
-function createWishlistItems(timestamp: string): WishlistItem[] {
-  return wishlist.map(([name, price, bought, inWishlist, priority], index) => ({
-    id: `wish-${index + 1}`,
+function createWishlistItems(
+  timestamp: string,
+  makeId: SeedIdFactory,
+  categoryId: string,
+): WishlistItem[] {
+  return wishlist.map(([name, price, bought, inWishlist, priority]) => ({
+    id: makeId("wish"),
     name,
-    categoryId: "cat-wishlist",
+    categoryId,
     actualPrice: price,
     effectiveValue: bought || !inWishlist || price == null ? 0 : price,
     currency: "EUR",
@@ -219,19 +251,23 @@ function createWishlistItems(timestamp: string): WishlistItem[] {
   }));
 }
 
-function createSpendingEntries(timestamp: string): SpendingEntry[] {
+function createSpendingEntries(
+  timestamp: string,
+  makeId: SeedIdFactory,
+  categoryId: string,
+): SpendingEntry[] {
   const entries: SpendingEntry[] = [];
   for (const [week, usdAmount, eurAmount] of spendingWeeks) {
     const date = dateInputValue(startOfIsoWeek(SOURCE_YEAR, week));
     const month = new Date(`${date}T00:00:00`).getMonth() + 1;
     if (usdAmount !== null) {
       entries.push({
-        id: `spend-${week}-usd`,
+        id: makeId("spend"),
         year: SOURCE_YEAR,
         month,
         week,
         date,
-        categoryId: "cat-spending",
+        categoryId,
         amount: usdAmount,
         currency: "USD",
         recurrenceType: "none",
@@ -244,12 +280,12 @@ function createSpendingEntries(timestamp: string): SpendingEntry[] {
     }
     if (eurAmount !== null) {
       entries.push({
-        id: `spend-${week}-eur`,
+        id: makeId("spend"),
         year: SOURCE_YEAR,
         month,
         week,
         date,
-        categoryId: "cat-spending",
+        categoryId,
         amount: eurAmount,
         currency: "EUR",
         recurrenceType: "none",
@@ -264,66 +300,73 @@ function createSpendingEntries(timestamp: string): SpendingEntry[] {
   return entries;
 }
 
-function createSeasonalPresets(): SeasonalPreset[] {
+function createSeasonalPresets(
+  makeId: SeedIdFactory,
+  activityIds: Map<string, string>,
+): SeasonalPreset[] {
+  // Overrides are keyed by activity id, so they have to be rebuilt against the
+  // ids this budget actually generated rather than the old hardcoded ones.
+  const act = (key: string): string => activityIds.get(key)!;
+
   return [
     {
-      id: "season-normal",
+      id: makeId("season"),
       name: "Normal Mode",
       season: "normal",
       activityOverrides: {},
       notes: "Default workbook-inspired setup.",
     },
     {
-      id: "season-summer",
+      id: makeId("season"),
       name: "Summer",
       season: "summer",
       activityOverrides: {
-        "act-arabic": { visible: false, active: false },
-        "act-aviation": { visible: true, active: true },
+        [act("arabic")]: { visible: false, active: false },
+        [act("aviation")]: { visible: true, active: true },
       },
       notes: "Light study load, more flexible piloting planning.",
     },
     {
-      id: "season-school",
+      id: makeId("season"),
       name: "School Term",
       season: "school-term",
       activityOverrides: {
-        "act-arabic": { visible: true, active: true },
-        "act-aviation": { pricePerMonth: 850 },
+        [act("arabic")]: { visible: true, active: true },
+        [act("aviation")]: { pricePerMonth: 850 },
       },
       notes: "Keeps lessons visible and trims piloting intensity.",
     },
     {
-      id: "season-travel",
+      id: makeId("season"),
       name: "Travel Mode",
       season: "travel",
       activityOverrides: {
-        "act-aviation": { visible: true, active: true, pricePerMonth: 1500 },
-        "act-navigraph": { visible: true, active: true },
+        [act("aviation")]: { visible: true, active: true, pricePerMonth: 1500 },
+        [act("navigraph")]: { visible: true, active: true },
       },
       notes: "Piloting-heavy scenario.",
     },
   ];
 }
 
-function createScenarioPresets(): ScenarioPreset[] {
+function createScenarioPresets(makeId: SeedIdFactory): ScenarioPreset[] {
   return [
     {
-      id: "scenario-balanced",
+      id: makeId("scenario"),
       name: "Balanced",
       monthlyBudget: 600 / 1.19,
       pilotIncludedInBudget: true,
       notes: "Current workbook baseline.",
     },
     {
-      id: "scenario-tight",
+      id: makeId("scenario"),
       name: "Tight Month",
       monthlyBudget: 450 / 1.19,
       pilotIncludedInBudget: false,
       notes: "Lower allowance and pilots excluded from the active budget card.",
     },
     {
-      id: "scenario-travel",
+      id: makeId("scenario"),
       name: "Travel Push",
       monthlyBudget: 800 / 1.19,
       pilotIncludedInBudget: true,

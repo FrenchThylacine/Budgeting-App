@@ -7,6 +7,7 @@
 import { describe, expect, it } from "vitest";
 import { buildPeriodReport, reportHtml } from "../src/domain/report";
 import { createSeedBudgetSnapshot } from "../src/data/seedBudget";
+import { catId } from "./helpers/seedIds";
 import { formatMoney } from "../src/domain/currency";
 import type { BudgetSnapshot, SpendingEntry } from "../src/domain/types";
 
@@ -102,7 +103,12 @@ describe("buildPeriodReport", () => {
   });
 
   it("notes that piloting is excluded from shares", () => {
-    const snap = snapshotWith([entry({ amount: 100, categoryId: "cat-piloting", isPiloting: true })]);
+    // Resolved against this snapshot: seed ids are generated per budget, so a
+    // second snapshotWith() call would produce ids that do not exist here.
+    const snap = snapshotWith([]);
+    snap.years["2026"].spendingEntries = [
+      entry({ amount: 100, categoryId: catId(snap, "cat-piloting"), isPiloting: true }),
+    ];
     const report = buildPeriodReport(snap, "month", NOW);
     expect(report.notes.some((n) => n.includes("Piloting"))).toBe(true);
   });

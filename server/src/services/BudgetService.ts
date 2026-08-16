@@ -2,25 +2,40 @@ import type { BudgetSnapshot } from "../../../src/domain/types.js";
 import { SnapshotRepository } from "../repositories/SnapshotRepository.js";
 import { getDatabase } from "../db/index.js";
 
+/**
+ * The budget every request used before accounts existed, and the one a
+ * single-user deployment keeps using.
+ */
+export const DEFAULT_SNAPSHOT_ID = "active";
+
 export class BudgetService {
   private repository: SnapshotRepository;
 
-  constructor(sql = getDatabase()) {
+  /**
+   * @param snapshotId Which budget this service instance reads and writes.
+   *
+   * The id used to be the literal "active" repeated at each of the four call
+   * sites below. Routing a request to a specific account therefore meant
+   * finding and changing every one of them; taking it here makes this class the
+   * single place that decides, which is what the authentication work needs.
+   * The default keeps existing behaviour byte-for-byte.
+   */
+  constructor(sql = getDatabase(), private snapshotId: string = DEFAULT_SNAPSHOT_ID) {
     this.repository = new SnapshotRepository(sql);
   }
 
   /**
-   * Load the active budget snapshot
+   * Load this service's budget snapshot
    */
   async loadSnapshot(): Promise<BudgetSnapshot | null> {
-    return await this.repository.loadSnapshot("active");
+    return await this.repository.loadSnapshot(this.snapshotId);
   }
 
   /**
    * Save the full budget snapshot (with all nested entities)
    */
   async saveSnapshot(snapshot: BudgetSnapshot): Promise<void> {
-    await this.repository.saveSnapshot(snapshot, "active");
+    await this.repository.saveSnapshot(snapshot, this.snapshotId);
   }
 
   /**
@@ -28,7 +43,7 @@ export class BudgetService {
    * Returns null when no snapshot exists yet.
    */
   async loadRevision(): Promise<number | null> {
-    return await this.repository.loadRevision("active");
+    return await this.repository.loadRevision(this.snapshotId);
   }
 
   /**
