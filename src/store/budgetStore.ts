@@ -7,17 +7,19 @@ import type {
   Activity,
   AuditType,
   BudgetApproval,
+  BudgetCategory,
   BudgetSnapshot,
   CurrencyCode,
   MonthCloseRecord,
+  ScenarioPreset,
   Settings,
   SpendingEntry,
   WalletEntry,
   WishlistItem,
   YearRecord,
-  BudgetCategory,
 } from "../domain/types";
 import { createSeedBudgetSnapshot } from "../data/seedBudget";
+import { scenarioFromCurrentState } from "../domain/scenarios";
 import { defaultCategories } from "../data/seedBudget";
 import { deleteSnapshot as deleteIdbSnapshot, loadSnapshot as loadIdbSnapshot, saveSnapshot as saveIdbSnapshot } from "../storage/idb";
 import { ApiUnavailableError, AuthRequiredError, getApiClient, SnapshotConflictError } from "../api/client";
@@ -141,6 +143,12 @@ interface BudgetStore {
   recordBudgetApproval: (approval: Omit<BudgetApproval, "id" | "createdAt" | "decidedAt">) => void;
   applySeasonalPreset: (presetId: string) => void;
   applyScenarioPreset: (presetId: string) => void;
+  addScenarioPreset: (preset: Omit<ScenarioPreset, "id">) => void;
+  updateScenarioPreset: (id: string, patch: Partial<Omit<ScenarioPreset, "id">>) => void;
+  duplicateScenarioPreset: (id: string) => void;
+  removeScenarioPreset: (id: string) => void;
+  /** Capture the current budget and caps as a new scenario. */
+  captureScenarioPreset: (name: string) => void;
   undo: () => void;
   redo: () => void;
   // Category management
@@ -857,6 +865,82 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
       "preset",
       "Applied seasonal preset.",
       { presetId },
+    );
+  },
+
+  addScenarioPreset: (preset) => {
+    commit(
+      set,
+      get,
+      (snapshot) => {
+        snapshot.scenarioPresets.push({ ...preset, id: id("scenario") } as ScenarioPreset);
+      },
+      "preset",
+      `Created scenario "${preset.name}".`,
+    );
+  },
+
+  updateScenarioPreset: (presetId, patch) => {
+    commit(
+      set,
+      get,
+      (snapshot) => {
+        const preset = snapshot.scenarioPresets.find((item) => item.id === presetId);
+        if (!preset) return;
+        Object.assign(preset, patch);
+      },
+      "preset",
+      "Updated scenario.",
+      { presetId },
+    );
+  },
+
+  duplicateScenarioPreset: (presetId) => {
+    commit(
+      set,
+      get,
+      (snapshot) => {
+        const source = snapshot.scenarioPresets.find((item) => item.id === presetId);
+        if (!source) return;
+        const index = snapshot.scenarioPresets.indexOf(source);
+        snapshot.scenarioPresets.splice(index + 1, 0, {
+          ...source,
+          id: id("scenario"),
+          name: `${source.name} copy`,
+          // Copied, not shared: mutating the original's caps through its clone
+          // is exactly the kind of surprise a duplicate must not produce.
+          categoryCaps: source.categoryCaps ? { ...source.categoryCaps } : undefined,
+        });
+      },
+      "preset",
+      "Duplicated scenario.",
+      { presetId },
+    );
+  },
+
+  removeScenarioPreset: (presetId) => {
+    commit(
+      set,
+      get,
+      (snapshot) => {
+        const index = snapshot.scenarioPresets.findIndex((item) => item.id === presetId);
+        if (index !== -1) snapshot.scenarioPresets.splice(index, 1);
+      },
+      "preset",
+      "Deleted scenario.",
+      { presetId },
+    );
+  },
+
+  captureScenarioPreset: (name) => {
+    commit(
+      set,
+      get,
+      (snapshot) => {
+        snapshot.scenarioPresets.push(scenarioFromCurrentState(snapshot, name, id("scenario")));
+      },
+      "preset",
+      `Saved the current budget as "${name}".`,
     );
   },
 
