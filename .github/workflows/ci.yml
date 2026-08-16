@@ -1,0 +1,82 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Typecheck, test, build
+    runs-on: ubuntu-latest
+
+    # The integration suites exercise real schema DDL, migrations and repository
+    # SQL. A mocked driver accepts statements PostgreSQL rejects — that is how
+    # multi-statement DDL, integers bound to BOOLEAN columns and a broken
+    # ON CONFLICT target all reached production unnoticed. Running them here
+    # means CI catches that class of bug instead of a person doing it by hand.
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: budget_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Typecheck
+        run: npx tsc -b
+
+      - name: Test
+        # Setting TEST_DATABASE_URL opts the integration suites in; without it
+        # they skip, which would quietly reduce coverage to the unit tests.
+        env:
+          TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/budget_test
+        run: npm test
+
+      - name: Build frontend
+        run: npm run build
+
+      - name: Build server
+        run: npm run server:build
+
+      - name: Verify the compiled server starts
+        # `server:build` only proves tsc emitted files. The output was once
+        # unable to start at all — extensionless ESM imports, an unresolvable
+        # path alias — and nothing caught it. A 503 here is success: it means
+        # the process booted and answered, just without a database.
+        run: |
+          node server/dist/server/src/index.js &
+          SERVER_PID=$!
+          for _ in $(seq 1 20); do
+            if curl -fsS -o /dev/null -w '%{http_code}' http://127.0.0.1:3001/api/health | grep -qE '200|503'; then
+              echo "Server booted and answered."
+              kill $SERVER_PID
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "Server did not answer within 20s"
+          kill $SERVER_PID 2>/dev/null || true
+          exit 1
