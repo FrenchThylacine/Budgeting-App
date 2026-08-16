@@ -269,10 +269,17 @@ export async function initializeSchema(
       ON budget_approvals(year, month);
   `;
 
-  await sql`
-    CREATE INDEX IF NOT EXISTS idx_budget_approvals_snapshot
-      ON budget_approvals(snapshot_id);
-  `;
+  // The index on snapshot_id deliberately lives in migration 006, not here.
+  //
+  // This function runs BEFORE the migrations, and every statement in it is
+  // written so that an existing database is left alone. On such a database
+  // `CREATE TABLE IF NOT EXISTS budget_approvals` does nothing, so the column
+  // added by 006 does not exist yet — and indexing it here fails with
+  // `column "snapshot_id" does not exist` (SQLSTATE 42703), which aborts
+  // initialization and answers every request with 503.
+  //
+  // Rule for anything added later: a column introduced by a migration may only
+  // be referenced by that migration or a later one, never by this file.
 
   await sql`
     CREATE TABLE IF NOT EXISTS audit_log (

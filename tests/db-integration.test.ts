@@ -647,3 +647,118 @@ describeDb("PostgreSQL integration", () => {
     }
   });
 });
+
+/**
+ * Upgrading a database that already holds data.
+ *
+ * Every suite above builds its schema from nothing, which is the one path that
+ * cannot go wrong. Production is the other path: the tables already exist, so
+ * `CREATE TABLE IF NOT EXISTS` is a no-op and only the migrations change
+ * anything.
+ *
+ * That gap hid a live defect. `initializeSchema` runs before the migrations,
+ * and it had gained `CREATE INDEX ... ON budget_approvals(snapshot_id)` — a
+ * column migration 006 has not added yet at that point. Against an existing
+ * database it failed with SQLSTATE 42703, which aborted initialization and
+ * turned every request into a 503. A fresh database never noticed, because
+ * there the CREATE TABLE really does create the column.
+ */
+describeDb("upgrading an existing database", () => {
+  const LEGACY_SCHEMA = "test_legacy";
+  let client: Client;
+  let sql: any;
+
+  beforeAll(async () => {
+    client = new Client({ connectionString });
+    await client.connect();
+    await client.query(`DROP SCHEMA IF EXISTS ${LEGACY_SCHEMA} CASCADE;`);
+    await client.query(`CREATE SCHEMA ${LEGACY_SCHEMA};`);
+    await client.query(`SET search_path TO ${LEGACY_SCHEMA};`);
+
+    // The shape these tables had before migration 006 — no snapshot_id on
+    // budget_approvals, no seed_key on categories.
+    await client.query(`
+      CREATE TABLE snapshots (
+        id TEXT PRIMARY KEY, version INTEGER NOT NULL, revision INTEGER NOT NULL DEFAULT 0,
+        settings TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+      );`);
+    await client.query(`
+      CREATE TABLE categories (
+        id TEXT PRIMARY KEY, snapshot_id TEXT NOT NULL, name TEXT NOT NULL,
+        bucket TEXT NOT NULL, color TEXT NOT NULL, monthly_cap DOUBLE PRECISION,
+        notes TEXT, archived BOOLEAN DEFAULT false, icon TEXT, description TEXT, parent_id TEXT,
+        FOREIGN KEY (snapshot_id) REFERENCES snapshots(id) ON DELETE CASCADE
+      );`);
+    await client.query(`
+      CREATE TABLE budget_approvals (
+        id TEXT PRIMARY KEY, year INTEGER NOT NULL, month INTEGER NOT NULL,
+        suggested_amount DOUBLE PRECISION NOT NULL, approved_amount DOUBLE PRECISION,
+        currency TEXT NOT NULL, status TEXT NOT NULL, recurring_total DOUBLE PRECISION NOT NULL,
+        note TEXT, created_at TEXT NOT NULL, decided_at TEXT NOT NULL
+      );`);
+
+    // Data written by the old code: a seeded category keyed by its literal id,
+    // and an approval with no owner.
+    await client.query(
+      `INSERT INTO snapshots (id, version, revision, settings, created_at, updated_at)
+       VALUES ('active', 1, 3, '{}', 'then', 'then');`);
+    await client.query(
+      `INSERT INTO categories (id, snapshot_id, name, bucket, color)
+       VALUES ('cat-health', 'active', 'Health', 'general', '#16A34A'),
+              ('cat-abc123-user-made', 'active', 'Mine', 'general', '#000000');`);
+    await client.query(
+      `INSERT INTO budget_approvals
+         (id, year, month, suggested_amount, approved_amount, currency, status, recurring_total, created_at, decided_at)
+       VALUES ('legacy-approval', 2026, 2, 500, 500, 'EUR', 'approved', 400, 'then', 'then');`);
+
+    sql = pgTagAdapter(client);
+  }, 30000);
+
+  afterAll(async () => {
+    await client?.end();
+  });
+
+  it("initializes and migrates without error", async () => {
+    // The regression: this threw `column "snapshot_id" does not exist`.
+    await expect(initializeSchema(sql)).resolves.not.toThrow();
+    await expect(runMigrations(sql)).resolves.not.toThrow();
+  });
+
+  it("adds the owner column and adopts existing approvals", async () => {
+    const cols = await client.query(
+      `SELECT column_name FROM information_schema.columns WHERE table_schema = $1 AND table_name = 'budget_approvals'`,
+      [LEGACY_SCHEMA],
+    );
+    expect(cols.rows.map((r) => r.column_name)).toContain("snapshot_id");
+
+    // Rows that predate accounts belong to the one budget that existed.
+    const rows = await client.query(`SELECT id, snapshot_id FROM budget_approvals`);
+    expect(rows.rows).toEqual([{ id: "legacy-approval", snapshot_id: "active" }]);
+  });
+
+  it("backfills seed keys for seeded categories but not user-created ones", async () => {
+    const rows = await client.query(`SELECT id, seed_key FROM categories ORDER BY id`);
+    const bySeedKey = Object.fromEntries(rows.rows.map((r) => [r.id, r.seed_key]));
+
+    // A row the old seed wrote: its id *is* the stable key.
+    expect(bySeedKey["cat-health"]).toBe("cat-health");
+    // A category the user created. It shares the `cat-` prefix, which is why
+    // the backfill lists the ten seeded ids instead of matching LIKE 'cat-%'.
+    expect(bySeedKey["cat-abc123-user-made"]).toBeNull();
+  });
+
+  it("creates the index the migration owns", async () => {
+    const rows = await client.query(
+      `SELECT indexname FROM pg_indexes WHERE schemaname = $1 AND tablename = 'budget_approvals'`,
+      [LEGACY_SCHEMA],
+    );
+    expect(rows.rows.map((r) => r.indexname)).toContain("idx_budget_approvals_snapshot");
+  });
+
+  it("is safe to run twice, as every boot does", async () => {
+    await expect(initializeSchema(sql)).resolves.not.toThrow();
+    await expect(runMigrations(sql)).resolves.not.toThrow();
+    const applied = await client.query(`SELECT name, count(*)::int AS n FROM migrations GROUP BY name`);
+    for (const row of applied.rows) expect(row.n).toBe(1);
+  });
+});
