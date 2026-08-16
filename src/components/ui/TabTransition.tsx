@@ -10,13 +10,14 @@ interface TabTransitionProps {
 /**
  * Long enough to read as a movement rather than a flicker.
  *
- * 620ms was measurably too quick: the aircraft crossed a 1440px panel in
- * roughly a third of a second, which reads as a twitch and gives the
- * compositor a very high pixel rate to sustain. At this duration the same
- * distance is covered calmly, and the animation is cheaper per frame because
- * less changes between them.
+ * 620ms was too quick to read as a movement. 1150ms was too long once the
+ * thing it was covering — a deferred panel being fetched, measured at
+ * 190–370ms locally — was removed by warming those chunks in advance.
+ *
+ * Measured here at a median 8.3ms per frame with no frame over 20ms, so the
+ * stutter people saw was the fetch, not the animation.
  */
-const SWEEP_MS = 1150;
+const SWEEP_MS = 880;
 
 /**
  * The transition between tabs.

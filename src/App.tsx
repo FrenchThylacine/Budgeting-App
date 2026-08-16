@@ -17,11 +17,51 @@ import { WalletPanel } from "./components/wallet/WalletPanel";
  * download made every first paint wait for code most sessions never open.
  * Named exports are unwrapped here because React.lazy expects a default.
  */
-const AnalyticsPanel = lazy(() => import("./components/analytics/AnalyticsPanel").then((m) => ({ default: m.AnalyticsPanel })));
-const ScenarioLab = lazy(() => import("./components/scenarios/ScenarioLab").then((m) => ({ default: m.ScenarioLab })));
-const HistoryPanel = lazy(() => import("./components/history/HistoryPanel").then((m) => ({ default: m.HistoryPanel })));
-const SettingsPanel = lazy(() => import("./components/settings/SettingsPanel").then((m) => ({ default: m.SettingsPanel })));
-const CategoryManager = lazy(() => import("./components/categories/CategoryManager").then((m) => ({ default: m.CategoryManager })));
+/**
+ * The import is named so it can be used twice: once by React.lazy, and once to
+ * warm the chunk ahead of time.
+ *
+ * Splitting these out of the initial bundle cut the first load by 40%, but it
+ * moved the cost to the moment a tab is opened — measured at 190–370ms locally
+ * and considerably worse over a real network. That delay lands exactly when
+ * the transition is playing, so the animation appeared to stutter when what
+ * was actually happening was a chunk being fetched.
+ */
+const loadAnalytics = () => import("./components/analytics/AnalyticsPanel");
+const loadScenarios = () => import("./components/scenarios/ScenarioLab");
+const loadHistory = () => import("./components/history/HistoryPanel");
+const loadSettings = () => import("./components/settings/SettingsPanel");
+const loadCategories = () => import("./components/categories/CategoryManager");
+
+const AnalyticsPanel = lazy(() => loadAnalytics().then((m) => ({ default: m.AnalyticsPanel })));
+const ScenarioLab = lazy(() => loadScenarios().then((m) => ({ default: m.ScenarioLab })));
+const HistoryPanel = lazy(() => loadHistory().then((m) => ({ default: m.HistoryPanel })));
+const SettingsPanel = lazy(() => loadSettings().then((m) => ({ default: m.SettingsPanel })));
+const CategoryManager = lazy(() => loadCategories().then((m) => ({ default: m.CategoryManager })));
+
+/**
+ * Fetch every deferred panel once the browser is idle.
+ *
+ * The dashboard still paints without them, so the initial load keeps its gain;
+ * by the time anyone reaches for a tab the chunk is already in memory and the
+ * switch is instant. Sequential rather than parallel, so warming the cache
+ * never competes with a request the user is actually waiting on.
+ */
+function preloadPanels(): void {
+  const loaders = [loadAnalytics, loadSettings, loadCategories, loadHistory, loadScenarios];
+  let index = 0;
+  const next = () => {
+    if (index >= loaders.length) return;
+    loaders[index++]()
+      .catch(() => undefined) // a warm-up that fails must never surface
+      .then(() => schedule(next));
+  };
+  const schedule = (fn: () => void) => {
+    if (typeof window.requestIdleCallback === "function") window.requestIdleCallback(() => fn(), { timeout: 2000 });
+    else window.setTimeout(fn, 200);
+  };
+  schedule(next);
+}
 import { RolloverDialog } from "./components/modals/RolloverDialog";
 import { HistoricalEditDialog } from "./components/modals/HistoricalEditDialog";
 import { Notifications } from "./components/Notifications";
@@ -70,6 +110,11 @@ export default function App() {
   useEffect(() => {
     if (user) void hydrate();
   }, [user, hydrate]);
+
+  // Warm the deferred panels once there is something on screen.
+  useEffect(() => {
+    if (hydrated) preloadPanels();
+  }, [hydrated]);
   useEffect(() => {
     try { localStorage.setItem(SIDEBAR_PREF_KEY, String(sidebarCollapsed)); } catch { /* noop */ }
   }, [sidebarCollapsed]);
