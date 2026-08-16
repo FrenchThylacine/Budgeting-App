@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowDown, ArrowUp, Copy, Eye, EyeOff, GripVertical, Pencil, Plus, Trash2 } from "lucide-react";
 import { CURRENCY_OPTIONS, formatMoney } from "../../domain/currency";
+import { SwipeRow } from "../ui/SwipeRow";
 import { monthName } from "../../domain/dates";
 import { estimateActivity, monthlyEstimateNative, yearlyEstimateNative } from "../../domain/calculations";
 import {
@@ -463,8 +464,25 @@ export const ActivityPanel: React.FC = () => {
             const estimate = estimateMap.get(activity.id);
             const orderIndex = orderedAll.findIndex((item) => item.id === activity.id);
             return (
-              <div
+              <SwipeRow
                 key={activity.id}
+                label={activity.name}
+                // Touch-only, so it does not collide with the mouse-driven
+                // drag-to-reorder on the same card: HTML5 dragstart never
+                // fires from a finger.
+                trailing={
+                  mutable
+                    ? [
+                        {
+                          label: activity.visible ? "Hide" : "Show",
+                          icon: activity.visible ? <EyeOff size={18} /> : <Eye size={18} />,
+                          onAction: () => update(activity.id, { visible: !activity.visible }),
+                        },
+                      ]
+                    : []
+                }
+              >
+              <div
                 className="item-row"
                 draggable={canReorder}
                 onDragStart={() => setDragId(activity.id)}
@@ -604,6 +622,7 @@ export const ActivityPanel: React.FC = () => {
                   )}
                 </div>
               </div>
+              </SwipeRow>
             );
           })}
         </div>
