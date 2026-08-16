@@ -44,19 +44,18 @@ const REWRITE_DESTINATIONS = new Set(["/api", "/api/", "/api/index"]);
  * Rebuild the original request path when Vercel hands us the rewrite
  * destination instead of the path the browser asked for.
  *
- * Today Vercel delivers the original path, so this is a no-op. It exists
- * because Vercel has announced that internal rewrites may start routing on the
- * rewritten destination path, and `vercel dev` already behaves that way. The
- * sub-path travels in `__vpath`, so the correct URL can be reconstructed under
- * either behaviour without ever double-prefixing `/api`.
+ * Measured in production: Vercel delivers the ORIGINAL path, so this is
+ * currently a no-op. It is kept because Vercel has announced that internal
+ * rewrites may start routing on the rewritten destination path, and
+ * `vercel dev` already behaves that way. The sub-path travels in `__vpath`, so
+ * the correct URL can be reconstructed under either behaviour without ever
+ * double-prefixing `/api`.
  */
 function restoreOriginalPath(req: Request, _res: Response, next: NextFunction): void {
   const raw = req.url ?? "/";
   const queryStart = raw.indexOf("?");
   const pathname = queryStart === -1 ? raw : raw.slice(0, queryStart);
   const params = new URLSearchParams(queryStart === -1 ? "" : raw.slice(queryStart + 1));
-
-  (req as Request & { vercelRawUrl?: string }).vercelRawUrl = raw;
 
   const vpath = params.get("__vpath");
   if (vpath === null) {
@@ -78,20 +77,6 @@ function restoreOriginalPath(req: Request, _res: Response, next: NextFunction): 
 
 const handler = express();
 handler.use(restoreOriginalPath);
-
-/**
- * Deployment probe. Reports which path Vercel actually delivered, so the
- * routing behaviour is measured rather than assumed. Remove once production
- * behaviour has been confirmed.
- */
-handler.get("/api/__routecheck", (req: Request, res: Response) => {
-  res.json({
-    rawUrl: (req as Request & { vercelRawUrl?: string }).vercelRawUrl ?? null,
-    normalizedUrl: req.url,
-    vercelId: req.headers["x-vercel-id"] ?? null,
-  });
-});
-
 handler.use(app);
 
 export default handler;
