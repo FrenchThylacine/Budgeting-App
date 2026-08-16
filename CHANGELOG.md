@@ -1,5 +1,24 @@
 # Changelog
 
+## 2026-08-16 — Where an item is bought, and what it looks like
+
+### One field could not carry both facts
+
+A wishlist item's `url` was the purchase link *and* the source of its icon. That forced a choice with no good answer: point it at the shop and every item bought there looks identical, or point it at the manufacturer and the link sends you somewhere you cannot buy.
+
+They are two different facts, so they are now two fields. `brandUrl` supplies the icon; `url` is still where the item is bought and is **never** replaced. When there is no brand link, the icon falls back to the purchase link exactly as before, so nothing changes for items that only ever had one.
+
+The field sits behind a disclosure — most items are bought and branded by the same site, and asking everyone for a second link would tax the common case to serve the uncommon one. Migration `009` persists it.
+
+### A form that refused what its own placeholder suggested
+
+Both link fields were `type="url"`, so the browser demanded a scheme. Typing `store.com/product` — which the placeholder literally proposes, and which `parseItemUrl` is written to accept as https — made the browser block submission with a message the form never showed.
+
+The fields are now `type="text"` with `inputMode="url"`. The keyboard is unchanged, and the app's own validation is stricter than the browser's anyway: it rejects `javascript:` and `data:`, which `type="url"` accepts.
+
+**Verification** — `npx tsc -b` clean · **411 tests passing**, 65 against real PostgreSQL 17 · both builds clean. Driven in a browser: an item bought from one domain and branded by another stores both links, draws its icon from the brand, and still links to the shop.
+
+
 ## 2026-08-16 — Scenarios you can see, build and undo
 
 ### Applying a scenario was destructive and silent

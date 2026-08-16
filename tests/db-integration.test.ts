@@ -695,6 +695,32 @@ describeDb("PostgreSQL integration", () => {
     expect(activity.scheduleOverrides).toHaveLength(1);
     expect(activity.scheduleOverrides![0].id).toBe("ok");
   });
+  it("round-trips the wishlist brand link separately from the purchase link", async () => {
+    const snapshot = (await repo.loadSnapshot("active"))!;
+    const year = Object.values(snapshot.years)[0];
+    const target = year.wishlistItems[0];
+    target.url = "https://contrail-shop.example/products/rafale";
+    target.brandUrl = "https://azurpoly.example/";
+    snapshot.revision = (snapshot.revision ?? 0) + 1;
+    await repo.saveSnapshot(snapshot, "active");
+
+    const reloaded = await repo.loadSnapshot("active");
+    const item = Object.values(reloaded!.years)[0].wishlistItems.find((w) => w.id === target.id)!;
+
+    // Both survive, and neither overwrites the other. The repository writes a
+    // fixed column list, so a field missing from the schema, the upsert or the
+    // parser is silently dropped on the next round-trip.
+    expect(item.url).toBe("https://contrail-shop.example/products/rafale");
+    expect(item.brandUrl).toBe("https://azurpoly.example/");
+  });
+
+  it("leaves the brand link absent when it was never set", async () => {
+    const snapshot = (await repo.loadSnapshot("active"))!;
+    const item = Object.values(snapshot.years)[0].wishlistItems.find((w) => !w.brandUrl);
+    // Undefined, not an empty string: "no brand" must stay distinguishable so
+    // the icon falls back to the shop rather than resolving to nothing.
+    expect(item?.brandUrl).toBeUndefined();
+  });
 });
 
 /**

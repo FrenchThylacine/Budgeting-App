@@ -542,8 +542,8 @@ export class SnapshotRepository {
         INSERT INTO wishlist_items
         (id, year_id, name, category_id, actual_price, effective_value, currency,
          bought, in_wishlist, priority, date_added, date_purchased, notes, active,
-         url, color, linked_spending_id, created_at, updated_at)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+         url, brand_url, color, linked_spending_id, created_at, updated_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
         ON CONFLICT (id) DO UPDATE SET
           name = EXCLUDED.name,
           category_id = EXCLUDED.category_id,
@@ -558,6 +558,7 @@ export class SnapshotRepository {
           notes = EXCLUDED.notes,
           active = EXCLUDED.active,
           url = EXCLUDED.url,
+          brand_url = EXCLUDED.brand_url,
           color = EXCLUDED.color,
           linked_spending_id = EXCLUDED.linked_spending_id,
           updated_at = EXCLUDED.updated_at
@@ -579,6 +580,7 @@ export class SnapshotRepository {
           item.notes ?? null,
           item.active === true,
           item.url ?? null,
+          item.brandUrl ?? null,
           item.color ?? null,
           item.linkedSpendingId ?? null,
           now,
@@ -852,6 +854,7 @@ export class SnapshotRepository {
       notes: row.notes ?? "",
       active: row.active === 1 || row.active === true,
       url: row.url ?? undefined,
+      brandUrl: row.brand_url ?? undefined,
       color: row.color ?? undefined,
       linkedSpendingId: row.linked_spending_id ?? undefined,
     };

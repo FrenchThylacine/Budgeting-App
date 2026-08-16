@@ -260,8 +260,21 @@ export interface WishlistItem {
   datePurchased?: string;
   notes: string;
   active: boolean;
-  /** Product or reference URL; the domain drives the item's visual identity. */
+  /** Where the item is bought. Never replaced by the brand link below. */
   url?: string;
+  /**
+   * Where the item's visual identity comes from, when that is not the shop.
+   *
+   * A model kit bought from a marketplace is made by a manufacturer; an add-on
+   * sold on one store is built by a studio. Using the shop's favicon for both
+   * makes every item from that shop look identical, and using the brand's
+   * link to buy from would send the user to the wrong place. They are two
+   * different facts, so they are two fields.
+   *
+   * Falls back to `url` when absent, so nothing changes for items that have
+   * only a purchase link.
+   */
+  brandUrl?: string;
   /** Accent colour for the item card. */
   color?: string;
   /** Spending entry created when this item was bought, when linked. */
