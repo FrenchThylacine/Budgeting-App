@@ -1,5 +1,29 @@
 # Changelog
 
+## 2026-08-16 — Scenarios you can see, build and undo
+
+### Applying a scenario was destructive and silent
+
+One button, and clicking it rewrote the monthly budget, the piloting rule and every category cap the scenario named — with nothing shown beforehand. The only way to learn what a scenario contained was to apply it and compare, and the only way back was undo, if you noticed in time.
+
+Applying now opens a preview: each setting that changes, with the current value struck through and the new one beside it. It states plainly that **nothing recorded is touched** — spending, activities and history stay as they are — and that the change is undoable.
+
+- **A scenario already in effect is marked**, and its Apply button is disabled. Applying the same one twice is visibly a no-op rather than an action with an unknown result.
+- **A scenario restating what is already true reports no changes.** Float drift is tolerated: a budget of `600 / 1.19` stored and reloaded is not bit-identical to the same division done again, and a hundredth of a currency unit is below anything the app displays.
+- **A cap for a category that no longer exists is named**, rather than silently dropped — otherwise the scenario quietly does less than it says.
+
+### Scenarios can finally be created
+
+There was no way to add, edit, duplicate or delete one. The three seeded scenarios were all anyone could ever have, which made the whole feature ornamental.
+
+- **Save current** captures the budget, the piloting rule and every cap that is set — the way people actually build scenarios: "save where I am before I try something." Re-applying a captured scenario is a verified no-op.
+- Create from scratch, edit, duplicate, and delete with an inline confirmation.
+- **An empty cap field means "leave that category alone". Zero means a real cap of nothing.** Collapsing the two would make it impossible to write a scenario that does not touch a category — and it is the same distinction the rest of the app makes between missing and zero. Verified end to end: a cap of 0 entered in the editor survives to PostgreSQL.
+- A duplicate copies its caps rather than sharing the object, so editing the copy cannot reach into the original.
+
+**Verification** — `npx tsc -b` clean · **400 tests passing**, 63 against real PostgreSQL 17 · both builds clean. Driven in a browser against real data: the seeded "Balanced" scenario is correctly detected as already in effect; applying "Tight Month" previews two changes, persists them, and moves the badge; creating a scenario with a zero cap round-trips; deleting asks first.
+
+
 ## 2026-08-16 — One-off exceptions to a recurring schedule
 
 ### "Just this once", without corrupting the rest of the year
