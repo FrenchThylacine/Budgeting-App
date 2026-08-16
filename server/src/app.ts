@@ -1,6 +1,6 @@
 import express from "express";
 import cors from "cors";
-import { initializeDatabase } from "./db/index.js";
+import { connectionStringSources, initializeDatabase } from "./db/index.js";
 import { createSnapshotRoutes } from "./routes/snapshot.js";
 import { createSpendingRoutes } from "./routes/spending.js";
 import { createCategoryRoutes } from "./routes/categories.js";
@@ -21,10 +21,17 @@ export function createApp() {
       await initializeDatabase();
       res.json({ status: "ok", database: "connected" });
     } catch (error) {
+      // When the database is unreachable, report WHICH of the known connection
+      // variables are present. Names and booleans only — never a value, and
+      // never arbitrary environment keys, so this cannot leak a secret. It
+      // exists because "DATABASE_URL missing" on a platform you cannot inspect
+      // is otherwise indistinguishable from "set, but in the wrong scope".
       res.status(503).json({
         status: "degraded",
         database: "unavailable",
         message: error instanceof Error ? error.message : String(error),
+        connectionStringVars: connectionStringSources(),
+        runtime: { nodeEnv: process.env.NODE_ENV ?? null, onVercel: Boolean(process.env.VERCEL) },
       });
     }
   });
