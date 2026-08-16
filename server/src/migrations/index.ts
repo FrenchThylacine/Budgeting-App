@@ -198,6 +198,16 @@ export async function runMigrations(
         await sql`ALTER TABLE activities ADD COLUMN IF NOT EXISTS schedule_overrides TEXT;`;
       },
     },
+    {
+      // Where a wishlist item's visual identity comes from, separately from
+      // where it is bought. One field could not carry both: the shop's favicon
+      // makes every item from that shop look identical, and pointing the link
+      // at the manufacturer sends the user somewhere they cannot buy.
+      name: "009-wishlist-brand-url",
+      run: async (sql: NeonQueryFunction<any, any>) => {
+        await sql`ALTER TABLE wishlist_items ADD COLUMN IF NOT EXISTS brand_url TEXT;`;
+      },
+    },
   ];
 
 

@@ -127,6 +127,18 @@ export function faviconUrl(domain: string, size = 64): string {
   return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=${size}`;
 }
 
+/**
+ * The domain an item's icon should come from.
+ *
+ * The brand link when there is one, the purchase link otherwise. Keeping these
+ * separate means the visual identity can be the manufacturer while the link
+ * still opens the shop — using one field for both forced a choice between an
+ * item that looks right and an item that buys right.
+ */
+export function itemIconDomain(item: { url?: string; brandUrl?: string }): string | null {
+  return itemDomain(item.brandUrl) ?? itemDomain(item.url);
+}
+
 // ─── Colour identity ─────────────────────────────────────────────────────────
 
 /**

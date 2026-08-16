@@ -1,15 +1,5 @@
 import React, { useMemo, useState } from "react";
-import {
-  Check,
-  ExternalLink,
-  Link2Off,
-  Pencil,
-  Plus,
-  Receipt,
-  ShoppingBag,
-  Trash2,
-  X,
-} from "lucide-react";
+import { Check, ExternalLink, Link2Off, Pencil, Plus, Receipt, ShoppingBag, Trash2, X, Sparkles } from "lucide-react";
 import { CURRENCY_OPTIONS, formatMoney } from "../../domain/currency";
 import { todayDateInput } from "../../domain/dates";
 import {
@@ -17,6 +7,7 @@ import {
   PRIORITY_ORDER,
   faviconUrl,
   itemDomain,
+  itemIconDomain,
   normalizeItemUrl,
   parseItemUrl,
   purchaseDefaults,
@@ -124,7 +115,8 @@ interface EditFormProps {
 
 const EditForm: React.FC<EditFormProps> = ({ draft, onChange, onSave, onCancel, submitLabel }) => {
   const urlError = draft.url.trim().length > 0 && normalizeItemUrl(draft.url) == null;
-  const valid = draft.name.trim().length > 0 && !urlError;
+  const brandUrlError = draft.brandUrl.trim().length > 0 && normalizeItemUrl(draft.brandUrl) == null;
+  const valid = draft.name.trim().length > 0 && !urlError && !brandUrlError;
   const accent = wishlistItemAccent({
     id: "draft",
     name: draft.name || "draft",
@@ -202,7 +194,14 @@ const EditForm: React.FC<EditFormProps> = ({ draft, onChange, onSave, onCancel, 
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
         <input
           className="input"
-          type="url"
+          // Deliberately not type="url": that makes the browser demand a
+          // scheme, so "store.com/product" — which this very placeholder
+          // suggests, and which parseItemUrl is written to accept as https —
+          // was silently rejected and the form refused to submit with no
+          // message the user could act on. inputMode still brings up the right
+          // keyboard, and the app's own validation is stricter anyway: it also
+          // rejects javascript: and data:, which type="url" happily accepts.
+          type="text"
           inputMode="url"
           placeholder="Link (optional) — e.g. store.com/product"
           aria-label="Product link"
@@ -239,6 +238,35 @@ const EditForm: React.FC<EditFormProps> = ({ draft, onChange, onSave, onCancel, 
           Enter a valid web address (http or https only).
         </div>
       )}
+
+      {/* Behind a disclosure: most items are bought and branded by the same
+          site, so asking everyone for a second link would tax the common case
+          to serve the uncommon one. */}
+      <details className="wishlist-advanced">
+        <summary>
+          <Sparkles size={13} aria-hidden="true" />
+          <span>Different brand for the icon</span>
+        </summary>
+        <p className="text-note" style={{ margin: "6px 0 8px" }}>
+          Use this when the maker is not the shop — a model kit bought from a marketplace, an add-on
+          sold on one store and built by another. The purchase link above is never changed.
+        </p>
+        <input
+          className="input"
+          type="text"
+          inputMode="url"
+          placeholder="Brand site — e.g. manufacturer.com"
+          aria-label="Brand site for the icon"
+          value={draft.brandUrl}
+          onChange={(e) => onChange({ brandUrl: e.target.value })}
+          style={{ width: "100%", borderColor: brandUrlError ? "var(--danger)" : undefined }}
+        />
+        {brandUrlError && (
+          <div className="text-caption" style={{ color: "var(--danger)", marginTop: 6 }}>
+            Enter a valid web address (http or https only).
+          </div>
+        )}
+      </details>
 
       <textarea
         className="input"
@@ -596,7 +624,10 @@ export const WishlistPanel: React.FC = () => {
         >
           {filteredItems.map((item) => {
             const accent = wishlistItemAccent(item);
-            const domain = itemDomain(item.url);
+            // Two different facts: what the item looks like, and where it is
+            // bought. The icon follows the brand when there is one; the link
+            // always opens the shop.
+            const domain = itemIconDomain(item);
             const href = parseItemUrl(item.url)?.toString();
             const priority = PRIORITY_META[item.priority] ?? PRIORITY_META.low;
             const isEditing = editingId === item.id;

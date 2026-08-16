@@ -189,6 +189,10 @@ export async function initializeSchema(
       notes TEXT,
       active BOOLEAN NOT NULL,
       url TEXT,
+      -- Where the item's visual identity comes from, when that is not the shop.
+      -- Declared here as well as in migration 009: nothing in this file
+      -- references it, so an existing database that lacks it is unaffected.
+      brand_url TEXT,
       color TEXT,
       linked_spending_id TEXT,
       created_at TEXT NOT NULL,
