@@ -5,6 +5,7 @@ import { useBudgetStore } from "../../store/budgetStore";
 import { formatDualMoney } from "../../utils/formatters";
 import { Button } from "../ui/Button";
 import { Section } from "../ui/Section";
+import { EditorSheet } from "../ui/EditorSheet";
 import { EmptyState } from "../ui/EmptyState";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -72,6 +73,14 @@ interface CategoryFormProps {
   onSave: () => void;
   onCancel: () => void;
   submitLabel: string;
+  /**
+   * Suppress the form's own buttons.
+   *
+   * Inside a sheet the actions live in its sticky footer, so a long form never
+   * scrolls its save button out of reach. Two sets of buttons would be two
+   * places to look for the same thing.
+   */
+  hideActions?: boolean;
 }
 
 const CategoryForm: React.FC<CategoryFormProps> = ({
@@ -82,6 +91,7 @@ const CategoryForm: React.FC<CategoryFormProps> = ({
   onSave,
   onCancel,
   submitLabel,
+  hideActions,
 }) => {
   const valid = draft.name.trim().length > 0;
 
@@ -209,6 +219,7 @@ const CategoryForm: React.FC<CategoryFormProps> = ({
       </div>
 
       {/* Actions */}
+      {!hideActions && (
       <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
         <Button type="button" variant="ghost" size="sm" onClick={onCancel}>
           <X size={14} /> Cancel
@@ -222,6 +233,7 @@ const CategoryForm: React.FC<CategoryFormProps> = ({
           <Check size={14} /> {submitLabel}
         </Button>
       </div>
+      )}
     </form>
   );
 };
@@ -265,7 +277,7 @@ export const CategoryManager: React.FC = () => {
   };
 
   // ── Edit ──
-  const startEdit = (cat: BudgetCategory) => {
+  const beginEdit = (cat: BudgetCategory) => {
     setEditingId(cat.id);
     setEditDraft(draftFromCategory(cat));
   };
@@ -305,7 +317,23 @@ export const CategoryManager: React.FC = () => {
     return (
       <div key={cat.id}>
         <div
-          className="item-row"
+          className="item-row editable-row"
+          role="button"
+          tabIndex={0}
+          aria-label={`Edit ${cat.name}`}
+          onClick={(event) => {
+            const target = event.target as HTMLElement;
+            if (target.closest("button, a, input, select, textarea")) return;
+            if (window.getSelection()?.toString()) return;
+            beginEdit(cat);
+          }}
+          onKeyDown={(event) => {
+            if (event.target !== event.currentTarget) return;
+            if (event.key === "Enter" || event.key === " ") {
+              event.preventDefault();
+              beginEdit(cat);
+            }
+          }}
           style={{ opacity: cat.archived ? 0.55 : 1, alignItems: "flex-start" }}
         >
           {/* Left: colour dot + info */}
@@ -374,7 +402,7 @@ export const CategoryManager: React.FC = () => {
                 size="sm"
                 variant="ghost"
                 icon
-                onClick={() => (isEditing ? cancelEdit() : startEdit(cat))}
+                onClick={() => (isEditing ? cancelEdit() : beginEdit(cat))}
                 aria-label={isEditing ? "Cancel edit" : "Edit category"}
                 title={isEditing ? "Cancel" : "Edit"}
               >
@@ -406,9 +434,20 @@ export const CategoryManager: React.FC = () => {
           </div>
         </div>
 
-        {/* Inline edit form */}
+        {/* A dedicated editor rather than a form unfolding inside the list,
+            which pushed every category below it out of view. */}
         {isEditing && editDraft && (
-          <div style={{ marginTop: -4, marginBottom: 4 }}>
+          <EditorSheet
+            title={`Edit ${cat.name}`}
+            subtitle="Bucket and cap are locked while a closed period is selected."
+            onClose={cancelEdit}
+            footer={
+              <>
+                <Button variant="ghost" onClick={cancelEdit}>Cancel</Button>
+                <Button variant="primary" onClick={saveEdit}>Save changes</Button>
+              </>
+            }
+          >
             <CategoryForm
               draft={editDraft}
               categories={categories}
@@ -419,8 +458,9 @@ export const CategoryManager: React.FC = () => {
               onSave={saveEdit}
               onCancel={cancelEdit}
               submitLabel="Save changes"
+              hideActions
             />
-          </div>
+          </EditorSheet>
         )}
       </div>
     );

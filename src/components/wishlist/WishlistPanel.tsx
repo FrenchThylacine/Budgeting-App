@@ -20,6 +20,8 @@ import {
 import type { WishlistLinkResult } from "../../domain/wishlist";
 import { seedCategoryIdOrFallback } from "../../domain/seedCategories";
 import { SwipeRow } from "../ui/SwipeRow";
+import { gesturesFor } from "../../domain/gestures";
+import type { SwipeActionId } from "../../domain/types";
 import { useBudgetStore } from "../../store/budgetStore";
 import {
   formatDualMoney,
@@ -318,6 +320,25 @@ export const WishlistPanel: React.FC = () => {
   // Category ids are generated per budget, so the wishlist category has to be
   // looked up by its seed key rather than assumed to be the literal
   // "cat-wishlist". That id only ever belonged to the first budget created.
+  const gestures = gesturesFor(settings, "wishlist");
+
+  /** Build the panel for one configured action, or nothing when it is off. */
+  const swipeActionsFor = (action: SwipeActionId, item: WishlistItem, enabled: boolean) => {
+    if (!enabled || action === "none") return [];
+    switch (action) {
+      case "delete":
+        return [{ label: "Delete", icon: <Trash2 size={18} />, destructive: true, onAction: () => remove(item.id) }];
+      case "buy":
+        // Buying something already bought is not an action, so the panel is
+        // simply absent rather than present and inert.
+        return item.bought ? [] : [{ label: "Buy", icon: <ShoppingBag size={18} />, onAction: () => startPurchase(item) }];
+      case "edit":
+        return [{ label: "Edit", icon: <Pencil size={18} />, onAction: () => startEdit(item) }];
+      default:
+        return [];
+    }
+  };
+
   const wishlistCategoryId =
     seedCategoryIdOrFallback(snapshot.categories, "cat-wishlist") ?? "";
 
@@ -644,29 +665,10 @@ export const WishlistPanel: React.FC = () => {
                 label={item.name}
                 // Right-to-left reveals the destructive action, matching the
                 // platform convention people already have.
-                trailing={
-                  mutable && !isEditing
-                    ? [
-                        {
-                          label: "Delete",
-                          icon: <Trash2 size={18} />,
-                          destructive: true,
-                          onAction: () => remove(item.id),
-                        },
-                      ]
-                    : []
-                }
-                leading={
-                  mutable && !item.bought && !isEditing
-                    ? [
-                        {
-                          label: "Buy",
-                          icon: <ShoppingBag size={18} />,
-                          onAction: () => startPurchase(item),
-                        },
-                      ]
-                    : []
-                }
+                // Which action sits on each side is a preference: some people
+                // want Delete under the thumb, others want it nowhere near it.
+                trailing={swipeActionsFor(gestures.trailing, item, mutable && !isEditing)}
+                leading={swipeActionsFor(gestures.leading, item, mutable && !isEditing)}
               >
               <div
                 style={{

@@ -58,6 +58,15 @@ export interface ExchangeRates {
   ratesSource?: string;
 }
 
+/** Swipe preferences, keyed by list. Absent means "use the defaults". */
+export interface GestureSettings {
+  wishlist?: { trailing?: SwipeActionId; leading?: SwipeActionId };
+  activities?: { trailing?: SwipeActionId; leading?: SwipeActionId };
+  spending?: { trailing?: SwipeActionId; leading?: SwipeActionId };
+}
+
+export type SwipeActionId = "none" | "delete" | "archive" | "buy" | "edit" | "duplicate";
+
 export interface Settings {
   selectedYear: number;
   selectedMonth: number;
@@ -74,6 +83,14 @@ export interface Settings {
   pilotIncludedInBudget: boolean;
   promptBeforeMonthClose: boolean;
   liveClockEnabled: boolean;
+  /**
+   * Swipe actions per list.
+   *
+   * Optional: an account that has never opened the gesture settings has no
+   * stored value and the defaults apply. Writing a full copy up front would
+   * freeze today's defaults into every account forever.
+   */
+  gestures?: GestureSettings;
   nanPolicy: NanPolicy;
   saveTimestampEnabled: boolean;
   monthlyBudget: number;

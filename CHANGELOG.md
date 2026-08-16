@@ -1,5 +1,29 @@
 # Changelog
 
+## 2026-08-16 — One interaction model everywhere
+
+### Editing is a dedicated editor, on every entity
+
+Activities, transactions and categories all open a **dedicated editor** now — a centred dialog on a large screen, a full-screen sheet on a phone — and **the whole row opens it**. The small icon buttons stop being the only way in.
+
+Spending's form used to stand permanently open above the list, occupying a large block of every visit to record something most visits do not record. It now opens on demand, and a row opens it already filled in.
+
+Category editing unfolded inside the list, pushing every category below it out of view. Inside a sheet the form's own buttons are suppressed and the actions live in the sticky footer — two sets of buttons would be two places to look for the same thing.
+
+### Swipe is configurable, and it is everywhere
+
+Wishlist, activities **and** transactions all carry swipe actions, and **Settings → Gestures** decides what each direction does.
+
+That is configurable rather than fixed because the destructive action is the one people genuinely disagree about: some want Delete under the thumb, others want it nowhere near it. A gesture that removes something you did not mean to touch is not recovered by picking a cleverer default.
+
+- Each list offers only actions it can actually perform — "Buy" is absent from transactions, because a control that does nothing is worse than no control.
+- Turning a direction off is always available.
+- An empty preference means "use the defaults"; storing a full copy up front would freeze today's defaults into an account forever. A stored value that names only one direction still gets the default for the other, rather than silently disabling it.
+- The gesture still only **reveals**. The revealed button is the second, deliberate tap, and it is a real button in the DOM for a keyboard.
+
+**Verification** — `npx tsc -b` clean · **435 tests passing**, 65 against real PostgreSQL 17 · both builds clean. In a browser: the gesture settings persist to PostgreSQL, changing one changes what the wishlist reveals, and a transaction row opens the editor already filled in.
+
+
 ## 2026-08-16 — Dedicated editors, a clean start, and a header that gets out of the way
 
 ### A new account starts empty

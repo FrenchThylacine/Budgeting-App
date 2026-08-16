@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowDown, ArrowUp, Copy, Eye, EyeOff, GripVertical, Pencil, Plus, Trash2 } from "lucide-react";
 import { CURRENCY_OPTIONS, formatMoney } from "../../domain/currency";
 import { SwipeRow } from "../ui/SwipeRow";
+import { gesturesFor } from "../../domain/gestures";
 import { AdvancedFields, EditorSheet } from "../ui/EditorSheet";
 import { monthName } from "../../domain/dates";
 import { estimateActivity, monthlyEstimateNative, yearlyEstimateNative } from "../../domain/calculations";
@@ -13,7 +14,7 @@ import {
   nextOccurrences,
   occurrencesInMonth,
 } from "../../domain/schedule";
-import type { Activity, CostModel, IsoWeekday, RecurrenceType } from "../../domain/types";
+import type { Activity, CostModel, IsoWeekday, RecurrenceType, SwipeActionId } from "../../domain/types";
 import { useBudgetStore } from "../../store/budgetStore";
 import {
   activityToDraft,
@@ -115,6 +116,32 @@ export const ActivityPanel: React.FC = () => {
 
   // Manual ordering only makes sense while the list is actually in that order.
   const canReorder = mutable && sortBy === "order" && !search && !categoryFilter;
+  const activityGestures = gesturesFor(snapshot.settings, "activities");
+
+  const activitySwipe = (action: SwipeActionId, activity: Activity) => {
+    if (!mutable || action === "none") return [];
+    switch (action) {
+      case "archive":
+        return [{
+          label: activity.visible ? "Hide" : "Show",
+          icon: activity.visible ? <EyeOff size={18} /> : <Eye size={18} />,
+          onAction: () => update(activity.id, { visible: !activity.visible }),
+        }];
+      case "edit":
+        return [{ label: "Edit", icon: <Pencil size={18} />, onAction: () => begin(activity) }];
+      case "duplicate":
+        return [{ label: "Duplicate", icon: <Copy size={18} />, onAction: () => duplicate(activity.id) }];
+      case "delete":
+        return [{
+          label: "Delete", icon: <Trash2 size={18} />, destructive: true,
+          onAction: () => {
+            if (window.confirm(`Delete "${activity.name}"? Linked spending is kept.`)) remove(activity.id);
+          },
+        }];
+      default:
+        return [];
+    }
+  };
 
   const move = (activity: Activity, direction: -1 | 1) => {
     const index = orderedAll.findIndex((item) => item.id === activity.id);
@@ -484,17 +511,8 @@ export const ActivityPanel: React.FC = () => {
                 // Touch-only, so it does not collide with the mouse-driven
                 // drag-to-reorder on the same card: HTML5 dragstart never
                 // fires from a finger.
-                trailing={
-                  mutable
-                    ? [
-                        {
-                          label: activity.visible ? "Hide" : "Show",
-                          icon: activity.visible ? <EyeOff size={18} /> : <Eye size={18} />,
-                          onAction: () => update(activity.id, { visible: !activity.visible }),
-                        },
-                      ]
-                    : []
-                }
+                trailing={activitySwipe(activityGestures.trailing, activity)}
+                leading={activitySwipe(activityGestures.leading, activity)}
               >
               <div
                 className={`item-row${mutable ? " editable-row" : ""}`}
