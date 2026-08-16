@@ -1,5 +1,42 @@
 # Changelog
 
+## 2026-08-16 — Accounts
+
+### Email and password sign-in, with the data model made safe for it first
+
+Adding accounts to this schema would have destroyed data. Three defects had to be fixed before a single line of authentication was written, all confirmed against a real PostgreSQL 17 server rather than a mock.
+
+- **`budget_approvals` had no owner column**, and the repository read it with `SELECT * FROM budget_approvals` — no `WHERE` clause at all. Every budget would have loaded every other budget's approvals, which this project treats as permanent financial records.
+- **Every seed identifier was hardcoded** (`cat-health`, `act-gym`, `wish-1`, …). Those are primary keys in tables shared by all budgets, so two seeded budgets collided on every row, and `ON CONFLICT (id) DO UPDATE` rewrote the existing row while leaving `snapshot_id` pointing at the original owner. The second account created would have taken over the first one's data on its first save. Identifiers are now generated per budget; a new `seedKey` carries the stable identity the app matches on, so the nine places that referenced those literals still resolve.
+- **Category deletion was ordered before the rows that reference it.** Found by the new tests and live regardless of accounts: `activities.category_id`, `spending_entries.category_id` and `wishlist_items.category_id` are `ON DELETE RESTRICT`, and PostgreSQL checks those statement by statement rather than at commit — so replacing a budget's whole category set aborted the transaction with a bare foreign-key error. That is exactly what an Excel import or a reset to seed does.
+
+Every `ON CONFLICT (id) DO UPDATE` now carries `WHERE <table>.<owner> = EXCLUDED.<owner>`, so a cross-budget identifier collision can never rewrite another account's row under any circumstances.
+
+### How authentication works
+
+- **Passwords are hashed with scrypt** from `node:crypto` — no native module to compile, which matters on Vercel where a binding that fails to load takes the deployment down. The cost parameters are stored inside each hash, so raising them later does not invalidate anyone; a stale hash is upgraded quietly on the next successful sign-in.
+- **Sessions are opaque random tokens, stored hashed**, in an `HttpOnly` / `SameSite=Lax` cookie. Opaque rather than JWT because they must be *revocable*: signing out ends the session immediately, and a password reset invalidates every session that existed before it. A database dump yields no usable session.
+- **Password reset** links work once and expire in 30 minutes. Sent through Resend's HTTP API — called with `fetch`, so no SDK dependency is added. `forgot-password` answers identically whether or not the address has an account, and whether or not mail was actually sent: any variation would turn it into a way to enumerate accounts.
+- **Rate limiting lives in the database**, because serverless instances share no memory — an in-process counter resets on every cold start and would cap nothing.
+- **CORS is now an allowlist.** It was `origin: "*"` with `credentials: true`, a combination browsers reject outright, so the session cookie would never have been sent at all.
+- **`SIGNUP_INVITE_CODE`** (optional): when set, signup requires it. A personal finance app on a public URL otherwise lets anyone create an account.
+
+The **first account created adopts the budget that already existed**, so introducing accounts does not orphan the data the app was already holding.
+
+### The offline cache is now per account
+
+IndexedDB used a single slot named `active`. With accounts that is a leak: sign out, sign in as someone else, lose the network for a moment, and the app would hydrate the previous person's budget and present it as the current account's. The cache is keyed by account, signing out clears **every** cached budget on the device, and a 401 is now a distinct error that the store refuses to serve from cache — previously any failed request fell through to it.
+
+### Two bugs found by testing in a real browser
+
+- **The API client's request wrapper called itself**, so every request recursed until the stack overflowed. The whole suite stayed green: the integration tests drive Express over HTTP and never touch that class. It surfaced only as a permanent "Offline" badge, because the overflow was caught and reported as an unreachable API. `tests/api-client.test.ts` now covers it.
+- **`classList.toggle("dark", undefined)` flips the class rather than clearing it**, so a snapshot stored without `darkMode` inverted the theme on every run of the effect — leaving a dark page with light-scheme form controls.
+
+### Verification
+
+`npx tsc -b` clean · **330 tests passing**, 61 of them against a real PostgreSQL 17 server · both builds clean. The new isolation and authentication suites were each re-run against the previous code and fail there, so they measure the fixes rather than merely accompanying them. The full flow was then driven in a real browser: sign up, sign in, two accounts in isolated contexts confirming neither can see the other's budget, sign out clearing the cache, and a 375 px viewport with no horizontal overflow.
+
+
 ## 2026-08-16 — V3
 
 ### Multi-device synchronization was broken. This is the fix.

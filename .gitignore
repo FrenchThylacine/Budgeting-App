@@ -27,6 +27,8 @@ Thumbs.db
 .pnpm-store/
 .vercel
 .env*
+# ...but the template carries no secrets and is the reference for what to set.
+!.env.example
 *.tsbuildinfo
 # Type/JS artifacts emitted into src by the server build
 src/**/*.js

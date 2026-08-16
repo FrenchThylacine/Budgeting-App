@@ -362,39 +362,77 @@ Never trust client input.
 
 ---
 
-# Authentication (Future)
+# Authentication
 
-Future API should support:
+Implemented. Every route under `/api` except `/api/health` and `/api/auth/*` requires a session.
 
-JWT
+## Endpoints
 
-OAuth
+| Method | Path | Auth | Purpose |
+|---|---|---|---|
+| `POST` | `/api/auth/signup` | public | Create an account. `201` with `{ user }`, `409` `email_taken`, `403` `invite_required`. |
+| `POST` | `/api/auth/signin` | public | `200` with `{ user }`, `401` `invalid_credentials`, `429` `rate_limited`. |
+| `POST` | `/api/auth/signout` | public | Deletes the session server-side and clears the cookie. |
+| `GET` | `/api/auth/me` | public | `200` with `{ user }` or `{ user: null }` — never `401`. |
+| `POST` | `/api/auth/forgot-password` | public | Always `200` with the same body. |
+| `POST` | `/api/auth/reset-password` | public | `400` `invalid_token` if unknown, expired, or already used. |
+| `POST` | `/api/auth/change-password` | session | Requires the current password. |
 
-Refresh Tokens
+`/api/auth/me` answers `200` with `user: null` rather than `401` because the app uses it to decide which screen to show on load; a `401` there would be indistinguishable from a session that expired mid-use.
 
-Sessions
+## Passwords
 
-Multiple devices
+scrypt from `node:crypto` — no native module to compile, which matters on Vercel where a binding that fails to load takes the whole deployment down. Salt per password, comparison via `timingSafeEqual`.
 
-Secure cookies
+Cost parameters are stored **inside** each encoded hash rather than read from configuration at verification time, so raising the cost later does not invalidate every existing password. A hash made with weaker parameters still verifies and is re-hashed on the next successful sign-in.
 
-Role-based access
+Minimum length 10, and length is the only rule. Composition requirements measurably push people towards `Password1!` and its cousins.
 
-Although authentication is not currently implemented, architecture should remain compatible.
+## Sessions
+
+Opaque random tokens (32 bytes, CSPRNG), stored as their SHA-256, delivered in a cookie:
+
+- `HttpOnly` — unreadable from JavaScript, so an XSS cannot exfiltrate it.
+- `Secure` — set when the request arrived over HTTPS. Not unconditional, or local development could never sign in.
+- `SameSite=Lax` — not `Strict`, which would drop the cookie when arriving from a reset link in an email client. `Lax` still blocks the cross-site POST case that matters.
+
+Opaque rather than JWT because they must be **revocable**: signing out ends the session immediately, and a password reset invalidates every session that existed beforehand. Expiry is compared in the database, so a wrong clock on one serverless instance cannot extend a session.
+
+## Account isolation
+
+Each account owns exactly one budget (`users.snapshot_id`, unique). `BudgetService` takes that id in its constructor and every repository call is scoped to it; `requireAuth` is applied once to `/api` rather than route by route, because a per-route guard is one forgotten line away from exposing a budget.
+
+The **first account created adopts the pre-existing `active` budget**, so introducing accounts does not orphan data the app was already holding.
+
+## Not implemented
+
+OAuth, refresh tokens, and role-based access. The single-owner model has no roles to assign, and refresh tokens solve a problem revocable server-side sessions do not have.
 
 ---
 
-# Rate Limiting (Future)
+# Rate Limiting
 
-Future public deployments should include:
+Implemented for the endpoints that can be ground through.
 
-Rate limiting
+| Endpoint | Buckets | Limit |
+|---|---|---|
+| `/api/auth/signin` | email, client IP | 10 per 15 minutes |
+| `/api/auth/forgot-password` | email | 5 per hour |
 
-Request throttling
+Two buckets on sign-in, not one: an email bucket stops a single account being ground through, an IP bucket stops one source spraying many accounts. Neither covers both.
 
-Brute-force protection
+Counters live in the **database**, not in memory. Serverless instances share no memory, so an in-process counter resets on every cold start and is per-instance besides — it would cap nothing under the traffic it exists to stop.
 
-Abuse detection
+Exceeding the sign-in limit returns `429` with `code: "rate_limited"`. Exceeding the reset limit still returns the normal `200`: a `429` there would confirm that the address has an account.
+
+---
+
+# Account enumeration
+
+Several responses are deliberately identical where a naive implementation would differ.
+
+- `signin` returns the same status and the same message for an unknown email and a wrong password.
+- `forgot-password` returns the same body whether or not the address has an account, whether or not it was rate limited, and whether or not the email provider accepted the message. A missing `RESEND_API_KEY` must not become an observable difference.
 
 ---
 

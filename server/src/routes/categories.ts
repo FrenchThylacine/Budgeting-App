@@ -1,5 +1,7 @@
 import { Router, Request, Response } from "express";
 import { BudgetService } from "../services/BudgetService.js";
+import { getDatabase } from "../db/index.js";
+import { snapshotIdFor } from "../auth/middleware.js";
 import { asyncHandler, AppError, validateEnum, validateFiniteNumber, validateRequired } from "../middleware/errorHandler.js";
 import type { BudgetCategory } from "../../../src/domain/types.js";
 
@@ -7,7 +9,11 @@ const categoryBuckets = ["general", "piloting", "personal", "wallet"] as const;
 
 export function createCategoryRoutes(): Router {
   const router = Router();
-  const getService = () => new BudgetService();
+  // Bound to the authenticated account's budget. `requireAuth` runs before
+  // these routers are reached, so `snapshotIdFor` always has a value; it throws
+  // rather than defaulting if that ever stops being true, because the default
+  // would be another user's budget.
+  const getService = (req: Request) => new BudgetService(getDatabase(), snapshotIdFor(req));
 
   /**
    * GET /api/categories
@@ -15,8 +21,8 @@ export function createCategoryRoutes(): Router {
    */
   router.get(
     "/",
-    asyncHandler(async (_req: Request, res: Response) => {
-      const service = getService();
+    asyncHandler(async (req: Request, res: Response) => {
+      const service = getService(req);
       const snapshot = await service.getOrThrow();
       res.json(snapshot.categories);
     }),
@@ -31,7 +37,7 @@ export function createCategoryRoutes(): Router {
     asyncHandler(async (req: Request, res: Response) => {
       validateRequired(req.body, "name", "bucket", "color");
 
-      const service = getService();
+      const service = getService(req);
       let snapshot = await service.getOrThrow();
 
       const name = String(req.body.name).trim();
@@ -81,7 +87,7 @@ export function createCategoryRoutes(): Router {
     asyncHandler(async (req: Request, res: Response) => {
       validateRequired(req.body, "sourceId", "targetId");
 
-      const service = getService();
+      const service = getService(req);
       let snapshot = await service.getOrThrow();
       const { sourceId, targetId } = req.body;
 
@@ -108,7 +114,7 @@ export function createCategoryRoutes(): Router {
   router.patch(
     "/:id",
     asyncHandler(async (req: Request, res: Response) => {
-      const service = getService();
+      const service = getService(req);
       let snapshot = await service.getOrThrow();
       const categoryId = req.params.id;
 
@@ -165,7 +171,7 @@ export function createCategoryRoutes(): Router {
   router.patch(
     "/:id/archive",
     asyncHandler(async (req: Request, res: Response) => {
-      const service = getService();
+      const service = getService(req);
       let snapshot = await service.getOrThrow();
       const categoryId = req.params.id;
 

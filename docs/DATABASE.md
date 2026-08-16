@@ -63,6 +63,36 @@ These could not be observed with a mocked driver and were all failing in real Po
 | `003-add-snapshot-revision` | `snapshots.revision` — optimistic concurrency |
 | `004-add-audit-historical-edit` | `audit_log.historical_edit`, `.historical_period` |
 | `005-add-activity-schedule-and-wishlist-links` | `activities.icon/color/cost_model/sessions_per_month/weekdays/day_of_month/start_date`, `wishlist_items.url/color/linked_spending_id`, `spending_entries.wishlist_item_id` |
+| `006-tenant-isolation` | `budget_approvals.snapshot_id` (+ backfill to `active`), `categories.seed_key` (backfilled for the ten seeded ids only) |
+| `007-authentication` | `users`, `sessions`, `password_reset_tokens`, `auth_attempts` |
+
+### `schema.ts` runs before the migrations, and that constrains what may go in it
+
+This is not a style point. Migration 006 shipped with `CREATE INDEX ... ON budget_approvals(snapshot_id)` placed next to the table definition in `schema.ts`. On a **fresh** database that works, because the `CREATE TABLE` really does create the column. On an **existing** one, `CREATE TABLE IF NOT EXISTS` is a no-op, the column does not exist yet, and the index fails with SQLSTATE `42703` — aborting initialization and answering every request with 503.
+
+The whole test suite passed, because every integration test built its schema from nothing: the one path that cannot go wrong was the only path under test.
+
+Two rules follow:
+
+1. **A column introduced by a migration may only be referenced by that migration or a later one**, never by `schema.ts`.
+2. **A brand-new table is declared in its migration only**, not in both places. Two definitions can drift; one cannot. `users`, `sessions`, `password_reset_tokens` and `auth_attempts` follow this.
+
+The `upgrading an existing database` suite now covers the path directly: it builds the pre-006 table shapes, inserts the kind of rows the old code wrote, and runs `initializeSchema` + `runMigrations` over them.
+
+### Why 006 exists
+
+Two defects made more than one budget per database impossible, and both corrupted data rather than merely leaking it.
+
+- `budget_approvals` carried no owner column, and the repository read it with no `WHERE` clause — every budget would have loaded every other budget's approvals.
+- The seed hardcoded its row ids (`cat-health`, `act-gym`, `wish-1`, …), which are primary keys in shared tables. `ON CONFLICT (id) DO UPDATE` rewrote the existing row's contents while leaving `snapshot_id` pointing at the original owner, so the second budget created took over the first one's rows. Ids are now generated per budget; `categories.seed_key` carries the stable identity the application matches on, and its values are the old ids so existing rows keep resolving.
+
+The backfill lists the ten seeded ids explicitly rather than matching `LIKE 'cat-%'`, because user-created categories share that prefix and must not be labelled as seeded.
+
+Every `ON CONFLICT (id) DO UPDATE` now also carries `WHERE <table>.<owner> = EXCLUDED.<owner>`, so a cross-budget id collision becomes a no-op instead of silent corruption. `EXCLUDED` consumes no placeholder, which matters because `queryHelper` splits on `/\$\d+/` and cannot reuse one.
+
+### Write ordering inside `saveSnapshot`
+
+Removed categories are deleted **after** the year writes, not before. `activities.category_id`, `spending_entries.category_id` and `wishlist_items.category_id` are `ON DELETE RESTRICT`, and PostgreSQL checks those statement by statement rather than at commit — so deleting a category before the rows referencing it have been rewritten aborts the whole transaction with a bare foreign-key error. Replacing a budget's entire category set, which an Excel import or a reset to seed does, hit exactly that.
 
 Migration 005 exists because the repository writes a **fixed column list**: a field added to the TypeScript model but not to the schema, the upsert and the parser is silently dropped on the next server round-trip. Adding a persisted field means touching all four places, and the integration suite has a round-trip test per field group to catch the omission.
 

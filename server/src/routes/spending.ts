@@ -1,5 +1,7 @@
 import { Router, Request, Response } from "express";
 import { BudgetService } from "../services/BudgetService.js";
+import { getDatabase } from "../db/index.js";
+import { snapshotIdFor } from "../auth/middleware.js";
 import { asyncHandler, AppError, validateDateInput, validateEnum, validateFiniteNumber, validateRequired } from "../middleware/errorHandler.js";
 import type { SpendingEntry } from "../../../src/domain/types.js";
 import { getIsoWeek } from "../../../src/domain/dates.js";
@@ -9,7 +11,11 @@ const recurrenceTypes = ["none", "weekly", "monthly", "yearly", "session", "purc
 
 export function createSpendingRoutes(): Router {
   const router = Router();
-  const getService = () => new BudgetService();
+  // Bound to the authenticated account's budget. `requireAuth` runs before
+  // these routers are reached, so `snapshotIdFor` always has a value; it throws
+  // rather than defaulting if that ever stops being true, because the default
+  // would be another user's budget.
+  const getService = (req: Request) => new BudgetService(getDatabase(), snapshotIdFor(req));
 
   /**
    * GET /api/spending/:year/:month
@@ -17,11 +23,11 @@ export function createSpendingRoutes(): Router {
    */
   router.get(
     "/:year/:month",
-    asyncHandler(async (_req: Request, res: Response) => {
-      const service = getService();
+    asyncHandler(async (req: Request, res: Response) => {
+      const service = getService(req);
       const snapshot = await service.getOrThrow();
-      const year = parseInt(String(_req.params.year));
-      const month = parseInt(String(_req.params.month));
+      const year = parseInt(String(req.params.year));
+      const month = parseInt(String(req.params.month));
 
       const yearRecord = snapshot.years[String(year)];
       if (!yearRecord) {
@@ -42,7 +48,7 @@ export function createSpendingRoutes(): Router {
     asyncHandler(async (req: Request, res: Response) => {
       validateRequired(req.body, "year", "month", "amount", "currency", "categoryId");
 
-      const service = getService();
+      const service = getService(req);
       let snapshot = await service.getOrThrow();
 
       const now = new Date().toISOString();
@@ -92,7 +98,7 @@ export function createSpendingRoutes(): Router {
   router.patch(
     "/:id",
     asyncHandler(async (req: Request, res: Response) => {
-      const service = getService();
+      const service = getService(req);
       let snapshot = await service.getOrThrow();
       const entryId = req.params.id;
 
@@ -159,7 +165,7 @@ export function createSpendingRoutes(): Router {
   router.delete(
     "/:id",
     asyncHandler(async (req: Request, res: Response) => {
-      const service = getService();
+      const service = getService(req);
       let snapshot = await service.getOrThrow();
       const entryId = req.params.id;
 

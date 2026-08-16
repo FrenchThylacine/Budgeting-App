@@ -1,5 +1,7 @@
 import { Router, Request, Response } from "express";
 import { BudgetService } from "../services/BudgetService.js";
+import { getDatabase } from "../db/index.js";
+import { snapshotIdFor } from "../auth/middleware.js";
 import { asyncHandler, AppError, validateEnum, validateFiniteNumber, validateRequired } from "../middleware/errorHandler.js";
 import type { Activity } from "../../../src/domain/types.js";
 
@@ -8,7 +10,11 @@ const recurrenceTypes = ["none", "weekly", "monthly", "yearly", "session", "purc
 
 export function createActivitiesRoutes(): Router {
   const router = Router();
-  const getService = () => new BudgetService();
+  // Bound to the authenticated account's budget. `requireAuth` runs before
+  // these routers are reached, so `snapshotIdFor` always has a value; it throws
+  // rather than defaulting if that ever stops being true, because the default
+  // would be another user's budget.
+  const getService = (req: Request) => new BudgetService(getDatabase(), snapshotIdFor(req));
 
   /**
    * GET /api/activities/:year
@@ -17,7 +23,7 @@ export function createActivitiesRoutes(): Router {
   router.get(
     "/:year",
     asyncHandler(async (req: Request, res: Response) => {
-      const service = getService();
+      const service = getService(req);
       const snapshot = await service.getOrThrow();
       const year = validateFiniteNumber(req.params.year, "year", { integer: true, min: 1 });
 
@@ -39,7 +45,7 @@ export function createActivitiesRoutes(): Router {
     asyncHandler(async (req: Request, res: Response) => {
       validateRequired(req.body, "year", "name", "categoryId", "currency", "recurrenceType");
 
-      const service = getService();
+      const service = getService(req);
       let snapshot = await service.getOrThrow();
       const year = validateFiniteNumber(req.body.year, "year", { integer: true, min: 1 });
 
@@ -96,7 +102,7 @@ export function createActivitiesRoutes(): Router {
   router.patch(
     "/:id",
     asyncHandler(async (req: Request, res: Response) => {
-      const service = getService();
+      const service = getService(req);
       let snapshot = await service.getOrThrow();
       const activityId = req.params.id;
 
@@ -161,7 +167,7 @@ export function createActivitiesRoutes(): Router {
   router.delete(
     "/:id",
     asyncHandler(async (req: Request, res: Response) => {
-      const service = getService();
+      const service = getService(req);
       let snapshot = await service.getOrThrow();
       const activityId = req.params.id;
 

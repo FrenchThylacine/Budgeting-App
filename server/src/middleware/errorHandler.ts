@@ -4,6 +4,15 @@ export class AppError extends Error {
   constructor(
     public statusCode: number,
     message: string,
+    /**
+     * Stable machine-readable reason, when the client must branch on *why*
+     * rather than merely on the status. `unauthenticated` is the case that
+     * matters: the store falls back to its offline cache whenever a request
+     * fails, and doing that after a sign-out would render the previous
+     * account's budget. Matching on the message text instead would break the
+     * moment the wording changes.
+     */
+    public code?: string,
   ) {
     super(message);
     this.name = "AppError";
@@ -15,6 +24,7 @@ export function errorHandler(err: Error, _req: Request, res: Response, _next: Ne
     res.status(err.statusCode).json({
       error: err.message,
       statusCode: err.statusCode,
+      ...(err.code ? { code: err.code } : {}),
     });
     return;
   }

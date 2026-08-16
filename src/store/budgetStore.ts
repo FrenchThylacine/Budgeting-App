@@ -20,7 +20,8 @@ import type {
 import { createSeedBudgetSnapshot } from "../data/seedBudget";
 import { defaultCategories } from "../data/seedBudget";
 import { deleteSnapshot as deleteIdbSnapshot, loadSnapshot as loadIdbSnapshot, saveSnapshot as saveIdbSnapshot } from "../storage/idb";
-import { ApiUnavailableError, getApiClient, SnapshotConflictError } from "../api/client";
+import { ApiUnavailableError, AuthRequiredError, getApiClient, SnapshotConflictError } from "../api/client";
+import { useAuthStore } from "./authStore";
 import { isViewingHistoricalPeriod } from "../utils/formatters";
 import { periodLabel } from "../domain/periods";
 
@@ -214,6 +215,14 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
       persistSnapshot(seeded, set, get);
       return;
     } catch (error) {
+      // A signed-out client has no budget. Falling through to the cache here
+      // would render whatever this device last held — which, after a sign-out
+      // or a session expiry, is the previous account's data.
+      if (error instanceof AuthRequiredError) {
+        useAuthStore.getState().handleSessionExpired();
+        set({ hydrated: false, syncState: "error", syncError: null });
+        return;
+      }
       if (!(error instanceof ApiUnavailableError)) {
         console.error("Unexpected error while loading from the server:", error);
       }
@@ -1277,6 +1286,15 @@ function persistSnapshot(
           return;
         }
 
+        // The session ended between opening the page and saving. Report it as
+        // such: "error" alone would leave the user retrying a write that can
+        // never succeed.
+        if (error instanceof AuthRequiredError) {
+          useAuthStore.getState().handleSessionExpired();
+          set({ syncState: "error", pendingLocalChanges: true, syncError: null });
+          return;
+        }
+
         if (error instanceof ApiUnavailableError) {
           // Explicitly NOT "saved": the change exists only on this device.
           set({
@@ -1346,6 +1364,11 @@ async function syncFromServer(
     });
     await saveIdbSnapshot(remote).catch(() => undefined);
   } catch (error) {
+    if (error instanceof AuthRequiredError) {
+      useAuthStore.getState().handleSessionExpired();
+      set({ syncState: "error", syncError: null });
+      return;
+    }
     if (error instanceof ApiUnavailableError) {
       set({
         syncState: "offline",

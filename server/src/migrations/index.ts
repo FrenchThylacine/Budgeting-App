@@ -117,6 +117,75 @@ export async function runMigrations(
         `;
       },
     },
+    {
+      // Accounts, sessions, password resets, and the rate-limit ledger.
+      //
+      // These tables are defined here and NOT in schema.ts. Every other table
+      // is declared in both, which is how migration 006 shipped an index over a
+      // column that did not exist yet: schema.ts runs first, so it saw the old
+      // shape of an existing database. A table that lives in exactly one place
+      // cannot drift, and a brand-new table has no reason to be in two.
+      name: "007-authentication",
+      run: async (sql: NeonQueryFunction<any, any>) => {
+        // `email` keeps what the user typed, for display and for addressing
+        // mail. `email_normalized` is what uniqueness and lookup use, so
+        // Alice@ and alice@ cannot become two accounts.
+        await sql`
+          CREATE TABLE IF NOT EXISTS users (
+            id TEXT PRIMARY KEY,
+            email TEXT NOT NULL,
+            email_normalized TEXT NOT NULL UNIQUE,
+            password_hash TEXT NOT NULL,
+            snapshot_id TEXT NOT NULL UNIQUE,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+          );
+        `;
+
+        // Only the SHA-256 of a session token is stored, so a database dump
+        // yields no usable session. ON DELETE CASCADE means deleting an account
+        // cannot leave a session that still authenticates.
+        await sql`
+          CREATE TABLE IF NOT EXISTS sessions (
+            id TEXT PRIMARY KEY,
+            user_id TEXT NOT NULL,
+            token_hash TEXT NOT NULL UNIQUE,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            last_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            expires_at TIMESTAMPTZ NOT NULL,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+          );
+        `;
+        await sql`CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);`;
+        await sql`CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at);`;
+
+        await sql`
+          CREATE TABLE IF NOT EXISTS password_reset_tokens (
+            id TEXT PRIMARY KEY,
+            user_id TEXT NOT NULL,
+            token_hash TEXT NOT NULL UNIQUE,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            expires_at TIMESTAMPTZ NOT NULL,
+            used_at TIMESTAMPTZ,
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+          );
+        `;
+        await sql`CREATE INDEX IF NOT EXISTS idx_reset_tokens_user ON password_reset_tokens(user_id);`;
+
+        // Rate limiting lives in the database because serverless instances
+        // share no memory: an in-process counter resets on every cold start and
+        // is per-instance besides, so it would cap nothing under the traffic it
+        // exists to stop.
+        await sql`
+          CREATE TABLE IF NOT EXISTS auth_attempts (
+            id TEXT PRIMARY KEY,
+            bucket TEXT NOT NULL,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+          );
+        `;
+        await sql`CREATE INDEX IF NOT EXISTS idx_auth_attempts_bucket ON auth_attempts(bucket, created_at);`;
+      },
+    },
   ];
 
 
