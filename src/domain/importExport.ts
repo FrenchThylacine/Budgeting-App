@@ -1,4 +1,14 @@
-import * as XLSX from "xlsx";
+/**
+ * The spreadsheet library is loaded on demand.
+ *
+ * `xlsx` is by far the largest dependency in the bundle, and a session that
+ * never exports a file never needs it. Importing it at module scope made every
+ * first paint — including the sign-in screen, before any budget exists — wait
+ * for it to download and parse.
+ */
+async function loadXlsx() {
+  return import("xlsx");
+}
 import { calculateYear, estimateActivity } from "./calculations";
 import { todayDateInput } from "./dates";
 import type { Activity, BudgetSnapshot } from "./types";
@@ -13,7 +23,8 @@ import type { Activity, BudgetSnapshot } from "./types";
  * four of the five years. The replacement locates everything by header text.
  */
 
-export function exportAllYearsToExcel(snapshot: BudgetSnapshot): void {
+export async function exportAllYearsToExcel(snapshot: BudgetSnapshot): Promise<void> {
+  const XLSX = await loadXlsx();
   const workbook = XLSX.utils.book_new();
   const calculation = calculateYear(snapshot);
   XLSX.utils.book_append_sheet(
@@ -46,7 +57,8 @@ export function exportAllYearsToExcel(snapshot: BudgetSnapshot): void {
   XLSX.writeFile(workbook, `premium-budget-all-years-${safeDate()}.xlsx`);
 }
 
-export function exportCurrentYearToExcel(snapshot: BudgetSnapshot): void {
+export async function exportCurrentYearToExcel(snapshot: BudgetSnapshot): Promise<void> {
+  const XLSX = await loadXlsx();
   const workbook = XLSX.utils.book_new();
   const record = snapshot.years[String(snapshot.settings.selectedYear)];
   if (!record) return;

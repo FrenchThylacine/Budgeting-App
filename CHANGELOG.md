@@ -1,5 +1,46 @@
 # Changelog
 
+## 2026-08-16 — Identity, and a dashboard that answers a different question
+
+### An Air France identity, without touching your colours
+
+The interface palette moves to deep navy (`#002157`) with the signature red as a **mark, not an interactive colour**. The red appears on the brand gradient and nowhere else: it is a shade away from `--danger`, and a red button would read as a warning rather than as a brand. Keeping the two apart is what lets both stay legible.
+
+Neutrals are cooled so the navy reads as a deepening of the same family rather than a foreign hue, and headings take navy ink instead of near-black.
+
+**Colours you chose are untouched.** Activity, category and wishlist colours come from your data and are applied inline; changing interface tokens cannot reach them. The colour pickers still offer the same swatches.
+
+Two details that a single palette swap usually gets wrong:
+
+- **`--accent-contrast`.** The primary button used a fixed white label. The accent is near-black navy in light mode and a pale blue in dark mode, so one of the two was always going to fail contrast. The label now follows the background.
+- **The brand mark uses fixed values**, deliberately not redefined for dark mode. Letting a logo follow the theme turned the navy-and-red gradient into blue-and-pink. Interface tokens lighten on a dark ground because text must stay readable; a logo is the same mark everywhere.
+
+### "Upcoming recurring" now shows what is actually coming up
+
+It listed the five most expensive recurring activities — no dates, no chronology, the same five every month. It answered *what costs the most*, which the budget card already answers, rather than *what is about to happen*, which nothing did.
+
+It is now a dated timeline across the next 14 days, grouped by day, with relative labels where they help (`Today`, `Tomorrow`, a weekday) and the full date where they do not.
+
+The honest parts:
+
+- **Activities with no schedule are not given invented dates.** A monthly subscription with no day set has no knowable date. They appear in a separate, collapsed group that says why — which is also the only way the omission ever gets fixed.
+- **A per-occurrence price is shown only when it can be derived.** A monthly charge falling on one day of the month costs its monthly price on that day; that is arithmetic. Dividing a monthly total by a number of weekly sessions nobody entered is not, so those show a dash.
+- Costs in the undated group are labelled `avg/mo`, because a yearly subscription is not a monthly charge even when it divides neatly.
+- A twice-weekly activity alone fills a fortnight, so the list stops at five days and says how many occurrences it left out.
+
+### The first load is 40% smaller
+
+| | before | after |
+|---|---|---|
+| Initial JavaScript | 1,216 kB | **739 kB** |
+| gzipped | 276 kB | **188 kB** |
+
+- `xlsx` — the largest dependency at 429 kB — is loaded only when a file is actually opened or exported. It was previously downloaded and parsed before the **sign-in screen** could paint, on every visit, for a library most sessions never use.
+- Analytics, Scenarios, History, Categories and Settings load when opened. The Suspense fallback holds the page height so switching tabs does not collapse the layout, and it stops animating for anyone who has asked the system to reduce motion.
+
+**Verification** — `npx tsc -b` clean · **367 tests passing**, 61 against real PostgreSQL 17 · both builds clean · checked in a browser at 1440 and 390 px, in both themes, with no horizontal overflow.
+
+
 ## 2026-08-16 — Excel import
 
 ### The importer existed but was wired to nothing, and did not work

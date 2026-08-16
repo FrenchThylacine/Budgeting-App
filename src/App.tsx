@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, Suspense, lazy } from "react";
 import { useBudgetStore } from "./store/budgetStore";
 import { calculateYear } from "./domain/calculations";
 import { Sidebar } from "./components/layout/Sidebar";
@@ -9,11 +9,19 @@ import { ActivityPanel } from "./components/activity/ActivityPanel";
 import { SpendingPanel } from "./components/spending/SpendingPanel";
 import { WishlistPanel } from "./components/wishlist/WishlistPanel";
 import { WalletPanel } from "./components/wallet/WalletPanel";
-import { AnalyticsPanel } from "./components/analytics/AnalyticsPanel";
-import { ScenarioLab } from "./components/scenarios/ScenarioLab";
-import { HistoryPanel } from "./components/history/HistoryPanel";
-import { SettingsPanel } from "./components/settings/SettingsPanel";
-import { CategoryManager } from "./components/categories/CategoryManager";
+/**
+ * Panels loaded on demand.
+ *
+ * The dashboard is what loads first, and it does not need the chart library,
+ * the icon catalogue or the scenario tools. Bundling them into the initial
+ * download made every first paint wait for code most sessions never open.
+ * Named exports are unwrapped here because React.lazy expects a default.
+ */
+const AnalyticsPanel = lazy(() => import("./components/analytics/AnalyticsPanel").then((m) => ({ default: m.AnalyticsPanel })));
+const ScenarioLab = lazy(() => import("./components/scenarios/ScenarioLab").then((m) => ({ default: m.ScenarioLab })));
+const HistoryPanel = lazy(() => import("./components/history/HistoryPanel").then((m) => ({ default: m.HistoryPanel })));
+const SettingsPanel = lazy(() => import("./components/settings/SettingsPanel").then((m) => ({ default: m.SettingsPanel })));
+const CategoryManager = lazy(() => import("./components/categories/CategoryManager").then((m) => ({ default: m.CategoryManager })));
 import { RolloverDialog } from "./components/modals/RolloverDialog";
 import { HistoricalEditDialog } from "./components/modals/HistoricalEditDialog";
 import { Notifications } from "./components/Notifications";
@@ -229,7 +237,19 @@ export default function App() {
           {/* Keying on the tab restarts the enter animation, so switching
               views reads as a transition rather than an instant swap. */}
           <div key={activeTab} className="tab-panel">
-            {tabs[activeTab]}
+            {/* A lazily loaded panel suspends on first open. The fallback keeps
+                the layout height so the page does not jump, and announces
+                itself rather than flashing an empty region. */}
+            <Suspense
+              fallback={
+                <div className="panel-loading" role="status" aria-live="polite">
+                  <span className="panel-loading-bar" aria-hidden="true" />
+                  <span className="text-caption">Loading…</span>
+                </div>
+              }
+            >
+              {tabs[activeTab]}
+            </Suspense>
           </div>
         </main>
 

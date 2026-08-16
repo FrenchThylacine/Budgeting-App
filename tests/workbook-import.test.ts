@@ -95,7 +95,7 @@ function workbook(overrides: { budget?: unknown[][]; spending?: unknown[][] } = 
 }
 
 function importFixture(overrides?: { budget?: unknown[][]; spending?: unknown[][] }) {
-  return parseWorkbook(workbook(overrides), NOW, "fixture.xlsx", sequentialIds());
+  return parseWorkbook(workbook(overrides), NOW, "fixture.xlsx", sequentialIds(), XLSX.utils);
 }
 
 // ─── Reading amounts ─────────────────────────────────────────────────────────
@@ -287,8 +287,8 @@ describe("rejecting a file that is not this workbook", () => {
     XLSX.utils.book_append_sheet(wb, sheetFrom([["hello"]]), "Sheet1");
     // The previous importer fell back to the first sheet and produced confident
     // nonsense from whatever happened to be in it.
-    expect(() => parseWorkbook(wb, NOW)).toThrow(WorkbookShapeError);
-    expect(() => parseWorkbook(wb, NOW)).toThrow(/Sheet1/);
+    expect(() => parseWorkbook(wb, NOW, "x.xlsx", sequentialIds(), XLSX.utils)).toThrow(WorkbookShapeError);
+    expect(() => parseWorkbook(wb, NOW, "x.xlsx", sequentialIds(), XLSX.utils)).toThrow(/Sheet1/);
   });
 
   it("refuses a Budget sheet with no Activities header", () => {
@@ -317,8 +317,8 @@ describe("rejecting a file that is not this workbook", () => {
 
 describe("identifiers", () => {
   it("gives two imports of the same file entirely different ids", () => {
-    const first = parseWorkbook(workbook(), NOW, "a.xlsx");
-    const second = parseWorkbook(workbook(), NOW, "b.xlsx");
+    const first = parseWorkbook(workbook(), NOW, "a.xlsx", undefined, XLSX.utils);
+    const second = parseWorkbook(workbook(), NOW, "b.xlsx", undefined, XLSX.utils);
 
     const idsOf = (result: typeof first) => [
       ...result.snapshot.categories.map((c) => c.id),

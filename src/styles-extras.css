@@ -189,63 +189,160 @@
   max-width: 22ch;
 }
 
-/* ─── Import preview ──────────────────────────────────────────────────────── */
+/* ─── Lazily loaded panels ────────────────────────────────────────────────── */
 
-.import-table-wrap {
-  /* The table scrolls inside its own box rather than widening the dialog. */
-  overflow-x: auto;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-}
-
-.import-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 0.875rem;
-}
-
-.import-table th,
-.import-table td {
-  padding: 8px 12px;
-  text-align: right;
-  white-space: nowrap;
-}
-
-.import-table thead th {
-  font-weight: 600;
+.panel-loading {
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: var(--space-3);
+  /* Holds the page height so switching tabs does not collapse the layout and
+     bounce the scroll position. */
+  min-height: 320px;
   color: var(--text-secondary);
-  font-size: 0.8125rem;
-  border-bottom: 1px solid var(--border);
 }
 
-.import-table tbody th {
-  text-align: left;
-  font-weight: 500;
-  color: var(--text-primary);
-}
-
-.import-table tbody tr + tr th,
-.import-table tbody tr + tr td {
-  border-top: 1px solid var(--border);
-}
-
-/* Figures line up column-wise only with tabular numerals. */
-.import-table .tabular {
-  font-variant-numeric: tabular-nums;
-}
-
-.import-delta-up { color: var(--success); font-weight: 600; }
-.import-delta-down { color: var(--danger); font-weight: 600; }
-
-/* Visually hidden but read aloud — the table caption. */
-.sr-only {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
+.panel-loading-bar {
+  width: 160px;
+  height: 3px;
+  border-radius: var(--radius-full);
+  background: var(--bg-inset);
   overflow: hidden;
-  clip: rect(0 0 0 0);
-  white-space: nowrap;
-  border: 0;
+  position: relative;
 }
+
+.panel-loading-bar::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  width: 40%;
+  border-radius: inherit;
+  background: var(--accent);
+  animation: panelLoadingSlide 1.1s var(--ease-out) infinite;
+}
+
+@keyframes panelLoadingSlide {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(250%); }
+}
+
+/* An indeterminate bar that never stops is a distraction for anyone who has
+   asked the system to reduce motion. */
+@media (prefers-reduced-motion: reduce) {
+  .panel-loading-bar::after {
+    animation: none;
+    width: 100%;
+    opacity: 0.5;
+  }
+}
+
+/* ─── Upcoming schedule ───────────────────────────────────────────────────── */
+
+.upcoming { display: grid; gap: var(--space-4); }
+
+.upcoming-days {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-4);
+}
+
+.upcoming-day-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: 8px;
+}
+
+.upcoming-day-label {
+  font-size: var(--text-footnote);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+/* A hairline that fills whatever the label leaves, so the days read as a
+   timeline rather than as a stack of unrelated headings. */
+.upcoming-day-rule {
+  flex: 1;
+  height: 1px;
+  background: var(--separator);
+}
+
+.upcoming-items {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.upcoming-item {
+  display: grid;
+  /* minmax(0, …) on the flexible tracks: an `auto` or `1fr` track is floored at
+     its min-content width, so one long activity name would widen the card and
+     push the page into horizontal scroll. */
+  grid-template-columns: 8px minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: var(--space-3);
+  padding: 7px 0;
+}
+
+.upcoming-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-full);
+  align-self: center;
+}
+
+.upcoming-name {
+  font-size: var(--text-callout);
+  font-weight: var(--weight-medium);
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.upcoming-cadence {
+  color: var(--text-tertiary);
+  grid-column: 2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.upcoming-amount {
+  grid-row: 1 / span 2;
+  grid-column: 3;
+  align-self: center;
+  font-size: var(--text-callout);
+  font-weight: var(--weight-semibold);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.upcoming-note {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-tertiary);
+  margin: 0;
+}
+
+.upcoming-undated > summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  padding: 8px 0;
+  font-size: var(--text-caption);
+  color: var(--text-secondary);
+  border-top: 1px solid var(--separator);
+}
+
+.upcoming-undated > summary:hover { color: var(--text-primary); }
+.upcoming-undated[open] > summary { color: var(--text-primary); }
