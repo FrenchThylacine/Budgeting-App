@@ -1,5 +1,7 @@
 import { Router, Request, Response } from "express";
 import { BudgetService } from "../services/BudgetService.js";
+import { getDatabase } from "../db/index.js";
+import { snapshotIdFor } from "../auth/middleware.js";
 import { asyncHandler, AppError } from "../middleware/errorHandler.js";
 
 /**
@@ -34,7 +36,11 @@ function validateSnapshotPayload(snapshot: unknown): void {
 
 export function createSnapshotRoutes(): Router {
   const router = Router();
-  const getService = () => new BudgetService();
+  // Bound to the authenticated account's budget. `requireAuth` runs before
+  // these routers are reached, so `snapshotIdFor` always has a value; it throws
+  // rather than defaulting if that ever stops being true, because the default
+  // would be another user's budget.
+  const getService = (req: Request) => new BudgetService(getDatabase(), snapshotIdFor(req));
 
   /**
    * GET /api/snapshot
@@ -42,8 +48,8 @@ export function createSnapshotRoutes(): Router {
    */
   router.get(
     "/",
-    asyncHandler(async (_req: Request, res: Response) => {
-      const service = getService();
+    asyncHandler(async (req: Request, res: Response) => {
+      const service = getService(req);
       const snapshot = await service.loadSnapshot();
       if (!snapshot) {
         throw new AppError(404, "No active snapshot found");
@@ -59,8 +65,8 @@ export function createSnapshotRoutes(): Router {
    */
   router.get(
     "/revision",
-    asyncHandler(async (_req: Request, res: Response) => {
-      const service = getService();
+    asyncHandler(async (req: Request, res: Response) => {
+      const service = getService(req);
       const revision = await service.loadRevision();
       res.json({ revision });
     }),
@@ -87,7 +93,7 @@ export function createSnapshotRoutes(): Router {
       const snapshot = req.body;
       validateSnapshotPayload(snapshot);
 
-      const service = getService();
+      const service = getService(req);
       const storedRevision = await service.loadRevision();
 
       // `baseRevision` may travel in the body or as a header, so a plain
@@ -139,7 +145,7 @@ export function createSnapshotRoutes(): Router {
   router.patch(
     "/settings",
     asyncHandler(async (req: Request, res: Response) => {
-      const service = getService();
+      const service = getService(req);
       let snapshot = await service.getOrThrow();
       snapshot = await service.updateSettings(snapshot, req.body);
       res.json(snapshot.settings);
@@ -152,7 +158,7 @@ export function createSnapshotRoutes(): Router {
    */
   router.post(
     "/reset",
-    asyncHandler(async (_req: Request, res: Response) => {
+    asyncHandler(async (req: Request, res: Response) => {
       if (process.env.NODE_ENV === "production") {
         throw new AppError(403, "Reset endpoint not available in production");
       }

@@ -26,6 +26,33 @@ export class ApiUnavailableError extends Error {
   }
 }
 
+/**
+ * The request was refused because nobody is signed in.
+ *
+ * Distinct from ApiUnavailableError, and the distinction is load-bearing: the
+ * store falls back to its IndexedDB cache whenever the API is unreachable, so
+ * treating a 401 as "offline" would render the *previous* account's budget to
+ * whoever just signed out. A signed-out client has no budget, and must say so.
+ */
+export class AuthRequiredError extends Error {
+  constructor() {
+    super("Authentication required.");
+    this.name = "AuthRequiredError";
+  }
+}
+
+/**
+ * Classify a thrown value from the transport layer.
+ *
+ * AuthRequiredError travels through the same try/catch blocks that turn network
+ * failures into ApiUnavailableError; without this it would be swallowed and
+ * re-labelled as "offline".
+ */
+function toTransportError(error: unknown): Error {
+  if (error instanceof AuthRequiredError) return error;
+  return new ApiUnavailableError(error);
+}
+
 function defaultBaseUrl(): string {
   try {
     const fromEnv = import.meta.env?.VITE_API_URL as string | undefined;
@@ -48,16 +75,32 @@ export class BudgetApiClient {
   }
 
   /**
+   * Every request to the API goes through here.
+   *
+   * `credentials: "include"` is required for the session cookie to be sent at
+   * all — fetch omits cookies by default on cross-origin requests, and this app
+   * is served from a different origin than the API in development. Centralising
+   * it means a new endpoint cannot be added without it.
+   */
+  private async http(url: string, init?: RequestInit): Promise<Response> {
+    // globalThis.fetch, explicitly: this is the one place that must reach the
+    // real thing rather than route back through this method.
+    const response = await globalThis.fetch(url, { ...init, credentials: "include" });
+    if (response.status === 401) throw new AuthRequiredError();
+    return response;
+  }
+
+  /**
    * Load the active snapshot
    */
   async loadSnapshot(): Promise<BudgetSnapshot | null> {
     let response: Response;
     try {
-      response = await fetch(`${this.baseUrl}/snapshot`);
+      response = await this.http(`${this.baseUrl}/snapshot`);
     } catch (error) {
       // Network-level failure: the API is unreachable, which is different
       // from the API answering "no snapshot yet".
-      throw new ApiUnavailableError(error);
+      throw toTransportError(error);
     }
     if (response.status === 404) return null;
     if (response.status >= 500) throw new ApiUnavailableError(new Error(response.statusText));
@@ -69,9 +112,9 @@ export class BudgetApiClient {
   async loadRevision(): Promise<number | null> {
     let response: Response;
     try {
-      response = await fetch(`${this.baseUrl}/snapshot/revision`);
+      response = await this.http(`${this.baseUrl}/snapshot/revision`);
     } catch (error) {
-      throw new ApiUnavailableError(error);
+      throw toTransportError(error);
     }
     if (response.status === 404) return null;
     if (!response.ok) throw new ApiUnavailableError(new Error(response.statusText));
@@ -91,7 +134,7 @@ export class BudgetApiClient {
   async saveSnapshot(snapshot: BudgetSnapshot, baseRevision: number | null = null): Promise<number | null> {
     let response: Response;
     try {
-      response = await fetch(`${this.baseUrl}/snapshot`, {
+      response = await this.http(`${this.baseUrl}/snapshot`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
@@ -100,7 +143,7 @@ export class BudgetApiClient {
         body: JSON.stringify(baseRevision != null ? { ...snapshot, baseRevision } : snapshot),
       });
     } catch (error) {
-      throw new ApiUnavailableError(error);
+      throw toTransportError(error);
     }
 
     if (response.status === 409) {
@@ -133,7 +176,7 @@ export class BudgetApiClient {
    */
   async updateSettings(patch: Partial<any>): Promise<any> {
     try {
-      const response = await fetch(`${this.baseUrl}/snapshot/settings`, {
+      const response = await this.http(`${this.baseUrl}/snapshot/settings`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(patch),
@@ -141,6 +184,9 @@ export class BudgetApiClient {
       if (!response.ok) throw new Error(`Failed to update settings: ${response.statusText}`);
       return response.json();
     } catch (error) {
+      // Never degrade a 401 into an empty result: an empty list rendered as
+      // real data is indistinguishable from "this account has nothing".
+      if (error instanceof AuthRequiredError) throw error;
       console.error("Error updating settings:", error);
       throw error;
     }
@@ -151,10 +197,13 @@ export class BudgetApiClient {
    */
   async getSpendingEntries(year: number, month: number): Promise<SpendingEntry[]> {
     try {
-      const response = await fetch(`${this.baseUrl}/spending/${year}/${month}`);
+      const response = await this.http(`${this.baseUrl}/spending/${year}/${month}`);
       if (!response.ok) throw new Error(`Failed to load spending: ${response.statusText}`);
       return response.json();
     } catch (error) {
+      // Never degrade a 401 into an empty result: an empty list rendered as
+      // real data is indistinguishable from "this account has nothing".
+      if (error instanceof AuthRequiredError) throw error;
       console.error("Error loading spending:", error);
       return [];
     }
@@ -165,7 +214,7 @@ export class BudgetApiClient {
    */
   async addSpendingEntry(entry: Omit<SpendingEntry, "id" | "createdAt" | "updatedAt">): Promise<SpendingEntry> {
     try {
-      const response = await fetch(`${this.baseUrl}/spending`, {
+      const response = await this.http(`${this.baseUrl}/spending`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(entry),
@@ -173,6 +222,9 @@ export class BudgetApiClient {
       if (!response.ok) throw new Error(`Failed to add spending: ${response.statusText}`);
       return response.json();
     } catch (error) {
+      // Never degrade a 401 into an empty result: an empty list rendered as
+      // real data is indistinguishable from "this account has nothing".
+      if (error instanceof AuthRequiredError) throw error;
       console.error("Error adding spending:", error);
       throw error;
     }
@@ -183,7 +235,7 @@ export class BudgetApiClient {
    */
   async updateSpendingEntry(id: string, patch: Partial<SpendingEntry>): Promise<SpendingEntry> {
     try {
-      const response = await fetch(`${this.baseUrl}/spending/${id}`, {
+      const response = await this.http(`${this.baseUrl}/spending/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(patch),
@@ -191,6 +243,9 @@ export class BudgetApiClient {
       if (!response.ok) throw new Error(`Failed to update spending: ${response.statusText}`);
       return response.json();
     } catch (error) {
+      // Never degrade a 401 into an empty result: an empty list rendered as
+      // real data is indistinguishable from "this account has nothing".
+      if (error instanceof AuthRequiredError) throw error;
       console.error("Error updating spending:", error);
       throw error;
     }
@@ -201,11 +256,14 @@ export class BudgetApiClient {
    */
   async deleteSpendingEntry(id: string): Promise<void> {
     try {
-      const response = await fetch(`${this.baseUrl}/spending/${id}`, {
+      const response = await this.http(`${this.baseUrl}/spending/${id}`, {
         method: "DELETE",
       });
       if (!response.ok) throw new Error(`Failed to delete spending: ${response.statusText}`);
     } catch (error) {
+      // Never degrade a 401 into an empty result: an empty list rendered as
+      // real data is indistinguishable from "this account has nothing".
+      if (error instanceof AuthRequiredError) throw error;
       console.error("Error deleting spending:", error);
       throw error;
     }
@@ -216,10 +274,13 @@ export class BudgetApiClient {
    */
   async getCategories(): Promise<BudgetCategory[]> {
     try {
-      const response = await fetch(`${this.baseUrl}/categories`);
+      const response = await this.http(`${this.baseUrl}/categories`);
       if (!response.ok) throw new Error(`Failed to load categories: ${response.statusText}`);
       return response.json();
     } catch (error) {
+      // Never degrade a 401 into an empty result: an empty list rendered as
+      // real data is indistinguishable from "this account has nothing".
+      if (error instanceof AuthRequiredError) throw error;
       console.error("Error loading categories:", error);
       return [];
     }
@@ -230,7 +291,7 @@ export class BudgetApiClient {
    */
   async addCategory(category: Omit<BudgetCategory, "id">): Promise<BudgetCategory> {
     try {
-      const response = await fetch(`${this.baseUrl}/categories`, {
+      const response = await this.http(`${this.baseUrl}/categories`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(category),
@@ -238,6 +299,9 @@ export class BudgetApiClient {
       if (!response.ok) throw new Error(`Failed to add category: ${response.statusText}`);
       return response.json();
     } catch (error) {
+      // Never degrade a 401 into an empty result: an empty list rendered as
+      // real data is indistinguishable from "this account has nothing".
+      if (error instanceof AuthRequiredError) throw error;
       console.error("Error adding category:", error);
       throw error;
     }
@@ -248,7 +312,7 @@ export class BudgetApiClient {
    */
   async updateCategory(id: string, patch: Partial<BudgetCategory>): Promise<BudgetCategory> {
     try {
-      const response = await fetch(`${this.baseUrl}/categories/${id}`, {
+      const response = await this.http(`${this.baseUrl}/categories/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(patch),
@@ -256,6 +320,9 @@ export class BudgetApiClient {
       if (!response.ok) throw new Error(`Failed to update category: ${response.statusText}`);
       return response.json();
     } catch (error) {
+      // Never degrade a 401 into an empty result: an empty list rendered as
+      // real data is indistinguishable from "this account has nothing".
+      if (error instanceof AuthRequiredError) throw error;
       console.error("Error updating category:", error);
       throw error;
     }
@@ -273,10 +340,13 @@ export class BudgetApiClient {
    */
   async getActivities(year: number): Promise<Activity[]> {
     try {
-      const response = await fetch(`${this.baseUrl}/activities/${year}`);
+      const response = await this.http(`${this.baseUrl}/activities/${year}`);
       if (!response.ok) throw new Error(`Failed to load activities: ${response.statusText}`);
       return response.json();
     } catch (error) {
+      // Never degrade a 401 into an empty result: an empty list rendered as
+      // real data is indistinguishable from "this account has nothing".
+      if (error instanceof AuthRequiredError) throw error;
       console.error("Error loading activities:", error);
       return [];
     }
@@ -287,7 +357,7 @@ export class BudgetApiClient {
    */
   async addActivity(activity: Omit<Activity, "id" | "order">): Promise<Activity> {
     try {
-      const response = await fetch(`${this.baseUrl}/activities`, {
+      const response = await this.http(`${this.baseUrl}/activities`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(activity),
@@ -295,6 +365,9 @@ export class BudgetApiClient {
       if (!response.ok) throw new Error(`Failed to add activity: ${response.statusText}`);
       return response.json();
     } catch (error) {
+      // Never degrade a 401 into an empty result: an empty list rendered as
+      // real data is indistinguishable from "this account has nothing".
+      if (error instanceof AuthRequiredError) throw error;
       console.error("Error adding activity:", error);
       throw error;
     }
@@ -305,7 +378,7 @@ export class BudgetApiClient {
    */
   async updateActivity(id: string, patch: Partial<Activity>): Promise<Activity> {
     try {
-      const response = await fetch(`${this.baseUrl}/activities/${id}`, {
+      const response = await this.http(`${this.baseUrl}/activities/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(patch),
@@ -313,6 +386,9 @@ export class BudgetApiClient {
       if (!response.ok) throw new Error(`Failed to update activity: ${response.statusText}`);
       return response.json();
     } catch (error) {
+      // Never degrade a 401 into an empty result: an empty list rendered as
+      // real data is indistinguishable from "this account has nothing".
+      if (error instanceof AuthRequiredError) throw error;
       console.error("Error updating activity:", error);
       throw error;
     }
@@ -323,11 +399,14 @@ export class BudgetApiClient {
    */
   async deleteActivity(id: string): Promise<void> {
     try {
-      const response = await fetch(`${this.baseUrl}/activities/${id}`, {
+      const response = await this.http(`${this.baseUrl}/activities/${id}`, {
         method: "DELETE",
       });
       if (!response.ok) throw new Error(`Failed to delete activity: ${response.statusText}`);
     } catch (error) {
+      // Never degrade a 401 into an empty result: an empty list rendered as
+      // real data is indistinguishable from "this account has nothing".
+      if (error instanceof AuthRequiredError) throw error;
       console.error("Error deleting activity:", error);
       throw error;
     }
@@ -338,10 +417,13 @@ export class BudgetApiClient {
    */
   async getApprovals(year: number): Promise<any[]> {
     try {
-      const response = await fetch(`${this.baseUrl}/approvals/${year}`);
+      const response = await this.http(`${this.baseUrl}/approvals/${year}`);
       if (!response.ok) throw new Error(`Failed to load approvals: ${response.statusText}`);
       return response.json();
     } catch (error) {
+      // Never degrade a 401 into an empty result: an empty list rendered as
+      // real data is indistinguishable from "this account has nothing".
+      if (error instanceof AuthRequiredError) throw error;
       console.error("Error loading approvals:", error);
       return [];
     }
@@ -352,10 +434,13 @@ export class BudgetApiClient {
    */
   async getApprovalForMonth(year: number, month: number): Promise<any | null> {
     try {
-      const response = await fetch(`${this.baseUrl}/approvals/${year}/${month}`);
+      const response = await this.http(`${this.baseUrl}/approvals/${year}/${month}`);
       if (!response.ok) throw new Error(`Failed to load approval: ${response.statusText}`);
       return response.json();
     } catch (error) {
+      // Never degrade a 401 into an empty result: an empty list rendered as
+      // real data is indistinguishable from "this account has nothing".
+      if (error instanceof AuthRequiredError) throw error;
       console.error("Error loading approval:", error);
       return null;
     }
@@ -374,7 +459,7 @@ export class BudgetApiClient {
     recurringTotal: number;
   }): Promise<any> {
     try {
-      const response = await fetch(`${this.baseUrl}/approvals`, {
+      const response = await this.http(`${this.baseUrl}/approvals`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(approval),
@@ -382,6 +467,9 @@ export class BudgetApiClient {
       if (!response.ok) throw new Error(`Failed to propose approval: ${response.statusText}`);
       return response.json();
     } catch (error) {
+      // Never degrade a 401 into an empty result: an empty list rendered as
+      // real data is indistinguishable from "this account has nothing".
+      if (error instanceof AuthRequiredError) throw error;
       console.error("Error proposing approval:", error);
       throw error;
     }
@@ -396,7 +484,7 @@ export class BudgetApiClient {
     notes?: string,
   ): Promise<any> {
     try {
-      const response = await fetch(`${this.baseUrl}/approvals/${id}`, {
+      const response = await this.http(`${this.baseUrl}/approvals/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ approvedAmount, status: "approved", decidedAt: new Date().toISOString(), note: notes }),
@@ -404,6 +492,9 @@ export class BudgetApiClient {
       if (!response.ok) throw new Error(`Failed to approve: ${response.statusText}`);
       return response.json();
     } catch (error) {
+      // Never degrade a 401 into an empty result: an empty list rendered as
+      // real data is indistinguishable from "this account has nothing".
+      if (error instanceof AuthRequiredError) throw error;
       console.error("Error approving:", error);
       throw error;
     }
@@ -414,7 +505,7 @@ export class BudgetApiClient {
    */
   async rejectApproval(id: string, reason?: string): Promise<any> {
     try {
-      const response = await fetch(`${this.baseUrl}/approvals/${id}`, {
+      const response = await this.http(`${this.baseUrl}/approvals/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: "rejected", decidedAt: new Date().toISOString(), note: reason }),
@@ -422,6 +513,9 @@ export class BudgetApiClient {
       if (!response.ok) throw new Error(`Failed to reject: ${response.statusText}`);
       return response.json();
     } catch (error) {
+      // Never degrade a 401 into an empty result: an empty list rendered as
+      // real data is indistinguishable from "this account has nothing".
+      if (error instanceof AuthRequiredError) throw error;
       console.error("Error rejecting:", error);
       throw error;
     }
@@ -432,7 +526,7 @@ export class BudgetApiClient {
    */
   async healthCheck(): Promise<boolean> {
     try {
-      const response = await fetch(`${this.baseUrl}/health`);
+      const response = await this.http(`${this.baseUrl}/health`);
       return response.ok;
     } catch {
       return false;

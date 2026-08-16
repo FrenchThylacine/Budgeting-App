@@ -76,6 +76,13 @@ describeApi("API integration over HTTP", () => {
       server = app.listen(0, "127.0.0.1", () => resolve());
     });
     baseUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+
+    // Everything below /api except health and /api/auth now requires a session,
+    // so the suite signs in once and reuses the cookie.
+    const signup = await signUp("owner@example.test");
+    if (signup.status !== 201) {
+      throw new Error(`Test account setup failed: ${signup.status} ${JSON.stringify(signup.body)}`);
+    }
   }, 30000);
 
   afterAll(async () => {
@@ -84,12 +91,62 @@ describeApi("API integration over HTTP", () => {
     await client.end();
   });
 
+  /**
+   * Cookie jar.
+   *
+   * Node's fetch does not keep cookies between calls, so without this every
+   * request after sign-in arrives anonymous and the suite tests nothing but the
+   * 401 path. Only the name=value pair is retained — attributes such as
+   * HttpOnly and Secure govern a browser, not this client.
+   */
+  const cookies = new Map<string, string>();
+
+  function storeCookies(response: Response): void {
+    const raw = (response.headers as unknown as { getSetCookie?: () => string[] }).getSetCookie?.()
+      ?? (response.headers.get("set-cookie") ? [response.headers.get("set-cookie")!] : []);
+    for (const line of raw) {
+      const [pair] = line.split(";");
+      const eq = pair.indexOf("=");
+      if (eq === -1) continue;
+      const name = pair.slice(0, eq).trim();
+      const value = pair.slice(eq + 1).trim();
+      // An empty value is how a server expires a cookie.
+      if (value === "") cookies.delete(name);
+      else cookies.set(name, value);
+    }
+  }
+
+  function cookieHeader(): Record<string, string> {
+    if (cookies.size === 0) return {};
+    return { Cookie: [...cookies].map(([k, v]) => `${k}=${v}`).join("; ") };
+  }
+
   async function api(path: string, init?: RequestInit) {
+    const headers: Record<string, string> = cookieHeader();
+    Object.assign(headers, (init?.headers ?? {}) as Record<string, string>);
+    const response = await fetch(`${baseUrl}${path}`, { ...init, headers });
+    storeCookies(response);
+    const text = await response.text();
+    let body: any = null;
+    try { body = text ? JSON.parse(text) : null; } catch { body = text; }
+    return { status: response.status, body };
+  }
+
+  /** Request with no session, for asserting that a route is actually guarded. */
+  async function anonymousApi(path: string, init?: RequestInit) {
     const response = await fetch(`${baseUrl}${path}`, init);
     const text = await response.text();
     let body: any = null;
     try { body = text ? JSON.parse(text) : null; } catch { body = text; }
     return { status: response.status, body };
+  }
+
+  async function signUp(email: string, password = "a-long-enough-passphrase") {
+    return api("/api/auth/signup", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password }),
+    });
   }
 
   async function putSnapshot(snapshot: unknown) {

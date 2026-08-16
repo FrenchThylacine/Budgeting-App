@@ -3,6 +3,11 @@ import type { NeonQueryFunction } from "@neondatabase/serverless";
 // The Neon HTTP driver executes exactly one SQL command per call, so every
 // statement below must stay in its own template. Grouping several commands in
 // one template fails at runtime against a real Neon database.
+//
+// Not here: the authentication tables (`users`, `sessions`,
+// `password_reset_tokens`, `auth_attempts`). They are declared once, in
+// migration 007. This file runs BEFORE the migrations and must therefore
+// describe only what an already-deployed database is guaranteed to have.
 export async function initializeSchema(
   sql: NeonQueryFunction<any, any>
 ): Promise<void> {

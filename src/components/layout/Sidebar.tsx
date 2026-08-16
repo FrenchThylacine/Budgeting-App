@@ -1,9 +1,11 @@
 import React from "react";
+import { useAuthStore } from "../../store/authStore";
 import { useBudgetStore } from "../../store/budgetStore";
 import {
   LayoutDashboard, ListTodo, Receipt, Gift, Wallet, BarChart3,
   FlaskConical, History, Settings, Tags, ChevronLeft, ChevronRight,
-  Plane, FileSpreadsheet, Download, FileJson, RefreshCw, FileText
+  Plane, FileSpreadsheet, Download, FileJson, RefreshCw, FileText,
+  LogOut, UserRound
 } from "lucide-react";
 import { exportCurrentYearToExcel, exportAllYearsToExcel, exportJson } from "../../domain/importExport";
 import { buildPeriodReport, reportHtml, type ReportScope } from "../../domain/report";
@@ -62,6 +64,8 @@ export const Sidebar: React.FC<{
 }> = ({ activeTab, setActiveTab, collapsed, setCollapsed }) => {
   const snapshot = useBudgetStore((s) => s.snapshot);
   const resetToSeed = useBudgetStore((s) => s.resetToSeed);
+  const user = useAuthStore((s) => s.user);
+  const signOut = useAuthStore((s) => s.signOut);
 
   const overviewItems = navItems.slice(0, 6);
   const systemItems = navItems.slice(6);
@@ -150,6 +154,19 @@ export const Sidebar: React.FC<{
               }}
             >
               <RefreshCw size={14} /> Reset
+            </button>
+          </div>
+
+          <div className="nav-section-title" style={{ marginTop: 16 }}>Account</div>
+          <div style={{ display: "grid", gap: 8 }}>
+            {/* The address is shown, not just "signed in": on a shared device
+                it is the only way to tell whose budget is on screen. */}
+            <div className="auth-account text-footnote" title={user?.email ?? ""}>
+              <UserRound size={14} aria-hidden="true" />
+              <span className="auth-account-email">{user?.email ?? "Signed in"}</span>
+            </div>
+            <button className="btn btn-secondary btn-sm" onClick={() => void signOut()}>
+              <LogOut size={14} /> Sign out
             </button>
           </div>
         </div>
