@@ -24,7 +24,7 @@
  * field by field rather than through `new Date(string)`, which would treat them
  * as UTC and shift the day for anyone west of Greenwich.
  */
-import type { Activity, IsoWeekday } from "./types";
+import type { Activity, IsoWeekday, ScheduleOverride } from "./types";
 
 /** Monday-first ISO weekday order, for pickers and labels. */
 export const ISO_WEEKDAYS: IsoWeekday[] = [1, 2, 3, 4, 5, 6, 7];
@@ -106,41 +106,169 @@ export function hasSchedule(activity: Activity): boolean {
   return normalizeWeekdays(activity.weekdays).length > 0 || normalizeDayOfMonth(activity.dayOfMonth) != null;
 }
 
+
+// ─── One-off exceptions ──────────────────────────────────────────────────────
+
+/** A single occurrence, after any override that applies to it. */
+export interface ScheduledOccurrence {
+  date: Date;
+  /**
+   * Price for this occurrence in the activity's own currency, or null when it
+   * cannot be derived. Null is never read as zero: an unpriced session is not
+   * a free one.
+   */
+  price: number | null;
+  /** Exists only because an `extra` override added it. */
+  added: boolean;
+  /** Displaced from the date the rule produced. */
+  moved: boolean;
+}
+
+function normalizeOverrides(activity: Activity): ScheduleOverride[] {
+  const overrides = activity.scheduleOverrides;
+  if (!Array.isArray(overrides)) return [];
+  // A malformed entry is dropped rather than throwing: one bad row must not
+  // make the whole activity unschedulable.
+  return overrides.filter(
+    (o) => o && typeof o.date === "string" && parseLocalDate(o.date) != null,
+  );
+}
+
+/** Dates the rule alone produces in [from, to], ignoring every override. */
+function ruleDatesBetween(activity: Activity, from: Date, to: Date): Date[] {
+  const weekdays = normalizeWeekdays(activity.weekdays);
+  const dayOfMonth = normalizeDayOfMonth(activity.dayOfMonth);
+  if (weekdays.length === 0 && dayOfMonth == null) return [];
+
+  let cursor = startOfDay(from);
+  const start = parseLocalDate(activity.startDate);
+  if (start && start.getTime() > cursor.getTime()) cursor = start;
+  const end = startOfDay(to);
+
+  const out: Date[] = [];
+  // Bounded by the range rather than by a step count, so a long window cannot
+  // silently truncate and a pathological input cannot loop forever.
+  const maxDays = 400;
+  for (let day = 0; day <= maxDays && cursor.getTime() <= end.getTime(); day += 1) {
+    if (weekdays.length > 0) {
+      if (weekdays.includes(isoWeekdayOf(cursor))) out.push(new Date(cursor));
+    } else if (dayOfMonth != null && cursor.getDate() === dayOfMonth) {
+      out.push(new Date(cursor));
+    }
+    cursor = addDays(cursor, 1);
+  }
+  return out;
+}
+
+/**
+ * Real occurrences in a date range, with one-off exceptions applied.
+ *
+ * This is the single place the rule and its exceptions are combined. Everything
+ * else — the monthly count, the monthly and yearly estimates, the dashboard
+ * timeline — is expressed on top of it, so an override cannot be honoured in
+ * one view and ignored in another.
+ */
+export function occurrenceDatesBetween(activity: Activity, from: Date, to: Date): ScheduledOccurrence[] {
+  if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) return [];
+  // An exception to a rule that does not exist is not a schedule. Without this
+  // an `extra` on an unscheduled activity would appear on the timeline while
+  // contributing nothing to any total, because the estimates are gated on
+  // hasSchedule() — the exact inconsistency overrides exist to avoid. A one-off
+  // dated cost with no rule behind it is a spending entry, not a schedule.
+  if (!hasSchedule(activity)) return [];
+
+  const overrides = normalizeOverrides(activity);
+  const basePrice = schedulePrice(activity);
+  const rangeStart = startOfDay(from).getTime();
+  const rangeEnd = startOfDay(to).getTime();
+
+  const byRuleDate = new Map<string, ScheduleOverride>();
+  const extras: ScheduleOverride[] = [];
+  for (const override of overrides) {
+    if (override.kind === "extra") extras.push(override);
+    // Last one wins if two target the same date; the alternative is an
+    // ambiguous combination nobody can predict.
+    else byRuleDate.set(override.date, override);
+  }
+
+  const inRange = (date: Date): boolean => {
+    const time = startOfDay(date).getTime();
+    return time >= rangeStart && time <= rangeEnd;
+  };
+
+  const priceFor = (override: ScheduleOverride | undefined): number | null => {
+    if (override && (override.kind === "price" || override.kind === "extra")) {
+      // `undefined` means the override does not state a price, so the rule's
+      // price still applies. An explicit `null` means "not known", and stays
+      // unknown rather than falling back.
+      if (override.amount !== undefined) return override.amount;
+    }
+    return basePrice;
+  };
+
+  const results: ScheduledOccurrence[] = [];
+
+  // A move can pull an occurrence in from outside the window, so the rule is
+  // generated over a widened range and then filtered by where things land.
+  const widened = 40;
+  const scanFrom = addDays(startOfDay(from), -widened);
+  const scanTo = addDays(startOfDay(to), widened);
+
+  for (const ruleDate of ruleDatesBetween(activity, scanFrom, scanTo)) {
+    const key = toLocalDateInput(ruleDate);
+    const override = byRuleDate.get(key);
+
+    if (override?.kind === "skip") continue;
+
+    if (override?.kind === "move") {
+      const moved = parseLocalDate(override.movedTo ?? null);
+      // A move with no destination is treated as a skip rather than silently
+      // leaving the occurrence where it was — the user asked for it to not
+      // happen then.
+      if (!moved) continue;
+      if (inRange(moved)) {
+        results.push({ date: moved, price: priceFor(override), added: false, moved: true });
+      }
+      continue;
+    }
+
+    if (inRange(ruleDate)) {
+      results.push({ date: ruleDate, price: priceFor(override), added: false, moved: false });
+    }
+  }
+
+  for (const extra of extras) {
+    const date = parseLocalDate(extra.date);
+    if (!date || !inRange(date)) continue;
+    results.push({ date, price: priceFor(extra), added: true, moved: false });
+  }
+
+  results.sort((a, b) => a.date.getTime() - b.date.getTime());
+  return results;
+}
+
+/**
+ * Real occurrences inside one calendar month, with exceptions applied.
+ *
+ * The month is expressed as a range so a moved occurrence lands in the month it
+ * moved to, and leaves the one it moved from.
+ */
+export function occurrenceDatesInMonth(activity: Activity, year: number, month: number): ScheduledOccurrence[] {
+  if (!Number.isInteger(month) || month < 1 || month > 12) return [];
+  const lastDay = daysInMonth(year, month);
+  if (lastDay === 0) return [];
+  return occurrenceDatesBetween(activity, new Date(year, month - 1, 1), new Date(year, month - 1, lastDay));
+}
+
 /**
  * Real occurrences of an activity inside one calendar month.
  *
  * Counts actual matching days, so August with five Mondays returns five and a
- * 29-day February returns what February really holds.
+ * 29-day February returns what February really holds. One-off exceptions are
+ * included, because a skipped week is genuinely one fewer occurrence.
  */
 export function occurrencesInMonth(activity: Activity, year: number, month: number): number {
-  if (!Number.isInteger(month) || month < 1 || month > 12) return 0;
-  const weekdays = normalizeWeekdays(activity.weekdays);
-  const dayOfMonth = normalizeDayOfMonth(activity.dayOfMonth);
-  if (weekdays.length === 0 && dayOfMonth == null) return 0;
-
-  const lastDay = daysInMonth(year, month);
-  if (lastDay === 0) return 0;
-
-  // `startDate` clips the month: before it, the schedule was not yet running.
-  let firstDay = 1;
-  const start = parseLocalDate(activity.startDate);
-  if (start) {
-    const startYear = start.getFullYear();
-    const startMonth = start.getMonth() + 1;
-    if (startYear > year || (startYear === year && startMonth > month)) return 0;
-    if (startYear === year && startMonth === month) firstDay = start.getDate();
-  }
-
-  if (weekdays.length > 0) {
-    let count = 0;
-    for (let day = firstDay; day <= lastDay; day += 1) {
-      if (weekdays.includes(isoWeekdayOf(new Date(year, month - 1, day)))) count += 1;
-    }
-    return count;
-  }
-
-  // Day-of-month: exactly one occurrence, and only when the day exists.
-  return dayOfMonth != null && dayOfMonth >= firstDay && dayOfMonth <= lastDay ? 1 : 0;
+  return occurrenceDatesInMonth(activity, year, month).length;
 }
 
 /** Real occurrences across a whole calendar year. */
@@ -157,46 +285,16 @@ export function occurrencesInYear(activity: Activity, year: number): number {
  * Returns an empty list when the activity has no schedule.
  */
 export function nextOccurrences(activity: Activity, from: Date, count: number): Date[] {
-  const results: Date[] = [];
-  if (!Number.isFinite(count) || count <= 0) return results;
-  if (Number.isNaN(from.getTime())) return results;
-
-  const weekdays = normalizeWeekdays(activity.weekdays);
-  const dayOfMonth = normalizeDayOfMonth(activity.dayOfMonth);
-  if (weekdays.length === 0 && dayOfMonth == null) return results;
-
-  const wanted = Math.floor(count);
-  let cursor = startOfDay(from);
-  const start = parseLocalDate(activity.startDate);
-  if (start && start.getTime() > cursor.getTime()) cursor = start;
-
-  if (weekdays.length > 0) {
-    // At most seven days separate two hits, so this bound can never cut a
-    // reachable occurrence short while still guaranteeing termination.
-    const maxSteps = wanted * 7 + 7;
-    for (let step = 0; step < maxSteps && results.length < wanted; step += 1) {
-      if (weekdays.includes(isoWeekdayOf(cursor))) results.push(new Date(cursor));
-      cursor = addDays(cursor, 1);
-    }
-    return results;
-  }
-
-  // Day-of-month: walk month by month, skipping months that lack the day.
-  let year = cursor.getFullYear();
-  let month = cursor.getMonth() + 1;
-  const maxMonths = wanted * 12 + 24;
-  for (let step = 0; step < maxMonths && results.length < wanted; step += 1) {
-    if (dayOfMonth != null && dayOfMonth <= daysInMonth(year, month)) {
-      const candidate = new Date(year, month - 1, dayOfMonth);
-      if (candidate.getTime() >= cursor.getTime()) results.push(candidate);
-    }
-    month += 1;
-    if (month > 12) {
-      month = 1;
-      year += 1;
-    }
-  }
-  return results;
+  if (!Number.isFinite(count) || count <= 0) return [];
+  if (Number.isNaN(from.getTime())) return [];
+  // Expressed on the override-aware core, so a skipped week does not appear on
+  // the dashboard timeline while being correctly absent from the month's total.
+  // The window bounds the work; 400 days covers thirteen monthly occurrences,
+  // far more than any view asks for.
+  const horizon = addDays(startOfDay(from), 400);
+  return occurrenceDatesBetween(activity, from, horizon)
+    .slice(0, Math.floor(count))
+    .map((occurrence) => occurrence.date);
 }
 
 /** Price used by the schedule model: per-session first, estimate as a fallback. */
@@ -213,9 +311,24 @@ export function schedulePrice(activity: Activity): number | null {
  */
 export function monthlyEstimateFromSchedule(activity: Activity, year: number, month: number): number | null {
   if (!hasSchedule(activity)) return null;
-  const price = schedulePrice(activity);
-  if (price == null) return null;
-  return price * occurrencesInMonth(activity, year, month);
+  return sumOccurrences(occurrenceDatesInMonth(activity, year, month));
+}
+
+/**
+ * Total of a set of occurrences, or null when any of them has no price.
+ *
+ * A partial sum would understate the month while looking like a complete
+ * figure, which is worse than admitting the total is not known. With no
+ * overrides this is exactly price × count, so existing budgets are unchanged.
+ */
+function sumOccurrences(occurrences: ScheduledOccurrence[]): number | null {
+  if (occurrences.length === 0) return 0;
+  let total = 0;
+  for (const occurrence of occurrences) {
+    if (occurrence.price == null) return null;
+    total += occurrence.price;
+  }
+  return total;
 }
 
 /**
@@ -224,9 +337,13 @@ export function monthlyEstimateFromSchedule(activity: Activity, year: number, mo
  */
 export function yearlyEstimateFromSchedule(activity: Activity, year: number): number | null {
   if (!hasSchedule(activity)) return null;
-  const price = schedulePrice(activity);
-  if (price == null) return null;
-  return price * occurrencesInYear(activity, year);
+  let total = 0;
+  for (let month = 1; month <= 12; month += 1) {
+    const monthly = monthlyEstimateFromSchedule(activity, year, month);
+    if (monthly == null) return null;
+    total += monthly;
+  }
+  return total;
 }
 
 /** Short human summary of a schedule, e.g. "Mon, Wed" or "Day 15 monthly". */

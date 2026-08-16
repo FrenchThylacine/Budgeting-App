@@ -1,5 +1,34 @@
 # Changelog
 
+## 2026-08-16 — One-off exceptions to a recurring schedule
+
+### "Just this once", without corrupting the rest of the year
+
+A week is skipped, a lesson moves, an extra session happens, one occurrence costs something different. Recording any of that by editing the recurring rule rewrites **every other month the rule produces**, including closed ones.
+
+Exceptions now apply to a single date and leave the rule untouched: **skip**, **move**, **extra**, and **price**. They are created from the dashboard timeline, on the occurrence itself, because that is where the user is looking when they find out.
+
+The design rule is that everything derives from one function. `occurrenceDatesBetween` is the single place the rule and its exceptions are combined; the monthly count, the monthly and yearly estimates and the timeline are all expressed on top of it. An override cannot be honoured in one view and ignored in another — which in a financial app is simply a wrong number. `calculations.ts` needed no changes at all.
+
+Decisions worth stating, each one a test:
+
+- **A skipped week lowers the month by exactly one occurrence**, and leaves every other month alone.
+- **A move crosses month boundaries with its cost.** Moving 30 March to 1 April takes the money out of March and puts it into April, rather than losing it.
+- **A move with no destination is a skip.** The user said it does not happen then; leaving it in place is the one outcome they ruled out.
+- **Zero is a real price.** A free session totals as zero. An *unstated* price is not zero: the month then reports that its total cannot be derived, rather than quietly understating itself.
+- **An exception to a rule that does not exist is not a schedule.** An `extra` on an unscheduled activity used to appear on the timeline while contributing to no total — found by a test, and now returns nothing.
+- Exceptions go through `updateActivity`, so they inherit the closed-period guard and land on the undo stack.
+
+Migration `008` persists them. The repository writes a fixed column list, so a field added to the model but not to the schema, the upsert *and* the parser is silently dropped on the next round-trip — the failure migration 005 existed to fix. There is a round-trip test against real PostgreSQL, and removing the column from the upsert fails it.
+
+### Two things found while testing rather than by the suite
+
+- **Icon-only buttons had no accessible name.** Undo, redo and the theme toggle carried a `title` and nothing else. `title` produces a mouse tooltip; several screen readers ignore it outright, so those buttons announced nothing at all. `Button` now derives an `aria-label` from it, which fixes all ten without touching a call site.
+- **`.text-footnote` uppercases its content** — correct for a micro-label like `REMAINING`, and wrong for the sentences I had put in it, which came out shouting. A `.text-note` class now carries small explanatory prose in sentence case.
+
+**Verification** — `npx tsc -b` clean · **388 tests passing**, 63 against real PostgreSQL 17 · both builds clean. Driven end to end in a browser: skip an occurrence → the timeline drops it → the committed monthly falls from €442.68 to €410.32, exactly one session → the override reaches PostgreSQL → undo restores both the figure and the database.
+
+
 ## 2026-08-16 — Identity, and a dashboard that answers a different question
 
 ### An Air France identity, without touching your colours

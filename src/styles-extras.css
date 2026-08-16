@@ -346,3 +346,57 @@
 
 .upcoming-undated > summary:hover { color: var(--text-primary); }
 .upcoming-undated[open] > summary { color: var(--text-primary); }
+
+/* ─── One-off exception dialog ────────────────────────────────────────────── */
+
+.occurrence-choices {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.occurrence-choice {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: var(--text-callout);
+  color: var(--text-primary);
+}
+
+.occurrence-choice:hover { background: var(--bg-subtle); }
+.occurrence-choice input { margin-top: 3px; flex: none; }
+.occurrence-choice .text-note { color: var(--text-secondary); }
+
+.occurrence-input {
+  width: 100%;
+  /* Indented to the radio label's text, so it reads as belonging to the option
+     above rather than to the section. */
+  margin: 2px 0 6px 34px;
+  max-width: calc(100% - 34px);
+}
+
+/* The row action stays hidden until the row is hovered or the button itself is
+   focused, so the list is not a field of icons — but it must never be hidden
+   from the keyboard, which is why :focus-visible is included. */
+.upcoming-action {
+  grid-row: 1 / span 2;
+  grid-column: 4;
+  align-self: center;
+  opacity: 0;
+  transition: opacity var(--duration-fast) var(--ease-out);
+}
+
+.upcoming-item { grid-template-columns: 8px minmax(0, 1fr) auto auto; }
+.upcoming-item:hover .upcoming-action,
+.upcoming-action:focus-visible { opacity: 1; }
+
+/* Hover does not exist on a touch screen, so the action is always visible
+   there rather than unreachable. */
+@media (hover: none) {
+  .upcoming-action { opacity: 1; }
+}

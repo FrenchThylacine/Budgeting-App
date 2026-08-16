@@ -186,6 +186,18 @@ export async function runMigrations(
         await sql`CREATE INDEX IF NOT EXISTS idx_auth_attempts_bucket ON auth_attempts(bucket, created_at);`;
       },
     },
+    {
+      // One-off exceptions to a recurring schedule: a week skipped, a lesson
+      // moved, an extra session, a different price once.
+      //
+      // Without persistence the field would exist in the client model and be
+      // dropped on the next server round-trip — the failure mode migration 005
+      // exists to fix, because the repository writes a fixed column list.
+      name: "008-schedule-overrides",
+      run: async (sql: NeonQueryFunction<any, any>) => {
+        await sql`ALTER TABLE activities ADD COLUMN IF NOT EXISTS schedule_overrides TEXT;`;
+      },
+    },
   ];
 
 

@@ -646,6 +646,55 @@ describeDb("PostgreSQL integration", () => {
       expect(activityIds.has(id)).toBe(true);
     }
   });
+
+  it("round-trips one-off schedule overrides", async () => {
+    const snapshot = (await repo.loadSnapshot("active"))!;
+    const year = Object.values(snapshot.years)[0];
+    year.activities[0].weekdays = [1];
+    year.activities[0].costModel = "schedule";
+    year.activities[0].scheduleOverrides = [
+      { id: "ovr-skip", kind: "skip", date: "2026-03-16", note: "away" },
+      { id: "ovr-move", kind: "move", date: "2026-03-23", movedTo: "2026-03-25" },
+      { id: "ovr-price", kind: "price", date: "2026-03-30", amount: 0 },
+      { id: "ovr-extra", kind: "extra", date: "2026-03-11", amount: 45 },
+    ];
+    snapshot.revision = (snapshot.revision ?? 0) + 1;
+    await repo.saveSnapshot(snapshot, "active");
+
+    const reloaded = await repo.loadSnapshot("active");
+    const activity = Object.values(reloaded!.years)[0].activities.find((a) => a.id === year.activities[0].id)!;
+
+    // The repository writes a fixed column list, so a field added to the model
+    // but not to the schema, the upsert and the parser is silently dropped on
+    // the next round-trip. That is what migration 005 existed to fix, and it is
+    // why every persisted field needs a test like this one.
+    expect(activity.scheduleOverrides).toHaveLength(4);
+    const byId = Object.fromEntries((activity.scheduleOverrides ?? []).map((o) => [o.id, o]));
+    expect(byId["ovr-skip"].kind).toBe("skip");
+    expect(byId["ovr-move"].movedTo).toBe("2026-03-25");
+    // Zero must survive as zero: a free session is a fact, not a missing price.
+    expect(byId["ovr-price"].amount).toBe(0);
+    expect(byId["ovr-extra"].amount).toBe(45);
+  });
+
+  it("drops a malformed override instead of failing the whole load", async () => {
+    // Target an activity that is actually part of the loaded snapshot: any row
+    // in the table would do for the write, but the assertion reads it back
+    // through loadSnapshot.
+    const loaded = (await repo.loadSnapshot("active"))!;
+    const id = Object.values(loaded.years)[0].activities[0].id;
+    await client.query(`UPDATE activities SET schedule_overrides = $1 WHERE id = $2`, [
+      '[{"id":"ok","kind":"skip","date":"2026-03-16"},{"nonsense":true},"garbage"]',
+      id,
+    ]);
+
+    const reloaded = await repo.loadSnapshot("active");
+    const activity = Object.values(reloaded!.years)[0].activities.find((a) => a.id === id)!;
+    // One bad entry must not make the whole budget unloadable; the activity
+    // still has its recurring rule and its valid exceptions.
+    expect(activity.scheduleOverrides).toHaveLength(1);
+    expect(activity.scheduleOverrides![0].id).toBe("ok");
+  });
 });
 
 /**

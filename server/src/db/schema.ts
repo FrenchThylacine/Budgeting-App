@@ -97,6 +97,10 @@ export async function initializeSchema(
       weekdays TEXT,
       day_of_month INTEGER,
       start_date TEXT,
+      -- One-off exceptions to the recurring rule, as a JSON array. Safe to
+      -- declare here as well as in migration 008: nothing in this file
+      -- references it, so an existing database that lacks it is unaffected.
+      schedule_overrides TEXT,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL,
       FOREIGN KEY(year_id)

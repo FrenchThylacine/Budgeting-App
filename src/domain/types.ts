@@ -179,6 +179,41 @@ export interface Activity {
   dayOfMonth?: number | null;
   /** First date the schedule applies from (YYYY-MM-DD). */
   startDate?: string;
+  /**
+   * One-off exceptions to the recurring rule.
+   *
+   * A week skipped, a lesson moved, an extra session, a different price once —
+   * real life does not follow the rule exactly, and editing the rule to record
+   * a single exception corrupts every other month it produces. These override
+   * individual occurrences and leave the rule untouched.
+   */
+  scheduleOverrides?: ScheduleOverride[];
+}
+
+/** What an override does to the occurrence it names. */
+export type ScheduleOverrideKind = "skip" | "move" | "extra" | "price";
+
+export interface ScheduleOverride {
+  id: string;
+  kind: ScheduleOverrideKind;
+  /**
+   * The occurrence being overridden (YYYY-MM-DD).
+   *
+   * For `skip`, `move` and `price` this is the date the recurring rule
+   * produces. For `extra` it is the added date, which the rule never produces.
+   */
+  date: string;
+  /** Where a `move` puts the occurrence (YYYY-MM-DD). */
+  movedTo?: string;
+  /**
+   * Price for this one occurrence, in the activity's own currency.
+   *
+   * Used by `price` and optionally by `extra`. `null` means the price is not
+   * stated — which is not the same as free, so it is never read as zero.
+   */
+  amount?: number | null;
+  /** Why, for the audit trail and the tooltip. */
+  note?: string;
 }
 
 export interface SpendingEntry {

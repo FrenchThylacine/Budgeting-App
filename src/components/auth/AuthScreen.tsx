@@ -200,7 +200,7 @@ export const AuthScreen: React.FC = () => {
               </button>
             </div>
             {mode !== "signin" && (
-              <span className="text-footnote">
+              <span className="text-note">
                 At least {MIN_PASSWORD_LENGTH} characters. Length matters more than symbols.
               </span>
             )}
