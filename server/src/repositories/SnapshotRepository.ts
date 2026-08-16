@@ -13,11 +13,38 @@ import type {
   YearRecord,
   SeasonalPreset,
   ScenarioPreset,
+  ScheduleOverride,
 } from "../../../src/domain/types.js";
 
 interface PendingQuery {
   text: string;
   params: unknown[];
+}
+
+/**
+ * One-off schedule exceptions, stored as a JSON array.
+ *
+ * Entries without a usable date are dropped rather than throwing. The
+ * alternative — one malformed override making the whole budget unloadable — is
+ * a far worse failure than silently losing an exception, and the activity still
+ * has its recurring rule.
+ */
+function parseScheduleOverrides(raw: unknown): ScheduleOverride[] | undefined {
+  if (typeof raw !== "string" || raw.length === 0) return undefined;
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return undefined;
+    const valid = parsed.filter(
+      (entry): entry is ScheduleOverride =>
+        Boolean(entry) &&
+        typeof entry.id === "string" &&
+        typeof entry.date === "string" &&
+        ["skip", "move", "extra", "price"].includes(entry.kind),
+    );
+    return valid.length > 0 ? valid : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 /**
@@ -375,9 +402,10 @@ export class SnapshotRepository {
          price_per_session, price_per_purchase, price_per_month, estimated_cost, yearly_estimate,
          active, visible, seasonal_tag, "order", notes,
          icon, color, cost_model, sessions_per_month, weekdays, day_of_month, start_date,
+         schedule_overrides,
          created_at, updated_at)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17,
-                $18, $19, $20, $21, $22, $23, $24, $25, $26)
+                $18, $19, $20, $21, $22, $23, $24, $25, $26, $27)
         ON CONFLICT (id) DO UPDATE SET
           name = EXCLUDED.name,
           category_id = EXCLUDED.category_id,
@@ -401,6 +429,7 @@ export class SnapshotRepository {
           weekdays = EXCLUDED.weekdays,
           day_of_month = EXCLUDED.day_of_month,
           start_date = EXCLUDED.start_date,
+          schedule_overrides = EXCLUDED.schedule_overrides,
           updated_at = EXCLUDED.updated_at
         WHERE activities.year_id = EXCLUDED.year_id
       `,
@@ -431,6 +460,12 @@ export class SnapshotRepository {
           activity.weekdays && activity.weekdays.length > 0 ? JSON.stringify(activity.weekdays) : null,
           activity.dayOfMonth ?? null,
           activity.startDate ?? null,
+          // Overrides are a small list read as a unit with the activity, so
+          // JSON keeps the schema simple without a join table — the same
+          // reasoning as weekdays above.
+          activity.scheduleOverrides && activity.scheduleOverrides.length > 0
+            ? JSON.stringify(activity.scheduleOverrides)
+            : null,
           now,
           now,
         ],
@@ -776,6 +811,7 @@ export class SnapshotRepository {
       weekdays: parseWeekdays(row.weekdays),
       dayOfMonth: row.day_of_month != null ? Number(row.day_of_month) : undefined,
       startDate: row.start_date ?? undefined,
+      scheduleOverrides: parseScheduleOverrides(row.schedule_overrides),
     };
   }
 

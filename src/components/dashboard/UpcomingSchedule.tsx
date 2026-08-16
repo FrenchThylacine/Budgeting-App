@@ -1,9 +1,11 @@
-import React from "react";
-import { CalendarClock, CalendarPlus } from "lucide-react";
+import React, { useState } from "react";
+import { CalendarClock, CalendarPlus, MoreHorizontal } from "lucide-react";
 import { dayLabel, groupByDay, upcomingSchedule } from "../../domain/upcoming";
 import { describeSchedule } from "../../domain/schedule";
 import { normalizeAmount } from "../../domain/currency";
-import type { BudgetSnapshot } from "../../domain/types";
+import type { Activity, BudgetSnapshot, ScheduleOverride } from "../../domain/types";
+import { useBudgetStore } from "../../store/budgetStore";
+import { OccurrenceOverrideDialog } from "./OccurrenceOverrideDialog";
 
 interface UpcomingScheduleProps {
   snapshot: BudgetSnapshot;
@@ -27,6 +29,10 @@ interface UpcomingScheduleProps {
  * get fixed.
  */
 export const UpcomingSchedule: React.FC<UpcomingScheduleProps> = ({ snapshot, money, now = new Date() }) => {
+  const updateActivity = useBudgetStore((s) => s.updateActivity);
+  const mutable = useBudgetStore((s) => s.isCurrentPeriodMutable)();
+  const [editing, setEditing] = useState<{ activity: Activity; date: Date } | null>(null);
+
   const { occurrences, undated, horizonDays } = upcomingSchedule(snapshot, now);
   const allDays = groupByDay(occurrences);
 
@@ -79,6 +85,17 @@ export const UpcomingSchedule: React.FC<UpcomingScheduleProps> = ({ snapshot, mo
                             not a zero: the app does not know what it costs. */}
                         {amount == null ? "—" : money(amount)}
                       </span>
+                      {mutable && (
+                        <button
+                          type="button"
+                          className="btn btn-ghost btn-sm btn-icon upcoming-action"
+                          onClick={() => setEditing({ activity: item.activity, date: item.date })}
+                          aria-label={`Change ${item.activity.name} on ${item.date.toLocaleDateString()}`}
+                          title="Skip, move, or reprice just this one"
+                        >
+                          <MoreHorizontal size={15} />
+                        </button>
+                      )}
                     </li>
                   );
                 })}
@@ -102,7 +119,7 @@ export const UpcomingSchedule: React.FC<UpcomingScheduleProps> = ({ snapshot, mo
               {undated.length} recurring {undated.length === 1 ? "activity has" : "activities have"} no date set
             </span>
           </summary>
-          <p className="text-footnote upcoming-note">
+          <p className="text-note upcoming-note">
             These recur but have no weekday or day of the month, so they cannot be placed on a calendar.
             Set one in the activity to see it above.
           </p>
@@ -135,6 +152,22 @@ export const UpcomingSchedule: React.FC<UpcomingScheduleProps> = ({ snapshot, mo
             ? `${hiddenOccurrences} more in the next ${horizonDays} days`
             : `Next ${horizonDays} days`}
         </p>
+      )}
+      {editing && (
+        <OccurrenceOverrideDialog
+          activity={editing.activity}
+          date={editing.date}
+          currency={editing.activity.currency}
+          onCancel={() => setEditing(null)}
+          onApply={(overrides: ScheduleOverride[]) => {
+            // Goes through updateActivity, which refuses while a closed period
+            // is selected and puts the change on the undo stack.
+            updateActivity(editing.activity.id, {
+              scheduleOverrides: overrides.length > 0 ? overrides : undefined,
+            });
+            setEditing(null);
+          }}
+        />
       )}
     </div>
   );

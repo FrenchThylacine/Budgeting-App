@@ -241,6 +241,11 @@ body {
 .text-body { font-size: var(--text-body); font-weight: var(--weight-regular); line-height: var(--leading-normal); }
 .text-callout { font-size: var(--text-callout); font-weight: var(--weight-medium); line-height: 1.4; }
 .text-caption { font-size: var(--text-caption); font-weight: var(--weight-medium); line-height: 1.4; color: var(--text-secondary); }
+/**
+ * A micro-LABEL: uppercase, tracked, semibold. "REMAINING", "MON, THU".
+ * Deliberately not for sentences — uppercasing a sentence reads as shouting
+ * and measurably slows reading, because word shapes disappear.
+ */
 .text-footnote {
   font-size: var(--text-footnote);
   font-weight: var(--weight-semibold);
@@ -248,6 +253,14 @@ body {
   color: var(--text-tertiary);
   text-transform: uppercase;
   letter-spacing: var(--tracking-wide);
+}
+
+/** Small explanatory prose at the same size, left in sentence case. */
+.text-note {
+  font-size: var(--text-footnote);
+  font-weight: var(--weight-regular);
+  line-height: 1.5;
+  color: var(--text-secondary);
 }
 
 /**
