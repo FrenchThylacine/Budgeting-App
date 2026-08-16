@@ -28,9 +28,11 @@ import { Notifications } from "./components/Notifications";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { isViewingHistoricalPeriod } from "./utils/formatters";
 import { periodLabel } from "./domain/periods";
-import { Lock, Plane, Unlock } from "lucide-react";
+import { Lock, Unlock } from "lucide-react";
 import { useAuthStore } from "./store/authStore";
 import { AuthScreen } from "./components/auth/AuthScreen";
+import { TabTransition } from "./components/ui/TabTransition";
+import { AircraftMark } from "./components/ui/AircraftMark";
 
 type TabKey = "dashboard" | "activities" | "spending" | "wishlist" | "wallet" | "analytics" | "scenarios" | "history" | "settings" | "categories";
 
@@ -123,12 +125,12 @@ export default function App() {
     return (
       <div className="boot-screen" role="status" aria-live="polite">
         <div className="boot-inner">
-          <div className="boot-mark">
-            <Plane size={30} strokeWidth={2.2} aria-hidden="true" />
+          <div className="boot-craft">
+            <AircraftMark size={72} hull="#FFFFFF" accent="var(--brand-mark-to)" />
           </div>
           <div style={{ display: "grid", justifyItems: "center", gap: 4 }}>
-            <div className="text-title">Budget OS</div>
-            <div className="text-caption">Checking your session…</div>
+            <div className="boot-title">Budget OS</div>
+            <div className="boot-caption">Checking your session…</div>
           </div>
           <div className="boot-track" aria-hidden="true">
             <div className="boot-fill" />
@@ -146,12 +148,12 @@ export default function App() {
     return (
       <div className="boot-screen" role="status" aria-live="polite">
         <div className="boot-inner">
-          <div className="boot-mark">
-            <Plane size={30} strokeWidth={2.2} aria-hidden="true" />
+          <div className="boot-craft">
+            <AircraftMark size={72} hull="#FFFFFF" accent="var(--brand-mark-to)" />
           </div>
           <div style={{ display: "grid", justifyItems: "center", gap: 4 }}>
-            <div className="text-title">Budget OS</div>
-            <div className="text-caption">Loading your finances…</div>
+            <div className="boot-title">Budget OS</div>
+            <div className="boot-caption">Loading your finances…</div>
           </div>
           <div className="boot-track" aria-hidden="true">
             <div className="boot-fill" />
@@ -236,12 +238,6 @@ export default function App() {
 
           {/* Keying on the tab restarts the enter animation, so switching
               views reads as a transition rather than an instant swap. */}
-          {/* The animation lives on the inner element, not on this one.
-              A lazily loaded panel suspends, so the outer wrapper mounts with
-              the fallback inside it and the transition plays over an empty
-              box — then the real content swaps in without remounting and
-              never animates at all. Keying the inner element means the
-              animation fires when the content actually arrives. */}
           <div className="tab-panel-frame">
             {/* A lazily loaded panel suspends on first open. The fallback keeps
                 the layout height so the page does not jump, and announces
@@ -254,7 +250,7 @@ export default function App() {
                 </div>
               }
             >
-              <div key={activeTab} className="tab-panel">{tabs[activeTab]}</div>
+              <TabTransition tabKey={activeTab}>{tabs[activeTab]}</TabTransition>
             </Suspense>
           </div>
         </main>
