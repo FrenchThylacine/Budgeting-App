@@ -881,3 +881,123 @@
     overflow-y: auto;
   }
 }
+
+/* ─── Tab transition: the aircraft brings the page ────────────────────────── */
+
+.tab-transition { position: relative; min-width: 0; }
+
+.tab-sweep {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  overflow: hidden;
+  pointer-events: none;
+  border-radius: var(--radius-lg);
+}
+
+/* The banner the aircraft trails. It leads the reveal, so the page appears to
+   arrive with it rather than merely fading. */
+.tab-sweep-banner {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 42%;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    var(--accent-soft) 22%,
+    var(--accent-soft) 70%,
+    var(--brand-red-soft) 96%,
+    transparent 100%
+  );
+  transform: translateX(-60%);
+  animation: sweepBanner 620ms var(--ease-out) forwards;
+}
+
+.tab-sweep-craft {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  display: grid;
+  place-items: center;
+  transform: translate(-60px, -50%);
+  animation: sweepCraft 620ms var(--ease-out) forwards;
+  filter: drop-shadow(0 4px 10px rgba(0, 33, 87, 0.25));
+}
+
+@keyframes sweepBanner {
+  from { transform: translateX(-60%); }
+  to   { transform: translateX(260%); }
+}
+
+@keyframes sweepCraft {
+  from { transform: translate(-60px, -50%); }
+  to   { transform: translate(calc(100vw + 40px), -50%); }
+}
+
+/* The page rises into place just behind the banner, so the two read as one
+   movement rather than as two things happening at once. */
+.tab-panel-arriving {
+  animation: pageArrive 620ms var(--ease-out);
+}
+
+/* No hold at zero. An earlier version kept the page invisible for the first
+   35% so it would appear "behind" the banner — but the banner starts
+   off-screen, so those 215ms were a blank panel with nothing covering it.
+   The page now rises immediately and the banner passes over it. */
+@keyframes pageArrive {
+  0%   { opacity: 0; transform: translateY(8px); }
+  55%  { opacity: 1; transform: none; }
+  100% { opacity: 1; transform: none; }
+}
+
+/* A shape flying across the screen on every navigation is exactly what this
+   setting exists to stop. The page still changes; it simply appears. */
+@media (prefers-reduced-motion: reduce) {
+  .tab-sweep { display: none; }
+  .tab-panel-arriving { animation: none; }
+}
+
+/* ─── Boot screen ─────────────────────────────────────────────────────────── */
+
+.boot-screen {
+  /* Deep navy ground with a low horizon glow, so the mark reads as airborne
+     rather than as an icon on a grey page. */
+  background:
+    radial-gradient(120% 80% at 50% 120%, rgba(228, 0, 43, 0.20) 0%, transparent 60%),
+    radial-gradient(90% 60% at 50% -10%, rgba(107, 165, 255, 0.18) 0%, transparent 70%),
+    var(--brand-mark-from);
+  color: #FFFFFF;
+}
+
+.boot-craft {
+  display: grid;
+  place-items: center;
+  animation: bootCruise 3.2s var(--ease-out) infinite;
+}
+
+.boot-title {
+  font-size: 1.25rem;
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-snug);
+  color: #FFFFFF;
+}
+
+.boot-caption {
+  font-size: var(--text-caption);
+  color: rgba(255, 255, 255, 0.72);
+}
+
+/* A slow drift, not a bounce: the aircraft is cruising, not hopping. */
+@keyframes bootCruise {
+  0%, 100% { transform: translate3d(-6px, 2px, 0) rotate(-1.5deg); }
+  50%      { transform: translate3d(6px, -2px, 0) rotate(1.5deg); }
+}
+
+.boot-track { background: rgba(255, 255, 255, 0.18); }
+.boot-fill { background: linear-gradient(90deg, #FFFFFF, var(--brand-mark-to)); }
+
+@media (prefers-reduced-motion: reduce) {
+  .boot-craft { animation: none; }
+}

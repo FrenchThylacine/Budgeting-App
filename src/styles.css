@@ -744,9 +744,9 @@ strong {
 }
 
 .period-mode.active {
-  background: var(--bg-elevated);
+  background: var(--accent);
+  color: var(--accent-contrast);
   box-shadow: var(--shadow-xs);
-  color: var(--text-primary);
 }
 
 .period-current-label {
@@ -842,10 +842,24 @@ strong {
   color: var(--text-primary);
 }
 
+/* The selected item is a solid navy block with a red icon, not a pale tint.
+   A wash of 8% accent is legible but says nothing; this is the one place the
+   identity should be unmistakable, and it is also the strongest available
+   signal of where you are. */
 .nav-item.active {
-  background: var(--accent-soft);
-  color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-contrast);
+  box-shadow: var(--shadow-sm);
 }
+
+.nav-item.active .nav-icon {
+  color: var(--brand-red);
+  opacity: 1;
+}
+
+/* On a dark ground the accent is a pale blue, so the red would sit on light
+   blue and lose contrast. The mark keeps its meaning by deepening instead. */
+:root.dark .nav-item.active .nav-icon { color: var(--brand-mark-to); }
 
 .nav-item .nav-icon {
   width: 20px;
