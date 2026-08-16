@@ -1,5 +1,43 @@
 # Changelog
 
+## 2026-08-16 — Excel import
+
+### The importer existed but was wired to nothing, and did not work
+
+`importBudgetWorkbook` had never been reachable: there was no file input anywhere in the application. Run against the real workbook for the first time, it also turned out to be substantially wrong.
+
+| Expected | Imported |
+|---|---|
+| 8 activities | **6** — Gym and Arabic lost |
+| 14 wishlist items | **12** — the two most expensive lost |
+| Weeks 1→33 | **11→33** — the first ten lost |
+| 5 years (2026–2030) | **1** — the rest silently deleted by the save's targeted-delete pass |
+| Balance €339.39 | **0** |
+
+Two causes. Cells were addressed by hardcoded row number, and the sheet was read with `blankrows: false` — which drops empty rows, so every index below the workbook's first blank separator row was off by two. And `parseAmount` could not read `"€339.39"`, so an unknown balance became a *stated zero*, which is a different and wrong number rather than a missing one.
+
+### Rewritten around header detection
+
+`domain/workbookImport.ts` locates everything by its header text: the `Activities` row, the `What I want` column, the `Year` row and the label under each year that says which of its three columns is USD and which is EUR. Blank rows, inserted columns and moved metadata no longer matter. Verified against the real file: 8 activities, 14 wishlist items, 5 years, 48 transactions, balance €339.39, and a spending total of **€2,399.48** against the **€2,399.47** the sheet computes for itself.
+
+- **Missing stays missing.** Empty cells, `N/A` and `NaN` produce nothing; `0` is kept, because a week with no spending is a fact the user recorded. A corrupted `parseAmount` that returns 0 for unknown fails four tests.
+- **Failures are loud.** A missing sheet names the sheets the file does contain; a missing `Activities` or `Year` header is an error. The old code fell back to the first sheet in the workbook and to the seed's own activities, presenting invented data as if it had been read from the file.
+- **Identifiers are generated per import**, not derived from the file. They are primary keys in tables shared by every account, so two people importing the same workbook would otherwise collide on every row — the defect migration 006 exists to prevent.
+- Weeks 53–55, which the sheet prints as layout for every year, are skipped with one aggregated note rather than fifteen.
+- The monthly block below the weekly one is deliberately not imported; it restates the same figures and reading both would double every amount.
+
+### An import now shows what it will destroy, first
+
+An import **replaces** the budget: the save deletes anything absent from the incoming snapshot. A preview dialog now states that plainly, with a before/after count of years, categories, activities, transactions, wishlist items and wallet entries, an explicit warning naming any year that will be deleted, the file's own notes, a one-click backup, and a confirmation checkbox that keeps the destructive button disabled until it is ticked. The import goes through `importSnapshot`, so it lands on the undo stack — verified in the browser: import, then undo, and the previous budget returns.
+
+### Also
+
+- `scripts/create-account.ts` creates or resets an account from the command line. It is not a back door: the password goes through the same scrypt hashing and the account has no elevated rights. The only rule it relaxes is the password minimum, and only when the database is on localhost — against anything else it refuses with an explanation.
+- The superseded importer and the ten helpers only it used were deleted rather than left beside the replacement; `importExport.ts` drops from 400 to 121 lines.
+
+**Verification** — `npx tsc -b` clean · **355 tests passing**, 61 against real PostgreSQL 17 · both builds clean · the full round trip driven in a browser: file → preview → confirm → store → API → PostgreSQL → read back → undo.
+
+
 ## 2026-08-16 — Accounts
 
 ### Email and password sign-in, with the data model made safe for it first
