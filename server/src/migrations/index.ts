@@ -208,6 +208,15 @@ export async function runMigrations(
         await sql`ALTER TABLE wishlist_items ADD COLUMN IF NOT EXISTS brand_url TEXT;`;
       },
     },
+    {
+      // A library icon for a wishlist item, for the common case where the site
+      // has no usable favicon — or returns a generic placeholder that renders
+      // as something indistinguishable from a broken image.
+      name: "010-wishlist-icon",
+      run: async (sql: NeonQueryFunction<any, any>) => {
+        await sql`ALTER TABLE wishlist_items ADD COLUMN IF NOT EXISTS icon TEXT;`;
+      },
+    },
   ];
 
 

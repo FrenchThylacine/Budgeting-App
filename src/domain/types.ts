@@ -292,6 +292,15 @@ export interface WishlistItem {
    * only a purchase link.
    */
   brandUrl?: string;
+  /**
+   * A chosen icon from the library.
+   *
+   * Takes priority over the favicon. Many sites have no usable icon, and some
+   * return a generic placeholder that looks like a broken image — picking one
+   * from the library is the only reliable way out, so an explicit choice must
+   * win over anything derived from a URL.
+   */
+  icon?: string;
   /** Accent colour for the item card. */
   color?: string;
   /** Spending entry created when this item was bought, when linked. */

@@ -129,6 +129,12 @@
   /* Motion */
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  /* One curve for anything that travels across the screen: it leaves calmly,
+     covers the distance, and settles without overshoot. Motion that starts and
+     stops abruptly is what makes an animation feel cheap. */
+  --sweep-ease: cubic-bezier(0.33, 0, 0.15, 1);
+  --sweep-duration: 1150ms;
+
   --duration-fast: 150ms;
   --duration-normal: 250ms;
   --duration-slow: 350ms;
@@ -744,9 +750,14 @@ strong {
 }
 
 .period-mode.active {
-  background: var(--accent);
-  color: var(--accent-contrast);
+  background: var(--brand-mark-from);
+  color: #FFFFFF;
   box-shadow: var(--shadow-xs);
+}
+
+:root.dark .period-mode.active {
+  background: #FFFFFF;
+  color: var(--brand-mark-from);
 }
 
 .period-current-label {
@@ -846,20 +857,29 @@ strong {
    A wash of 8% accent is legible but says nothing; this is the one place the
    identity should be unmistakable, and it is also the strongest available
    signal of where you are. */
+/* The selected item is a solid block, not a pale tint: a wash of 8% accent is
+   legible but says nothing, and this is both the one place the identity should
+   be unmistakable and the strongest signal available of where you are.
+
+   Light mode: brand navy block, white label, red icon.
+   Dark mode:  white block, navy label, red icon. Navy on near-black would
+               disappear, so the block inverts — the RED is constant in both,
+               and that is what actually carries the identity. */
 .nav-item.active {
-  background: var(--accent);
-  color: var(--accent-contrast);
+  background: var(--brand-mark-from);
+  color: #FFFFFF;
   box-shadow: var(--shadow-sm);
 }
 
 .nav-item.active .nav-icon {
-  color: var(--brand-red);
+  color: var(--brand-mark-to);
   opacity: 1;
 }
 
-/* On a dark ground the accent is a pale blue, so the red would sit on light
-   blue and lose contrast. The mark keeps its meaning by deepening instead. */
-:root.dark .nav-item.active .nav-icon { color: var(--brand-mark-to); }
+:root.dark .nav-item.active {
+  background: #FFFFFF;
+  color: var(--brand-mark-from);
+}
 
 .nav-item .nav-icon {
   width: 20px;

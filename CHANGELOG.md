@@ -1,5 +1,41 @@
 # Changelog
 
+## 2026-08-16 — A proper aircraft, calmer motion, bolder colour
+
+### The mark is now an airliner
+
+A twin-aisle wide-body seen from above, in a blue-white-red livery: swept tapered wings with upturned tips, engines slung ahead of the leading edge on visible pylons, a rounded nose with a darkened flight deck, a small tailplane close to the tail, and a navy fin with a red flash.
+
+It took three attempts. The first was a generic silhouette; the second used bezier curves for the wings and **they crossed over themselves** — a curve one control point away from wrong is not worth the realism at 44 pixels, where the silhouette is all anyone can see. Straight edges throughout now, and it reads as an airliner down to the sidebar size.
+
+The airline's logo and wordmark are trademarks and are deliberately not drawn.
+
+### The transition is slower, and cheaper per frame
+
+620 ms was measurably too quick: the aircraft crossed a 1440 px panel in about a third of a second, which reads as a twitch — and gives the compositor a very high pixel rate to sustain, which is where the stutter came from.
+
+- **1150 ms**, on one easing curve that leaves calmly, covers the distance and settles without overshoot.
+- **The `drop-shadow` filter is gone.** It was recomputed every frame across the whole panel. Only `transform` animates now, on promoted layers.
+- The hard gradient band, which read as a bar sliding past, is replaced by a soft wash travelling ahead of the aircraft and a **contrail** drawn by the aircraft's own element — so there is no second animated thing to keep in sync.
+
+### Selection is unmistakable
+
+- **Light mode**: brand navy block, white label, **red icon**.
+- **Dark mode**: white block, navy label, **red icon**. Navy on near-black would disappear, so the block inverts — the red is constant in both, and that is what carries the identity.
+
+### More motion, and less clutter on a phone
+
+- Sheets rise from the bottom edge on a phone and scale in on a desktop, which is where each visually comes from.
+- Lists arrive in a short stagger, capped at eight rows — beyond that the last row waits noticeably for no benefit.
+- **On touch devices the per-row icon buttons are gone.** They were ~34 px targets crowded at the edge of a card, competing for width the content needed; the swipe panel gives the same actions a full-height target and tapping the row opens the editor. Scoped to touch-only, so a mouse or keyboard keeps every control.
+
+### Wishlist items can use the icon library
+
+Many sites have no usable favicon, and some return a placeholder indistinguishable from a broken image. An icon chosen from the library now **overrides** anything derived from a URL, because an explicit choice should win. Migration `010`.
+
+**Verification** — `npx tsc -b` clean · **435 tests passing**, 65 against real PostgreSQL 17 · both builds clean.
+
+
 ## 2026-08-16 — One interaction model everywhere
 
 ### Editing is a dedicated editor, on every entity

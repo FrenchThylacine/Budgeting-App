@@ -895,60 +895,75 @@
   border-radius: var(--radius-lg);
 }
 
-/* The banner the aircraft trails. It leads the reveal, so the page appears to
-   arrive with it rather than merely fading. */
-.tab-sweep-banner {
+/* A wide, very soft wash travelling just ahead of the aircraft. Replaces the
+   hard gradient band, which read as a bar sliding past rather than as light. */
+.tab-sweep-glow {
   position: absolute;
-  top: 0;
-  bottom: 0;
+  top: -20%;
+  bottom: -20%;
   left: 0;
-  width: 42%;
-  background: linear-gradient(
-    90deg,
-    transparent 0%,
-    var(--accent-soft) 22%,
-    var(--accent-soft) 70%,
-    var(--brand-red-soft) 96%,
-    transparent 100%
+  width: 55%;
+  background: radial-gradient(
+    60% 50% at 50% 50%,
+    var(--accent-soft) 0%,
+    transparent 72%
   );
-  transform: translateX(-60%);
-  animation: sweepBanner 620ms var(--ease-out) forwards;
+  transform: translate3d(-90%, 0, 0);
+  animation: sweepGlow var(--sweep-duration) var(--sweep-ease) forwards;
+  will-change: transform;
 }
 
 .tab-sweep-craft {
   position: absolute;
-  top: 50%;
+  top: 46%;
   left: 0;
   display: grid;
   place-items: center;
-  transform: translate(-60px, -50%);
-  animation: sweepCraft 620ms var(--ease-out) forwards;
-  filter: drop-shadow(0 4px 10px rgba(0, 33, 87, 0.25));
+  transform: translate3d(-140px, -50%, 0);
+  animation: sweepCraft var(--sweep-duration) var(--sweep-ease) forwards;
+  /* transform only, and promoted to its own layer. A drop-shadow filter here
+     was recomputed every frame across the whole panel, which is what made the
+     sweep stutter. */
+  will-change: transform;
 }
 
-@keyframes sweepBanner {
-  from { transform: translateX(-60%); }
-  to   { transform: translateX(260%); }
+/* The contrail: a thin tapering line trailing the aircraft, drawn by the same
+   element so there is nothing to keep in sync. */
+.tab-sweep-craft::before {
+  content: "";
+  position: absolute;
+  right: 62%;
+  top: 50%;
+  width: 46vw;
+  height: 2px;
+  transform: translateY(-50%);
+  border-radius: 2px;
+  background: linear-gradient(
+    270deg,
+    var(--accent-soft) 0%,
+    color-mix(in srgb, var(--accent-soft) 55%, transparent) 35%,
+    transparent 100%
+  );
+}
+
+@keyframes sweepGlow {
+  from { transform: translate3d(-90%, 0, 0); }
+  to   { transform: translate3d(240%, 0, 0); }
 }
 
 @keyframes sweepCraft {
-  from { transform: translate(-60px, -50%); }
-  to   { transform: translate(calc(100vw + 40px), -50%); }
+  from { transform: translate3d(-140px, -50%, 0); }
+  to   { transform: translate3d(calc(100vw + 140px), -50%, 0); }
 }
 
-/* The page rises into place just behind the banner, so the two read as one
-   movement rather than as two things happening at once. */
+/* The page settles in behind, on its own gentler curve, so the two read as one
+   movement rather than as two things racing. */
 .tab-panel-arriving {
-  animation: pageArrive 620ms var(--ease-out);
+  animation: pageArrive calc(var(--sweep-duration) * 0.7) var(--ease-out);
 }
 
-/* No hold at zero. An earlier version kept the page invisible for the first
-   35% so it would appear "behind" the banner — but the banner starts
-   off-screen, so those 215ms were a blank panel with nothing covering it.
-   The page now rises immediately and the banner passes over it. */
 @keyframes pageArrive {
-  0%   { opacity: 0; transform: translateY(8px); }
-  55%  { opacity: 1; transform: none; }
+  0%   { opacity: 0; transform: translate3d(0, 14px, 0); }
   100% { opacity: 1; transform: none; }
 }
 
@@ -1030,4 +1045,75 @@
    to read its own value. */
 @media (max-width: 640px) {
   .gesture-row { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* ─── Touch devices: the gesture replaces the buttons ─────────────────────── */
+
+/* On a phone the per-row icon buttons are ~34px targets crowded together at
+   the edge of a card, and they compete for the width the content needs. The
+   swipe panel gives the same actions a full-height target, and tapping the row
+   opens the editor — so the buttons are redundant, not merely small.
+   Scoped to touch-only devices, so a mouse or a keyboard keeps every control. */
+@media (hover: none) and (pointer: coarse) {
+  .swipe-row .row-actions,
+  .swipe-row .item-actions {
+    display: none;
+  }
+}
+
+/* ─── Sheets and dialogs ──────────────────────────────────────────────────── */
+
+.sheet {
+  animation: sheetIn 260ms var(--ease-out);
+}
+
+.sheet-backdrop {
+  animation: backdropIn 200ms var(--ease-out);
+}
+
+@keyframes sheetIn {
+  from { opacity: 0; transform: translate3d(0, 12px, 0) scale(0.985); }
+  to   { opacity: 1; transform: none; }
+}
+
+@keyframes backdropIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* A phone sheet covers the screen, so it rises from the bottom edge rather
+   than growing from the middle, which is where it visually comes from. */
+@media (max-width: 640px) {
+  @keyframes sheetIn {
+    from { transform: translate3d(0, 100%, 0); }
+    to   { transform: none; }
+  }
+}
+
+/* ─── Lists arrive in sequence ────────────────────────────────────────────── */
+
+/* A short stagger, capped at eight: beyond that the last row waits noticeably
+   for no benefit, and a long list would feel slow rather than considered. */
+.item-list > *,
+.scenario-list > * {
+  animation: rowIn 320ms var(--ease-out) backwards;
+}
+
+.item-list > *:nth-child(1),  .scenario-list > *:nth-child(1)  { animation-delay: 0ms; }
+.item-list > *:nth-child(2),  .scenario-list > *:nth-child(2)  { animation-delay: 26ms; }
+.item-list > *:nth-child(3),  .scenario-list > *:nth-child(3)  { animation-delay: 52ms; }
+.item-list > *:nth-child(4),  .scenario-list > *:nth-child(4)  { animation-delay: 78ms; }
+.item-list > *:nth-child(5),  .scenario-list > *:nth-child(5)  { animation-delay: 104ms; }
+.item-list > *:nth-child(6),  .scenario-list > *:nth-child(6)  { animation-delay: 130ms; }
+.item-list > *:nth-child(7),  .scenario-list > *:nth-child(7)  { animation-delay: 156ms; }
+.item-list > *:nth-child(n+8), .scenario-list > *:nth-child(n+8) { animation-delay: 182ms; }
+
+@keyframes rowIn {
+  from { opacity: 0; transform: translate3d(0, 8px, 0); }
+  to   { opacity: 1; transform: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sheet, .sheet-backdrop,
+  .item-list > *, .scenario-list > * { animation: none; }
 }
