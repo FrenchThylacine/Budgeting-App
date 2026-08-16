@@ -34,6 +34,7 @@ import {
   spendingStats,
 } from "../src/domain/analytics";
 import { createSeedBudgetSnapshot } from "../src/data/seedBudget";
+import { catId } from "./helpers/seedIds";
 import type { BudgetSnapshot, SpendingEntry } from "../src/domain/types";
 
 // ─── Fixtures ────────────────────────────────────────────────────────────────
@@ -589,13 +590,18 @@ describe("financialHealth", () => {
 
 describe("chart data honours the financial rules", () => {
   it("keeps piloting spend visible but out of every share percentage", () => {
-    const snap = snapshotWith([
-      entry({ amount: 400, categoryId: "cat-health" }),
-      entry({ amount: 600, categoryId: "cat-piloting", isPiloting: true }),
-    ]);
+    // Resolved against this snapshot: seed ids are generated per budget, so a
+    // second snapshotWith() call would produce ids that do not exist here.
+    const snap = snapshotWith([]);
+    const pilotingId = catId(snap, "cat-piloting");
+    const healthId = catId(snap, "cat-health");
+    snap.years["2026"].spendingEntries = [
+      entry({ amount: 400, categoryId: healthId }),
+      entry({ amount: 600, categoryId: pilotingId, isPiloting: true }),
+    ];
     const rows = categoryBreakdown(snap.years["2026"].spendingEntries, snap);
-    const piloting = rows.find((row) => row.categoryId === "cat-piloting")!;
-    const health = rows.find((row) => row.categoryId === "cat-health")!;
+    const piloting = rows.find((row) => row.categoryId === pilotingId)!;
+    const health = rows.find((row) => row.categoryId === healthId)!;
 
     expect(piloting.total).toBe(600); // still charted
     expect(piloting.share).toBeNull(); // but never a share

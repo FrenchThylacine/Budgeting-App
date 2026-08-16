@@ -1,6 +1,7 @@
 import { monthName, weeksInIsoYear, isMonthClosed, isWeekClosed } from "./dates";
 import { normalizeAmount, roundAmount } from "./currency";
 import { monthlyEstimateFromSchedule, yearlyEstimateFromSchedule } from "./schedule";
+import { findSeedCategory } from "./seedCategories";
 import type {
   Activity,
   ActivityEstimate,
@@ -358,7 +359,7 @@ function summarizeCategories(
   }
   return Array.from(totals.entries())
     .map(([categoryId, total]) => {
-      const category = categoryMap.get(categoryId) ?? categories.find((item) => item.id === "cat-spending");
+      const category = categoryMap.get(categoryId) ?? findSeedCategory(categories, "cat-spending");
       return {
         categoryId,
         categoryName: category?.name ?? "Uncategorized",

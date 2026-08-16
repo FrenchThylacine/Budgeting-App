@@ -1181,12 +1181,22 @@ export function currenciesForStore(): CurrencyCode[] {
 }
 
 function normalizeSnapshot(snapshot: BudgetSnapshot): BudgetSnapshot {
-  const existingCategories = new Set(snapshot.categories.map((category) => category.id));
-  // Copied, so a later edit to a restored default cannot write through to the
-  // shared seed definition.
-  const missingCategories = defaultCategories
-    .filter((category) => !existingCategories.has(category.id))
-    .map((category) => ({ ...category }));
+  // Matched on the seed key, not the id: ids are now generated per budget, so
+  // an id comparison would find nothing and re-add all ten defaults on every
+  // load. The id fallback covers budgets written before seed keys existed,
+  // whose rows still carry the key value as their id.
+  const presentKeys = new Set(
+    snapshot.categories.flatMap((category) => [category.seedKey, category.id].filter(Boolean) as string[]),
+  );
+  const missingCategories: BudgetCategory[] = defaultCategories
+    .filter((template) => !presentKeys.has(template.seedKey))
+    .map((template) => ({
+      id: id("cat"),
+      seedKey: template.seedKey,
+      name: template.name,
+      bucket: template.bucket,
+      color: template.color,
+    }));
   if (missingCategories.length > 0) {
     snapshot.categories = [...snapshot.categories, ...missingCategories];
   }

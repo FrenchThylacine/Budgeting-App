@@ -4,6 +4,7 @@ import { monthName } from "../domain/dates";
 import { isHistoricalPeriod } from "../domain/periods";
 import { normalizeWeekdays } from "../domain/schedule";
 import { isActiveWishlistItem, normalizeItemUrl } from "../domain/wishlist";
+import { seedCategoryIdOrFallback } from "../domain/seedCategories";
 
 export interface ActivityDraft {
   name: string;
@@ -83,7 +84,14 @@ export function isViewingHistoricalPeriod(settings: Settings, now = new Date()):
 export function activityToDraft(activity: Activity | null, snapshot: BudgetSnapshot): ActivityDraft {
   return {
     name: activity?.name ?? "",
-    categoryId: activity?.categoryId ?? snapshot.categories[0]?.id ?? "cat-spending",
+    // Resolved against this budget's own categories. The old literal fallback
+    // named a category that may not exist here, and the value goes straight
+    // into a foreign key.
+    categoryId:
+      activity?.categoryId ??
+      snapshot.categories[0]?.id ??
+      seedCategoryIdOrFallback(snapshot.categories, "cat-spending") ??
+      "",
     currency: activity?.currency ?? snapshot.settings.baseCurrency,
     recurrenceType: activity?.recurrenceType ?? "monthly",
     recurrenceInterval: activity?.recurrenceInterval ?? 1,

@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { createSeedBudgetSnapshot } from "../src/data/seedBudget";
+import { catId } from "./helpers/seedIds";
 import { useBudgetStore } from "../src/store/budgetStore";
 
 const NOW = new Date("2026-08-10T12:00:00Z");
@@ -132,17 +133,18 @@ describe("category edits and historical integrity", () => {
     snapshot.settings.selectedPeriodMode = "month";
     snapshot.settings.selectedYear = 2026;
     snapshot.settings.selectedMonth = 7; // historical relative to NOW (August)
-    const category = snapshot.categories.find((c) => c.id === "cat-spending")!;
+    const spendingId = catId(snapshot, "cat-spending");
+    const category = snapshot.categories.find((c) => c.id === spendingId)!;
     const originalBucket = category.bucket;
     useBudgetStore.setState({ snapshot });
 
-    useBudgetStore.getState().updateCategory("cat-spending", {
+    useBudgetStore.getState().updateCategory(spendingId, {
       name: "Renamed while historical",
       bucket: "piloting",
       monthlyCap: 999,
     });
 
-    const updated = useBudgetStore.getState().snapshot.categories.find((c) => c.id === "cat-spending")!;
+    const updated = useBudgetStore.getState().snapshot.categories.find((c) => c.id === spendingId)!;
     // Harmless metadata still applies...
     expect(updated.name).toBe("Renamed while historical");
     // ...but fields that would rewrite historical reporting do not.
@@ -157,10 +159,11 @@ describe("category edits and historical integrity", () => {
     snapshot.settings.selectedMonth = 8;
     useBudgetStore.setState({ snapshot });
 
-    useBudgetStore.getState().updateCategory("cat-spending", { bucket: "piloting" });
+    const spendingId = catId(snapshot, "cat-spending");
+    useBudgetStore.getState().updateCategory(spendingId, { bucket: "piloting" });
 
     expect(
-      useBudgetStore.getState().snapshot.categories.find((c) => c.id === "cat-spending")!.bucket,
+      useBudgetStore.getState().snapshot.categories.find((c) => c.id === spendingId)!.bucket,
     ).toBe("piloting");
   });
 

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { calculateRolloverDelta, calculateSuggestedMonthlyBudget, calculateYear, createNextYearRecord, summarizeWeek } from "../src/domain/calculations";
 import { createSeedBudgetSnapshot } from "../src/data/seedBudget";
+import { catId } from "./helpers/seedIds";
 import type { Activity, SpendingEntry } from "../src/domain/types";
 
 const NOW = new Date("2026-07-09T12:00:00+03:00");
@@ -116,8 +117,8 @@ describe("budget calculations", () => {
     const snapshot = createSeedBudgetSnapshot(NOW);
     snapshot.settings.baseCurrency = "EUR";
     snapshot.years["2026"].activities = [
-      recurringActivity({ id: "normal-recurring", categoryId: "cat-other", pricePerMonth: 1234, estimatedCost: 1234 }),
-      recurringActivity({ id: "pilot-recurring", categoryId: "cat-piloting", pricePerMonth: 9999, estimatedCost: 9999 }),
+      recurringActivity({ id: "normal-recurring", categoryId: catId(snapshot, "cat-other"), pricePerMonth: 1234, estimatedCost: 1234 }),
+      recurringActivity({ id: "pilot-recurring", categoryId: catId(snapshot, "cat-piloting"), pricePerMonth: 9999, estimatedCost: 9999 }),
       recurringActivity({ id: "inactive-recurring", active: false, pricePerMonth: 500, estimatedCost: 500 }),
     ];
 
@@ -131,7 +132,7 @@ describe("budget calculations", () => {
     const snapshot = createSeedBudgetSnapshot(NOW);
     snapshot.settings.baseCurrency = "USD";
     snapshot.years["2026"].activities = [
-      recurringActivity({ id: "usd-recurring", categoryId: "cat-other", currency: "USD", pricePerMonth: 5678, estimatedCost: 5678 }),
+      recurringActivity({ id: "usd-recurring", categoryId: catId(snapshot, "cat-other"), currency: "USD", pricePerMonth: 5678, estimatedCost: 5678 }),
     ];
 
     const suggestion = calculateSuggestedMonthlyBudget(snapshot);

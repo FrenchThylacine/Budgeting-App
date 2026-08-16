@@ -11,7 +11,21 @@ import type {
   WalletEntry,
   WishlistItem,
 } from "./types";
-import { createSeedBudgetSnapshot, defaultCategories } from "../data/seedBudget";
+import { createSeedBudgetSnapshot } from "../data/seedBudget";
+import { seedCategoryIdOrFallback } from "./seedCategories";
+import type { SeedCategoryKey } from "./types";
+
+/**
+ * Resolves a seed category key against the categories a specific budget owns.
+ *
+ * The importer used to write literal ids (`"cat-wishlist"`, `"cat-spending"`,
+ * `"cat-piloting"`) into every row it produced. Those ids belonged to whichever
+ * budget happened to be created first; in any other budget they name a category
+ * that does not exist, and both `activities.category_id` and
+ * `spending_entries.category_id` are `ON DELETE RESTRICT` foreign keys, so the
+ * whole import transaction fails with an opaque constraint error.
+ */
+type CategoryResolver = (key: SeedCategoryKey) => string;
 
 type SheetRows = unknown[][];
 
@@ -22,6 +36,8 @@ export async function importBudgetWorkbook(file: File, now = new Date()): Promis
   const spendingRows = rows(workbook, "Spending");
   const snapshot = createSeedBudgetSnapshot(now);
   const timestamp = now.toISOString();
+  const resolveCategory: CategoryResolver = (key) =>
+    seedCategoryIdOrFallback(snapshot.categories, key) ?? "";
   const year = parseAmount(spendingRows[2]?.[2]) ?? snapshot.settings.selectedYear;
   const eurUsd = parseAmount(budgetRows[0]?.[7]) ?? snapshot.settings.exchangeRates.eurUsd;
   const usdLbp = parseAmount(spendingRows[0]?.[5]) ?? snapshot.settings.exchangeRates.usdLbp;
@@ -43,9 +59,9 @@ export async function importBudgetWorkbook(file: File, now = new Date()): Promis
   snapshot.years = {
     [year]: {
       year,
-      activities: parseActivities(budgetRows),
-      spendingEntries: parseSpending(spendingRows, year, timestamp),
-      wishlistItems: parseWishlist(budgetRows, timestamp),
+      activities: parseActivities(budgetRows, resolveCategory),
+      spendingEntries: parseSpending(spendingRows, year, timestamp, resolveCategory),
+      wishlistItems: parseWishlist(budgetRows, timestamp, resolveCategory),
       walletEntries: [
         {
           id: `wallet-opening-${year}`,
@@ -151,7 +167,7 @@ function rows(workbook: XLSX.WorkBook, sheetName: string): SheetRows {
   return XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true, blankrows: false }) as SheetRows;
 }
 
-function parseActivities(rowsValue: SheetRows): Activity[] {
+function parseActivities(rowsValue: SheetRows, resolveCategory: CategoryResolver): Activity[] {
   const activities: Activity[] = [];
   for (let rowIndex = 4; rowIndex < rowsValue.length; rowIndex += 1) {
     const row = rowsValue[rowIndex] ?? [];
@@ -161,7 +177,7 @@ function parseActivities(rowsValue: SheetRows): Activity[] {
     const perSession = parseAmount(row[2]);
     const perMonth = parseAmount(row[3]);
     const yearly = parseAmount(row[5]);
-    const categoryId = categoryForActivity(name);
+    const categoryId = categoryForActivity(name, resolveCategory);
     const recurrenceType = inferRecurrence(perSession, perMonth, yearly);
     const interval = recurrenceType === "session" && perSession ? Math.max(1, Math.round((perMonth ?? perSession) / perSession)) : 1;
     activities.push({
@@ -178,7 +194,7 @@ function parseActivities(rowsValue: SheetRows): Activity[] {
       yearlyEstimate: yearly,
       active: true,
       visible: true,
-      seasonalTag: categoryId === "cat-piloting" ? "travel" : "normal",
+      seasonalTag: categoryId === resolveCategory("cat-piloting") ? "travel" : "normal",
       order: activities.length,
       notes: "Imported from the Budget sheet activity block.",
     });
@@ -186,7 +202,7 @@ function parseActivities(rowsValue: SheetRows): Activity[] {
   return activities.length > 0 ? activities : createSeedBudgetSnapshot().years["2026"].activities;
 }
 
-function parseWishlist(rowsValue: SheetRows, timestamp: string): WishlistItem[] {
+function parseWishlist(rowsValue: SheetRows, timestamp: string, resolveCategory: CategoryResolver): WishlistItem[] {
   const items: WishlistItem[] = [];
   for (let rowIndex = 4; rowIndex < rowsValue.length; rowIndex += 1) {
     const row = rowsValue[rowIndex] ?? [];
@@ -198,7 +214,7 @@ function parseWishlist(rowsValue: SheetRows, timestamp: string): WishlistItem[] 
     items.push({
       id: slugId("wish", name),
       name,
-      categoryId: "cat-wishlist",
+      categoryId: resolveCategory("cat-wishlist"),
       actualPrice,
       effectiveValue: actualPrice != null && inWishlist && !bought ? actualPrice : 0,
       currency: "EUR",
@@ -214,7 +230,7 @@ function parseWishlist(rowsValue: SheetRows, timestamp: string): WishlistItem[] 
   return items;
 }
 
-function parseSpending(rowsValue: SheetRows, fallbackYear: number, timestamp: string): SpendingEntry[] {
+function parseSpending(rowsValue: SheetRows, fallbackYear: number, timestamp: string, resolveCategory: CategoryResolver): SpendingEntry[] {
   const entries: SpendingEntry[] = [];
   const header = rowsValue[2] ?? [];
   const yearColumns = header
@@ -233,8 +249,9 @@ function parseSpending(rowsValue: SheetRows, fallbackYear: number, timestamp: st
       const eur = parseAmount(row[groupStart + 1]);
       const date = dateInputValue(startOfIsoWeek(yearColumn.year, week));
       const month = new Date(`${date}T00:00:00`).getMonth() + 1;
-      if (usd != null) entries.push(spendingEntry(yearColumn.year, month, week, date, usd, "USD", timestamp, "L.L. + USD"));
-      if (eur != null) entries.push(spendingEntry(yearColumn.year, month, week, date, eur, "EUR", timestamp, "EUR"));
+      const spendingCategoryId = resolveCategory("cat-spending");
+      if (usd != null) entries.push(spendingEntry(yearColumn.year, month, week, date, usd, "USD", timestamp, "L.L. + USD", spendingCategoryId));
+      if (eur != null) entries.push(spendingEntry(yearColumn.year, month, week, date, eur, "EUR", timestamp, "EUR", spendingCategoryId));
     }
   }
   return entries;
@@ -249,6 +266,7 @@ function spendingEntry(
   currency: CurrencyCode,
   timestamp: string,
   label: string,
+  categoryId: string,
 ): SpendingEntry {
   return {
     id: `spend-${year}-${week}-${currency.toLowerCase()}-${Math.random().toString(16).slice(2)}`,
@@ -256,7 +274,7 @@ function spendingEntry(
     month,
     week,
     date,
-    categoryId: "cat-spending",
+    categoryId,
     amount,
     currency,
     recurrenceType: "none",
@@ -275,15 +293,15 @@ function inferRecurrence(perSession: number | null, perMonth: number | null, yea
   return "none";
 }
 
-function categoryForActivity(name: string): string {
+function categoryForActivity(name: string, resolveCategory: CategoryResolver): string {
   const lower = name.toLowerCase();
-  if (lower.includes("aviation") || lower.includes("navigraph") || lower.includes("pilot")) return "cat-piloting";
-  if (lower.includes("gym")) return "cat-health";
-  if (lower.includes("arabic")) return "cat-learning";
-  if (lower.includes("alpha") || lower.includes("ogero")) return "cat-utilities";
-  if (lower.includes("nebula")) return "cat-software";
-  if (lower.includes("pc")) return "cat-tech";
-  return defaultCategories.find((category) => category.id === "cat-other")?.id ?? defaultCategories[0].id;
+  if (lower.includes("aviation") || lower.includes("navigraph") || lower.includes("pilot")) return resolveCategory("cat-piloting");
+  if (lower.includes("gym")) return resolveCategory("cat-health");
+  if (lower.includes("arabic")) return resolveCategory("cat-learning");
+  if (lower.includes("alpha") || lower.includes("ogero")) return resolveCategory("cat-utilities");
+  if (lower.includes("nebula")) return resolveCategory("cat-software");
+  if (lower.includes("pc")) return resolveCategory("cat-tech");
+  return resolveCategory("cat-other");
 }
 
 function activityExport(activity: Activity, snapshot: BudgetSnapshot): Record<string, unknown> {

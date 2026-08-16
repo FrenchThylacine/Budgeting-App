@@ -36,6 +36,9 @@ const describeDb = connectionString ? describe : describe.skip;
  * Unexecuted queries are represented as thunks so `transaction` can run them
  * inside BEGIN/COMMIT, matching Neon's batch semantics.
  */
+/** Private schema for this suite; also what the schema assertions look in. */
+const TEST_SCHEMA = "test_repo";
+
 function pgTagAdapter(client: Client) {
   const build = (strings: TemplateStringsArray, params: unknown[]) => {
     let text = "";
@@ -89,9 +92,9 @@ describeDb("PostgreSQL integration", () => {
     await client.connect();
     // Each integration suite owns a private schema so suites stay isolated even
     // when Vitest runs their files in parallel against one database.
-    await client.query(`DROP SCHEMA IF EXISTS test_repo CASCADE;`);
-    await client.query(`CREATE SCHEMA test_repo;`);
-    await client.query(`SET search_path TO test_repo;`);
+    await client.query(`DROP SCHEMA IF EXISTS ${TEST_SCHEMA} CASCADE;`);
+    await client.query(`CREATE SCHEMA ${TEST_SCHEMA};`);
+    await client.query(`SET search_path TO ${TEST_SCHEMA};`);
     sql = pgTagAdapter(client);
     repo = new SnapshotRepository(sql);
   }, 30000);
@@ -104,8 +107,13 @@ describeDb("PostgreSQL integration", () => {
     await initializeSchema(sql);
     await runMigrations(sql);
 
+    // Scoped to the schema this suite actually builds in. It used to look in
+    // 'public', where nothing is created, so the list came back empty and the
+    // assertion could never pass — the test reported a failure regardless of
+    // whether the schema was correct.
     const tables = await client.query(
-      `SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' ORDER BY table_name`,
+      `SELECT table_name FROM information_schema.tables WHERE table_schema = $1 ORDER BY table_name`,
+      [TEST_SCHEMA],
     );
     const names = tables.rows.map((r) => r.table_name);
     expect(names).toEqual(
@@ -116,11 +124,26 @@ describeDb("PostgreSQL integration", () => {
       ]),
     );
 
+    const columnsOf = async (table: string): Promise<string[]> => {
+      const res = await client.query(
+        `SELECT column_name FROM information_schema.columns WHERE table_schema = $1 AND table_name = $2`,
+        [TEST_SCHEMA, table],
+      );
+      return res.rows.map((r) => r.column_name);
+    };
+
     // The revision column backs optimistic concurrency.
-    const cols = await client.query(
-      `SELECT column_name FROM information_schema.columns WHERE table_name = 'snapshots'`,
-    );
-    expect(cols.rows.map((r) => r.column_name)).toContain("revision");
+    expect(await columnsOf("snapshots")).toContain("revision");
+
+    // Migration 006. Without an owner column on budget_approvals the
+    // repository cannot scope the read, and approvals are permanent financial
+    // records shared across every budget in the database.
+    expect(await columnsOf("budget_approvals")).toContain("snapshot_id");
+    expect(await columnsOf("categories")).toContain("seed_key");
+
+    // Every migration must be recorded, or it re-runs on every boot.
+    const applied = await client.query(`SELECT name FROM migrations ORDER BY name`);
+    expect(applied.rows.map((r) => r.name)).toContain("006-tenant-isolation");
   });
 
   it("survives concurrent migration runs", async () => {
@@ -497,5 +520,130 @@ describeDb("PostgreSQL integration", () => {
     snapshot!.revision = 20;
     await repo.saveSnapshot(snapshot!, "active");
     expect(await repo.loadRevision("active")).toBe(20);
+  });
+  // ─── Two budgets in one database ──────────────────────────────────────────
+  //
+  // Every one of these failed before migration 006 and the per-budget seed ids.
+  // They are the reason this work exists: authentication is pointless if the
+  // second account created silently overwrites the first one's records.
+
+  it("keeps two budgets' categories separate when both are seeded", async () => {
+    const alice = createSeedBudgetSnapshot();
+    const bob = createSeedBudgetSnapshot();
+
+    // Distinguishable, and only in Bob's copy.
+    const bobHealth = bob.categories.find((c) => c.seedKey === "cat-health")!;
+    bobHealth.name = "Bob's Health";
+    bobHealth.color = "#123456";
+
+    await repo.saveSnapshot(alice, "user-alice");
+    await repo.saveSnapshot(bob, "user-bob");
+
+    const loadedAlice = await repo.loadSnapshot("user-alice");
+    const loadedBob = await repo.loadSnapshot("user-bob");
+
+    // Both budgets keep a full category set. With shared seed ids, the second
+    // save took over the first's rows and Alice was left with none.
+    expect(loadedAlice!.categories.length).toBe(alice.categories.length);
+    expect(loadedBob!.categories.length).toBe(bob.categories.length);
+
+    const aliceHealth = loadedAlice!.categories.find((c) => c.seedKey === "cat-health")!;
+    expect(aliceHealth.name).toBe("Health");
+    expect(aliceHealth.color).not.toBe("#123456");
+
+    // No row is shared between them.
+    const aliceIds = new Set(loadedAlice!.categories.map((c) => c.id));
+    const overlap = loadedBob!.categories.filter((c) => aliceIds.has(c.id));
+    expect(overlap).toEqual([]);
+  });
+
+  it("does not leak budget approvals between budgets", async () => {
+    const approval = (id: string, amount: number) => ({
+      id,
+      year: 2026,
+      month: 3,
+      suggestedAmount: amount,
+      approvedAmount: amount,
+      currency: "EUR" as const,
+      status: "approved" as const,
+      recurringTotal: amount,
+      createdAt: "2026-03-01T00:00:00.000Z",
+      decidedAt: "2026-03-02T00:00:00.000Z",
+      note: `approval note for ${id}`,
+    });
+
+    const alice = await repo.loadSnapshot("user-alice");
+    const bob = await repo.loadSnapshot("user-bob");
+    alice!.budgetApprovals = [approval("approval-alice", 1000)];
+    bob!.budgetApprovals = [approval("approval-bob", 2000)];
+
+    await repo.saveSnapshot(alice!, "user-alice");
+    await repo.saveSnapshot(bob!, "user-bob");
+
+    // loadBudgetApprovals() used to read the whole table with no WHERE clause,
+    // so each budget saw both rows — a disclosure of permanent financial
+    // records across accounts.
+    const reloadedAlice = await repo.loadSnapshot("user-alice");
+    const reloadedBob = await repo.loadSnapshot("user-bob");
+
+    expect(reloadedAlice!.budgetApprovals.map((a) => a.id)).toEqual(["approval-alice"]);
+    expect(reloadedBob!.budgetApprovals.map((a) => a.id)).toEqual(["approval-bob"]);
+    expect(reloadedAlice!.budgetApprovals[0].suggestedAmount).toBe(1000);
+  });
+
+  it("refuses to overwrite a row that belongs to another budget", async () => {
+    const alice = await repo.loadSnapshot("user-alice");
+    const stolen = { ...alice!.categories[0] };
+    const originalName = stolen.name;
+
+    // Force the collision the old seed produced by accident: Bob claims a row
+    // id that Alice owns. The ON CONFLICT guard must leave Alice's row alone.
+    const bob = await repo.loadSnapshot("user-bob");
+    bob!.categories = [...bob!.categories, { ...stolen, name: "Hijacked", color: "#FF0000" }];
+    await repo.saveSnapshot(bob!, "user-bob");
+
+    const reloadedAlice = await repo.loadSnapshot("user-alice");
+    const aliceRow = reloadedAlice!.categories.find((c) => c.id === stolen.id)!;
+    expect(aliceRow).toBeDefined();
+    expect(aliceRow.name).toBe(originalName);
+    expect(aliceRow.color).not.toBe("#FF0000");
+  });
+
+  it("gives each budget its own seed identifiers", () => {
+    const first = createSeedBudgetSnapshot();
+    const second = createSeedBudgetSnapshot();
+
+    const ids = (snap: BudgetSnapshot) => [
+      ...snap.categories.map((c) => c.id),
+      ...Object.values(snap.years).flatMap((y) => [
+        ...y.activities.map((a) => a.id),
+        ...y.spendingEntries.map((e) => e.id),
+        ...y.wishlistItems.map((w) => w.id),
+        ...y.walletEntries.map((w) => w.id),
+      ]),
+      ...snap.seasonalPresets.map((p) => p.id),
+      ...snap.scenarioPresets.map((p) => p.id),
+      ...snap.auditLog.map((l) => l.id),
+    ];
+
+    const firstIds = new Set(ids(first));
+    const shared = ids(second).filter((id) => firstIds.has(id));
+    expect(shared).toEqual([]);
+
+    // Seed keys, unlike ids, are the stable part and must still match.
+    expect(second.categories.map((c) => c.seedKey)).toEqual(first.categories.map((c) => c.seedKey));
+  });
+
+  it("keeps seasonal overrides pointing at this budget's activities", () => {
+    const snap = createSeedBudgetSnapshot();
+    const activityIds = new Set(Object.values(snap.years).flatMap((y) => y.activities.map((a) => a.id)));
+    const referenced = snap.seasonalPresets.flatMap((preset) => Object.keys(preset.activityOverrides ?? {}));
+
+    expect(referenced.length).toBeGreaterThan(0);
+    // Overrides are keyed by activity id. Generating fresh activity ids without
+    // rewriting these keys would leave every preset silently inert.
+    for (const id of referenced) {
+      expect(activityIds.has(id)).toBe(true);
+    }
   });
 });
