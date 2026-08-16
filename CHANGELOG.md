@@ -1,5 +1,33 @@
 # Changelog
 
+## 2026-08-16 — The stutter was a download, not an animation
+
+### Measured before changing anything
+
+The transition was reported as laggy twice. Profiling one tab switch gave a **median frame of 8.3 ms and not a single frame over 20 ms** — the animation was never dropping frames.
+
+The delay was the deferred panels. Splitting them out cut the first load by 40%, but it moved the cost to the moment a tab opens: **190–370 ms locally**, and considerably worse over a real network. That lands exactly while the transition plays, so a chunk being fetched looked like an animation stuttering.
+
+**The panels are now fetched while the browser is idle**, once something is on screen. Sequentially, so warming the cache never competes with a request someone is waiting on, and failures are swallowed — a warm-up must never surface.
+
+| Tab | before | after |
+|---|---|---|
+| Analytics | 210 ms | **41 ms** |
+| Scenarios | 372 ms | **20 ms** |
+| History | 188 ms | **17 ms** |
+| Settings | — | **22 ms** |
+
+The loading bar no longer appears at all. With the wait removed, the transition is **880 ms** rather than 1150: that duration existed to cover a fetch that no longer happens.
+
+### Tap to edit, on everything
+
+Wishlist items, wallet entries and scenarios now open their editor when tapped, joining activities, transactions and categories. Every list in the app behaves the same way.
+
+Each is a real button to a screen reader, responds to Enter and Space, and ignores clicks that landed on its own controls or that finished a text selection — so "apply this scenario" and "select this text" do not become "edit".
+
+**Verification** — `npx tsc -b` clean · **435 tests passing**, 65 against real PostgreSQL 17 · both builds clean. Frame cadence re-measured after the change: median 8.3 ms, worst 10.4 ms, zero frames over 20 ms.
+
+
 ## 2026-08-16 — A proper aircraft, calmer motion, bolder colour
 
 ### The mark is now an airliner

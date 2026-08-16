@@ -210,7 +210,27 @@ export const WalletPanel: React.FC = () => {
                 </div>
               </div>
             ) : (
-              <div key={entry.id} className="item-row">
+              <div
+                key={entry.id}
+                className={mutable ? "item-row editable-row" : "item-row"}
+                role={mutable ? "button" : undefined}
+                tabIndex={mutable ? 0 : undefined}
+                aria-label={mutable ? `Edit ${entry.source}` : undefined}
+                onClick={(event) => {
+                  if (!mutable) return;
+                  const target = event.target as HTMLElement;
+                  if (target.closest("button, a, input, select, textarea")) return;
+                  if (window.getSelection()?.toString()) return;
+                  beginEdit(entry.id, entry.amount, entry.source);
+                }}
+                onKeyDown={(event) => {
+                  if (!mutable || event.target !== event.currentTarget) return;
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    beginEdit(entry.id, entry.amount, entry.source);
+                  }
+                }}
+              >
                 <div style={{ minWidth: 0 }}>
                   <div
                     className="text-callout"

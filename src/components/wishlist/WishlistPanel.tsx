@@ -691,6 +691,24 @@ export const WishlistPanel: React.FC = () => {
                 leading={swipeActionsFor(gestures.leading, item, mutable && !isEditing)}
               >
               <div
+                className={mutable && !isEditing ? "editable-row" : undefined}
+                role={mutable && !isEditing ? "button" : undefined}
+                tabIndex={mutable && !isEditing ? 0 : undefined}
+                aria-label={mutable && !isEditing ? `Edit ${item.name}` : undefined}
+                onClick={(event) => {
+                  if (!mutable || isEditing) return;
+                  const target = event.target as HTMLElement;
+                  if (target.closest("button, a, input, select, textarea")) return;
+                  if (window.getSelection()?.toString()) return;
+                  startEdit(item);
+                }}
+                onKeyDown={(event) => {
+                  if (!mutable || isEditing || event.target !== event.currentTarget) return;
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    startEdit(item);
+                  }
+                }}
                 style={{
                   display: "grid",
                   gap: 10,

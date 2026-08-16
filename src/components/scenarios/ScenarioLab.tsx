@@ -76,7 +76,29 @@ export const ScenarioLab: React.FC = () => {
               const changes = scenarioDiff(snapshot, preset);
               const active = isScenarioActive(snapshot, preset);
               return (
-                <article key={preset.id} className={`scenario-card${active ? " scenario-card-active" : ""}`}>
+                <article
+                  key={preset.id}
+                  className={`scenario-card${active ? " scenario-card-active" : ""}${mutable ? " editable-row" : ""}`}
+                  role={mutable ? "button" : undefined}
+                  tabIndex={mutable ? 0 : undefined}
+                  aria-label={mutable ? `Edit ${preset.name}` : undefined}
+                  onClick={(event) => {
+                    if (!mutable) return;
+                    const target = event.target as HTMLElement;
+                    // The card's own buttons apply, duplicate and delete; only
+                    // a click on the card itself means "edit".
+                    if (target.closest("button, a, input, select, textarea")) return;
+                    if (window.getSelection()?.toString()) return;
+                    setEditing(preset);
+                  }}
+                  onKeyDown={(event) => {
+                    if (!mutable || event.target !== event.currentTarget) return;
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      setEditing(preset);
+                    }
+                  }}
+                >
                   <header className="scenario-head">
                     <div style={{ minWidth: 0 }}>
                       <h3 className="text-callout scenario-name">{preset.name}</h3>
