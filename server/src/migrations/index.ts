@@ -84,10 +84,19 @@ export async function runMigrations(
 
       await migration.run(sql);
 
-
+      // "Check then insert" is a race: two workers can both read no row and
+      // both insert, and the loser crashes on the unique constraint — which
+      // takes the whole API down with a 503, not just the migration. This is
+      // not hypothetical on serverless, where several instances boot at once.
+      //
+      // ON CONFLICT makes the bookkeeping idempotent. Re-running a migration
+      // body is harmless because every one of them is written with
+      // IF NOT EXISTS, so losing the race costs a little duplicated work and
+      // nothing else.
       await sql`
         INSERT INTO migrations (name)
-        VALUES (${migration.name});
+        VALUES (${migration.name})
+        ON CONFLICT (name) DO NOTHING;
       `;
     }
   }
