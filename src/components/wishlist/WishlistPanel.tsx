@@ -18,6 +18,7 @@ import {
   withAlpha,
 } from "../../domain/wishlist";
 import type { WishlistLinkResult } from "../../domain/wishlist";
+import { ActivityIcon, IconPicker } from "../ui/IconPicker";
 import { seedCategoryIdOrFallback } from "../../domain/seedCategories";
 import { SwipeRow } from "../ui/SwipeRow";
 import { gesturesFor } from "../../domain/gestures";
@@ -66,10 +67,11 @@ function emptyDraft(baseCurrency: string, wishlistCategoryId: string): WishlistD
  * image box in the card. The image is never given a referrer: the wishlist
  * should not tell a third party which page the user is looking at.
  */
-const ItemMark: React.FC<{ domain: string | null; accent: string; size?: number }> = ({
+const ItemMark: React.FC<{ domain: string | null; accent: string; size?: number; icon?: string }> = ({
   domain,
   accent,
   size = 34,
+  icon,
 }) => {
   const [failed, setFailed] = useState(false);
   const showFavicon = domain != null && !failed;
@@ -88,7 +90,12 @@ const ItemMark: React.FC<{ domain: string | null; accent: string; size?: number 
         overflow: "hidden",
       }}
     >
-      {showFavicon ? (
+      {icon ? (
+        // An explicit choice wins: many sites have no usable favicon, and some
+        // return a placeholder that renders as something indistinguishable
+        // from a broken image.
+        <ActivityIcon name={icon} size={size - 16} color={accent} />
+      ) : showFavicon ? (
         <img
           src={faviconUrl(domain, 64)}
           alt=""
@@ -264,6 +271,19 @@ const EditForm: React.FC<EditFormProps> = ({ draft, onChange, onSave, onCancel, 
           onChange={(e) => onChange({ brandUrl: e.target.value })}
           style={{ width: "100%", borderColor: brandUrlError ? "var(--danger)" : undefined }}
         />
+
+        <div style={{ marginTop: 12 }}>
+          <IconPicker
+            value={draft.icon || undefined}
+            accent={draft.color || undefined}
+            label="Or pick an icon"
+            onChange={(name) => onChange({ icon: name ?? "" })}
+          />
+          <p className="text-note" style={{ margin: "6px 0 0" }}>
+            Overrides the site icon. Use it when the site has none, or when the one it returns is
+            not recognisable.
+          </p>
+        </div>
         {brandUrlError && (
           <div className="text-caption" style={{ color: "var(--danger)", marginTop: 6 }}>
             Enter a valid web address (http or https only).
@@ -686,7 +706,7 @@ export const WishlistPanel: React.FC = () => {
               >
                 {/* Header: mark, name, price */}
                 <div style={{ display: "flex", gap: 10, alignItems: "flex-start", minWidth: 0 }}>
-                  <ItemMark domain={domain} accent={accent} />
+                  <ItemMark domain={domain} accent={accent} icon={item.icon} />
                   <div style={{ minWidth: 0, flex: 1 }}>
                     <div
                       className="text-callout"
@@ -908,6 +928,7 @@ export const WishlistPanel: React.FC = () => {
                       </Button>
                     )}
                     <div style={{ flex: "1 1 0", minWidth: 0 }} />
+                    <span className="row-actions" style={{ display: "flex", gap: 4 }}>
                     <Button
                       size="sm"
                       variant="ghost"
@@ -929,6 +950,7 @@ export const WishlistPanel: React.FC = () => {
                     >
                       <Trash2 size={14} />
                     </Button>
+                    </span>
                   </div>
                 )}
 

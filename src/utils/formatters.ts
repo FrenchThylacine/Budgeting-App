@@ -45,6 +45,8 @@ export interface WishlistDraft {
   url: string;
   /** Optional brand link that supplies the icon, when it is not the shop. */
   brandUrl: string;
+  /** A library icon, which overrides anything derived from a URL. */
+  icon: string;
   /** Accent colour, empty when the card falls back to its hashed colour. */
   color: string;
 }
@@ -177,6 +179,7 @@ export function wishlistToDraft(item: WishlistItem | null): WishlistDraft {
     active: item?.active ?? true,
     url: item?.url ?? "",
     brandUrl: item?.brandUrl ?? "",
+    icon: item?.icon ?? "",
     color: item?.color ?? "",
   };
 }
@@ -187,7 +190,7 @@ export function wishlistToDraft(item: WishlistItem | null): WishlistDraft {
  */
 export function wishlistPayloadFromDraft(
   draft: WishlistDraft,
-): Pick<WishlistItem, "name" | "actualPrice" | "effectiveValue" | "currency" | "priority" | "notes" | "inWishlist" | "url" | "brandUrl" | "color"> {
+): Pick<WishlistItem, "name" | "actualPrice" | "effectiveValue" | "currency" | "priority" | "notes" | "inWishlist" | "url" | "brandUrl" | "icon" | "color"> {
   const price = parseAmount(draft.actualPrice);
   return {
     name: draft.name.trim(),
@@ -199,6 +202,7 @@ export function wishlistPayloadFromDraft(
     inWishlist: draft.inWishlist,
     url: normalizeItemUrl(draft.url),
     brandUrl: normalizeItemUrl(draft.brandUrl),
+    icon: draft.icon.trim() || undefined,
     color: draft.color.trim() || undefined,
   };
 }

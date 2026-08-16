@@ -616,7 +616,7 @@ export const ActivityPanel: React.FC = () => {
                     </div>
                   </div>
                   {mutable && (
-                    <div style={{ display: "flex", gap: 4 }}>
+                    <div className="row-actions" style={{ display: "flex", gap: 4 }}>
                       {canReorder && (
                         <>
                           <Button

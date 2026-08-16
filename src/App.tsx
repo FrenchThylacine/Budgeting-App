@@ -126,7 +126,7 @@ export default function App() {
       <div className="boot-screen" role="status" aria-live="polite">
         <div className="boot-inner">
           <div className="boot-craft">
-            <AircraftMark size={72} hull="#FFFFFF" accent="var(--brand-mark-to)" />
+            <AircraftMark size={104} />
           </div>
           <div style={{ display: "grid", justifyItems: "center", gap: 4 }}>
             <div className="boot-title">Budget OS</div>
@@ -149,7 +149,7 @@ export default function App() {
       <div className="boot-screen" role="status" aria-live="polite">
         <div className="boot-inner">
           <div className="boot-craft">
-            <AircraftMark size={72} hull="#FFFFFF" accent="var(--brand-mark-to)" />
+            <AircraftMark size={104} />
           </div>
           <div style={{ display: "grid", justifyItems: "center", gap: 4 }}>
             <div className="boot-title">Budget OS</div>

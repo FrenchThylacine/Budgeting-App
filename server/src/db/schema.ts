@@ -193,6 +193,8 @@ export async function initializeSchema(
       -- Declared here as well as in migration 009: nothing in this file
       -- references it, so an existing database that lacks it is unaffected.
       brand_url TEXT,
+      -- A library icon, chosen when no site supplies a usable one.
+      icon TEXT,
       color TEXT,
       linked_spending_id TEXT,
       created_at TEXT NOT NULL,

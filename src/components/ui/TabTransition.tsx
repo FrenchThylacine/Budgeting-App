@@ -7,8 +7,16 @@ interface TabTransitionProps {
   children: React.ReactNode;
 }
 
-/** Long enough to read as deliberate, short enough never to be in the way. */
-const SWEEP_MS = 620;
+/**
+ * Long enough to read as a movement rather than a flicker.
+ *
+ * 620ms was measurably too quick: the aircraft crossed a 1440px panel in
+ * roughly a third of a second, which reads as a twitch and gives the
+ * compositor a very high pixel rate to sustain. At this duration the same
+ * distance is covered calmly, and the animation is cheaper per frame because
+ * less changes between them.
+ */
+const SWEEP_MS = 1150;
 
 /**
  * The transition between tabs.
@@ -48,9 +56,11 @@ export const TabTransition: React.FC<TabTransitionProps> = ({ tabKey, children }
     <div className="tab-transition">
       {sweeping && (
         <div className="tab-sweep" aria-hidden="true">
-          <span className="tab-sweep-banner" />
+          <span className="tab-sweep-glow" />
           <span className="tab-sweep-craft">
-            <AircraftMark size={34} hull="var(--brand-mark-from)" accent="var(--brand-mark-to)" />
+            {/* The contrail is drawn by the wrapper, so it stays attached to
+                the aircraft without a second animated element to keep in sync. */}
+            <AircraftMark size={44} />
           </span>
         </div>
       )}

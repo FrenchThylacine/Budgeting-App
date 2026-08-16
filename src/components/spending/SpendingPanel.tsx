@@ -532,7 +532,7 @@ export const SpendingPanel: React.FC = () => {
                     {entry.note ? ` · ${entry.note}` : ""}
                   </div>
                 </div>
-                <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+                <div className="row-actions" style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
                   <strong>{formatMoney(entry.amount, entry.currency, snapshot.settings.currencyDisplayMode)}</strong>
                   {mutable && (
                     <>
