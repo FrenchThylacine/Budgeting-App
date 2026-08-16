@@ -1,13 +1,15 @@
-import React from "react";
+import React, { useRef, useState } from "react";
 import { useAuthStore } from "../../store/authStore";
 import { useBudgetStore } from "../../store/budgetStore";
 import {
   LayoutDashboard, ListTodo, Receipt, Gift, Wallet, BarChart3,
   FlaskConical, History, Settings, Tags, ChevronLeft, ChevronRight,
   Plane, FileSpreadsheet, Download, FileJson, RefreshCw, FileText,
-  LogOut, UserRound
+  LogOut, UserRound, Upload
 } from "lucide-react";
-import { exportCurrentYearToExcel, exportAllYearsToExcel, exportJson } from "../../domain/importExport";
+import { exportCurrentYearToExcel, exportAllYearsToExcel, exportJson, importJsonBackup } from "../../domain/importExport";
+import { WorkbookShapeError, importBudgetWorkbook } from "../../domain/workbookImport";
+import { ImportPreviewDialog, type ImportPreview } from "../modals/ImportPreviewDialog";
 import { buildPeriodReport, reportHtml, type ReportScope } from "../../domain/report";
 import { formatMoney } from "../../domain/currency";
 import type { BudgetSnapshot } from "../../domain/types";
@@ -64,8 +66,57 @@ export const Sidebar: React.FC<{
 }> = ({ activeTab, setActiveTab, collapsed, setCollapsed }) => {
   const snapshot = useBudgetStore((s) => s.snapshot);
   const resetToSeed = useBudgetStore((s) => s.resetToSeed);
+  const importSnapshot = useBudgetStore((s) => s.importSnapshot);
   const user = useAuthStore((s) => s.user);
   const signOut = useAuthStore((s) => s.signOut);
+
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [preview, setPreview] = useState<ImportPreview | null>(null);
+  const [importError, setImportError] = useState<string | null>(null);
+
+  /**
+   * Read the chosen file into a preview. Nothing is written here — the import
+   * only happens if the user confirms in the dialog.
+   */
+  const handleFileChosen = async (event: React.ChangeEvent<HTMLInputElement>): Promise<void> => {
+    const file = event.target.files?.[0];
+    // Cleared immediately so choosing the same file twice still fires a change
+    // event, which is otherwise a confusing dead click.
+    event.target.value = "";
+    if (!file) return;
+
+    setImportError(null);
+    try {
+      if (file.name.toLowerCase().endsWith(".json")) {
+        const snapshot = await importJsonBackup(file);
+        setPreview({
+          fileName: file.name,
+          snapshot,
+          summary: {
+            years: Object.keys(snapshot.years).map(Number).sort((a, b) => a - b),
+            activities: Object.values(snapshot.years).reduce((n, y) => n + y.activities.length, 0),
+            wishlistItems: Object.values(snapshot.years).reduce((n, y) => n + y.wishlistItems.length, 0),
+            spendingEntries: Object.values(snapshot.years).reduce((n, y) => n + y.spendingEntries.length, 0),
+            walletEntries: Object.values(snapshot.years).reduce((n, y) => n + y.walletEntries.length, 0),
+            spendingByCurrency: {},
+          },
+          warnings: [],
+        });
+        return;
+      }
+
+      const result = await importBudgetWorkbook(file);
+      setPreview({ fileName: file.name, ...result });
+    } catch (error) {
+      // A file that is not this workbook gets a message naming what was wrong,
+      // rather than the previous behaviour of importing whatever it could find.
+      setImportError(
+        error instanceof WorkbookShapeError || error instanceof Error
+          ? error.message
+          : "That file could not be read.",
+      );
+    }
+  };
 
   const overviewItems = navItems.slice(0, 6);
   const systemItems = navItems.slice(6);
@@ -147,6 +198,21 @@ export const Sidebar: React.FC<{
             <button className="btn btn-secondary btn-sm" onClick={() => exportJson(snapshot)}>
               <FileJson size={14} /> Backup JSON
             </button>
+            <button className="btn btn-secondary btn-sm" onClick={() => fileInputRef.current?.click()}>
+              <Upload size={14} /> Import file
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".xlsx,.xls,.json"
+              onChange={(event) => void handleFileChosen(event)}
+              hidden
+            />
+            {importError && (
+              <p className="auth-banner auth-banner-error" role="alert">
+                <span>{importError}</span>
+              </p>
+            )}
             <button
               className="btn btn-danger btn-sm"
               onClick={() => {
@@ -170,6 +236,20 @@ export const Sidebar: React.FC<{
             </button>
           </div>
         </div>
+      )}
+      {preview && (
+        <ImportPreviewDialog
+          preview={preview}
+          current={snapshot}
+          onBackup={() => exportJson(snapshot)}
+          onCancel={() => setPreview(null)}
+          onConfirm={() => {
+            // Goes through importSnapshot, so the change lands on the undo
+            // stack and can be reversed without re-selecting the file.
+            importSnapshot(preview.snapshot, `Imported ${preview.fileName}.`);
+            setPreview(null);
+          }}
+        />
       )}
     </aside>
   );

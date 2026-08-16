@@ -188,3 +188,64 @@
   white-space: nowrap;
   max-width: 22ch;
 }
+
+/* ─── Import preview ──────────────────────────────────────────────────────── */
+
+.import-table-wrap {
+  /* The table scrolls inside its own box rather than widening the dialog. */
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.import-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.import-table th,
+.import-table td {
+  padding: 8px 12px;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.import-table thead th {
+  font-weight: 600;
+  color: var(--text-secondary);
+  font-size: 0.8125rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.import-table tbody th {
+  text-align: left;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.import-table tbody tr + tr th,
+.import-table tbody tr + tr td {
+  border-top: 1px solid var(--border);
+}
+
+/* Figures line up column-wise only with tabular numerals. */
+.import-table .tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+.import-delta-up { color: var(--success); font-weight: 600; }
+.import-delta-down { color: var(--danger); font-weight: 600; }
+
+/* Visually hidden but read aloud — the table caption. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
