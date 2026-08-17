@@ -2,7 +2,7 @@
 
 This is the active engineering tracker. A checkbox is ticked only after implementation **and** the relevant verification have both succeeded. "The code exists" is never sufficient.
 
-**Last updated:** 2026-08-16 — accounts, production, Excel import, identity and interaction pass. **Production is live and verified**: `/api/health` returns `{"status":"ok","database":"connected"}`, `/api/auth/me` answers 200, and every budget route returns 401 without a session. 421 tests, 65 of them against a real PostgreSQL 17 server.
+**Last updated:** 2026-08-17 — Air France identity, physical swipe, dashboard declutter, account settings. **Production was verified live on 2026-08-16**: `/api/health` returned `{"status":"ok","database":"connected"}`, `/api/auth/me` answered 200, and every budget route returned 401 without a session. Today's work has **not** been deployed and is therefore unverified in production. 374 unit tests plus the database suites; today's browser checks ran against a throwaway local PostgreSQL database, never against production data.
 
 ## How this session verified things
 
@@ -14,11 +14,11 @@ Anything that could not be verified this way is under *Not verified* and stays u
 
 ## In progress / next
 
-- [ ] Dedicated editors for **spending**, **categories** and **wishlist** — the shell (`EditorSheet`) exists and activities use it; the other three panels still edit inline.
-- [ ] Expand the icon library toward the named product/brand set (flight-sim, streaming, gaming, sports). The picker is searchable and categorised, and wishlist items can now draw an icon from a brand domain, but the curated library is still the base Lucide set.
-- [ ] Gesture preferences in Settings (which action each direction performs).
-- [ ] Autosave mode with an editable change summary. Manual save and explicit sync state exist; autosave does not.
-- [ ] Exercise the Neon HTTP driver's `sql.transaction([...])` specifically. Production now runs on it, but no test drives it directly.
+- [ ] Add and remove currencies from the display list; the set is currently fixed in `CURRENCY_OPTIONS`.
+- [ ] A manual next-renewal date on an activity, overriding what the schedule computes.
+- [ ] Manual reports alongside the generated monthly and annual ones.
+- [ ] Supplied A350 artwork. `AircraftArt` and `AIRCRAFT_ASSET_PATH` are built to accept a file at `/aircraft.png` and fall back to the drawing if it is absent or fails to load — no code change needed once a file is dropped in.
+- [ ] Exercise the Neon HTTP driver's `sql.transaction([...])` specifically. Production runs on it, but no test drives it directly.
 - [ ] Automate the browser checks (Playwright). Everything marked "browser-verified" was checked by hand.
 
 ## Completed — accounts and production (2026-08-16)
@@ -75,6 +75,28 @@ Anything that could not be verified this way is under *Not verified* and stays u
 - [x] `.text-footnote` uppercases its content; a `.text-note` class now carries sentence-case prose (2026-08-16).
 - [x] Tab transition restored — code splitting had left the animation playing over the loading placeholder while the real content arrived without remounting (2026-08-16; verified in the browser).
 
+## Completed — identity, interaction and account (2026-08-17)
+
+Verified in a real browser at 390px and 1440px against a throwaway local PostgreSQL database. Not deployed.
+
+- [x] **Tricolour signature** above the whole app and inside the sign-in card. Its middle band is a pale blue-grey, not white: on a white card white is a gap, and a rule broken in the middle reads as a rendering fault rather than a flag (2026-08-17).
+- [x] The drawn airliner replaces the Lucide `Plane` in the sidebar, the sign-in card and the boot screens; the first-run mark sits on a navy medallion, because a white livery on a white card is a navy fin and a red line (2026-08-17).
+- [x] Boot screen is a route line rather than a progress bar — a progress bar promises a known duration (2026-08-17).
+- [x] **Tab transition reduced to a micro-interaction**: a hairline route across the top of the panel with a 22px aircraft along it, 720ms. The previous version flew a 44px aircraft through the middle of the content (2026-08-17).
+- [x] **Directional period transitions.** Forward slides in from the right, back from the left, driven by a new `periodOrdinal` because the dropdowns can jump anywhere. Applied to the frame, not by remounting, so scroll and typed filters survive (2026-08-17; verified by reading the class through a change in each direction).
+- [x] **Physical swipe.** 1:1 tracking to the panel edge, then 45% rubber-banding; past 150px of finger travel the row arms, the action fills it, its label moves to the revealed edge, and releasing performs it. Below that, release snaps open or shut (2026-08-17; browser-verified that opening does not delete, that a long drag then release does, and that declining the confirmation leaves the row).
+- [x] **The touch rule hiding per-row buttons had never applied.** The containers carried an inline `display: flex`, which outranks any stylesheet, so every phone still showed the buttons the swipe was built to replace (2026-08-17).
+- [x] With that fixed, the transaction amount vanished on touch — it was inside the container being hidden. Moved to `.row-trailing` (2026-08-17).
+- [x] **Editors label their fields.** They carried `aria-label` and `placeholder` only: a screen reader was served, a sighted user saw a box reading "Budget" and another reading "One-off" with nothing to say what either meant (2026-08-17).
+- [x] Wishlist add and edit use the editor sheet, with a live preview of the mark the item will carry and where it came from (2026-08-17).
+- [x] **Icon library 84 → 192** across 15 groups, four of them new: Aviation, Gaming, Shopping & services, Outdoors. Every name checked against the installed lucide build; measured cost 13.2 KB gzipped (2026-08-17).
+- [x] **Dashboard declutter.** A blank account gets three ways to start instead of eight cards saying "No data"; reference material is behind collapsible sections, unmounted when closed (2026-08-17).
+- [x] The suggested-budget card no longer appears when the suggestion is zero — approving it wrote a permanent, uneditable record stating the month's budget was zero (2026-08-17).
+- [x] **The Save button is gone.** It stamped `lastUpdated` to force a write, implying work was unsaved until pressed, and cost a full row on a phone (2026-08-17).
+- [x] Today's date and local time, refreshed each minute, inside the period widget with one button back to the current period (2026-08-17).
+- [x] **`.btn` had no disabled styling anywhere.** Close Month on a closed period, reorder arrows at the ends of a list, Approve with nothing to approve — each looked pressable and silently did nothing (2026-08-17).
+- [x] **Account settings.** Change email and change password, both behind the current password. The change-password endpoint, its client and its store action existed and were reachable from nowhere in the interface (2026-08-17; five integration tests against real PostgreSQL).
+
 ## Not verified
 
 - [ ] Multi-device sync **in production**. Verified locally against PostgreSQL with two isolated contexts; the production instance has no data in it yet.
@@ -94,14 +116,12 @@ Anything that could not be verified this way is under *Not verified* and stays u
 - [ ] **Back-dating from the current period** is still permissive by design: a transaction can be dated into a past month while viewing the current one. Late receipt entry is legitimate, and a dedicated audited path exists for rewriting a closed period.
 - [ ] **The granular REST routes are not on the live write path.** The client persists only through `GET`/`PUT /api/snapshot`; the per-entity routes are implemented and validated but unused, so their validation constrains nothing today.
 - [ ] `PATCH /api/snapshot/settings` spreads the request body with no per-field validation.
-- [ ] **Import is unreachable.** `importBudgetWorkbook` and `importJsonBackup` exist but no component calls them and there is no file input anywhere. Export works, so data can leave but not return.
 - [ ] **Seasonal presets are unreachable.** `applySeasonalPreset` is implemented and seeded but called from nowhere; it is also the only writer of `settings.selectedSeason`.
-- [ ] `ScenarioLab` applies presets destructively with no preview, and presets cannot be created, edited, or deleted.
 - [ ] Wishlist totals sum `actualPrice` across mixed currencies without conversion.
 - [ ] `POST /api/snapshot/reset` is a stub that reports success without doing anything.
 - [ ] Four settings are seeded but read by no code path: `autoWalletRollupEnabled`, `promptBeforeMonthClose`, `liveClockEnabled`, `nanPolicy`.
 - [ ] `YearRecord.monthlyNotes` exists as a type with no store action and no UI.
 - [ ] `calculation.categoryTotals` is computed on every recalculation and consumed by nothing.
-- [ ] The main bundle exceeds 500 kB; code-splitting has not been attempted.
-- [ ] No component or end-to-end tests; panels are verified by hand in the browser.
-- [ ] Swipe gestures, a full-screen editor, per-entity gesture settings, and dashboard widget configuration were requested but are **not implemented** in this pass.
+- [ ] No component or end-to-end tests; panels are verified by hand in the browser. The two mistakes that cost the most time this session were both measurement errors of exactly this kind — reading DOM state in the same tick as a synchronous event and concluding a working component was broken.
+- [ ] **Dashboard widget configuration** — choosing which cards appear — was requested and is not implemented. Sections are collapsible, but not selectable or reorderable.
+- [ ] The main bundle is 830 kB raw / 206 kB gzipped after the icon expansion. `xlsx`, Analytics, Scenarios, History, Categories and Settings are split out; the wishlist and activity panels are not, because they are primary tabs.

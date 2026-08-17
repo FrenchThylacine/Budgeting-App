@@ -2,7 +2,7 @@
 
 A personal finance application for tracking a real monthly budget: spending, recurring commitments, categories with caps, a wishlist, a wallet, and analytics that explain where the money went — visually, not as a wall of numbers.
 
-It is a single-user product designed to be used from more than one device against one shared database.
+Each account holds its own budget, and one account can be used from as many devices as you like against one shared database.
 
 ---
 
@@ -23,6 +23,10 @@ It is a single-user product designed to be used from more than one device agains
 **Reports.** Printable monthly and annual reports, generated from the same calculations as the screen.
 
 **Currencies.** Display currency plus live exchange rates with a manual override and offline fallback. Conversion is presentation-only: stored amounts are never rewritten.
+
+**Accounts.** Email and password sign-in with revocable sessions. Every account starts with an empty budget of its own — no demo data, and no adoption of anyone else's. Passwords are hashed with scrypt; sessions are opaque tokens stored hashed, so a database read cannot impersonate anyone. Signing in, changing your address and changing your password are all rate-limited or password-checked.
+
+**Import.** An existing spreadsheet or a JSON backup can be loaded from Settings. The import states exactly what it found and what will be replaced before anything is written.
 
 ---
 
@@ -49,7 +53,7 @@ React (Vite, TypeScript)
    REST API (fetch)
         │
    Express app  ── local: server/src/index.ts
-        │        └─ Vercel: api/[...path].ts (same app)
+        │        └─ Vercel: api/index.ts (same app)
         │
    SnapshotRepository
         │
@@ -117,6 +121,9 @@ Every route, service, and repository runs exactly as in production; only the dri
 **Backend (runtime)**
 - `DATABASE_URL` — PostgreSQL/Neon connection string
 - `NODE_ENV`, `HOST` (default `0.0.0.0`), `PORT` (default `3001`)
+- `CORS_ORIGIN` — allowed origins for browser requests. Cookies require an explicit origin; `*` is rejected by browsers when credentials are sent
+- `RESEND_API_KEY`, `MAIL_FROM` — sending password-reset email. Without them a reset link is logged by the server rather than sent, which is usable in development and useless in production
+- `SIGNUP_INVITE_CODE` — when set, signup additionally requires this code
 
 **Development helpers**
 - `LOCAL_PG_URL`, `PG_SCHEMA` — for `server:dev:pg`
@@ -128,9 +135,11 @@ No secret is ever needed in the browser. Exchange rates come from a keyless publ
 
 ## Deployment (Vercel)
 
-Vercel serves the Vite build from `dist/` and routes `/api/*` through `api/[...path].ts`, which exports the same Express app used locally. Set `DATABASE_URL` in the Vercel project before deploying. The schema is created and migrated automatically on first request.
+Vercel serves the Vite build from `dist/` and routes `/api/*` through `api/index.ts` — an explicit rewrite in `vercel.json`, not the filename-based catch-all. A `[...path].ts` catch-all was tried first and never matched a path with more than one segment, which killed every route below `/api/x` in production while single-segment routes worked; the explicit rewrite is what fixed it.
 
-**Not yet verified:** no authenticated deployment has been run from this repository, so production routing and a production `DATABASE_URL` are unconfirmed. After the first deploy, check `GET /api/health` — it answers `{"status":"ok","database":"connected"}` when healthy and `503 degraded` with the reason when not, so a misconfigured database is distinguishable from a dead server.
+Set `DATABASE_URL` in the Vercel project — in each environment you deploy, not only Development — before deploying. The schema is created and migrated automatically on first request.
+
+After a deploy, `GET /api/health` answers `{"status":"ok","database":"connected"}` when healthy and `503 degraded` with the reason when not, so a misconfigured database is distinguishable from a dead server.
 
 ---
 
@@ -165,10 +174,9 @@ The integration suites run the real schema, migrations, repository SQL, and the 
 
 ## Current limitations
 
-- **No production deployment has been verified** (see above).
 - **The Neon HTTP transport itself is not exercised by tests** — the SQL is verified against real PostgreSQL through an equivalent driver interface, but Neon's own wire protocol, notably `sql.transaction([...])`, is assumed.
-- **No automated browser tests.** UI behaviour is verified manually; a Playwright suite is the obvious next step.
-- **Import is unreachable from the UI.** Export works; the import functions exist but no component calls them.
+- **No automated browser tests.** UI behaviour is verified by hand in a real browser at phone and desktop widths; a Playwright suite is the obvious next step.
+- **Password-reset email needs a verified sender.** Without `RESEND_API_KEY` and a verified domain, the reset link is written to the server log instead of being sent.
 - Further open items are tracked in `implementation_plan.md` and `docs/KNOWN_ISSUES.md`.
 
 ---
