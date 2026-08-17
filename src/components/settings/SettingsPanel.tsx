@@ -7,6 +7,7 @@ import { useBudgetStore } from "../../store/budgetStore";
 import type { CurrencyCode, CurrencyDisplayMode, RoundingRule } from "../../domain/types";
 import { ACTION_LABELS, AVAILABLE_ACTIONS, gesturesFor } from "../../domain/gestures";
 import { ImportControl } from "../data/ImportControl";
+import { AccountSettings } from "./AccountSettings";
 import { Section } from "../ui/Section";
 import { SyncStatus } from "../layout/SyncStatus";
 
@@ -65,6 +66,8 @@ export const SettingsPanel: React.FC = () => {
 
   return (
     <div className="page-enter" style={{ display: "grid", gap: 24 }}>
+      <AccountSettings />
+
       <Section title="Currency">
         <div className="card card-body" style={{ display: "grid", gap: 16, maxWidth: 620 }}>
           <label className="text-callout" style={fieldStyle}>

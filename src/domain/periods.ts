@@ -119,3 +119,22 @@ export function periodLabel(settings: Settings): string {
   const formatter = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", timeZone: "UTC" });
   return `Week ${settings.selectedWeek} · ${formatter.format(start)}–${formatter.format(end)}`;
 }
+
+/**
+ * A single increasing number for the selected period.
+ *
+ * Used to tell which way the view moved — forwards or backwards in time — so a
+ * period change can animate in the direction it actually went. Comparing the
+ * labels cannot do this ("March" against "February" is not an ordering), and
+ * the call sites cannot either: the arrows know their direction but the month
+ * and year dropdowns jump anywhere.
+ *
+ * The scale differs per mode, which is fine: only the sign of the difference is
+ * ever read, and the mode cannot change without the ordinal changing too.
+ */
+export function periodOrdinal(settings: Settings): number {
+  const mode = settings.selectedPeriodMode ?? "month";
+  if (mode === "year") return settings.selectedYear;
+  if (mode === "week") return selectedIsoWeekYear(settings) * 53 + (settings.selectedWeek ?? 1);
+  return settings.selectedYear * 12 + (settings.selectedMonth ?? 1);
+}

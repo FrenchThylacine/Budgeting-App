@@ -395,6 +395,98 @@ describeAuth("authentication", () => {
     expect(res.status).toBe(400);
   });
 
+  // ─── Changing the account itself ──────────────────────────────────────────
+
+  it("refuses to change the address without the current password", async () => {
+    const owner = createClient(baseUrl);
+    await owner.post("/api/auth/signup", { email: "movable@example.test", password: PASSWORD });
+
+    // Being signed in is not proof of being the owner. If it were, an
+    // unattended session could move the account to an attacker's address and
+    // take every future password reset with it.
+    const res = await owner.post("/api/auth/change-email", {
+      currentPassword: "not-the-password",
+      email: "attacker@example.test",
+    });
+    expect(res.status).toBe(401);
+
+    const after = await client.query(`SELECT email FROM users WHERE email_normalized = $1`, [
+      "movable@example.test",
+    ]);
+    expect(after.rows).toHaveLength(1);
+  });
+
+  it("changes the address, keeps the session, and moves sign-in with it", async () => {
+    const owner = createClient(baseUrl);
+    await owner.post("/api/auth/signup", { email: "before@example.test", password: PASSWORD });
+
+    const res = await owner.post("/api/auth/change-email", {
+      currentPassword: PASSWORD,
+      email: "After@example.test",
+    });
+    expect(res.status).toBe(200);
+    expect(res.body.user.email).toBe("After@example.test");
+
+    // The session survives: changing your own address should not throw you out
+    // of the app you are standing in.
+    expect((await owner.request("/api/auth/me")).body.user?.email).toBe("After@example.test");
+
+    // Sign-in follows the new address and is case-insensitive, and the old one
+    // stops working — otherwise the change would be cosmetic.
+    const fresh = createClient(baseUrl);
+    expect((await fresh.post("/api/auth/signin", { email: "after@example.test", password: PASSWORD })).status).toBe(200);
+    const stale = createClient(baseUrl);
+    expect((await stale.post("/api/auth/signin", { email: "before@example.test", password: PASSWORD })).status).toBe(401);
+  });
+
+  it("refuses an address another account already holds", async () => {
+    const first = createClient(baseUrl);
+    await first.post("/api/auth/signup", { email: "holder@example.test", password: PASSWORD });
+    const second = createClient(baseUrl);
+    await second.post("/api/auth/signup", { email: "mover@example.test", password: PASSWORD });
+
+    // Case-insensitively: two accounts differing only in capitalisation would
+    // make sign-in ambiguous.
+    const res = await second.post("/api/auth/change-email", {
+      currentPassword: PASSWORD,
+      email: "HOLDER@example.test",
+    });
+    expect(res.status).toBe(409);
+  });
+
+  it("accepts the address the account already has", async () => {
+    const owner = createClient(baseUrl);
+    await owner.post("/api/auth/signup", { email: "samesame@example.test", password: PASSWORD });
+
+    // Re-saving without changing anything, or correcting only capitalisation,
+    // must not collide with the account's own row.
+    const res = await owner.post("/api/auth/change-email", {
+      currentPassword: PASSWORD,
+      email: "SameSame@example.test",
+    });
+    expect(res.status).toBe(200);
+  });
+
+  it("changes the password, keeps this device, and signs the others out", async () => {
+    const here = createClient(baseUrl);
+    await here.post("/api/auth/signup", { email: "rotate@example.test", password: PASSWORD });
+    const elsewhere = createClient(baseUrl);
+    await elsewhere.post("/api/auth/signin", { email: "rotate@example.test", password: PASSWORD });
+    expect((await elsewhere.request("/api/auth/me")).body.user).not.toBeNull();
+
+    const next = "an-entirely-different-passphrase";
+    expect((await here.post("/api/auth/change-password", { currentPassword: PASSWORD, newPassword: next })).status).toBe(200);
+
+    // The device that made the change keeps working; every other session is
+    // revoked, which is the point of changing a password.
+    expect((await here.request("/api/auth/me")).body.user).not.toBeNull();
+    expect((await elsewhere.request("/api/auth/me")).body.user).toBeNull();
+
+    const fresh = createClient(baseUrl);
+    expect((await fresh.post("/api/auth/signin", { email: "rotate@example.test", password: PASSWORD })).status).toBe(401);
+    expect((await fresh.post("/api/auth/signin", { email: "rotate@example.test", password: next })).status).toBe(200);
+  });
+
   // ─── Rate limiting ────────────────────────────────────────────────────────
 
   it("throttles repeated failed sign-ins", async () => {

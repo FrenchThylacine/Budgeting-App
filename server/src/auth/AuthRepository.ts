@@ -133,6 +133,21 @@ export class AuthRepository {
     ]);
   }
 
+  /**
+   * Change the address on an account.
+   *
+   * Both forms are written: the normalised one is what uniqueness and sign-in
+   * match on, the original is what the user typed and what correspondence is
+   * addressed to. Writing one without the other would let two accounts collide
+   * or leave sign-in matching an address the user no longer has.
+   */
+  async updateEmail(userId: string, email: string, now: string): Promise<void> {
+    await this.query(
+      `UPDATE users SET email = $1, email_normalized = $2, updated_at = $3 WHERE id = $4`,
+      [email.trim(), normalizeEmail(email), now, userId],
+    );
+  }
+
   // ─── Sessions ─────────────────────────────────────────────────────────────
 
   async createSession(userId: string, tokenHash: string, ttlDays: number): Promise<void> {

@@ -101,6 +101,11 @@ export async function changePassword(currentPassword: string, newPassword: strin
   await post<{ success: boolean }>("/change-password", { currentPassword, newPassword });
 }
 
+export async function changeEmail(currentPassword: string, email: string): Promise<AuthUser> {
+  const body = await post<{ user: AuthUser }>("/change-email", { currentPassword, email });
+  return body.user;
+}
+
 /**
  * Who is signed in, if anyone.
  *
