@@ -15,16 +15,18 @@ interface AircraftMarkProps {
 }
 
 /**
- * Where a supplied illustration lives, if there is one.
+ * The supplied A350 illustration, in `public/`.
  *
- * Dropping a transparent PNG or SVG at this path replaces the drawing below
- * everywhere it is used — loading screen, transition, brand mark — with no code
- * change. The drawing is the fallback so the app never depends on an asset
- * that may not have been added.
+ * A transparent cut-out of the artwork the owner provided: background removed
+ * by flood-filling from the borders, trimmed, and turned nose-right for the
+ * places that read left to right. Held at 512px because the largest use is
+ * 132px, which is 396px on a 3× screen.
+ *
+ * The drawing below remains the fallback, and remains what small marks use —
+ * an illustration this detailed is mush at 22px, where a silhouette is all
+ * anyone can see anyway.
  */
 export const AIRCRAFT_ASSET_PATH = "/aircraft.png";
-
-let assetAvailable: boolean | null = null;
 
 /**
  * A twin-aisle airliner seen from above, in a blue-white-red livery.
@@ -132,42 +134,33 @@ export const AircraftMark: React.FC<AircraftMarkProps> = ({
 };
 
 /**
- * The supplied illustration when one exists, the drawing otherwise.
+ * The illustration at the sizes that can carry it, with the drawing as a net.
  *
- * The check runs once per session and is cached, so a missing asset costs a
- * single failed request rather than one per render — and a broken image is
- * never shown, because the fallback swaps in on error.
+ * The image is rendered directly rather than probed first: it ships with the
+ * build, so waiting for a probe to succeed would show the drawing and then
+ * replace it — a visible swap on the loading screen, which is the one place
+ * this appears before anything else has painted. If the file is ever missing
+ * or fails to decode, `onError` falls back to the drawing, so the app cannot
+ * render a broken image.
  */
 export const AircraftArt: React.FC<AircraftMarkProps> = (props) => {
-  const [useAsset, setUseAsset] = React.useState(assetAvailable ?? false);
+  const [failed, setFailed] = React.useState(false);
 
-  React.useEffect(() => {
-    if (assetAvailable !== null) return;
-    const probe = new Image();
-    probe.onload = () => {
-      assetAvailable = true;
-      setUseAsset(true);
-    };
-    probe.onerror = () => {
-      assetAvailable = false;
-    };
-    probe.src = AIRCRAFT_ASSET_PATH;
-  }, []);
+  if (failed) return <AircraftMark {...props} />;
 
-  if (!useAsset) return <AircraftMark {...props} />;
-
+  const size = props.size ?? 64;
   return (
     <img
       src={AIRCRAFT_ASSET_PATH}
       alt={props.title ?? ""}
       aria-hidden={props.title ? undefined : true}
-      width={props.size ?? 64}
+      width={size}
+      height={size}
       className={props.className}
-      style={{ display: "block", height: "auto" }}
-      onError={() => {
-        assetAvailable = false;
-        setUseAsset(false);
-      }}
+      // Width and height are both set so the layout does not jump while it
+      // loads, and the artwork is square.
+      style={{ display: "block", objectFit: "contain" }}
+      onError={() => setFailed(true)}
     />
   );
 };

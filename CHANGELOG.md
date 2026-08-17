@@ -46,6 +46,14 @@ The transaction editor labelled its fields with `aria-label` and `placeholder` o
 
 The wishlist form became a sheet like the others, and its icon section now previews the mark the item will carry and names where it came from. That chain has four steps and any of them can fail quietly.
 
+### The real aircraft
+
+The A350 artwork you supplied is now the aircraft. Background flood-filled away from the borders, trimmed, turned nose-right, and held at 512px — the largest place it appears is 132px, which is 396px on a 3× screen. As a paletted PNG it is 33 KB, four times smaller than 32-bit and indistinguishable at the sizes used.
+
+It carries the loading screen and the first-run card. The 34px brand marks and the 22px craft in the tab transition stay on the drawn version: an illustration with a fuselage this detailed is mush at that size, where a silhouette is all anyone can see anyway. The drawing also remains the `onError` fallback, so a missing file cannot produce a broken image.
+
+Putting it on the loading screen exposed a defect in the route line underneath: its travelling highlight animates a full width past each end, and the track was `overflow: visible`, so it drew a bright streak clear off the side of the screen.
+
 ### Icons
 
 84 to 192, across 15 groups. Four are new: Aviation, Gaming, Shopping & services, Outdoors. Every name was checked against the installed lucide build before being written — an icon that does not exist renders as the fallback, so the picker would have offered a choice that silently did nothing. Measured cost: 13.2 KB gzipped, 193.2 → 206.4 KB.

@@ -183,7 +183,7 @@ export const Dashboard: React.FC<{ onNavigate?: (tab: "spending" | "activities" 
                 {/* On a medallion, not bare: the livery is white, and a white
                     aircraft on a white card is a navy fin and a red line. */}
                 <span className="start-mark">
-                  <AircraftArt size={64} />
+                  <AircraftArt size={78} />
                 </span>
                 <div style={{ minWidth: 0 }}>
                   <h2 className="text-title" style={{ margin: 0 }}>Nothing recorded yet</h2>

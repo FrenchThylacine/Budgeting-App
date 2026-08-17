@@ -17,7 +17,6 @@ Anything that could not be verified this way is under *Not verified* and stays u
 - [ ] Add and remove currencies from the display list; the set is currently fixed in `CURRENCY_OPTIONS`.
 - [ ] A manual next-renewal date on an activity, overriding what the schedule computes.
 - [ ] Manual reports alongside the generated monthly and annual ones.
-- [ ] Supplied A350 artwork. `AircraftArt` and `AIRCRAFT_ASSET_PATH` are built to accept a file at `/aircraft.png` and fall back to the drawing if it is absent or fails to load — no code change needed once a file is dropped in.
 - [ ] Exercise the Neon HTTP driver's `sql.transaction([...])` specifically. Production runs on it, but no test drives it directly.
 - [ ] Automate the browser checks (Playwright). Everything marked "browser-verified" was checked by hand.
 
@@ -95,6 +94,8 @@ Verified in a real browser at 390px and 1440px against a throwaway local Postgre
 - [x] **The Save button is gone.** It stamped `lastUpdated` to force a write, implying work was unsaved until pressed, and cost a full row on a phone (2026-08-17).
 - [x] Today's date and local time, refreshed each minute, inside the period widget with one button back to the current period (2026-08-17).
 - [x] **`.btn` had no disabled styling anywhere.** Close Month on a closed period, reorder arrows at the ends of a list, Approve with nothing to approve — each looked pressable and silently did nothing (2026-08-17).
+- [x] **The supplied A350 is in.** Background flood-filled away from the borders, trimmed, turned nose-right, held at 512px for a largest use of 132px, 33 KB as a paletted PNG (indistinguishable from 32-bit at the sizes used, four times smaller). It carries the loading screen and the first-run card; marks at 34px and the transition's 22px craft stay on the drawing, which is legible at that size where an illustration is mush. The drawing is still the `onError` fallback, so a missing file cannot produce a broken image (2026-08-17).
+- [x] The boot route line drew a bright streak off across the whole screen — its travelling highlight is animated a full width past each end and the track was `overflow: visible` (2026-08-17; measured: track 260px, `scrollWidth` 260).
 - [x] **Account settings.** Change email and change password, both behind the current password. The change-password endpoint, its client and its store action existed and were reachable from nowhere in the interface (2026-08-17; five integration tests against real PostgreSQL).
 
 ## Not verified

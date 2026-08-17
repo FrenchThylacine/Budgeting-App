@@ -1214,7 +1214,9 @@
   height: 2px;
   border-radius: 2px;
   background: rgba(255, 255, 255, 0.18);
-  overflow: visible;
+  /* Clipped: the travelling highlight is animated a full width past each end,
+     and with this visible it drew a bright line off across the whole screen. */
+  overflow: hidden;
 }
 
 .boot-route::before {
@@ -1403,8 +1405,8 @@
 .start-mark {
   display: grid;
   place-items: center;
-  width: 96px;
-  height: 96px;
+  width: 104px;
+  height: 104px;
   flex-shrink: 0;
   border-radius: var(--radius-lg);
   background: linear-gradient(145deg, var(--brand-mark-from), #0B3B7A);
