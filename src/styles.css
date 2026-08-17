@@ -133,7 +133,7 @@
      covers the distance, and settles without overshoot. Motion that starts and
      stops abruptly is what makes an animation feel cheap. */
   --sweep-ease: cubic-bezier(0.33, 0, 0.15, 1);
-  --sweep-duration: 880ms;
+  --sweep-duration: 720ms;
 
   --duration-fast: 150ms;
   --duration-normal: 250ms;

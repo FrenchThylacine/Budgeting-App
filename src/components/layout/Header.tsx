@@ -16,7 +16,7 @@ import { Button } from "../ui/Button";
 import { PeriodPopover } from "./PeriodPopover";
 import { SyncStatus } from "./SyncStatus";
 import {
-  ChevronLeft, ChevronRight, Sun, Moon, Undo2, Redo2, Save, Wallet,
+  ChevronLeft, ChevronRight, Sun, Moon, Undo2, Redo2, Wallet,
   Clock, CalendarCheck
 } from "lucide-react";
 type BudgetCalculation = ReturnType<typeof calculateYear>;
@@ -98,7 +98,7 @@ export const Header: React.FC<{
         )}
       </div>
 
-      <div style={{ display: "flex", flexDirection: "column", gap: 12, alignItems: "flex-end" }}>
+      <div className="header-actions">
         <PeriodPopover summary={periodTitle} historical={periodTitle !== realPeriodTitle}>
         <div className="period-selector" aria-label="Period selector">
           <div className="period-mode-toggle" role="group" aria-label="Period type">
@@ -140,7 +140,14 @@ export const Header: React.FC<{
         </div>
         </PeriodPopover>
 
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        {/* There is no Save button. Every change is written locally and pushed
+            on its own, and the sync badge above states which of those has
+            happened. The button that used to sit here only stamped
+            `lastUpdated` to force a write — so it implied that work was
+            unsaved until pressed, which was never true, and it cost a full row
+            on a phone. Sync can still be forced from the badge when it reports
+            a problem, which is the only time forcing one means anything. */}
+        <div className="header-buttons">
           <Button variant="ghost" icon onClick={() => updateSettings({ darkMode: !snapshot.settings.darkMode })} title="Toggle theme">
             {snapshot.settings.darkMode ? <Sun size={17} /> : <Moon size={17} />}
           </Button>
@@ -149,9 +156,6 @@ export const Header: React.FC<{
           </Button>
           <Button variant="ghost" icon onClick={redo} title="Redo (Ctrl+Y)">
             <Redo2 size={17} />
-          </Button>
-          <Button variant="secondary" onClick={() => updateSettings({ lastUpdated: new Date().toISOString() })}>
-            <Save size={16} /> Save
           </Button>
           <Button variant="primary" onClick={() => setRolloverOpen(true)} disabled={!isCurrentPeriodMutable()} title={isCurrentPeriodMutable() ? undefined : "Historical periods are read-only"}>
             <Wallet size={16} /> Close Month

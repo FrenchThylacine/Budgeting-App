@@ -72,7 +72,8 @@ import { Lock, Unlock } from "lucide-react";
 import { useAuthStore } from "./store/authStore";
 import { AuthScreen } from "./components/auth/AuthScreen";
 import { TabTransition } from "./components/ui/TabTransition";
-import { AircraftMark } from "./components/ui/AircraftMark";
+import { AircraftArt, AircraftMark } from "./components/ui/AircraftMark";
+import { Tricolour } from "./components/ui/Tricolour";
 
 type TabKey = "dashboard" | "activities" | "spending" | "wishlist" | "wallet" | "analytics" | "scenarios" | "history" | "settings" | "categories";
 
@@ -171,15 +172,13 @@ export default function App() {
       <div className="boot-screen" role="status" aria-live="polite">
         <div className="boot-inner">
           <div className="boot-craft">
-            <AircraftMark size={104} />
+            <AircraftArt size={132} />
           </div>
           <div style={{ display: "grid", justifyItems: "center", gap: 4 }}>
             <div className="boot-title">Budget OS</div>
             <div className="boot-caption">Checking your session…</div>
           </div>
-          <div className="boot-track" aria-hidden="true">
-            <div className="boot-fill" />
-          </div>
+          <div className="boot-route" aria-hidden="true" />
         </div>
       </div>
     );
@@ -194,15 +193,13 @@ export default function App() {
       <div className="boot-screen" role="status" aria-live="polite">
         <div className="boot-inner">
           <div className="boot-craft">
-            <AircraftMark size={104} />
+            <AircraftArt size={132} />
           </div>
           <div style={{ display: "grid", justifyItems: "center", gap: 4 }}>
             <div className="boot-title">Budget OS</div>
             <div className="boot-caption">Loading your finances…</div>
           </div>
-          <div className="boot-track" aria-hidden="true">
-            <div className="boot-fill" />
-          </div>
+          <div className="boot-route" aria-hidden="true" />
         </div>
       </div>
     );
@@ -225,6 +222,7 @@ export default function App() {
 
   return (
     <ErrorBoundary>
+      <Tricolour className="tricolour-app" />
       <div className={`app-shell ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}>
         <Sidebar
           activeTab={activeTab}

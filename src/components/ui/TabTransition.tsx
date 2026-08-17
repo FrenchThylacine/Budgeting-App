@@ -17,7 +17,7 @@ interface TabTransitionProps {
  * Measured here at a median 8.3ms per frame with no frame over 20ms, so the
  * stutter people saw was the fetch, not the animation.
  */
-const SWEEP_MS = 880;
+const SWEEP_MS = 720;
 
 /**
  * The transition between tabs.
@@ -57,11 +57,12 @@ export const TabTransition: React.FC<TabTransitionProps> = ({ tabKey, children }
     <div className="tab-transition">
       {sweeping && (
         <div className="tab-sweep" aria-hidden="true">
-          <span className="tab-sweep-glow" />
+          <span className="tab-sweep-route" />
           <span className="tab-sweep-craft">
-            {/* The contrail is drawn by the wrapper, so it stays attached to
-                the aircraft without a second animated element to keep in sync. */}
-            <AircraftMark size={44} />
+            {/* Small, and running along the top edge. An aircraft crossing the
+                middle of the page is a cartoon, and it covers exactly what was
+                asked for. */}
+            <AircraftMark size={22} variant="solid" hull="var(--accent)" />
           </span>
         </div>
       )}

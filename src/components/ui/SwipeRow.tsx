@@ -22,6 +22,15 @@ interface SwipeRowProps {
 
 /** How far the finger must travel before the panel is considered open. */
 export const OPEN_THRESHOLD = 56;
+/**
+ * How far past the open panel the row must be dragged to commit the action on
+ * release.
+ *
+ * Well beyond the panel, and reached only against rising resistance, so it can
+ * only be arrived at deliberately. A row that deletes because a scroll drifted
+ * sideways is not recoverable by apologising for it afterwards.
+ */
+export const COMMIT_THRESHOLD = 150;
 /** Movement below this is a tap or a scroll, not a swipe. */
 export const INTENT_THRESHOLD = 10;
 export const PANEL_WIDTH = 84;
@@ -61,11 +70,38 @@ function noNegativeZero(value: number): number {
   return value === 0 ? 0 : value;
 }
 
-/** Constrain the drag to what the row actually has to reveal. */
+/**
+ * Where the row sits for a given finger travel.
+ *
+ * Inside the panel the row tracks the finger exactly. Past it the movement is
+ * damped, so the row keeps responding — it never feels stuck — while making the
+ * commit distance something the hand notices it is working towards. That
+ * resistance is the whole feel of the gesture.
+ */
 export function clampOffset(dx: number, leadingCount: number, trailingCount: number): number {
-  return noNegativeZero(
-    Math.max(-trailingCount * PANEL_WIDTH, Math.min(leadingCount * PANEL_WIDTH, dx)),
-  );
+  const maxTrailing = trailingCount * PANEL_WIDTH;
+  const maxLeading = leadingCount * PANEL_WIDTH;
+  if (dx < 0) {
+    if (maxTrailing === 0) return 0;
+    return noNegativeZero(dx >= -maxTrailing ? dx : -(maxTrailing + resist(-dx - maxTrailing)));
+  }
+  if (maxLeading === 0) return 0;
+  return dx <= maxLeading ? dx : maxLeading + resist(dx - maxLeading);
+}
+
+/** Rubber-banding: each further pixel of finger travel moves the row less. */
+function resist(overshoot: number): number {
+  return overshoot * 0.45;
+}
+
+/**
+ * Whether releasing here should perform the action rather than just open.
+ *
+ * Compared against the raw finger travel, not the damped offset: the user is
+ * reasoning about how far they dragged, not about how far the row moved.
+ */
+export function shouldCommit(travel: number, panelCount: number): boolean {
+  return panelCount > 0 && Math.abs(travel) >= COMMIT_THRESHOLD;
 }
 
 /**
@@ -104,6 +140,11 @@ export const SwipeRow: React.FC<SwipeRowProps> = ({
   const draggingRef = useRef(false);
   const [dragging, setDragging] = useState(false);
   const offsetRef = useRef(0);
+  /** Raw finger travel, which is what the commit threshold is measured against. */
+  const travelRef = useRef(0);
+  /** True while the row is far enough that releasing would act. */
+  const [armed, setArmed] = useState(false);
+  const armedRef = useRef(false);
   const startX = useRef(0);
   const startY = useRef(0);
   const decided = useRef<SwipeIntent>("none");
@@ -165,14 +206,40 @@ export const SwipeRow: React.FC<SwipeRowProps> = ({
     }
     if (decided.current !== "swipe") return;
 
+    travelRef.current = dx;
     applyOffset(clampOffset(dx, leading.length, trailing.length));
+
+    const panelCount = dx < 0 ? trailing.length : leading.length;
+    const nowArmed = shouldCommit(dx, panelCount);
+    if (nowArmed !== armedRef.current) {
+      armedRef.current = nowArmed;
+      setArmed(nowArmed);
+      // A short pulse where a phone would buzz. `vibrate` is absent on iOS and
+      // ignored without a user gesture elsewhere, so the visual cue is the
+      // real feedback and the buzz is a bonus where it works.
+      navigator.vibrate?.(nowArmed ? 12 : 6);
+    }
   };
 
   const handlePointerUp = (): void => {
     if (!draggingRef.current) return;
     draggingRef.current = false;
     setDragging(false);
+    const wasArmed = armedRef.current;
+    armedRef.current = false;
+    setArmed(false);
     if (decided.current !== "swipe") return;
+
+    // Dragged far enough: perform the action on release, which is what the
+    // resistance has been signalling for the last fifty pixels.
+    if (wasArmed) {
+      const actions = travelRef.current < 0 ? trailing : leading;
+      const action = actions[0];
+      applyOffset(0);
+      travelRef.current = 0;
+      action?.onAction();
+      return;
+    }
     // Snap open or shut rather than resting part-way, so the row is never left
     // in a state where half a label is readable.
     applyOffset(snapOffset(offsetRef.current, leading.length, trailing.length));
@@ -207,6 +274,7 @@ export const SwipeRow: React.FC<SwipeRowProps> = ({
       ref={rowRef}
       className={`swipe-row ${className}`}
       data-open={offset !== 0 || undefined}
+      data-armed={armed || undefined}
       aria-describedby={offset !== 0 ? `${groupId}-hint` : undefined}
     >
       {leading.length > 0 && renderPanel(leading, "leading")}

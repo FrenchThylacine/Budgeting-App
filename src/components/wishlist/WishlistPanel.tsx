@@ -946,7 +946,7 @@ export const WishlistPanel: React.FC = () => {
                       </Button>
                     )}
                     <div style={{ flex: "1 1 0", minWidth: 0 }} />
-                    <span className="row-actions" style={{ display: "flex", gap: 4 }}>
+                    <span className="row-actions">
                     <Button
                       size="sm"
                       variant="ghost"

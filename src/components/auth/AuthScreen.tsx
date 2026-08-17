@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { AlertCircle, ArrowLeft, CheckCircle2, Eye, EyeOff, Plane } from "lucide-react";
+import { AlertCircle, ArrowLeft, CheckCircle2, Eye, EyeOff } from "lucide-react";
 import { useAuthStore } from "../../store/authStore";
+import { AircraftMark } from "../ui/AircraftMark";
+import { Tricolour } from "../ui/Tricolour";
 
 type Mode = "signin" | "signup" | "forgot" | "reset";
 
@@ -131,9 +133,10 @@ export const AuthScreen: React.FC = () => {
   return (
     <div className="auth-screen">
       <form className="auth-card card" onSubmit={handleSubmit} noValidate>
+        <Tricolour />
         <div className="auth-brand">
           <div className="auth-mark" aria-hidden="true">
-            <Plane size={26} strokeWidth={2.2} />
+            <AircraftMark size={34} variant="solid" hull="var(--accent)" />
           </div>
           <div>
             <div className="text-title">Budget OS</div>

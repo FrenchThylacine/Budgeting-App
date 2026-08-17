@@ -9,6 +9,7 @@ import type { CurrencyCode, RecurrenceType, SpendingEntry, WishlistItem } from "
 import { useBudgetStore } from "../../store/budgetStore";
 import { matchesEntryFilters } from "../../utils/formatters";
 import { Button } from "../ui/Button";
+import { Field } from "../ui/Field";
 import { EmptyState } from "../ui/EmptyState";
 import { Section } from "../ui/Section";
 import { EditorSheet } from "../ui/EditorSheet";
@@ -334,88 +335,102 @@ export const SpendingPanel: React.FC = () => {
               gap: 12,
             }}
           >
-            <input
-              className="input"
-              aria-label="Amount"
-              type="number"
-              step="any"
-              required
-              placeholder="Amount"
-              value={draft.amount}
-              onChange={(e) => setDraft({ ...draft, amount: e.target.value })}
-            />
-            <select
-              className="select"
-              aria-label="Currency"
-              value={draft.currency}
-              onChange={(e) => setDraft({ ...draft, currency: e.target.value as CurrencyCode })}
-            >
-              {CURRENCY_OPTIONS.map((currency) => (
-                <option key={currency}>{currency}</option>
-              ))}
-            </select>
-            <input
-              className="input"
-              aria-label="Date"
-              type="date"
-              required
-              value={draft.date}
-              onChange={(e) => setDraft({ ...draft, date: e.target.value })}
-            />
-            <select
-              className="select"
-              aria-label="Category"
-              value={draft.categoryId}
-              onChange={(e) => setDraft({ ...draft, categoryId: e.target.value })}
-            >
-              {categoryOptions.map((category) => (
-                <option key={category.id} value={category.id}>
-                  {category.name}
-                  {category.archived ? " (archived)" : ""}
-                </option>
-              ))}
-            </select>
-            {/* The category decides whether this counts as piloting; the state
-                is shown rather than asked for a second time. */}
-            {pilotingForDraft && (
-              <span
-                className="text-caption"
-                style={{ display: "flex", alignItems: "center", color: "var(--text-tertiary)" }}
-              >
-                {categorySaysPiloting ? "Counts as piloting spend." : "Kept as piloting spend."}
-              </span>
-            )}
-            <select
-              className="select"
-              aria-label="Payment source"
-              value={draft.source}
-              onChange={(e) => setDraft({ ...draft, source: e.target.value })}
-            >
-              {SOURCE_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-            <select
-              className="select"
-              aria-label="Recurrence"
-              value={draft.recurrenceType}
-              onChange={(e) => setDraft({ ...draft, recurrenceType: e.target.value as RecurrenceType })}
-            >
-              {RECURRENCE_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-            <div style={{ display: "grid", gap: 4, minWidth: 0 }}>
+            <Field label="Amount">
+              <input
+                className="input"
+                type="number"
+                step="any"
+                required
+                placeholder="0.00"
+                value={draft.amount}
+                onChange={(e) => setDraft({ ...draft, amount: e.target.value })}
+              />
+            </Field>
+            <Field label="Currency">
               <select
                 className="select"
-                aria-label="Wishlist item"
+                value={draft.currency}
+                onChange={(e) => setDraft({ ...draft, currency: e.target.value as CurrencyCode })}
+              >
+                {CURRENCY_OPTIONS.map((currency) => (
+                  <option key={currency}>{currency}</option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Date">
+              <input
+                className="input"
+                type="date"
+                required
+                value={draft.date}
+                onChange={(e) => setDraft({ ...draft, date: e.target.value })}
+              />
+            </Field>
+            <Field
+              label="Category"
+              // The category decides whether this counts as piloting; the state
+              // is shown rather than asked for a second time.
+              hint={
+                pilotingForDraft
+                  ? categorySaysPiloting
+                    ? "Counts as piloting spend."
+                    : "Kept as piloting spend."
+                  : undefined
+              }
+            >
+              <select
+                className="select"
+                value={draft.categoryId}
+                onChange={(e) => setDraft({ ...draft, categoryId: e.target.value })}
+              >
+                {categoryOptions.map((category) => (
+                  <option key={category.id} value={category.id}>
+                    {category.name}
+                    {category.archived ? " (archived)" : ""}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Paid from">
+              <select
+                className="select"
+                value={draft.source}
+                onChange={(e) => setDraft({ ...draft, source: e.target.value })}
+              >
+                {SOURCE_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Repeats">
+              <select
+                className="select"
+                value={draft.recurrenceType}
+                onChange={(e) => setDraft({ ...draft, recurrenceType: e.target.value as RecurrenceType })}
+              >
+                {RECURRENCE_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field
+              label="Wishlist item"
+              hint={
+                draft.wishlistItemId
+                  ? editing
+                    ? "Links this transaction and marks the item bought."
+                    : "Marks the item bought when saved."
+                  : undefined
+              }
+            >
+              <select
+                className="select"
                 value={draft.wishlistItemId}
                 onChange={(e) => setDraft({ ...draft, wishlistItemId: e.target.value })}
-                style={{ minWidth: 0 }}
               >
                 <option value="">No wishlist item</option>
                 {linkableWishlistItems.map((item) => (
@@ -427,19 +442,15 @@ export const SpendingPanel: React.FC = () => {
                   </option>
                 ))}
               </select>
-              {draft.wishlistItemId && (
-                <span className="text-caption" style={{ color: "var(--text-tertiary)" }}>
-                  {editing ? "Links this transaction and marks the item bought." : "Marks the item bought when saved."}
-                </span>
-              )}
-            </div>
-            <input
-              className="input"
-              aria-label="Note"
-              placeholder="Note (optional)"
-              value={draft.note}
-              onChange={(e) => setDraft({ ...draft, note: e.target.value })}
-            />
+            </Field>
+            <Field label="Note">
+              <input
+                className="input"
+                placeholder="Optional"
+                value={draft.note}
+                onChange={(e) => setDraft({ ...draft, note: e.target.value })}
+              />
+            </Field>
           </form>
           </EditorSheet>
         )}
@@ -532,10 +543,13 @@ export const SpendingPanel: React.FC = () => {
                     {entry.note ? ` · ${entry.note}` : ""}
                   </div>
                 </div>
-                <div className="row-actions" style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+                {/* The amount sits outside `.row-actions`: that container is
+                    hidden on touch, where the swipe replaces the buttons, and
+                    the figure is the one thing on the row that must never go. */}
+                <div className="row-trailing">
                   <strong>{formatMoney(entry.amount, entry.currency, snapshot.settings.currencyDisplayMode)}</strong>
                   {mutable && (
-                    <>
+                    <div className="row-actions">
                       <Button variant="ghost" size="sm" icon onClick={() => beginEdit(entry)} aria-label="Edit transaction">
                         <Pencil size={15} />
                       </Button>
@@ -548,7 +562,7 @@ export const SpendingPanel: React.FC = () => {
                       >
                         <Trash2 size={15} />
                       </Button>
-                    </>
+                    </div>
                   )}
                 </div>
               </div>

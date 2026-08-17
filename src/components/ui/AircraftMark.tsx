@@ -15,6 +15,18 @@ interface AircraftMarkProps {
 }
 
 /**
+ * Where a supplied illustration lives, if there is one.
+ *
+ * Dropping a transparent PNG or SVG at this path replaces the drawing below
+ * everywhere it is used — loading screen, transition, brand mark — with no code
+ * change. The drawing is the fallback so the app never depends on an asset
+ * that may not have been added.
+ */
+export const AIRCRAFT_ASSET_PATH = "/aircraft.png";
+
+let assetAvailable: boolean | null = null;
+
+/**
  * A twin-aisle airliner seen from above, in a blue-white-red livery.
  *
  * Proportioned after a modern wide-body: a long slender fuselage, a
@@ -116,5 +128,46 @@ export const AircraftMark: React.FC<AircraftMarkProps> = ({
         </>
       )}
     </svg>
+  );
+};
+
+/**
+ * The supplied illustration when one exists, the drawing otherwise.
+ *
+ * The check runs once per session and is cached, so a missing asset costs a
+ * single failed request rather than one per render — and a broken image is
+ * never shown, because the fallback swaps in on error.
+ */
+export const AircraftArt: React.FC<AircraftMarkProps> = (props) => {
+  const [useAsset, setUseAsset] = React.useState(assetAvailable ?? false);
+
+  React.useEffect(() => {
+    if (assetAvailable !== null) return;
+    const probe = new Image();
+    probe.onload = () => {
+      assetAvailable = true;
+      setUseAsset(true);
+    };
+    probe.onerror = () => {
+      assetAvailable = false;
+    };
+    probe.src = AIRCRAFT_ASSET_PATH;
+  }, []);
+
+  if (!useAsset) return <AircraftMark {...props} />;
+
+  return (
+    <img
+      src={AIRCRAFT_ASSET_PATH}
+      alt={props.title ?? ""}
+      aria-hidden={props.title ? undefined : true}
+      width={props.size ?? 64}
+      className={props.className}
+      style={{ display: "block", height: "auto" }}
+      onError={() => {
+        assetAvailable = false;
+        setUseAsset(false);
+      }}
+    />
   );
 };

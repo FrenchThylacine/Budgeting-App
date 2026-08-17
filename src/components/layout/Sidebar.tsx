@@ -4,10 +4,11 @@ import { useBudgetStore } from "../../store/budgetStore";
 import {
   LayoutDashboard, ListTodo, Receipt, Gift, Wallet, BarChart3,
   FlaskConical, History, Settings, Tags, ChevronLeft, ChevronRight,
-  Plane, FileSpreadsheet, Download, FileJson, RefreshCw, FileText,
+  FileSpreadsheet, Download, FileJson, RefreshCw, FileText,
   LogOut, UserRound, Upload
 } from "lucide-react";
 import { exportCurrentYearToExcel, exportAllYearsToExcel, exportJson } from "../../domain/importExport";
+import { AircraftMark } from "../ui/AircraftMark";
 import { ImportControl } from "../data/ImportControl";
 import { buildPeriodReport, reportHtml, type ReportScope } from "../../domain/report";
 import { formatMoney } from "../../domain/currency";
@@ -76,7 +77,7 @@ export const Sidebar: React.FC<{
     <aside className="sidebar" aria-label="Primary navigation">
       <div className="nav-brand">
         <div className="brand-icon">
-          <Plane size={20} strokeWidth={2.5} />
+          <AircraftMark size={26} variant="solid" hull="#FFFFFF" />
         </div>
         {!collapsed && (
           <div className="brand-text">
