@@ -206,7 +206,7 @@ export default function App() {
   }
 
   const tabs: Record<TabKey, React.ReactNode> = {
-    dashboard: <Dashboard />,
+    dashboard: <Dashboard onNavigate={setActiveTab} />,
     activities: <ActivityPanel />,
     spending: <SpendingPanel />,
     wishlist: <WishlistPanel />,

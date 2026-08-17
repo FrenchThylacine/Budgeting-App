@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { useBudgetStore } from "../../store/budgetStore";
 import { calculateYear } from "../../domain/calculations";
 import { getIsoWeek, monthName, weekYear } from "../../domain/dates";
@@ -46,10 +46,25 @@ export const Header: React.FC<{
     updateSettings({ selectedYear: year, selectedMonth: month, selectedWeek: getIsoWeek(date), selectedWeekYear: weekYear(date) });
   }
 
+  /**
+   * The wall clock, refreshed each minute.
+   *
+   * A period selector that can show any month needs to say, without ambiguity,
+   * where "now" actually is — otherwise a view of March looks exactly like
+   * today in March. Minute resolution rather than seconds: a ticking second
+   * hand is a re-render per second for a number nobody is reading.
+   */
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(new Date()), 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
+
   const periodTitle = periodLabel(snapshot.settings);
   const atCurrentPeriod = isAtCurrentPeriod(snapshot.settings);
   const realPeriodTitle = periodLabel({ ...snapshot.settings, ...currentPeriodPatch(snapshot.settings) });
-  const todayLabel = new Intl.DateTimeFormat(undefined, { dateStyle: "long" }).format(new Date());
+  const todayLabel = new Intl.DateTimeFormat(undefined, { dateStyle: "long" }).format(now);
+  const clockLabel = new Intl.DateTimeFormat(undefined, { timeStyle: "short" }).format(now);
   const goToCurrentPeriod = () => updateSettings(currentPeriodPatch(snapshot.settings));
 
   const status = calculation.selectedMonthSpend.status;
@@ -136,6 +151,23 @@ export const Header: React.FC<{
           <Button variant="ghost" icon onClick={() => updateSettings(movePeriod(snapshot.settings, 1))} aria-label={`Next ${mode}`}>
             <ChevronRight size={18} />
           </Button>
+          </div>
+
+          {/* Where "now" is, stated inside the selector itself, and one button
+              back to it. Without this, a view of a past month is visually
+              identical to the same month lived through at the time. */}
+          <div className="period-now">
+            <span className="text-caption">
+              {todayLabel} · {clockLabel}
+            </span>
+            <button
+              className="btn btn-secondary btn-sm"
+              onClick={goToCurrentPeriod}
+              disabled={atCurrentPeriod}
+              title={atCurrentPeriod ? `Already on the current ${mode}` : undefined}
+            >
+              <CalendarCheck size={13} /> Go to current {mode}
+            </button>
           </div>
         </div>
         </PeriodPopover>

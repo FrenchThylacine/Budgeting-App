@@ -1305,3 +1305,141 @@
 
   .header-buttons { gap: 4px; }
 }
+
+/* ─── Collapsible sections ────────────────────────────────────────────────── */
+
+.disclosure {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+
+.disclosure-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 12px 4px;
+  background: none;
+  border: 0;
+  border-top: 1px solid var(--border);
+  color: var(--text-primary);
+  cursor: pointer;
+  text-align: left;
+}
+
+.disclosure-heading {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.disclosure-summary { color: var(--text-tertiary); }
+
+.disclosure-chevron {
+  flex-shrink: 0;
+  color: var(--text-tertiary);
+  transition: transform var(--duration-fast) var(--ease-out);
+}
+
+.disclosure-open .disclosure-chevron { transform: rotate(180deg); }
+
+.disclosure-trigger:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+.disclosure-panel {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+  animation: pageArrive 220ms var(--ease-out);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .disclosure-chevron { transition: none; }
+  .disclosure-panel { animation: none; }
+}
+
+/* ─── First run ───────────────────────────────────────────────────────────── */
+
+.start-card { display: grid; gap: 18px; }
+
+.start-steps {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+}
+
+.start-step {
+  display: grid;
+  gap: 6px;
+  align-content: start;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-subtle);
+  text-align: left;
+  cursor: pointer;
+  color: var(--text-primary);
+  min-width: 0;
+}
+
+.start-step:hover { border-color: var(--accent); }
+
+.start-step:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.start-step-index {
+  font-size: var(--text-footnote);
+  font-weight: var(--weight-semibold);
+  color: var(--accent);
+}
+
+.start-mark {
+  display: grid;
+  place-items: center;
+  width: 96px;
+  height: 96px;
+  flex-shrink: 0;
+  border-radius: var(--radius-lg);
+  background: linear-gradient(145deg, var(--brand-mark-from), #0B3B7A);
+}
+
+/* Today's date and the way back to it, inside the period widget. */
+.period-now {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+  color: var(--text-tertiary);
+}
+
+/* ─── Disabled controls ───────────────────────────────────────────────────── */
+
+/* There was no disabled styling for `.btn` anywhere in the app: Close Month on
+   a closed period, the reorder arrows at the ends of a list, Approve without a
+   suggestion — every one of them looked exactly as pressable as a live button
+   and simply did nothing when pressed. Nothing tells a user less than a
+   control that ignores them without explanation. */
+.btn:disabled,
+.btn[aria-disabled="true"] {
+  opacity: 0.45;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.btn:disabled:hover,
+.btn[aria-disabled="true"]:hover {
+  /* Hover states imply availability; a disabled control must stay inert. */
+  filter: none;
+  transform: none;
+}
