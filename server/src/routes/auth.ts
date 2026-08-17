@@ -281,5 +281,45 @@ export function createAuthRoutes(): Router {
     }),
   );
 
+  /**
+   * POST /api/auth/change-email
+   *
+   * Behind the current password, for the same reason as change-password: an
+   * unattended session must not be enough to move the account to an address
+   * the owner does not control, which would hand over password resets too.
+   *
+   * The budget itself is keyed on the user id, not the address, so nothing
+   * about the data moves — only how the owner signs in.
+   */
+  router.post(
+    "/change-email",
+    requireAuth,
+    asyncHandler(async (req: Request, res: Response) => {
+      const { currentPassword, email } = req.body ?? {};
+      if (typeof currentPassword !== "string") {
+        throw new AppError(400, "Your current password is required.");
+      }
+      if (typeof email !== "string" || !isPlausibleEmail(email)) {
+        throw new AppError(400, "Enter a valid email address.");
+      }
+
+      const repo = getRepo();
+      const user = await repo.findUserById(req.auth!.userId);
+      if (!user || !(await verifyPassword(currentPassword, user.passwordHash))) {
+        throw new AppError(401, "Your current password is incorrect.", "invalid_credentials");
+      }
+
+      const existing = await repo.findUserByEmail(email);
+      // Comparing ids rather than rejecting any match, so re-saving the same
+      // address — or correcting only its capitalisation — is not an error.
+      if (existing && existing.id !== user.id) {
+        throw new AppError(409, "That email address is already in use.");
+      }
+
+      await repo.updateEmail(user.id, email, new Date().toISOString());
+      res.json({ user: { id: user.id, email: email.trim() } });
+    }),
+  );
+
   return router;
 }

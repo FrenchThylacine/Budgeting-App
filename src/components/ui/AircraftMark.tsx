@@ -15,6 +15,20 @@ interface AircraftMarkProps {
 }
 
 /**
+ * The supplied A350 illustration, in `public/`.
+ *
+ * A transparent cut-out of the artwork the owner provided: background removed
+ * by flood-filling from the borders, trimmed, and turned nose-right for the
+ * places that read left to right. Held at 512px because the largest use is
+ * 132px, which is 396px on a 3× screen.
+ *
+ * The drawing below remains the fallback, and remains what small marks use —
+ * an illustration this detailed is mush at 22px, where a silhouette is all
+ * anyone can see anyway.
+ */
+export const AIRCRAFT_ASSET_PATH = "/aircraft.png";
+
+/**
  * A twin-aisle airliner seen from above, in a blue-white-red livery.
  *
  * Proportioned after a modern wide-body: a long slender fuselage, a
@@ -116,5 +130,37 @@ export const AircraftMark: React.FC<AircraftMarkProps> = ({
         </>
       )}
     </svg>
+  );
+};
+
+/**
+ * The illustration at the sizes that can carry it, with the drawing as a net.
+ *
+ * The image is rendered directly rather than probed first: it ships with the
+ * build, so waiting for a probe to succeed would show the drawing and then
+ * replace it — a visible swap on the loading screen, which is the one place
+ * this appears before anything else has painted. If the file is ever missing
+ * or fails to decode, `onError` falls back to the drawing, so the app cannot
+ * render a broken image.
+ */
+export const AircraftArt: React.FC<AircraftMarkProps> = (props) => {
+  const [failed, setFailed] = React.useState(false);
+
+  if (failed) return <AircraftMark {...props} />;
+
+  const size = props.size ?? 64;
+  return (
+    <img
+      src={AIRCRAFT_ASSET_PATH}
+      alt={props.title ?? ""}
+      aria-hidden={props.title ? undefined : true}
+      width={size}
+      height={size}
+      className={props.className}
+      // Width and height are both set so the layout does not jump while it
+      // loads, and the artwork is square.
+      style={{ display: "block", objectFit: "contain" }}
+      onError={() => setFailed(true)}
+    />
   );
 };

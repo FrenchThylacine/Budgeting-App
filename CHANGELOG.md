@@ -1,5 +1,63 @@
 # Changelog
 
+## 2026-08-17 — Three rules that had never once applied
+
+Three pieces of this app were written, committed, and never ran.
+
+**The touch rule that hid per-row buttons.** `@media (hover: none) and (pointer: coarse) { .swipe-row .row-actions { display: none } }` has been in the stylesheet since swipe was added. Every row container also carried an inline `style={{ display: "flex" }}`, and an inline style outranks any stylesheet rule. So every phone kept showing the Edit and Delete buttons that the swipe gesture exists to replace — the entire point of the gesture, silently undone by six characters of JSX. Found by looking at a phone-width screenshot, not by reading the CSS.
+
+Fixing it broke something else immediately: the transaction amount lived *inside* that container, so hiding it took the figure with it. The amount now sits in `.row-trailing`, which stays.
+
+**Change password.** A server route, an API wrapper, a store action, an error path — complete, tested at the edges, and reachable from nowhere in the interface. A signed-in user could not change their own password without going through "forgot password" and their own inbox. There is now an Account section in Settings, and a matching change-email endpoint beside it.
+
+**Disabled buttons.** `.btn` had no `:disabled` styling at all. Close Month on a closed period, the reorder arrows at the ends of a list, Approve with nothing to approve: each one looked exactly as pressable as a live button and did nothing when pressed. Nothing tells a user less.
+
+### The swipe now has weight
+
+The gesture only ever revealed a panel. It now behaves like something being dragged: 1:1 with the finger to the edge of the panel, then rubber-banding at 45% so it keeps responding while the distance starts to cost something. Past 150px of travel the row arms — the action takes the full width, its label moves to the edge you can actually see, and letting go performs it. Let go earlier and it snaps open or shut as before.
+
+The threshold is measured against raw finger travel rather than the damped offset, because the user is reasoning about how far they dragged, not about how far the row moved. Destructive actions still confirm.
+
+That label placement is not a detail. Centred in a panel that is four-fifths hidden behind the row, it left a wordless block of red at the exact moment the user needs to be told what letting go will do.
+
+### The dashboard stops apologising
+
+A new account opened on eight cards, each explaining that it had no data. That is not a dashboard, it is a list of things the app cannot tell you yet. A blank account now gets three ways to start — import a spreadsheet, add recurring expenses, log a transaction — each going straight to the right place. Everything returns the moment there is something to compute from.
+
+The reference material below the fold went behind collapsible sections, closed by default under 900px. They unmount rather than hide: a chart that is merely invisible still measures and re-renders for someone who chose not to look at it.
+
+The suggested-budget card no longer appears when the suggestion is zero. Approving it wrote a permanent, uneditable record stating that the month's budget was zero — with no recurring expenses there is no suggestion, which is not the same as a suggestion of nothing.
+
+And the Save button is gone. It stamped `lastUpdated` to force a write, which implied work was unsaved until you pressed it — never true — and cost a full row on a phone. The sync badge states what has actually reached the server.
+
+### Air France, quieter
+
+The tab transition flew a 44px aircraft through the middle of the page. It is now a hairline route across the top with a 22px aircraft along it, 720ms: noticed, not watched, and it no longer covers what you asked to see.
+
+A tricolour rule sits above the whole application and inside the sign-in card. Its middle band is a pale blue-grey rather than white — on a white card, white is a gap, and a rule broken in the middle reads as a rendering fault instead of a flag.
+
+Changing period now moves the page in the direction time moved. Forward slides in from the right, back from the left, driven by a period ordinal, because the arrows know their direction but the month and year dropdowns can jump anywhere.
+
+The drawn airliner replaced the last Lucide `Plane`. On the first-run card it sits on a navy medallion: the livery is white, and a white aircraft on a white card is a navy fin and a red line.
+
+### Editors say what their fields are
+
+The transaction editor labelled its fields with `aria-label` and `placeholder` only. A screen reader was served. A sighted user saw a box reading "Budget" and another reading "One-off", with nothing to say that the first meant who paid and the second how often it repeats — and a `<select>` has no placeholder to lose in the first place.
+
+The wishlist form became a sheet like the others, and its icon section now previews the mark the item will carry and names where it came from. That chain has four steps and any of them can fail quietly.
+
+### The real aircraft
+
+The A350 artwork you supplied is now the aircraft. Background flood-filled away from the borders, trimmed, turned nose-right, and held at 512px — the largest place it appears is 132px, which is 396px on a 3× screen. As a paletted PNG it is 33 KB, four times smaller than 32-bit and indistinguishable at the sizes used.
+
+It carries the loading screen and the first-run card. The 34px brand marks and the 22px craft in the tab transition stay on the drawn version: an illustration with a fuselage this detailed is mush at that size, where a silhouette is all anyone can see anyway. The drawing also remains the `onError` fallback, so a missing file cannot produce a broken image.
+
+Putting it on the loading screen exposed a defect in the route line underneath: its travelling highlight animates a full width past each end, and the track was `overflow: visible`, so it drew a bright streak clear off the side of the screen.
+
+### Icons
+
+84 to 192, across 15 groups. Four are new: Aviation, Gaming, Shopping & services, Outdoors. Every name was checked against the installed lucide build before being written — an icon that does not exist renders as the fallback, so the picker would have offered a choice that silently did nothing. Measured cost: 13.2 KB gzipped, 193.2 → 206.4 KB.
+
 ## 2026-08-16 — The stutter was a download, not an animation
 
 ### Measured before changing anything

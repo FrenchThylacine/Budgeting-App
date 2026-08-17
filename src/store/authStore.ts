@@ -2,6 +2,7 @@ import { create } from "zustand";
 import {
   AuthError,
   type AuthUser,
+  changeEmail as apiChangeEmail,
   changePassword as apiChangePassword,
   fetchCurrentUser,
   requestPasswordReset as apiRequestPasswordReset,
@@ -32,6 +33,7 @@ interface AuthStore {
   requestPasswordReset: (email: string) => Promise<string | null>;
   resetPassword: (token: string, password: string) => Promise<boolean>;
   changePassword: (currentPassword: string, newPassword: string) => Promise<boolean>;
+  changeEmail: (currentPassword: string, email: string) => Promise<boolean>;
   /** Called when the API reports the session is gone mid-use. */
   handleSessionExpired: () => void;
   clearError: () => void;
@@ -124,6 +126,20 @@ export const useAuthStore = create<AuthStore>((set) => ({
     try {
       await apiChangePassword(currentPassword, newPassword);
       set({ busy: false });
+      return true;
+    } catch (error) {
+      set({ busy: false, error: messageFor(error) });
+      return false;
+    }
+  },
+
+  changeEmail: async (currentPassword, email) => {
+    set({ busy: true, error: null });
+    try {
+      const user = await apiChangeEmail(currentPassword, email);
+      // The session and the cached budget are keyed on the user id, which does
+      // not change, so nothing local needs clearing — only the name on it.
+      set({ user, busy: false });
       return true;
     } catch (error) {
       set({ busy: false, error: messageFor(error) });

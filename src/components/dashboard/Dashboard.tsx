@@ -32,6 +32,8 @@ import { Card, CardBody } from "../ui/Card";
 import { UpcomingSchedule } from "./UpcomingSchedule";
 import { EmptyState } from "../ui/EmptyState";
 import { Button } from "../ui/Button";
+import { Disclosure } from "../ui/Disclosure";
+import { AircraftArt } from "../ui/AircraftMark";
 import {
   AlertTriangle, ArrowRight, Calendar, CreditCard, PiggyBank, TrendingDown, TrendingUp, Zap,
 } from "lucide-react";
@@ -78,7 +80,9 @@ const Figure: React.FC<{
   </div>
 );
 
-export const Dashboard: React.FC = () => {
+export const Dashboard: React.FC<{ onNavigate?: (tab: "spending" | "activities" | "settings") => void }> = ({
+  onNavigate,
+}) => {
   const snapshot = useBudgetStore((state) => state.snapshot);
   const recordBudgetApproval = useBudgetStore((state) => state.recordBudgetApproval);
   const { settings } = snapshot;
@@ -155,6 +159,80 @@ export const Dashboard: React.FC = () => {
       note: status === "approved" ? "Approved from dashboard" : "Rejected from dashboard",
     });
   };
+
+  /**
+   * Nothing has been entered yet — anywhere, not merely in this period.
+   *
+   * Eight cards each saying "No data" is not a dashboard, it is a list of
+   * things the app cannot tell you yet, and it is the first thing a new account
+   * shows. The figures return the moment there is anything to compute them
+   * from, so nothing is hidden that could be shown.
+   */
+  const isBlankAccount =
+    calculation.activityEstimates.length === 0 &&
+    calculation.monthlyBudgetBase === 0 &&
+    Object.values(snapshot.years).every((year) => (year?.spendingEntries?.length ?? 0) === 0);
+
+  if (isBlankAccount) {
+    return (
+      <div className="dashboard-grid page-enter">
+        <Card>
+          <CardBody>
+            <div className="start-card">
+              <div style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
+                {/* On a medallion, not bare: the livery is white, and a white
+                    aircraft on a white card is a navy fin and a red line. */}
+                <span className="start-mark">
+                  <AircraftArt size={78} />
+                </span>
+                <div style={{ minWidth: 0 }}>
+                  <h2 className="text-title" style={{ margin: 0 }}>Nothing recorded yet</h2>
+                  <p className="text-caption" style={{ marginTop: 4 }}>
+                    Figures, trends and forecasts appear here as soon as there is something to
+                    compute them from. Three ways to begin:
+                  </p>
+                </div>
+              </div>
+
+              <div className="start-steps">
+                <button type="button" className="start-step" onClick={() => onNavigate?.("settings")}>
+                  <span className="start-step-index">Import</span>
+                  <span className="text-callout">Bring in a spreadsheet</span>
+                  <span className="text-caption">
+                    Load an existing workbook or a JSON backup from Settings. You see exactly what
+                    it contains before anything is written.
+                  </span>
+                </button>
+                <button type="button" className="start-step" onClick={() => onNavigate?.("activities")}>
+                  <span className="start-step-index">Set up</span>
+                  <span className="text-callout">Add your recurring expenses</span>
+                  <span className="text-caption">
+                    Subscriptions, rent, lessons. These drive the suggested budget and the
+                    schedule of what is coming.
+                  </span>
+                </button>
+                <button type="button" className="start-step" onClick={() => onNavigate?.("spending")}>
+                  <span className="start-step-index">Record</span>
+                  <span className="text-callout">Log a transaction</span>
+                  <span className="text-caption">
+                    One expense is enough to start the trend, the category split and the health
+                    score for {periodLabel(settings)}.
+                  </span>
+                </button>
+              </div>
+            </div>
+          </CardBody>
+        </Card>
+
+        <Card>
+          <CardBody>
+            <h2 className="text-title" style={{ margin: "0 0 12px" }}>Upcoming</h2>
+            <UpcomingSchedule snapshot={snapshot} money={money} />
+          </CardBody>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="dashboard-grid page-enter">
@@ -374,7 +452,10 @@ export const Dashboard: React.FC = () => {
         </Card>
       </div>
 
-      {/* Categories and the recurring split. */}
+      {/* Everything below is reference rather than answer: it explains figures
+          already stated above. Collapsed by default on a phone, where it is
+          several screens of scrolling past the part people came for. */}
+      <Disclosure title="Detail" summary="Category split and recurring share">
       <div className="dashboard-row">
         <Card>
           <CardBody>
@@ -417,9 +498,16 @@ export const Dashboard: React.FC = () => {
           </CardBody>
         </Card>
       </div>
+      </Disclosure>
 
-      {/* Budget approval. */}
-      {isCurrent && !existingApproval && (
+      {/* Budget approval.
+
+          Only when there is something to suggest. With no recurring expenses
+          the suggestion is 0, and approving it wrote a permanent historical
+          record stating that this month's budget was zero — which is not what
+          the user meant, and approvals are not editable afterwards. A missing
+          suggestion is missing, not 0. */}
+      {isCurrent && !existingApproval && suggestion.suggestedAmount > 0 && (
         <Card style={{ borderColor: "var(--accent)", background: "var(--accent-soft)" }}>
           <CardBody>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 16 }}>
@@ -464,15 +552,16 @@ export const Dashboard: React.FC = () => {
         </Card>
       )}
 
-      {/* Upcoming commitments and savings. */}
-      <div className="dashboard-row">
-        <Card>
-          <CardBody>
-            <h2 className="text-title" style={{ margin: "0 0 12px" }}>Upcoming</h2>
-            <UpcomingSchedule snapshot={snapshot} money={money} />
-          </CardBody>
-        </Card>
+      {/* What is coming stays primary: it is the only part of the page about
+          the future, and the one thing a glance is usually for. */}
+      <Card>
+        <CardBody>
+          <h2 className="text-title" style={{ margin: "0 0 12px" }}>Upcoming</h2>
+          <UpcomingSchedule snapshot={snapshot} money={money} />
+        </CardBody>
+      </Card>
 
+      <Disclosure title="Savings and wallet" summary="Personal wallet, rollover, wishlist, year to date">
         <Card>
           <CardBody>
             <h2 className="text-title" style={{ margin: "0 0 12px" }}>Savings &amp; wallet</h2>
@@ -499,7 +588,7 @@ export const Dashboard: React.FC = () => {
             </div>
           </CardBody>
         </Card>
-      </div>
+      </Disclosure>
     </div>
   );
 };

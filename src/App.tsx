@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useEffect, Suspense, lazy } from "react";
+import React, { useState, useMemo, useEffect, useRef, Suspense, lazy } from "react";
 import { useBudgetStore } from "./store/budgetStore";
 import { calculateYear } from "./domain/calculations";
 import { Sidebar } from "./components/layout/Sidebar";
@@ -67,12 +67,13 @@ import { HistoricalEditDialog } from "./components/modals/HistoricalEditDialog";
 import { Notifications } from "./components/Notifications";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { isViewingHistoricalPeriod } from "./utils/formatters";
-import { periodLabel } from "./domain/periods";
+import { periodLabel, periodOrdinal } from "./domain/periods";
 import { Lock, Unlock } from "lucide-react";
 import { useAuthStore } from "./store/authStore";
 import { AuthScreen } from "./components/auth/AuthScreen";
 import { TabTransition } from "./components/ui/TabTransition";
-import { AircraftMark } from "./components/ui/AircraftMark";
+import { AircraftArt, AircraftMark } from "./components/ui/AircraftMark";
+import { Tricolour } from "./components/ui/Tricolour";
 
 type TabKey = "dashboard" | "activities" | "spending" | "wishlist" | "wallet" | "analytics" | "scenarios" | "history" | "settings" | "categories";
 
@@ -80,6 +81,7 @@ const SIDEBAR_PREF_KEY = "sidebar-collapsed";
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<TabKey>("dashboard");
+  const panelFrameRef = useRef<HTMLDivElement>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
     try { return localStorage.getItem(SIDEBAR_PREF_KEY) === "true"; } catch { return false; }
   });
@@ -133,6 +135,34 @@ export default function App() {
     };
   }, [snapshot.settings.darkMode]);
 
+  /**
+   * Move the page in the direction time moved.
+   *
+   * Going back a month and going forward a month produced exactly the same
+   * fade, so the only confirmation that the arrow did what was asked was to
+   * read the heading. The animation is applied to the frame rather than by
+   * remounting the panel, so a typed search or a scroll position survives the
+   * period change — remounting to get an animation costs the user their place.
+   */
+  const periodOrder = periodOrdinal(snapshot.settings);
+  const previousOrder = useRef(periodOrder);
+  useEffect(() => {
+    const frame = panelFrameRef.current;
+    const delta = periodOrder - previousOrder.current;
+    previousOrder.current = periodOrder;
+    if (!frame || delta === 0) return;
+    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
+
+    const className = delta > 0 ? "period-forward" : "period-back";
+    // Removed first, so a rapid second press restarts the animation rather
+    // than being swallowed because the class is already present.
+    frame.classList.remove("period-forward", "period-back");
+    void frame.offsetWidth;
+    frame.classList.add(className);
+    const timer = window.setTimeout(() => frame.classList.remove(className), 320);
+    return () => window.clearTimeout(timer);
+  }, [periodOrder]);
+
   // Keyboard shortcuts.
   //
   // This previously called preventDefault on Ctrl+Z and then did nothing,
@@ -171,15 +201,13 @@ export default function App() {
       <div className="boot-screen" role="status" aria-live="polite">
         <div className="boot-inner">
           <div className="boot-craft">
-            <AircraftMark size={104} />
+            <AircraftArt size={132} />
           </div>
           <div style={{ display: "grid", justifyItems: "center", gap: 4 }}>
             <div className="boot-title">Budget OS</div>
             <div className="boot-caption">Checking your session…</div>
           </div>
-          <div className="boot-track" aria-hidden="true">
-            <div className="boot-fill" />
-          </div>
+          <div className="boot-route" aria-hidden="true" />
         </div>
       </div>
     );
@@ -194,22 +222,20 @@ export default function App() {
       <div className="boot-screen" role="status" aria-live="polite">
         <div className="boot-inner">
           <div className="boot-craft">
-            <AircraftMark size={104} />
+            <AircraftArt size={132} />
           </div>
           <div style={{ display: "grid", justifyItems: "center", gap: 4 }}>
             <div className="boot-title">Budget OS</div>
             <div className="boot-caption">Loading your finances…</div>
           </div>
-          <div className="boot-track" aria-hidden="true">
-            <div className="boot-fill" />
-          </div>
+          <div className="boot-route" aria-hidden="true" />
         </div>
       </div>
     );
   }
 
   const tabs: Record<TabKey, React.ReactNode> = {
-    dashboard: <Dashboard />,
+    dashboard: <Dashboard onNavigate={setActiveTab} />,
     activities: <ActivityPanel />,
     spending: <SpendingPanel />,
     wishlist: <WishlistPanel />,
@@ -225,6 +251,7 @@ export default function App() {
 
   return (
     <ErrorBoundary>
+      <Tricolour className="tricolour-app" />
       <div className={`app-shell ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}>
         <Sidebar
           activeTab={activeTab}
@@ -283,7 +310,7 @@ export default function App() {
 
           {/* Keying on the tab restarts the enter animation, so switching
               views reads as a transition rather than an instant swap. */}
-          <div className="tab-panel-frame">
+          <div className="tab-panel-frame" ref={panelFrameRef}>
             {/* A lazily loaded panel suspends on first open. The fallback keeps
                 the layout height so the page does not jump, and announces
                 itself rather than flashing an empty region. */}

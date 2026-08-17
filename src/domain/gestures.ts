@@ -22,8 +22,10 @@ export interface GesturePreferences {
 export type GestureSurface = "wishlist" | "activities" | "spending";
 
 export const DEFAULT_GESTURES: Record<GestureSurface, GesturePreferences> = {
-  // Delete is trailing everywhere, which is the platform convention, and it
-  // only ever reveals a button — the gesture never deletes on release.
+  // Delete is trailing everywhere, which is the platform convention. A short
+  // swipe only reveals the button; committing on release takes a long,
+  // deliberate drag against rising resistance, and destructive actions still
+  // ask before they act.
   wishlist: { trailing: "delete", leading: "buy" },
   activities: { trailing: "archive", leading: "none" },
   spending: { trailing: "delete", leading: "none" },
@@ -45,7 +47,7 @@ export const ACTION_LABELS: Record<SwipeActionId, string> = {
   duplicate: "Duplicate",
 };
 
-/** Destructive actions render in the danger tone and are never fired by the gesture. */
+/** Destructive actions render in the danger tone and confirm before they act. */
 export function isDestructive(action: SwipeActionId): boolean {
   return action === "delete";
 }
