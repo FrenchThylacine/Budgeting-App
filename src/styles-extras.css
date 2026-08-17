@@ -1443,3 +1443,15 @@
   filter: none;
   transform: none;
 }
+
+/* Live preview of the mark a wishlist item will carry. */
+.wishlist-mark-preview {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 8px 0 12px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-subtle);
+}

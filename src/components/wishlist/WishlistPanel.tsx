@@ -19,6 +19,7 @@ import {
 } from "../../domain/wishlist";
 import type { WishlistLinkResult } from "../../domain/wishlist";
 import { ActivityIcon, IconPicker } from "../ui/IconPicker";
+import { EditorSheet } from "../ui/EditorSheet";
 import { seedCategoryIdOrFallback } from "../../domain/seedCategories";
 import { SwipeRow } from "../ui/SwipeRow";
 import { gesturesFor } from "../../domain/gestures";
@@ -116,6 +117,8 @@ const ItemMark: React.FC<{ domain: string | null; accent: string; size?: number;
 // ─── Shared edit form ────────────────────────────────────────────────────────
 
 interface EditFormProps {
+  /** Names the sheet, so an edit is never mistaken for a new item. */
+  title: string;
   draft: WishlistDraft;
   onChange: (patch: Partial<WishlistDraft>) => void;
   onSave: () => void;
@@ -123,7 +126,7 @@ interface EditFormProps {
   submitLabel: string;
 }
 
-const EditForm: React.FC<EditFormProps> = ({ draft, onChange, onSave, onCancel, submitLabel }) => {
+const EditForm: React.FC<EditFormProps> = ({ title, draft, onChange, onSave, onCancel, submitLabel }) => {
   const urlError = draft.url.trim().length > 0 && normalizeItemUrl(draft.url) == null;
   const brandUrlError = draft.brandUrl.trim().length > 0 && normalizeItemUrl(draft.brandUrl) == null;
   const valid = draft.name.trim().length > 0 && !urlError && !brandUrlError;
@@ -140,18 +143,28 @@ const EditForm: React.FC<EditFormProps> = ({ draft, onChange, onSave, onCancel, 
     onSave();
   };
 
+  /* A sheet rather than a form unfolding inside the list. The inline version
+     pushed every item below it out of view, and on a phone its Save button sat
+     under the fold with nothing to say it was there. */
   return (
+    <EditorSheet
+      title={title}
+      onClose={onCancel}
+      footer={
+        <>
+          <Button type="button" variant="ghost" onClick={onCancel}>
+            <X size={14} /> Cancel
+          </Button>
+          <Button type="submit" variant="primary" form="wishlist-editor-form" disabled={!valid}>
+            <Check size={14} /> {submitLabel}
+          </Button>
+        </>
+      }
+    >
     <form
+      id="wishlist-editor-form"
       onSubmit={handleSubmit}
-      style={{
-        background: "var(--bg-inset)",
-        border: "1px solid var(--border)",
-        borderRadius: "var(--radius-md)",
-        padding: 16,
-        display: "grid",
-        gap: 10,
-        minWidth: 0,
-      }}
+      style={{ display: "grid", gap: 10, minWidth: 0 }}
     >
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
         <input
@@ -255,8 +268,31 @@ const EditForm: React.FC<EditFormProps> = ({ draft, onChange, onSave, onCancel, 
       <details className="wishlist-advanced">
         <summary>
           <Sparkles size={13} aria-hidden="true" />
-          <span>Different brand for the icon</span>
+          <span>Icon &amp; brand</span>
         </summary>
+
+        {/* What the item will actually look like, resolved live from whatever
+            is filled in above. The chain has four steps and any of them can
+            quietly fail — a site with no icon, a favicon service answering with
+            a placeholder. Seeing the result before saving is the difference
+            between choosing an icon and hoping for one. */}
+        <div className="wishlist-mark-preview">
+          <ItemMark
+            domain={itemDomain(draft.brandUrl) ?? itemDomain(draft.url)}
+            accent={draft.color || "var(--accent)"}
+            icon={draft.icon || undefined}
+            size={40}
+          />
+          <span className="text-caption">
+            {draft.icon
+              ? "Using the icon you picked."
+              : itemDomain(draft.brandUrl)
+                ? `Using the site icon of ${itemDomain(draft.brandUrl)}.`
+                : itemDomain(draft.url)
+                  ? `Using the site icon of ${itemDomain(draft.url)}.`
+                  : "No link and no icon yet — a neutral mark is used."}
+          </span>
+        </div>
         <p className="text-note" style={{ margin: "6px 0 8px" }}>
           Use this when the maker is not the shop — a model kit bought from a marketplace, an add-on
           sold on one store and built by another. The purchase link above is never changed.
@@ -310,15 +346,8 @@ const EditForm: React.FC<EditFormProps> = ({ draft, onChange, onSave, onCancel, 
         In wishlist
       </label>
 
-      <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", flexWrap: "wrap" }}>
-        <Button type="button" variant="ghost" size="sm" onClick={onCancel}>
-          <X size={14} /> Cancel
-        </Button>
-        <Button type="submit" variant="primary" size="sm" disabled={!valid}>
-          <Check size={14} /> {submitLabel}
-        </Button>
-      </div>
     </form>
+    </EditorSheet>
   );
 };
 
@@ -627,8 +656,8 @@ export const WishlistPanel: React.FC = () => {
 
         {/* Add form */}
         {mutable && showAddForm && (
-          <div style={{ marginTop: 12 }}>
-            <EditForm
+          <EditForm
+              title="New wishlist item"
               draft={addDraft}
               onChange={(patch) => setAddDraft((draft) => ({ ...draft, ...patch }))}
               onSave={handleAdd}
@@ -638,7 +667,6 @@ export const WishlistPanel: React.FC = () => {
               }}
               submitLabel="Add item"
             />
-          </div>
         )}
       </Section>
 
@@ -972,9 +1000,9 @@ export const WishlistPanel: React.FC = () => {
                   </div>
                 )}
 
-                {/* Inline edit form */}
                 {isEditing && editDraft && (
                   <EditForm
+                    title={`Edit ${item.name}`}
                     draft={editDraft}
                     onChange={(patch) => setEditDraft((draft) => (draft ? { ...draft, ...patch } : draft))}
                     onSave={saveEdit}
