@@ -195,7 +195,10 @@ export function budgetPacing(
   const budget = normalizeAmount(settings.monthlyBudget, settings.monthlyBudgetCurrency, settings);
   if (!(budget > 0)) return null;
 
-  const spent = entries.reduce((s, e) => s + normalizeEntry(e, snapshot), 0);
+  // Only personal-funded entries count against the user's budget. Externally-funded
+  // transactions remain visible but must not reduce the user's remaining budget.
+  const personalEntries = entries.filter((e) => (e.source ?? "personal") === "personal");
+  const spent = personalEntries.reduce((s, e) => s + normalizeEntry(e, snapshot), 0);
   const remaining = budget - spent;
   const { totalDays, elapsedDays } = selectedPeriodWindow(settings, now);
   const daysLeft = Math.max(totalDays - elapsedDays, 0);
