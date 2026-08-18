@@ -25,6 +25,7 @@ Anything that could not be verified this way is under *Not verified* and stays u
   - Added Playwright config and Playwright tests under `tests/playwright/`; first E2E regression test for the Wishlist editor typing/focus added on 2026-08-18. Playwright test runner and two CI workflows were added (opt-in and an auto-run on push to `main`). Verification: unit tests are green locally; E2E verification is pending and will run in CI (the auto workflow was pushed and will execute on the recent commit) or can be run locally using a system browser (set BROWSER_EXECUTABLE_PATH to Brave/Chromium and run `npx playwright test`). See `docs/TESTING.md` for instructions.
 
 - [x] Ensure externally-funded spending is excluded from the user's personal budget calculations (transactions keep their real amount and remain visible; `summarizePeriod` now exposes `personalTotal`/`externalTotal` and `calculateYear`/`calculateRolloverDelta` use `personalTotal` for budget deltas). Verified: unit tests and production build.
+- [x] Allow custom icon URLs for activities and wishlist items (IconPicker accepts a URL and ActivityIcon renders image URLs safely; stored in the existing `icon` field). Verified: unit tests and production build.
 
 ## Completed — accounts and production (2026-08-16)
 
