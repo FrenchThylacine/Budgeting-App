@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { Check, ExternalLink, Link2Off, Pencil, Plus, Receipt, ShoppingBag, Trash2, X, Sparkles } from "lucide-react";
-import { CURRENCY_OPTIONS, formatMoney } from "../../domain/currency";
+import { CURRENCY_OPTIONS, formatMoney, normalizeAmount } from "../../domain/currency";
 import { todayDateInput } from "../../domain/dates";
 import {
   PRIORITY_META,
@@ -411,8 +411,12 @@ export const WishlistPanel: React.FC = () => {
   const boughtItems = useMemo(() => allItems.filter((item) => item.bought), [allItems]);
 
   const activeTotal = useMemo(
-    () => activeItems.reduce((sum, item) => sum + (item.actualPrice ?? 0), 0),
-    [activeItems],
+    () =>
+      activeItems.reduce(
+        (sum, item) => sum + normalizeAmount(item.actualPrice, item.currency, settings),
+        0,
+      ),
+    [activeItems, settings],
   );
 
   const categoryOptions = useMemo(

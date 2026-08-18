@@ -192,3 +192,19 @@ describe("rateToBase with provider rates", () => {
     expect(convertAmount(null, "USD", "EUR", rates)).toBeNull();
   });
 });
+
+describe("activeCurrencyOptions", () => {
+  it("filters currencies by enabledCurrencies and retains base/budget currencies", async () => {
+    const { activeCurrencyOptions } = await import("../src/domain/currency");
+    const options = activeCurrencyOptions({
+      enabledCurrencies: ["USD", "CAD"],
+      baseCurrency: "EUR",
+      monthlyBudgetCurrency: "GBP",
+    });
+    expect(options).toContain("USD");
+    expect(options).toContain("CAD");
+    expect(options).toContain("EUR"); // retained base
+    expect(options).toContain("GBP"); // retained budget
+    expect(options).not.toContain("JPY");
+  });
+});

@@ -287,14 +287,22 @@ export function occurrencesInYear(activity: Activity, year: number): number {
 export function nextOccurrences(activity: Activity, from: Date, count: number): Date[] {
   if (!Number.isFinite(count) || count <= 0) return [];
   if (Number.isNaN(from.getTime())) return [];
-  // Expressed on the override-aware core, so a skipped week does not appear on
-  // the dashboard timeline while being correctly absent from the month's total.
-  // The window bounds the work; 400 days covers thirteen monthly occurrences,
-  // far more than any view asks for.
+
   const horizon = addDays(startOfDay(from), 400);
-  return occurrenceDatesBetween(activity, from, horizon)
-    .slice(0, Math.floor(count))
-    .map((occurrence) => occurrence.date);
+  const scheduled = occurrenceDatesBetween(activity, from, horizon).map((o) => o.date);
+
+  // When an explicit manual next-renewal date is set and is on/after `from`,
+  // it takes precedence over what the automatic schedule computed.
+  if (activity.nextRenewalDate) {
+    const manual = parseLocalDate(activity.nextRenewalDate);
+    if (manual && manual >= startOfDay(from) && manual <= horizon) {
+      const rest = scheduled.filter((d) => d.getTime() !== manual.getTime());
+      const combined = [manual, ...rest].sort((a, b) => a.getTime() - b.getTime());
+      return combined.slice(0, Math.floor(count));
+    }
+  }
+
+  return scheduled.slice(0, Math.floor(count));
 }
 
 /** Price used by the schedule model: per-session first, estimate as a fallback. */

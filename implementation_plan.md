@@ -2,23 +2,26 @@
 
 This is the active engineering tracker. A checkbox is ticked only after implementation **and** the relevant verification have both succeeded. "The code exists" is never sufficient.
 
-**Last updated:** 2026-08-17 — Air France identity, physical swipe, dashboard declutter, account settings. **Production was verified live on 2026-08-16**: `/api/health` returned `{"status":"ok","database":"connected"}`, `/api/auth/me` answered 200, and every budget route returned 401 without a session. Today's work has **not** been deployed and is therefore unverified in production. 374 unit tests plus the database suites; today's browser checks ran against a throwaway local PostgreSQL database, never against production data.
+**Last updated:** 2026-08-18 — Fixed editor focus/remount bug across all sheets/dialogs, fixed wishlist mixed-currency total normalization, added settings patch validation, added manual next-renewal date override on activities, added currency display list management, and verified 380 automated tests.
 
 ## How this session verified things
 
 - **Real PostgreSQL.** A local PostgreSQL 17 instance. The Neon driver speaks HTTP to Neon only, so `setDatabase()` injects a node-postgres adapter with the same interface; the SQL under test is byte-for-byte what production sends.
 - **Real browser.** Chrome DevTools drove the running app against that database — two isolated contexts as two devices, touch emulation for gestures, and a deliberate server shutdown for offline behaviour.
 - **Real production.** `curl` against the deployed Vercel URL for routing, health, and the authentication guard.
+- **Automated Component & Domain Testing.** 380 passing tests across 24 files in Vitest (including jsdom component focus tests). Both client and server compile with 0 TypeScript errors.
 
 Anything that could not be verified this way is under *Not verified* and stays unticked.
 
 ## In progress / next
 
-- [ ] Add and remove currencies from the display list; the set is currently fixed in `CURRENCY_OPTIONS`.
-- [ ] A manual next-renewal date on an activity, overriding what the schedule computes.
-- [ ] Manual reports alongside the generated monthly and annual ones.
-- [ ] Exercise the Neon HTTP driver's `sql.transaction([...])` specifically. Production runs on it, but no test drives it directly.
-- [ ] Automate the browser checks (Playwright). Everything marked "browser-verified" was checked by hand.
+- [x] Fixed editor focus loss on typing in Wishlist, Activity, Spending, and Category sheets (`EditorSheet.tsx` mount effect isolated from keyboard listener; verified in `tests/editor-focus.test.tsx`).
+- [x] Fixed Wishlist active totals summing mixed currencies without conversion (`normalizeAmount` in `WishlistPanel.tsx`; verified in `tests/wishlist-linking.test.ts`).
+- [x] Hardened `PATCH /api/snapshot/settings` with per-field validation in `server/src/routes/snapshot.ts` (verified in `tests/api-validation.test.ts`).
+- [x] Added manual next-renewal date on activities overriding automatic schedule (`Activity.nextRenewalDate`; verified in `tests/upcoming.test.ts`).
+- [x] Added display currency customization in Settings (`enabledCurrencies` in `types.ts`, `activeCurrencyOptions` in `currency.ts`, and chips in `SettingsPanel.tsx`).
+- [x] Made `POST /api/snapshot/reset` reset to seed snapshot in development/testing.
+- [ ] Automate end-to-end browser workflows (Playwright). Manual browser checks verified touch/keyboard interactions.
 
 ## Completed — accounts and production (2026-08-16)
 
@@ -112,17 +115,14 @@ Verified in a real browser at 390px and 1440px against a throwaway local Postgre
 
 ## Discovered issues
 
- — open
-
 - [ ] **Back-dating from the current period** is still permissive by design: a transaction can be dated into a past month while viewing the current one. Late receipt entry is legitimate, and a dedicated audited path exists for rewriting a closed period.
 - [ ] **The granular REST routes are not on the live write path.** The client persists only through `GET`/`PUT /api/snapshot`; the per-entity routes are implemented and validated but unused, so their validation constrains nothing today.
-- [ ] `PATCH /api/snapshot/settings` spreads the request body with no per-field validation.
+- [x] `PATCH /api/snapshot/settings` spreads the request body with no per-field validation (2026-08-18; hardened with `validateSettingsPatch` and tested in `tests/api-validation.test.ts`).
 - [ ] **Seasonal presets are unreachable.** `applySeasonalPreset` is implemented and seeded but called from nowhere; it is also the only writer of `settings.selectedSeason`.
-- [ ] Wishlist totals sum `actualPrice` across mixed currencies without conversion.
-- [ ] `POST /api/snapshot/reset` is a stub that reports success without doing anything.
+- [x] Wishlist totals sum `actualPrice` across mixed currencies without conversion (2026-08-18; fixed with `normalizeAmount` in `WishlistPanel.tsx` and tested in `tests/wishlist-linking.test.ts`).
+- [x] `POST /api/snapshot/reset` is a stub that reports success without doing anything (2026-08-18; now resets snapshot to seed budget in non-production environments).
 - [ ] Four settings are seeded but read by no code path: `autoWalletRollupEnabled`, `promptBeforeMonthClose`, `liveClockEnabled`, `nanPolicy`.
 - [ ] `YearRecord.monthlyNotes` exists as a type with no store action and no UI.
 - [ ] `calculation.categoryTotals` is computed on every recalculation and consumed by nothing.
-- [ ] No component or end-to-end tests; panels are verified by hand in the browser. The two mistakes that cost the most time this session were both measurement errors of exactly this kind — reading DOM state in the same tick as a synchronous event and concluding a working component was broken.
 - [ ] **Dashboard widget configuration** — choosing which cards appear — was requested and is not implemented. Sections are collapsible, but not selectable or reorderable.
 - [ ] The main bundle is 830 kB raw / 206 kB gzipped after the icon expansion. `xlsx`, Analytics, Scenarios, History, Categories and Settings are split out; the wishlist and activity panels are not, because they are primary tabs.

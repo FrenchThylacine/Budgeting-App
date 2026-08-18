@@ -2,6 +2,18 @@ import type { CurrencyCode, CurrencyDisplayMode, ExchangeRates, RoundingRule, Se
 
 export const CURRENCY_OPTIONS: CurrencyCode[] = ["EUR", "USD", "LBP", "GBP", "CAD", "AUD", "JPY", "TRY", "SAR", "AED"];
 
+/**
+ * Returns the list of currencies enabled for display in dropdown pickers.
+ * Always ensures the settings baseCurrency and monthlyBudgetCurrency are included.
+ */
+export function activeCurrencyOptions(settings?: Partial<Settings> | null): CurrencyCode[] {
+  if (!settings) return CURRENCY_OPTIONS;
+  const set = new Set<CurrencyCode>(settings.enabledCurrencies && settings.enabledCurrencies.length > 0 ? settings.enabledCurrencies : CURRENCY_OPTIONS);
+  if (settings.baseCurrency) set.add(settings.baseCurrency);
+  if (settings.monthlyBudgetCurrency) set.add(settings.monthlyBudgetCurrency);
+  return CURRENCY_OPTIONS.filter((c) => set.has(c));
+}
+
 export const CURRENCY_SYMBOLS: Record<CurrencyCode, string> = {
   EUR: "€",
   USD: "$",

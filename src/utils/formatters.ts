@@ -30,6 +30,7 @@ export interface ActivityDraft {
   weekdays: IsoWeekday[];
   dayOfMonth: string;
   startDate: string;
+  nextRenewalDate: string;
 }
 
 export interface WishlistDraft {
@@ -115,6 +116,7 @@ export function activityToDraft(activity: Activity | null, snapshot: BudgetSnaps
     weekdays: normalizeWeekdays(activity?.weekdays),
     dayOfMonth: valueToInput(activity?.dayOfMonth),
     startDate: activity?.startDate ?? "",
+    nextRenewalDate: activity?.nextRenewalDate ?? "",
   };
 }
 
@@ -144,6 +146,7 @@ export function activityPayloadFromDraft(draft: ActivityDraft): Omit<Activity, "
     weekdays: weekdays.length > 0 ? weekdays : undefined,
     dayOfMonth: clampDayOfMonth(parseAmount(draft.dayOfMonth)),
     startDate: draft.startDate.trim() || undefined,
+    nextRenewalDate: draft.nextRenewalDate.trim() || undefined,
   };
 }
 

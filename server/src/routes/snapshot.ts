@@ -3,6 +3,7 @@ import { BudgetService } from "../services/BudgetService.js";
 import { getDatabase } from "../db/index.js";
 import { snapshotIdFor } from "../auth/middleware.js";
 import { asyncHandler, AppError } from "../middleware/errorHandler.js";
+import { createSeedBudgetSnapshot } from "../../../src/data/seedBudget.js";
 
 /**
  * Reject structurally invalid snapshots before they reach the database. A
@@ -31,6 +32,98 @@ function validateSnapshotPayload(snapshot: unknown): void {
   }
   if (candidate.revision !== undefined && !Number.isFinite(Number(candidate.revision))) {
     throw new AppError(400, "Invalid snapshot payload: revision must be a finite number");
+  }
+}
+
+const ALLOWED_CURRENCIES = ["EUR", "USD", "LBP", "GBP", "CAD", "AUD", "JPY", "TRY", "SAR", "AED"] as const;
+const ALLOWED_PERIOD_MODES = ["month", "week", "year"] as const;
+const ALLOWED_DISPLAY_MODES = ["symbol", "code", "both"] as const;
+const ALLOWED_ROUNDING_RULES = ["none", "nearest-1", "nearest-5", "nearest-10", "ceil-10"] as const;
+
+export function validateSettingsPatch(patch: unknown): void {
+  if (!patch || typeof patch !== "object" || Array.isArray(patch)) {
+    throw new AppError(400, "Invalid settings patch: expected an object");
+  }
+  const candidate = patch as Record<string, unknown>;
+
+  if (candidate.selectedYear !== undefined) {
+    const yr = Number(candidate.selectedYear);
+    if (!Number.isInteger(yr) || yr < 1900 || yr > 2200) {
+      throw new AppError(400, "selectedYear must be a valid integer year");
+    }
+  }
+  if (candidate.selectedMonth !== undefined) {
+    const mo = Number(candidate.selectedMonth);
+    if (!Number.isInteger(mo) || mo < 1 || mo > 12) {
+      throw new AppError(400, "selectedMonth must be an integer between 1 and 12");
+    }
+  }
+  if (candidate.selectedWeek !== undefined) {
+    const wk = Number(candidate.selectedWeek);
+    if (!Number.isInteger(wk) || wk < 1 || wk > 53) {
+      throw new AppError(400, "selectedWeek must be an integer between 1 and 53");
+    }
+  }
+  if (candidate.selectedWeekYear !== undefined) {
+    const wkYr = Number(candidate.selectedWeekYear);
+    if (!Number.isInteger(wkYr) || wkYr < 1900 || wkYr > 2200) {
+      throw new AppError(400, "selectedWeekYear must be a valid integer year");
+    }
+  }
+  if (candidate.selectedPeriodMode !== undefined) {
+    if (!ALLOWED_PERIOD_MODES.includes(candidate.selectedPeriodMode as any)) {
+      throw new AppError(400, `selectedPeriodMode must be one of: ${ALLOWED_PERIOD_MODES.join(", ")}`);
+    }
+  }
+  if (candidate.baseCurrency !== undefined) {
+    if (!ALLOWED_CURRENCIES.includes(candidate.baseCurrency as any)) {
+      throw new AppError(400, `baseCurrency must be one of: ${ALLOWED_CURRENCIES.join(", ")}`);
+    }
+  }
+  if (candidate.monthlyBudgetCurrency !== undefined) {
+    if (!ALLOWED_CURRENCIES.includes(candidate.monthlyBudgetCurrency as any)) {
+      throw new AppError(400, `monthlyBudgetCurrency must be one of: ${ALLOWED_CURRENCIES.join(", ")}`);
+    }
+  }
+  if (candidate.currencyDisplayMode !== undefined) {
+    if (!ALLOWED_DISPLAY_MODES.includes(candidate.currencyDisplayMode as any)) {
+      throw new AppError(400, `currencyDisplayMode must be one of: ${ALLOWED_DISPLAY_MODES.join(", ")}`);
+    }
+  }
+  if (candidate.roundingRule !== undefined) {
+    if (!ALLOWED_ROUNDING_RULES.includes(candidate.roundingRule as any)) {
+      throw new AppError(400, `roundingRule must be one of: ${ALLOWED_ROUNDING_RULES.join(", ")}`);
+    }
+  }
+  if (candidate.monthlyBudget !== undefined) {
+    const mb = Number(candidate.monthlyBudget);
+    if (!Number.isFinite(mb) || mb < 0) {
+      throw new AppError(400, "monthlyBudget must be a non-negative number");
+    }
+  }
+  if (candidate.darkMode !== undefined && typeof candidate.darkMode !== "boolean") {
+    throw new AppError(400, "darkMode must be a boolean");
+  }
+  if (candidate.pilotIncludedInBudget !== undefined && typeof candidate.pilotIncludedInBudget !== "boolean") {
+    throw new AppError(400, "pilotIncludedInBudget must be a boolean");
+  }
+  if (candidate.autoWalletRollupEnabled !== undefined && typeof candidate.autoWalletRollupEnabled !== "boolean") {
+    throw new AppError(400, "autoWalletRollupEnabled must be a boolean");
+  }
+  if (candidate.autoWishlistFlushEnabled !== undefined && typeof candidate.autoWishlistFlushEnabled !== "boolean") {
+    throw new AppError(400, "autoWishlistFlushEnabled must be a boolean");
+  }
+  if (candidate.promptBeforeMonthClose !== undefined && typeof candidate.promptBeforeMonthClose !== "boolean") {
+    throw new AppError(400, "promptBeforeMonthClose must be a boolean");
+  }
+  if (candidate.liveClockEnabled !== undefined && typeof candidate.liveClockEnabled !== "boolean") {
+    throw new AppError(400, "liveClockEnabled must be a boolean");
+  }
+  if (candidate.saveTimestampEnabled !== undefined && typeof candidate.saveTimestampEnabled !== "boolean") {
+    throw new AppError(400, "saveTimestampEnabled must be a boolean");
+  }
+  if (candidate.ignoreNonBudgetSpending !== undefined && typeof candidate.ignoreNonBudgetSpending !== "boolean") {
+    throw new AppError(400, "ignoreNonBudgetSpending must be a boolean");
   }
 }
 
@@ -145,6 +238,7 @@ export function createSnapshotRoutes(): Router {
   router.patch(
     "/settings",
     asyncHandler(async (req: Request, res: Response) => {
+      validateSettingsPatch(req.body);
       const service = getService(req);
       let snapshot = await service.getOrThrow();
       snapshot = await service.updateSettings(snapshot, req.body);
@@ -162,7 +256,10 @@ export function createSnapshotRoutes(): Router {
       if (process.env.NODE_ENV === "production") {
         throw new AppError(403, "Reset endpoint not available in production");
       }
-      res.json({ success: true, message: "Reset would happen here" });
+      const service = getService(req);
+      const seed = createSeedBudgetSnapshot();
+      await service.saveSnapshot(seed);
+      res.json({ success: true, message: "Snapshot reset to seed budget", revision: seed.revision ?? 1 });
     }),
   );
 

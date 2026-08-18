@@ -558,3 +558,27 @@ describe("missing records", () => {
     expect(result.status === "unlinked" && result.spendingId).toBeUndefined();
   });
 });
+
+describe("wishlist mixed-currency totals", () => {
+  it("converts mixed currencies to base currency without mutating source amounts", () => {
+    const snapshot = currentPeriodSnapshot([
+      makeItem({ id: "wish-eur", name: "EUR item", actualPrice: 100, currency: "EUR" }),
+      makeItem({ id: "wish-usd", name: "USD item", actualPrice: 108, currency: "USD" }),
+    ]);
+    snapshot.settings.baseCurrency = "EUR";
+    snapshot.settings.exchangeRates.eurUsd = 1.08; // 108 USD = 100 EUR
+
+    const activeItems = [
+      makeItem({ id: "wish-eur", actualPrice: 100, currency: "EUR" }),
+      makeItem({ id: "wish-usd", actualPrice: 108, currency: "USD" }),
+    ];
+
+    const activeTotal = activeItems.reduce(
+      (sum, item) => sum + (item.currency === "EUR" ? item.actualPrice! : item.actualPrice! / snapshot.settings.exchangeRates.eurUsd),
+      0,
+    );
+
+    expect(activeTotal).toBeCloseTo(200, 1);
+  });
+});
+

@@ -99,6 +99,8 @@ export interface Settings {
   lastUpdated: string;
   darkMode: boolean;
   ignoreNonBudgetSpending?: boolean;
+  /** Active currencies available in selection dropdowns. */
+  enabledCurrencies?: CurrencyCode[];
 }
 
 /**
@@ -196,6 +198,8 @@ export interface Activity {
   dayOfMonth?: number | null;
   /** First date the schedule applies from (YYYY-MM-DD). */
   startDate?: string;
+  /** Explicit next renewal / occurrence date override (YYYY-MM-DD). */
+  nextRenewalDate?: string | null;
   /**
    * One-off exceptions to the recurring rule.
    *

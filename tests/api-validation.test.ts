@@ -34,3 +34,28 @@ describe("API validation middleware helpers", () => {
     expect(() => validateEnum("INVALID", "currency", currencies)).toThrow(AppError);
   });
 });
+
+describe("Settings patch API validation", () => {
+  it("accepts valid settings patches", async () => {
+    const { validateSettingsPatch } = await import("../server/src/routes/snapshot");
+    expect(() =>
+      validateSettingsPatch({
+        darkMode: true,
+        baseCurrency: "EUR",
+        monthlyBudget: 2500,
+        selectedPeriodMode: "month",
+        selectedYear: 2026,
+        selectedMonth: 8,
+      }),
+    ).not.toThrow();
+  });
+
+  it("rejects invalid currencies, negative budgets, and malformed years/months", async () => {
+    const { validateSettingsPatch } = await import("../server/src/routes/snapshot");
+    expect(() => validateSettingsPatch({ baseCurrency: "BITCOIN" })).toThrow();
+    expect(() => validateSettingsPatch({ monthlyBudget: -500 })).toThrow();
+    expect(() => validateSettingsPatch({ selectedMonth: 13 })).toThrow();
+    expect(() => validateSettingsPatch({ selectedPeriodMode: "decade" })).toThrow();
+    expect(() => validateSettingsPatch("not-an-object")).toThrow();
+  });
+});

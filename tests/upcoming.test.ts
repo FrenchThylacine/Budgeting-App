@@ -172,4 +172,19 @@ describe("grouping and labelling", () => {
     ]);
     expect(days).toHaveLength(1);
   });
+
+  it("honours manual nextRenewalDate override over computed schedule", () => {
+    const snapshot = snapshotWith([
+      {
+        name: "Hosting",
+        dayOfMonth: 1, // regular is 1st of month
+        nextRenewalDate: "2026-08-25", // manual override on 25th
+        pricePerMonth: 15,
+      },
+    ]);
+    const { occurrences } = upcomingSchedule(snapshot, NOW, 14);
+    expect(occurrences.length).toBeGreaterThan(0);
+    // Overridden date is 2026-08-25
+    expect(occurrences[0].date.getDate()).toBe(25);
+  });
 });

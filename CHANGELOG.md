@@ -1,5 +1,40 @@
 # Changelog
 
+## 2026-08-18 — Editor focus stability, mixed currency normalization, settings validation
+
+### Fixed editor focus loss and cursor reset
+
+- **Root Cause Isolated:** `EditorSheet.tsx` had a single `useEffect` combining initial mount focus (`target?.focus()`) and the Escape/Tab key listener that depended on `[onClose]`. Because callers passed inline arrow functions for `onClose`, every keystroke triggered a parent re-render, creating a new `onClose` reference. The effect re-ran, re-executing `target?.focus()` and stealing the user's focus/caret back to the first input field on every character typed.
+- **Solution:** Decoupled `EditorSheet` into two distinct effects: a mount-only effect for initial focus/scroll locking, and a stable event listener reading from an `onCloseRef`.
+- **Coverage:** Tested across Wishlist, Activity, Spending, and Category sheet editors. Added automated DOM regression test `tests/editor-focus.test.tsx` verifying continuous character typing without focus loss or cursor reset.
+
+### Wishlist mixed-currency normalization
+
+- `WishlistPanel.tsx` previously summed raw `item.actualPrice` without currency conversion.
+- `activeTotal` now explicitly normalizes every item's amount to the user's base currency via `normalizeAmount(item.actualPrice, item.currency, settings)`.
+- Verified in `tests/wishlist-linking.test.ts`.
+
+### Settings API hardening
+
+- `PATCH /api/snapshot/settings` now validates every field using `validateSettingsPatch` in `server/src/routes/snapshot.ts`. Rejects invalid currencies, invalid period modes, negative budgets, and malformed years/months.
+- Tested in `tests/api-validation.test.ts`.
+
+### Manual next-renewal date override
+
+- Added `nextRenewalDate` to `Activity` and `ActivityDraft`.
+- `nextOccurrences` in `src/domain/schedule.ts` prioritizes the manual renewal date override over the computed schedule.
+- Added input in `ActivityPanel.tsx` and verified in `tests/upcoming.test.ts`.
+
+### Currencies in lists management
+
+- Added `enabledCurrencies` to `Settings` and `activeCurrencyOptions` helper in `currency.ts`.
+- Added interactive toggle badges in `SettingsPanel.tsx` allowing users to configure which currencies appear in dropdown selection lists while preserving locked base and budget currencies.
+- Tested in `tests/exchange-rates.test.ts`.
+
+### Functional non-production reset
+
+- `POST /api/snapshot/reset` now resets the active snapshot to a fresh `createSeedBudgetSnapshot()` in development and testing environments.
+
 ## 2026-08-17 — Three rules that had never once applied
 
 Three pieces of this app were written, committed, and never ran.

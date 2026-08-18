@@ -35,6 +35,21 @@ export const EditorSheet: React.FC<EditorSheetProps> = ({
 }) => {
   const sheetRef = useRef<HTMLDivElement>(null);
 
+  // Keep a ref to onClose so the keyboard handler can always call the latest
+  // version without re-running the effect when the parent re-renders.
+  // This is the critical fix: previously onClose was listed as a dependency,
+  // so every keystroke (parent re-render → new inline arrow → new onClose
+  // identity) caused the effect to re-run, which called target?.focus() and
+  // stole the cursor from wherever the user was typing.
+  const onCloseRef = useRef(onClose);
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  });
+
+  // ── Mount / unmount only ─────────────────────────────────────────────────
+  // Focuses the first field and locks page scroll. Both are one-time setup
+  // actions — re-running them on every parent re-render would steal focus
+  // from whichever field the user is currently typing in.
   useEffect(() => {
     const previouslyFocused = document.activeElement as HTMLElement | null;
 
@@ -52,10 +67,24 @@ export const EditorSheet: React.FC<EditorSheetProps> = ({
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
 
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      previouslyFocused?.focus?.();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  // initialFocusRef intentionally omitted: we only want to focus once on open.
+  // If the ref changes while the sheet is open the focus should stay where it
+  // is, not jump again.
+
+  // ── Keyboard shortcuts (Escape / Tab-trap) ───────────────────────────────
+  // Registered once; reads onCloseRef.current so it always calls the latest
+  // handler without needing to be re-registered on every render.
+  useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         event.preventDefault();
-        onClose();
+        onCloseRef.current();
         return;
       }
       if (event.key !== "Tab" || !sheetRef.current) return;
@@ -79,10 +108,8 @@ export const EditorSheet: React.FC<EditorSheetProps> = ({
     document.addEventListener("keydown", onKeyDown);
     return () => {
       document.removeEventListener("keydown", onKeyDown);
-      document.body.style.overflow = previousOverflow;
-      previouslyFocused?.focus?.();
     };
-  }, [onClose, initialFocusRef]);
+  }, []);
 
   return (
     <div className="sheet-backdrop" role="presentation" onMouseDown={onClose}>

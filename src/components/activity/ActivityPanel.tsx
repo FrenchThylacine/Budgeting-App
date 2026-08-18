@@ -378,6 +378,14 @@ export const ActivityPanel: React.FC = () => {
                     onChange={(event) => patch({ startDate: event.target.value })}
                   />
                 </Field>
+                <Field label="Next renewal" hint="Manual override for next occurrence date">
+                  <input
+                    className="input"
+                    type="date"
+                    value={form.nextRenewalDate}
+                    onChange={(event) => patch({ nextRenewalDate: event.target.value })}
+                  />
+                </Field>
               </FieldGroup>
             )}
 

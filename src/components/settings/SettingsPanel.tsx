@@ -113,6 +113,44 @@ export const SettingsPanel: React.FC = () => {
               ))}
             </select>
           </label>
+
+          <div style={fieldStyle}>
+            <span className="text-callout">Currencies in lists</span>
+            <span className="text-footnote">Select which currencies appear in dropdown pickers across the app.</span>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 4 }}>
+              {CURRENCY_OPTIONS.map((code) => {
+                const current = settings.enabledCurrencies ?? CURRENCY_OPTIONS;
+                const isEnabled = current.includes(code);
+                const isLocked = code === settings.baseCurrency || code === settings.monthlyBudgetCurrency;
+                return (
+                  <button
+                    key={code}
+                    type="button"
+                    disabled={isLocked}
+                    className={`badge ${isEnabled ? "badge-info" : "badge-neutral"}`}
+                    style={{
+                      cursor: isLocked ? "default" : "pointer",
+                      padding: "6px 12px",
+                      border: "none",
+                      fontSize: 13,
+                      fontWeight: isEnabled ? 600 : 400,
+                      opacity: isLocked ? 0.9 : 1,
+                    }}
+                    onClick={() => {
+                      if (isLocked) return;
+                      const next = isEnabled
+                        ? current.filter((c) => c !== code)
+                        : [...current, code];
+                      if (next.length > 0) update({ enabledCurrencies: next });
+                    }}
+                    title={isLocked ? `${code} is currently in use as your base or budget currency` : `Toggle ${code}`}
+                  >
+                    {isEnabled ? `✓ ${code}` : code}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
         </div>
       </Section>
 
