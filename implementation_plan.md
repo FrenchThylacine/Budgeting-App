@@ -22,6 +22,7 @@ Anything that could not be verified this way is under *Not verified* and stays u
 - [x] Added display currency customization in Settings (`enabledCurrencies` in `types.ts`, `activeCurrencyOptions` in `currency.ts`, and chips in `SettingsPanel.tsx`).
 - [x] Made `POST /api/snapshot/reset` reset to seed snapshot in development/testing.
 - [ ] Automate end-to-end browser workflows (Playwright). Manual browser checks verified touch/keyboard interactions.
+  - Added Playwright config and a first E2E regression test for the Wishlist editor typing/focus (tests/e2e/editor-typing.spec.ts). Test files added 2026-08-18; verification pending (needs `npm install` + `npx playwright install` and an environment for running).
 
 ## Completed — accounts and production (2026-08-16)
 

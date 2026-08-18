@@ -15,8 +15,10 @@
     "server:prod": "cd server && NODE_ENV=production HOST=0.0.0.0 PORT=3001 node dist/server/src/index.js",
     "dev:all": "concurrently \"npm run dev\" \"npm run server:dev\"",
     "server:dev:pg": "tsx scripts/dev-server-local-pg.mjs",
-    "test:db": "vitest run tests/db-integration.test.ts tests/api-integration.test.ts"
+    "test:db": "vitest run tests/db-integration.test.ts tests/api-integration.test.ts",
+    "test:e2e": "playwright test --project=chromium"
   },
+
   "dependencies": {
     "@neondatabase/serverless": "^1.1.0",
     "@vercel/analytics": "^2.0.1",
@@ -46,8 +48,10 @@
     "tsx": "^4.23.1",
     "typescript": "^5.7.2",
     "vite": "^6.0.3",
-    "vitest": "^4.1.10"
+    "vitest": "^4.1.10",
+    "playwright": "^1.38.0"
   },
+
   "allowScripts": {
     "esbuild@0.25.12": true,
     "esbuild@0.21.5": true,
