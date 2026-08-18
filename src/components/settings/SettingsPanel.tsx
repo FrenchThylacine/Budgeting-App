@@ -283,6 +283,17 @@ export const SettingsPanel: React.FC = () => {
             </select>
             <div className="text-footnote">Controls how calculations handle missing historical data.</div>
           </label>
+
+          <div style={{ display: 'grid', gap: 8 }}>
+            <div className="text-callout">Monthly notes for selected period</div>
+            <div className="text-footnote">Notes attached to the selected month are stored with the year record and persist across devices.</div>
+            <textarea
+              className="input"
+              style={{ minHeight: 80, resize: 'vertical' }}
+              value={(useBudgetStore.getState().snapshot.years[String(settings.selectedYear)]?.monthlyNotes?.[settings.selectedMonth] ?? '')}
+              onChange={(e) => useBudgetStore.getState().updateMonthlyNote(settings.selectedYear, settings.selectedMonth, e.target.value)}
+            />
+          </div>
         </div>
       </Section>
 

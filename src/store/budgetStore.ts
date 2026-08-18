@@ -149,6 +149,7 @@ interface BudgetStore {
   removeScenarioPreset: (id: string) => void;
   /** Capture the current budget and caps as a new scenario. */
   captureScenarioPreset: (name: string) => void;
+  updateMonthlyNote: (year: number, month: number, note: string | null) => void;
   undo: () => void;
   redo: () => void;
   // Category management
@@ -943,6 +944,25 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
       },
       "preset",
       `Saved the current budget as "${name}".`,
+    );
+  },
+
+  updateMonthlyNote: (year, month, note) => {
+    commit(
+      set,
+      get,
+      (snapshot) => {
+        const record = ensureYearRecord(snapshot, year);
+        if (!record.monthlyNotes) record.monthlyNotes = {};
+        if (note == null || note.trim() === "") {
+          delete record.monthlyNotes[month];
+        } else {
+          record.monthlyNotes[month] = note;
+        }
+      },
+      "note",
+      "Updated monthly note.",
+      { year, month },
     );
   },
 
