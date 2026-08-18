@@ -13,6 +13,11 @@ export default defineConfig({
     baseURL: process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:5173',
     trace: 'on-first-retry',
     headless: true,
+    launchOptions: {
+      // Allow running against an installed system browser (Brave) by setting BROWSER_EXECUTABLE_PATH.
+      // If not set, Playwright will attempt to use its managed browsers (requires `npx playwright install`).
+      executablePath: process.env.BROWSER_EXECUTABLE_PATH || undefined,
+    },
   },
   projects: [
     {
