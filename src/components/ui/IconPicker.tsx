@@ -420,14 +420,28 @@ export function iconNames(): string[] {
 }
 
 /** Looks up an icon component by stored name. Unknown names never throw. */
+const isUrl = (name: string | null | undefined) => {
+  if (!name) return false;
+  return /^https?:\/\//i.test(name) || /^data:/i.test(name);
+};
+
 export function resolveIcon(name: string | null | undefined): LucideIcon {
   if (!name) return FALLBACK_ICON;
+  if (isUrl(name)) return FALLBACK_ICON; // URLs are not lucide icons
   return ICON_INDEX.get(name)?.icon ?? FALLBACK_ICON;
 }
 
 /** The human label for a stored icon name, for tooltips and summaries. */
 export function iconLabel(name: string | null | undefined): string {
   if (!name) return "No icon";
+  if (isUrl(name)) {
+    try {
+      const url = new URL(name);
+      return `Custom icon (${url.hostname})`;
+    } catch (e) {
+      return "Custom icon";
+    }
+  }
   return ICON_INDEX.get(name)?.label ?? name;
 }
 
@@ -439,8 +453,30 @@ interface ActivityIconProps {
   className?: string;
 }
 
-/** Renders a stored icon name, falling back safely when the name is unknown. */
+/** Renders a stored icon name or a custom image URL, falling back safely when unknown. */
 export const ActivityIcon: React.FC<ActivityIconProps> = ({ name, size = 18, color, strokeWidth = 1.9, className }) => {
+  if (isUrl(name)) {
+    // Render an img for an explicit URL. Never expose a referrer.
+    return (
+      // eslint-disable-next-line jsx-a11y/img-redundant-alt
+      <img
+        src={name as string}
+        alt="icon"
+        width={size}
+        height={size}
+        style={{ display: "block", width: size, height: size, objectFit: "contain" }}
+        referrerPolicy="no-referrer"
+        onError={(e) => {
+          // Replace the broken image with the fallback icon component.
+          const el = e.currentTarget as HTMLImageElement;
+          el.style.display = "none";
+          // No further DOM mutation here; the parent will still show the
+          // fallback icon because resolveIcon returns FALLBACK_ICON for URLs.
+        }}
+        aria-hidden="true"
+      />
+    );
+  }
   const Icon = resolveIcon(name);
   return <Icon size={size} color={color} strokeWidth={strokeWidth} className={className} aria-hidden="true" />;
 };
@@ -678,6 +714,39 @@ export const IconPicker: React.FC<IconPickerProps> = ({ value, onChange, accent,
           >
             <Circle size={14} /> No icon
           </button>
+
+          {/* Custom URL input: allow entering an external image URL as the icon */}
+          <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 8 }}>
+            <input
+              className="input"
+              placeholder="Custom icon URL (https://...)"
+              type="url"
+              inputMode="url"
+              aria-label="Custom icon URL"
+              defaultValue={isUrl(value) ? value ?? "" : ""}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  const input = e.currentTarget as HTMLInputElement;
+                  const v = input.value.trim();
+                  if (v) select(v);
+                }
+              }}
+              style={{ flex: 1, minWidth: 0 }}
+            />
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => {
+                const input = panelRef.current?.querySelector<HTMLInputElement>("input[aria-label='Custom icon URL']");
+                if (!input) return;
+                const v = input.value.trim();
+                if (!v) return;
+                select(v);
+              }}
+            >
+              Apply
+            </button>
+          </div>
 
           {flat.length === 0 ? (
             <p className="text-caption" style={{ margin: "10px 4px" }}>
