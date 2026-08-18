@@ -123,7 +123,7 @@ Verified in a real browser at 390px and 1440px against a throwaway local Postgre
 - [x] Wishlist totals sum `actualPrice` across mixed currencies without conversion (2026-08-18; fixed with `normalizeAmount` in `WishlistPanel.tsx` and tested in `tests/wishlist-linking.test.ts`).
 - [x] `POST /api/snapshot/reset` is a stub that reports success without doing anything (2026-08-18; now resets snapshot to seed budget in non-production environments).
 - [x] Four settings were seeded but read by no code path: `autoWalletRollupEnabled`, `promptBeforeMonthClose`, `liveClockEnabled`, `nanPolicy` — these are now exposed in Settings → Advanced. (2026-08-18; verified in dev mode by toggling each setting and observing `snapshot.settings` change)
-- [ ] `YearRecord.monthlyNotes` exists as a type with no store action and no UI.
+- [x] `YearRecord.monthlyNotes` had no UI or store action; added `updateMonthlyNote` store action and a simple editor in Settings → Advanced (2026-08-18; verified by unit test `tests/monthlyNotes.test.ts`).
 - [ ] `calculation.categoryTotals` is computed on every recalculation and consumed by nothing.
 - [ ] **Dashboard widget configuration** — choosing which cards appear — was requested and is not implemented. Sections are collapsible, but not selectable or reorderable.
 - [ ] The main bundle is 830 kB raw / 206 kB gzipped after the icon expansion. `xlsx`, Analytics, Scenarios, History, Categories and Settings are split out; the wishlist and activity panels are not, because they are primary tabs.
