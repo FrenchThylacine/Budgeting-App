@@ -3,7 +3,6 @@ import { BudgetService } from "../services/BudgetService.js";
 import { getDatabase } from "../db/index.js";
 import { snapshotIdFor } from "../auth/middleware.js";
 import { asyncHandler, AppError } from "../middleware/errorHandler.js";
-import { createSeedBudgetSnapshot } from "../../../src/data/seedBudget.js";
 
 /**
  * Reject structurally invalid snapshots before they reach the database. A
@@ -257,6 +256,10 @@ export function createSnapshotRoutes(): Router {
         throw new AppError(403, "Reset endpoint not available in production");
       }
       const service = getService(req);
+      // Import the heavy seed factory lazily so the production server does not
+      // attempt to load client-side modules (which can use extensionless imports)
+      // during app startup. The endpoint is already gated to non-production.
+      const { createSeedBudgetSnapshot } = await import("../../../src/data/seedBudget.js");
       const seed = createSeedBudgetSnapshot();
       await service.saveSnapshot(seed);
       res.json({ success: true, message: "Snapshot reset to seed budget", revision: seed.revision ?? 1 });
