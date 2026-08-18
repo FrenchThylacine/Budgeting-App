@@ -209,6 +209,83 @@ export const SettingsPanel: React.FC = () => {
         </div>
       </Section>
 
+      <Section title="Seasonal presets">
+        <div className="card card-body" style={{ display: "grid", gap: 12, maxWidth: 620 }}>
+          <div className="text-footnote">Apply a preset to set a common season for your activities (e.g. summer, travel, school-term).</div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
+            {(settings.seasonalPresets ?? []).map((preset) => (
+              <button
+                key={preset.id}
+                type="button"
+                className="badge badge-info"
+                onClick={() => {
+                  // applySeasonalPreset is a store action
+                  useBudgetStore.getState().applySeasonalPreset(preset.id);
+                }}
+                title={`Apply ${preset.season} preset`}
+              >
+                {preset.season}
+              </button>
+            ))}
+            {(!settings.seasonalPresets || settings.seasonalPresets.length === 0) && (
+              <div className="text-caption">No presets available in this budget.</div>
+            )}
+          </div>
+        </div>
+      </Section>
+
+      <Section title="Advanced">
+        <div className="card card-body" style={{ display: "grid", gap: 12, maxWidth: 620 }}>
+          <label style={{ display: "flex", gap: 12, alignItems: "center" }}>
+            <input
+              type="checkbox"
+              checked={!!settings.autoWalletRollupEnabled}
+              onChange={(e) => update({ autoWalletRollupEnabled: e.target.checked })}
+            />
+            <div>
+              <div className="text-callout">Auto wallet rollup</div>
+              <div className="text-footnote">Automatically roll small wallet balances into the monthly budget when closing a month.</div>
+            </div>
+          </label>
+
+          <label style={{ display: "flex", gap: 12, alignItems: "center" }}>
+            <input
+              type="checkbox"
+              checked={!!settings.promptBeforeMonthClose}
+              onChange={(e) => update({ promptBeforeMonthClose: e.target.checked })}
+            />
+            <div>
+              <div className="text-callout">Confirm before closing month</div>
+              <div className="text-footnote">Show a confirmation dialog when attempting to close a month.</div>
+            </div>
+          </label>
+
+          <label style={{ display: "flex", gap: 12, alignItems: "center" }}>
+            <input
+              type="checkbox"
+              checked={!!settings.liveClockEnabled}
+              onChange={(e) => update({ liveClockEnabled: e.target.checked })}
+            />
+            <div>
+              <div className="text-callout">Live clock in period selector</div>
+              <div className="text-footnote">Toggle the live local time display inside the period selector.</div>
+            </div>
+          </label>
+
+          <label className="text-callout" style={{ display: "grid", gap: 6 }}>
+            NaN handling policy
+            <select
+              className="select"
+              value={settings.nanPolicy}
+              onChange={(e) => update({ nanPolicy: e.target.value as any })}
+            >
+              <option value="closed-periods-only">Closed periods only</option>
+            </select>
+            <div className="text-footnote">Controls how calculations handle missing historical data.</div>
+          </label>
+        </div>
+      </Section>
+
       <Section title="Year-end behaviour">
         <div className="card card-body" style={{ display: "grid", gap: 16, maxWidth: 620 }}>
           <label className="text-caption" style={checkboxStyle}>
