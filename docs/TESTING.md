@@ -71,7 +71,25 @@ npm run dev                                                                    #
 - Production Vercel routing and a production `DATABASE_URL`.
 - Physically separate devices (two isolated browser contexts were used instead).
 
-Browser checks — theme switching, period navigation, historical mode, mobile widths from 320 px, landscape, and tablet — were performed manually this session and are recorded in `implementation_plan.md`. They are not yet automated; a Playwright suite is the obvious next step.
+Browser checks — theme switching, period navigation, historical mode, mobile widths from 320 px, landscape, and tablet — were performed manually this session and are recorded in `implementation_plan.md`. A Playwright E2E suite has been added to provide automated browser regression coverage.
+
+Playwright notes (no automatic downloads):
+
+- The repository includes `playwright.config.ts` and a sample test at `tests/e2e/editor-typing.e2e.ts` that reproduces the editor typing/focus regression.
+- To avoid downloading Playwright-managed browser binaries, run tests against a locally installed browser (e.g., Brave) by setting `BROWSER_EXECUTABLE_PATH` to the browser executable path. Example on Windows:
+
+  ```powershell
+  $env:PLAYWRIGHT_BASE_URL = 'http://localhost:5173'
+  $env:BROWSER_EXECUTABLE_PATH = 'C:\\Program Files\\BraveSoftware\\Brave-Browser\\Application\\brave.exe'
+  npx playwright test tests/e2e/editor-typing.e2e.ts --project=chromium
+  ```
+
+- If you prefer Playwright to manage browser downloads, run `npx playwright install` (CI or local). This will download browser binaries.
+- The test runner has been intentionally placed in `tests/e2e` and named `*.e2e.ts` to avoid being discovered by the unit test runner (Vitest).
+
+Add a CI job that installs dependencies, runs `npx playwright install` (or uses a preinstalled browser), and runs `npm run test:e2e` against either a started local server or a deployed preview URL.
+
+
 
 ## General
 
