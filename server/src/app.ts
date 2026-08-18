@@ -65,6 +65,21 @@ export function createApp() {
   app.use(express.json({ limit: "10mb" }));
   app.use(cors(corsOptions()));
 
+  // If no database connection vars are present, short-circuit auth routes with
+  // a clear 503 response so deployments with missing env vars surface the cause
+  // rather than returning opaque 500s.
+  const anyDbVar = connectionStringSources().some((s) => s.present);
+  if (!anyDbVar) {
+    app.use("/api/auth", (_req, res) => {
+      res.status(503).json({
+        error: "Database unavailable",
+        message: "No database connection string found. Set DATABASE_URL (or one of POSTGRES_URL, POSTGRES_PRISMA_URL, DATABASE_URL_UNPOOLED, POSTGRES_URL_NON_POOLING) in the environment.",
+        connectionStringVars: connectionStringSources(),
+        runtime: { nodeEnv: process.env.NODE_ENV ?? null, onVercel: Boolean(process.env.VERCEL) },
+      });
+    });
+  }
+
   // Health must answer even when the database is unreachable, so operators can
   // tell "server down" apart from "server up, database misconfigured". It is
   // mounted before the database gate and before authentication for that reason.
