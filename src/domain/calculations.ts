@@ -49,7 +49,9 @@ export function calculateYear(snapshot: BudgetSnapshot, now = new Date()): YearC
   );
   const selectedMonthSpend = monthlyTrend[month - 1] ?? summarizeMonth([], snapshot, year, month, now);
   const selectedWeekSpend = weeklyTrend[week - 1] ?? summarizeWeek([], snapshot, year, week, now);
-  const selectedSpendValue = selectedMonthSpend.total ?? 0;
+  // Use personalTotal (amounts paid from the user's personal budget) for budget delta
+  // so externally-funded transactions do not affect the user's remaining budget.
+  const selectedSpendValue = selectedMonthSpend.personalTotal ?? selectedMonthSpend.total ?? 0;
   const canCalculateDelta = selectedMonthSpend.status === "value" || selectedMonthSpend.status === "zero";
   const delta = canCalculateDelta ? monthlyBudgetBase - selectedSpendValue : null;
 
@@ -263,7 +265,10 @@ export function calculateRolloverDelta(snapshot: BudgetSnapshot, year: number, m
     snapshot.settings.monthlyBudgetCurrency,
     snapshot.settings,
   );
-  return monthlyBudgetBase - (summary.total ?? 0);
+  // Use personalTotal when available so externally-funded entries do not
+  // reduce the user's rollover amount. Fall back to total when personalTotal
+  // is missing for older/empty summaries.
+  return monthlyBudgetBase - (summary.personalTotal ?? summary.total ?? 0);
 }
 
 export function calculateSuggestedMonthlyBudget(snapshot: BudgetSnapshot): { recurringTotal: number; suggestedAmount: number } {
