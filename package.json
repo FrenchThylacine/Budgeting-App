@@ -51,6 +51,7 @@
     "vite": "^6.0.3",
     "vitest": "^4.1.10"
   },
+  "vitest": { "exclude": ["tests/e2e/**"] },
   "allowScripts": {
     "esbuild@0.25.12": true,
     "esbuild@0.21.5": true,
