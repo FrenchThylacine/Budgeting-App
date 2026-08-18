@@ -10,7 +10,7 @@ describe('monthly notes', () => {
     const month = seed.settings.selectedMonth;
     useBudgetStore.getState().updateMonthlyNote(year, month, 'Test note');
     const record = useBudgetStore.getState().snapshot.years[String(year)];
-    expect(record.monthlyNotes[month]).toBe('Test note');
+    expect(record.monthlyNotes[month].note).toBe('Test note');
 
     // Clearing the note
     useBudgetStore.getState().updateMonthlyNote(year, month, '');
