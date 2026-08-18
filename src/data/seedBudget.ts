@@ -1,5 +1,5 @@
-import { dateInputValue, getIsoWeek, startOfIsoWeek, weekYear } from "../domain/dates";
-import { SEED_CATEGORIES, createSeedCategories } from "../domain/seedCategories";
+import { dateInputValue, getIsoWeek, startOfIsoWeek, weekYear } from "../domain/dates.js";
+import { SEED_CATEGORIES, createSeedCategories } from "../domain/seedCategories.js";
 import type {
   Activity,
   BudgetSnapshot,
@@ -10,7 +10,7 @@ import type {
   SeedCategoryKey,
   SpendingEntry,
   WishlistItem,
-} from "../domain/types";
+} from "../domain/types.js";
 
 const SOURCE_YEAR = 2026;
 
