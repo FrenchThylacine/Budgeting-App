@@ -213,7 +213,7 @@ export const SettingsPanel: React.FC = () => {
         <div className="card card-body" style={{ display: "grid", gap: 12, maxWidth: 620 }}>
           <div className="text-footnote">Apply a preset to set a common season for your activities (e.g. summer, travel, school-term).</div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
-            {(settings.seasonalPresets ?? []).map((preset) => (
+            {(useBudgetStore.getState().snapshot.seasonalPresets ?? []).map((preset) => (
               <button
                 key={preset.id}
                 type="button"
@@ -227,7 +227,7 @@ export const SettingsPanel: React.FC = () => {
                 {preset.season}
               </button>
             ))}
-            {(!settings.seasonalPresets || settings.seasonalPresets.length === 0) && (
+            {(useBudgetStore.getState().snapshot.seasonalPresets ?? []).length === 0 && (
               <div className="text-caption">No presets available in this budget.</div>
             )}
           </div>
@@ -290,7 +290,7 @@ export const SettingsPanel: React.FC = () => {
             <textarea
               className="input"
               style={{ minHeight: 80, resize: 'vertical' }}
-              value={(useBudgetStore.getState().snapshot.years[String(settings.selectedYear)]?.monthlyNotes?.[settings.selectedMonth] ?? '')}
+              value={useBudgetStore.getState().snapshot.years[String(settings.selectedYear)]?.monthlyNotes?.[settings.selectedMonth]?.note ?? ''}
               onChange={(e) => useBudgetStore.getState().updateMonthlyNote(settings.selectedYear, settings.selectedMonth, e.target.value)}
             />
           </div>

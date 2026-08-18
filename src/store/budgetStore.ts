@@ -957,10 +957,10 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
         if (note == null || note.trim() === "") {
           delete record.monthlyNotes[month];
         } else {
-          record.monthlyNotes[month] = note;
+          record.monthlyNotes[month] = { month, note, updatedAt: new Date().toISOString() };
         }
       },
-      "note",
+      "settings",
       "Updated monthly note.",
       { year, month },
     );
