@@ -2,6 +2,18 @@
 
 ## 2026-08-18 — Editor focus stability, mixed currency normalization, settings validation
 
+### Playwright E2E
+
+- Added a Playwright configuration and a first E2E regression test for the Wishlist editor typing/focus. The test is stored in `tests/e2e/editor-typing.e2e.ts` and runs against a configured `PLAYWRIGHT_BASE_URL` or localhost. (2026-08-18)
+
+### Settings & presets
+
+- Seasonal presets are now reachable from Settings → Seasonal presets and applying a preset updates the active `snapshot.settings.selectedSeason`. (2026-08-18)
+- Advanced toggles exposed: `autoWalletRollupEnabled`, `promptBeforeMonthClose`, `liveClockEnabled`, and `nanPolicy` are now editable from Settings → Advanced and persist to the snapshot. (2026-08-18)
+- Added a small editor for per-month notes (Settings → Advanced). Notes are stored on the `YearRecord.monthlyNotes` map and can be updated per selected month. (2026-08-18)
+
+## 2026-08-18 — Editor focus stability, mixed currency normalization, settings validation
+
 ### Fixed editor focus loss and cursor reset
 
 - **Root Cause Isolated:** `EditorSheet.tsx` had a single `useEffect` combining initial mount focus (`target?.focus()`) and the Escape/Tab key listener that depended on `[onClose]`. Because callers passed inline arrow functions for `onClose`, every keystroke triggered a parent re-render, creating a new `onClose` reference. The effect re-ran, re-executing `target?.focus()` and stealing the user's focus/caret back to the first input field on every character typed.
