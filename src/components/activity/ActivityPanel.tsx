@@ -27,6 +27,7 @@ import type { ActivityDraft } from "../../utils/formatters";
 import { ActivityIcon, ColorPicker, IconPicker, readableAccent, tint } from "../ui/IconPicker";
 import { Button } from "../ui/Button";
 import { EmptyState } from "../ui/EmptyState";
+import { Field, FieldGroup } from "../ui/Field";
 import { Section } from "../ui/Section";
 
 const RECURRENCE_TYPES: RecurrenceType[] = ["weekly", "monthly", "yearly", "session", "purchase", "custom", "none"];
@@ -683,46 +684,6 @@ export const ActivityPanel: React.FC = () => {
         </div>
       )}
     </div>
-  );
-};
-
-const FieldGroup: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
-  <fieldset style={{ border: "none", margin: 0, padding: 0, minWidth: 0 }}>
-    <legend className="text-footnote" style={{ padding: 0, marginBottom: 8 }}>
-      {title}
-    </legend>
-    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 170px), 1fr))", gap: 10 }}>
-      {children}
-    </div>
-  </fieldset>
-);
-
-/**
- * A labelled form field. `group` renders a div instead of a label: a label may
- * only own one control, so sets of chips, swatches, or checkboxes get a plain
- * heading and carry their own `aria-label` on the group.
- */
-const Field: React.FC<{
-  label: string;
-  hint?: string;
-  span?: boolean;
-  emphasised?: boolean;
-  group?: boolean;
-  children: React.ReactNode;
-}> = ({ label, hint, span, emphasised, group, children }) => {
-  const Wrapper = group ? "div" : "label";
-  return (
-    <Wrapper style={{ display: "grid", gap: 4, minWidth: 0, gridColumn: span ? "1 / -1" : undefined }}>
-      <span className="text-caption" style={{ fontWeight: emphasised ? 700 : 500, color: emphasised ? "var(--accent)" : undefined }}>
-        {label}
-      </span>
-      {children}
-      {hint && (
-        <span className="text-caption" style={{ color: "var(--text-tertiary)" }}>
-          {hint}
-        </span>
-      )}
-    </Wrapper>
   );
 };
 

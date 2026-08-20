@@ -19,6 +19,10 @@ interface ProgressRingProps {
   color?: string;
   /** Labels at the two ends of the scale (gauge mode). */
   scaleLabels?: [string, string];
+  /** Overrides the figure's colour; defaults to the primary text colour. */
+  valueColor?: string;
+  /** Overrides the grade's colour, so the word carries the same tone as the arc. */
+  labelColor?: string;
 }
 
 /**
@@ -40,6 +44,8 @@ export const ProgressRing: React.FC<ProgressRingProps> = ({
   sweep = 270,
   color = "var(--accent)",
   scaleLabels,
+  valueColor,
+  labelColor,
 }) => {
   const cx = size / 2;
   const cy = size / 2;
@@ -116,36 +122,46 @@ export const ProgressRing: React.FC<ProgressRingProps> = ({
         </g>
       )}
 
+      {/* The figure is the point of the gauge, so it is sized as the headline
+          of the panel rather than as a caption inside a graphic. At 210px it
+          reads at ~68px — the old size/4.2 gave 50px, which lost to the words
+          beside it. Tabular figures keep 8 and 92 the same optical weight. */}
       <text
         x={cx}
-        y={cy - (caption ? 8 : 2)}
+        y={cy - (label ? size * 0.045 : 0)}
         textAnchor="middle"
         dominantBaseline="middle"
-        fill="var(--text-primary)"
-        fontSize={Math.max(24, size / 4.2)}
+        fill={valueColor ?? "var(--text-primary)"}
+        fontSize={Math.max(30, size / 3.05)}
         fontWeight={700}
+        letterSpacing={-size / 110}
+        style={{ fontVariantNumeric: "tabular-nums" }}
       >
         {valueText}
       </text>
+      {/* The grade, set as a small-caps rule under the number: it is the word
+          the figure means, not a footnote about it. */}
       <text
         x={cx}
-        y={cy + (caption ? 16 : 22)}
+        y={cy + size * 0.135}
         textAnchor="middle"
         dominantBaseline="middle"
-        fill="var(--text-secondary)"
-        fontSize={12}
-        fontWeight={600}
+        fill={labelColor ?? "var(--text-secondary)"}
+        fontSize={Math.max(11, size / 15)}
+        fontWeight={700}
+        letterSpacing={size / 160}
+        style={{ textTransform: "uppercase" }}
       >
         {label}
       </text>
       {caption && (
         <text
           x={cx}
-          y={cy + 33}
+          y={cy + size * 0.225}
           textAnchor="middle"
           dominantBaseline="middle"
           fill="var(--text-tertiary)"
-          fontSize={11}
+          fontSize={Math.max(10, size / 19)}
         >
           {caption}
         </text>

@@ -1,0 +1,19 @@
+{
+  "name": "Budget OS",
+  "short_name": "Budget OS",
+  "description": "Personal budgeting: spending, recurring activities, wishlist, analytics and reports, synchronised across devices.",
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#002157",
+  "theme_color": "#002157",
+  "categories": ["finance", "productivity"],
+  "icons": [
+    { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

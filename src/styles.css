@@ -543,9 +543,26 @@ strong {
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   color: var(--text-primary);
+  /* Form controls do not inherit the page font: a `<textarea>` falls back to
+     the user agent's monospace, so every notes field in the app was set in a
+     typewriter face next to sans-serif labels. `inherit` is not enough for
+     `<select>` on some engines, so the stack is named. */
+  font-family: var(--font-sans);
   font-size: 0.9375rem;
-  transition: all var(--duration-fast) var(--ease-out);
+  line-height: 1.45;
+  /* Named properties rather than `all`: `all` includes layout and paint
+     properties, so every hover animated far more than the border. */
+  transition: border-color var(--duration-fast) var(--ease-out),
+              box-shadow var(--duration-fast) var(--ease-out),
+              background var(--duration-fast) var(--ease-out);
   outline: none;
+}
+
+/* Amounts line up digit for digit while they are being typed, and stop the
+   field from reflowing as 1 becomes 8. */
+.input[type="number"],
+.input[inputmode="decimal"] {
+  font-variant-numeric: tabular-nums;
 }
 
 .input:focus, .select:focus, .textarea:focus {
@@ -1325,6 +1342,11 @@ strong {
   grid-template-columns: auto minmax(0, 1fr);
   gap: var(--space-6);
   align-items: center;
+  /* The card is stretched to the height of the column of figures beside it, so
+     the contents are centred in whatever height that turns out to be rather
+     than pinned to the top with the remainder left blank. */
+  height: 100%;
+  align-content: center;
 }
 
 @media (max-width: 760px) {

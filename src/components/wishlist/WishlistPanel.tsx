@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from "react";
-import { Check, ExternalLink, Link2Off, Pencil, Plus, Receipt, ShoppingBag, Trash2, X, Sparkles } from "lucide-react";
-import { CURRENCY_OPTIONS, formatMoney } from "../../domain/currency";
+import { Check, ExternalLink, Link2Off, Pencil, Plus, Receipt, ShoppingBag, Trash2, X } from "lucide-react";
+import { CURRENCY_OPTIONS, formatMoney, normalizeAmount } from "../../domain/currency";
 import { todayDateInput } from "../../domain/dates";
 import {
   PRIORITY_META,
@@ -19,7 +19,7 @@ import {
 } from "../../domain/wishlist";
 import type { WishlistLinkResult } from "../../domain/wishlist";
 import { ActivityIcon, IconPicker } from "../ui/IconPicker";
-import { EditorSheet } from "../ui/EditorSheet";
+import { AdvancedFields, EditorSheet } from "../ui/EditorSheet";
 import { seedCategoryIdOrFallback } from "../../domain/seedCategories";
 import { SwipeRow } from "../ui/SwipeRow";
 import { gesturesFor } from "../../domain/gestures";
@@ -36,8 +36,9 @@ import {
 import type { WishlistDraft } from "../../utils/formatters";
 import { Button } from "../ui/Button";
 import { EmptyState } from "../ui/EmptyState";
+import { Field, FieldGroup } from "../ui/Field";
 import { Section } from "../ui/Section";
-import type { CurrencyCode, SpendingEntry, WishlistItem } from "../../domain/types";
+import type { BudgetCategory, CurrencyCode, SpendingEntry, WishlistItem } from "../../domain/types";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -119,6 +120,8 @@ const ItemMark: React.FC<{ domain: string | null; accent: string; size?: number;
 interface EditFormProps {
   /** Names the sheet, so an edit is never mistaken for a new item. */
   title: string;
+  /** Selectable categories, passed in so the form stays free of the store. */
+  categories: BudgetCategory[];
   draft: WishlistDraft;
   onChange: (patch: Partial<WishlistDraft>) => void;
   onSave: () => void;
@@ -126,7 +129,7 @@ interface EditFormProps {
   submitLabel: string;
 }
 
-const EditForm: React.FC<EditFormProps> = ({ title, draft, onChange, onSave, onCancel, submitLabel }) => {
+const EditForm: React.FC<EditFormProps> = ({ title, categories, draft, onChange, onSave, onCancel, submitLabel }) => {
   const urlError = draft.url.trim().length > 0 && normalizeItemUrl(draft.url) == null;
   const brandUrlError = draft.brandUrl.trim().length > 0 && normalizeItemUrl(draft.brandUrl) == null;
   const valid = draft.name.trim().length > 0 && !urlError && !brandUrlError;
@@ -164,113 +167,109 @@ const EditForm: React.FC<EditFormProps> = ({ title, draft, onChange, onSave, onC
     <form
       id="wishlist-editor-form"
       onSubmit={handleSubmit}
-      style={{ display: "grid", gap: 10, minWidth: 0 }}
+      style={{ display: "grid", gap: 20, minWidth: 0 }}
     >
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-        <input
-          className="input"
-          required
-          placeholder="Item name *"
-          aria-label="Item name"
-          value={draft.name}
-          onChange={(e) => onChange({ name: e.target.value })}
-          style={{ flex: "2 1 160px", minWidth: 120 }}
-          autoFocus
-        />
-        <input
-          className="input"
-          type="number"
-          step="any"
-          min="0"
-          placeholder="Price (optional)"
-          aria-label="Price"
-          value={draft.actualPrice}
-          onChange={(e) => onChange({ actualPrice: e.target.value })}
-          style={{ flex: "1 1 110px", minWidth: 100 }}
-        />
-        <select
-          className="select"
-          aria-label="Currency"
-          value={draft.currency}
-          onChange={(e) => onChange({ currency: e.target.value })}
-          style={{ flex: "1 1 80px", minWidth: 70 }}
-        >
-          {CURRENCY_OPTIONS.map((currency) => (
-            <option key={currency}>{currency}</option>
-          ))}
-        </select>
-        <select
-          className="select"
-          aria-label="Priority"
-          value={draft.priority}
-          onChange={(e) => onChange({ priority: e.target.value as WishlistItem["priority"] })}
-          style={{ flex: "1 1 110px", minWidth: 100 }}
-        >
-          {PRIORITY_ORDER.map((priority) => (
-            <option key={priority} value={priority}>
-              {PRIORITY_META[priority].label}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-        <input
-          className="input"
-          // Deliberately not type="url": that makes the browser demand a
-          // scheme, so "store.com/product" — which this very placeholder
-          // suggests, and which parseItemUrl is written to accept as https —
-          // was silently rejected and the form refused to submit with no
-          // message the user could act on. inputMode still brings up the right
-          // keyboard, and the app's own validation is stricter anyway: it also
-          // rejects javascript: and data:, which type="url" happily accepts.
-          type="text"
-          inputMode="url"
-          placeholder="Link (optional) — e.g. store.com/product"
-          aria-label="Product link"
-          value={draft.url}
-          onChange={(e) => onChange({ url: e.target.value })}
-          style={{
-            flex: "3 1 180px",
-            minWidth: 140,
-            borderColor: urlError ? "var(--danger)" : undefined,
-          }}
-        />
-        <label
-          className="text-caption"
-          style={{ display: "flex", alignItems: "center", gap: 6, flex: "0 0 auto" }}
-        >
-          Colour
+      {/* Labelled fields, in the same shell and with the same grid as the
+          activity and transaction editors. This form used to carry its labels
+          in `placeholder` alone, which vanish the moment anything is typed —
+          so an item being edited showed four boxes with values in them and
+          nothing to say what any of them meant. */}
+      <FieldGroup title="Item">
+        <Field label="Name" span>
           <input
-            type="color"
-            aria-label="Item colour"
-            value={/^#[0-9a-f]{6}$/i.test(draft.color) ? draft.color : accent}
-            onChange={(e) => onChange({ color: e.target.value })}
-            style={{ width: 34, height: 34, border: "none", background: "none", cursor: "pointer", padding: 2 }}
+            className="input"
+            required
+            placeholder="Azur Poly A350"
+            value={draft.name}
+            onChange={(e) => onChange({ name: e.target.value })}
+            autoFocus
           />
-        </label>
-        {draft.color && (
-          <Button type="button" variant="ghost" size="sm" onClick={() => onChange({ color: "" })}>
-            Auto colour
-          </Button>
-        )}
-      </div>
+        </Field>
+        <Field label="Price" hint="Optional">
+          <input
+            className="input"
+            type="number"
+            step="any"
+            min="0"
+            placeholder="—"
+            value={draft.actualPrice}
+            onChange={(e) => onChange({ actualPrice: e.target.value })}
+          />
+        </Field>
+        <Field label="Currency">
+          <select
+            className="select"
+            value={draft.currency}
+            onChange={(e) => onChange({ currency: e.target.value })}
+          >
+            {CURRENCY_OPTIONS.map((currency) => (
+              <option key={currency}>{currency}</option>
+            ))}
+          </select>
+        </Field>
+        <Field label="Priority" hint={PRIORITY_META[draft.priority as WishlistItem["priority"]]?.hint}>
+          <select
+            className="select"
+            value={draft.priority}
+            onChange={(e) => onChange({ priority: e.target.value as WishlistItem["priority"] })}
+          >
+            {PRIORITY_ORDER.map((priority) => (
+              <option key={priority} value={priority}>
+                {PRIORITY_META[priority].label}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field label="Category">
+          <select
+            className="select"
+            value={draft.categoryId}
+            onChange={(e) => onChange({ categoryId: e.target.value })}
+          >
+            {categories.map((category) => (
+              <option key={category.id} value={category.id}>
+                {category.name}
+              </option>
+            ))}
+          </select>
+        </Field>
+      </FieldGroup>
 
-      {urlError && (
-        <div className="text-caption" style={{ color: "var(--danger)" }}>
-          Enter a valid web address (http or https only).
-        </div>
-      )}
+      <FieldGroup title="Where to buy it">
+        <Field
+          label="Seller link"
+          span
+          hint={
+            urlError ? (
+              <span style={{ color: "var(--danger)" }}>Enter a valid web address (http or https only).</span>
+            ) : (
+              "The shop this is bought from. Opened by the link on the card."
+            )
+          }
+        >
+          <input
+            className="input"
+            // Deliberately not type="url": that makes the browser demand a
+            // scheme, so "store.com/product" — which this very placeholder
+            // suggests, and which parseItemUrl is written to accept as https —
+            // was silently rejected and the form refused to submit with no
+            // message the user could act on. inputMode still brings up the right
+            // keyboard, and the app's own validation is stricter anyway: it also
+            // rejects javascript: and data:, which type="url" happily accepts.
+            type="text"
+            inputMode="url"
+            placeholder="contrail.com/products/azur-poly"
+            value={draft.url}
+            onChange={(e) => onChange({ url: e.target.value })}
+            style={{ borderColor: urlError ? "var(--danger)" : undefined }}
+          />
+        </Field>
+      </FieldGroup>
 
       {/* Behind a disclosure: most items are bought and branded by the same
           site, so asking everyone for a second link would tax the common case
           to serve the uncommon one. */}
-      <details className="wishlist-advanced">
-        <summary>
-          <Sparkles size={13} aria-hidden="true" />
-          <span>Icon &amp; brand</span>
-        </summary>
-
+      <AdvancedFields label="Icon, brand and colour">
         {/* What the item will actually look like, resolved live from whatever
             is filled in above. The chain has four steps and any of them can
             quietly fail — a site with no icon, a favicon service answering with
@@ -293,58 +292,83 @@ const EditForm: React.FC<EditFormProps> = ({ title, draft, onChange, onSave, onC
                   : "No link and no icon yet — a neutral mark is used."}
           </span>
         </div>
-        <p className="text-note" style={{ margin: "6px 0 8px" }}>
-          Use this when the maker is not the shop — a model kit bought from a marketplace, an add-on
-          sold on one store and built by another. The purchase link above is never changed.
-        </p>
-        <input
-          className="input"
-          type="text"
-          inputMode="url"
-          placeholder="Brand site — e.g. manufacturer.com"
-          aria-label="Brand site for the icon"
-          value={draft.brandUrl}
-          onChange={(e) => onChange({ brandUrl: e.target.value })}
-          style={{ width: "100%", borderColor: brandUrlError ? "var(--danger)" : undefined }}
-        />
 
-        <div style={{ marginTop: 12 }}>
-          <IconPicker
-            value={draft.icon || undefined}
-            accent={draft.color || undefined}
-            label="Or pick an icon"
-            onChange={(name) => onChange({ icon: name ?? "" })}
+        <FieldGroup title="Brand">
+          <Field
+            label="Maker's site"
+            span
+            hint={
+              brandUrlError ? (
+                <span style={{ color: "var(--danger)" }}>Enter a valid web address (http or https only).</span>
+              ) : (
+                "Use this when the maker is not the shop — a model kit from a marketplace, an add-on sold on one store and built by another. The seller link above is never changed."
+              )
+            }
+          >
+            <input
+              className="input"
+              type="text"
+              inputMode="url"
+              placeholder="azurpoly.com"
+              value={draft.brandUrl}
+              onChange={(e) => onChange({ brandUrl: e.target.value })}
+              style={{ borderColor: brandUrlError ? "var(--danger)" : undefined }}
+            />
+          </Field>
+        </FieldGroup>
+
+        <FieldGroup title="Appearance">
+          <Field label="Icon" span group hint="Overrides the site icon. Use it when the site has none, or when the one it returns is not recognisable.">
+            <IconPicker
+              value={draft.icon || undefined}
+              accent={draft.color || undefined}
+              label=""
+              onChange={(name) => onChange({ icon: name ?? "" })}
+            />
+          </Field>
+          <Field label="Colour" group>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <input
+                type="color"
+                aria-label="Item colour"
+                value={/^#[0-9a-f]{6}$/i.test(draft.color) ? draft.color : accent}
+                onChange={(e) => onChange({ color: e.target.value })}
+                style={{ width: 40, height: 34, border: "none", background: "none", cursor: "pointer", padding: 2 }}
+              />
+              {draft.color ? (
+                <Button type="button" variant="ghost" size="sm" onClick={() => onChange({ color: "" })}>
+                  Reset to automatic
+                </Button>
+              ) : (
+                <span className="text-caption">Derived from the seller</span>
+              )}
+            </div>
+          </Field>
+        </FieldGroup>
+      </AdvancedFields>
+
+      <FieldGroup title="Notes">
+        <Field label="Notes" span hint="Anything worth remembering about this purchase">
+          <textarea
+            className="input"
+            placeholder="Optional"
+            value={draft.notes}
+            onChange={(e) => onChange({ notes: e.target.value })}
+            rows={2}
+            style={{ resize: "vertical", minWidth: 0, height: "auto", padding: 10 }}
           />
-          <p className="text-note" style={{ margin: "6px 0 0" }}>
-            Overrides the site icon. Use it when the site has none, or when the one it returns is
-            not recognisable.
-          </p>
-        </div>
-        {brandUrlError && (
-          <div className="text-caption" style={{ color: "var(--danger)", marginTop: 6 }}>
-            Enter a valid web address (http or https only).
-          </div>
-        )}
-      </details>
-
-      <textarea
-        className="input"
-        placeholder="Notes (optional)"
-        aria-label="Notes"
-        value={draft.notes}
-        onChange={(e) => onChange({ notes: e.target.value })}
-        rows={2}
-        style={{ resize: "vertical", minWidth: 0, height: "auto", padding: 10 }}
-      />
-
-      <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, cursor: "pointer" }}>
-        <input
-          type="checkbox"
-          checked={draft.inWishlist}
-          onChange={(e) => onChange({ inWishlist: e.target.checked })}
-        />
-        In wishlist
-      </label>
+        </Field>
+        <Field label="Visibility" span group>
+          <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, cursor: "pointer" }}>
+            <input
+              type="checkbox"
+              checked={draft.inWishlist}
+              onChange={(e) => onChange({ inWishlist: e.target.checked })}
+            />
+            Show in the wishlist
+          </label>
+        </Field>
+      </FieldGroup>
 
     </form>
     </EditorSheet>
@@ -392,14 +416,26 @@ export const WishlistPanel: React.FC = () => {
     seedCategoryIdOrFallback(snapshot.categories, "cat-wishlist") ?? "";
 
   const [view, setView] = useState<ViewFilter>("active");
-  const [showAddForm, setShowAddForm] = useState(false);
-  const [addDraft, setAddDraft] = useState<WishlistDraft>(() => emptyDraft(settings.baseCurrency, wishlistCategoryId));
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editDraft, setEditDraft] = useState<WishlistDraft | null>(null);
+  /**
+   * One editor for the whole panel, held at the panel root.
+   *
+   * It used to be rendered *inside* the card being edited, which put a
+   * `position: fixed` backdrop inside `.swipe-content` — an element carrying
+   * `will-change: transform`, which makes it the containing block for fixed
+   * descendants. The full-screen sheet was therefore laid out inside a 260px
+   * card and then clipped by `.swipe-row { overflow: hidden }`. Hoisting it out
+   * also means the editor is not unmounted and remounted when the list
+   * re-sorts, re-filters or re-renders underneath it.
+   */
+  const [editorId, setEditorId] = useState<"new" | string | null>(null);
+  const [draft, setDraft] = useState<WishlistDraft | null>(null);
   const [purchasingId, setPurchasingId] = useState<string | null>(null);
   const [purchaseDraft, setPurchaseDraft] = useState<PurchaseDraft | null>(null);
   const [expandedLinkId, setExpandedLinkId] = useState<string | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
+
+  const editingItem = editorId && editorId !== "new" ? allItems.find((item) => item.id === editorId) ?? null : null;
+  const purchasingItem = purchasingId ? allItems.find((item) => item.id === purchasingId) ?? null : null;
 
   // Urgent first, dream last, bought at the bottom.
   const filteredItems = useMemo(
@@ -410,8 +446,22 @@ export const WishlistPanel: React.FC = () => {
   const activeItems = useMemo(() => allItems.filter((item) => wishlistViewMatches(item, "active")), [allItems]);
   const boughtItems = useMemo(() => allItems.filter((item) => item.bought), [allItems]);
 
+  /**
+   * Converted to the base currency before adding up.
+   *
+   * Summing `actualPrice` raw added a $600 yoke to a €40 add-on and reported
+   * €640 — a number that is not a total of anything. `normalizeAmount` is the
+   * same conversion the rest of the app uses, so this figure now agrees with
+   * `summarizeWishlist` instead of contradicting it.
+   */
   const activeTotal = useMemo(
-    () => activeItems.reduce((sum, item) => sum + (item.actualPrice ?? 0), 0),
+    () => activeItems.reduce((sum, item) => sum + normalizeAmount(item.actualPrice, item.currency, settings), 0),
+    [activeItems, settings],
+  );
+
+  /** True when the list holds more than one currency, so the total needs saying so. */
+  const activeIsMixedCurrency = useMemo(
+    () => new Set(activeItems.map((item) => item.currency)).size > 1,
     [activeItems],
   );
 
@@ -432,39 +482,49 @@ export const WishlistPanel: React.FC = () => {
   // --- Handlers ---
 
   const resetForms = () => {
-    setEditingId(null);
-    setEditDraft(null);
+    setEditorId(null);
+    setDraft(null);
     setPurchasingId(null);
     setPurchaseDraft(null);
   };
 
-  const handleAdd = () => {
-    if (!addDraft.name.trim()) return;
-    add({
-      ...wishlistPayloadFromDraft(addDraft),
-      categoryId: addDraft.categoryId || wishlistCategoryId,
-      currency: addDraft.currency as CurrencyCode,
-      bought: false,
-      active: true,
-    });
-    setAddDraft(emptyDraft(settings.baseCurrency, wishlistCategoryId));
-    setShowAddForm(false);
-    setView("active");
+  const startAdd = () => {
+    resetForms();
+    setEditorId("new");
+    setDraft(emptyDraft(settings.baseCurrency, wishlistCategoryId));
     setNotice(null);
   };
 
   const startEdit = (item: WishlistItem) => {
     resetForms();
-    setEditingId(item.id);
-    setEditDraft(wishlistToDraft(item));
+    setEditorId(item.id);
+    setDraft(wishlistToDraft(item));
   };
 
-  const saveEdit = () => {
-    if (!editingId || !editDraft || !editDraft.name.trim()) return;
-    update(editingId, {
-      ...wishlistPayloadFromDraft(editDraft),
-      currency: editDraft.currency as CurrencyCode,
-    });
+  /**
+   * One commit point for both add and edit.
+   *
+   * The draft is edited freely and locally; nothing is written to the snapshot
+   * — and therefore nothing is queued for the server — until this runs.
+   */
+  const saveEditor = () => {
+    if (!draft || !draft.name.trim() || !editorId) return;
+    if (editorId === "new") {
+      add({
+        ...wishlistPayloadFromDraft(draft),
+        categoryId: draft.categoryId || wishlistCategoryId,
+        currency: draft.currency as CurrencyCode,
+        bought: false,
+        active: true,
+      });
+      setView("active");
+    } else {
+      update(editorId, {
+        ...wishlistPayloadFromDraft(draft),
+        currency: draft.currency as CurrencyCode,
+      });
+    }
+    setNotice(null);
     resetForms();
   };
 
@@ -621,8 +681,8 @@ export const WishlistPanel: React.FC = () => {
             ))}
           </div>
           <div style={{ flex: "1 1 0", minWidth: 0 }} />
-          {mutable && !showAddForm && (
-            <Button variant="primary" size="sm" onClick={() => setShowAddForm(true)}>
+          {mutable && (
+            <Button variant="primary" size="sm" onClick={startAdd}>
               <Plus size={14} /> Add item
             </Button>
           )}
@@ -654,21 +714,91 @@ export const WishlistPanel: React.FC = () => {
           </div>
         )}
 
-        {/* Add form */}
-        {mutable && showAddForm && (
-          <EditForm
-              title="New wishlist item"
-              draft={addDraft}
-              onChange={(patch) => setAddDraft((draft) => ({ ...draft, ...patch }))}
-              onSave={handleAdd}
-              onCancel={() => {
-                setShowAddForm(false);
-                setAddDraft(emptyDraft(settings.baseCurrency, wishlistCategoryId));
-              }}
-              submitLabel="Add item"
-            />
-        )}
       </Section>
+
+      {/* The one editor, at the panel root rather than inside a card. */}
+      {mutable && editorId && draft && (
+        <EditForm
+          title={editorId === "new" ? "New wishlist item" : `Edit ${editingItem?.name ?? "item"}`}
+          categories={categoryOptions}
+          draft={draft}
+          onChange={(patch) => setDraft((current) => (current ? { ...current, ...patch } : current))}
+          onSave={saveEditor}
+          onCancel={resetForms}
+          submitLabel={editorId === "new" ? "Add item" : "Save changes"}
+        />
+      )}
+
+      {/* Recording a purchase is its own task, so it gets the same shell. */}
+      {mutable && purchasingItem && purchaseDraft && (
+        <EditorSheet
+          title={`Buy ${purchasingItem.name}`}
+          subtitle={`Records a transaction in ${purchasingItem.currency} and marks the item bought.`}
+          onClose={resetForms}
+          footer={
+            <>
+              <Button type="button" variant="ghost" onClick={resetForms}>
+                Cancel
+              </Button>
+              <Button type="button" variant="secondary" onClick={() => markBoughtOnly(purchasingItem)}>
+                Just mark bought
+              </Button>
+              <Button type="submit" variant="primary" form="wishlist-purchase-form">
+                <Check size={14} /> Record purchase
+              </Button>
+            </>
+          }
+        >
+          <form
+            id="wishlist-purchase-form"
+            onSubmit={(event) => {
+              event.preventDefault();
+              submitPurchase(purchasingItem);
+            }}
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 170px), 1fr))",
+              gap: 12,
+            }}
+          >
+            <Field label={`Amount (${purchasingItem.currency})`}>
+              <input
+                className="input"
+                type="number"
+                step="any"
+                required
+                placeholder="0.00"
+                value={purchaseDraft.amount}
+                onChange={(e) => setPurchaseDraft((current) => (current ? { ...current, amount: e.target.value } : current))}
+              />
+            </Field>
+            <Field label="Date">
+              <input
+                className="input"
+                type="date"
+                required
+                value={purchaseDraft.date}
+                onChange={(e) => setPurchaseDraft((current) => (current ? { ...current, date: e.target.value } : current))}
+              />
+            </Field>
+            <Field label="Category" span>
+              <select
+                className="select"
+                value={purchaseDraft.categoryId}
+                onChange={(e) =>
+                  setPurchaseDraft((current) => (current ? { ...current, categoryId: e.target.value } : current))
+                }
+              >
+                {categoryOptions.map((category) => (
+                  <option key={category.id} value={category.id}>
+                    {category.name}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          </form>
+        </EditorSheet>
+      )}
 
       {/* Item cards */}
       {filteredItems.length === 0 ? (
@@ -697,11 +827,16 @@ export const WishlistPanel: React.FC = () => {
             // Two different facts: what the item looks like, and where it is
             // bought. The icon follows the brand when there is one; the link
             // always opens the shop.
-            const domain = itemIconDomain(item);
+            const iconDomain = itemIconDomain(item);
+            // The link's *label* must name where the link goes. It used to be
+            // labelled with the icon's domain, so an item branded "azurpoly.com"
+            // and sold on Contrail showed a link reading "azurpoly.com" that
+            // opened contrail.com — the one place in the app where the text and
+            // the destination disagreed.
+            const sellerDomain = itemDomain(item.url);
+            const brandDomain = itemDomain(item.brandUrl);
             const href = parseItemUrl(item.url)?.toString();
             const priority = PRIORITY_META[item.priority] ?? PRIORITY_META.low;
-            const isEditing = editingId === item.id;
-            const isPurchasing = purchasingId === item.id;
             const linked: SpendingEntry | null = item.linkedSpendingId
               ? (entriesById.get(item.linkedSpendingId) ?? null)
               : null;
@@ -715,23 +850,23 @@ export const WishlistPanel: React.FC = () => {
                 // platform convention people already have.
                 // Which action sits on each side is a preference: some people
                 // want Delete under the thumb, others want it nowhere near it.
-                trailing={swipeActionsFor(gestures.trailing, item, mutable && !isEditing)}
-                leading={swipeActionsFor(gestures.leading, item, mutable && !isEditing)}
+                trailing={swipeActionsFor(gestures.trailing, item, mutable)}
+                leading={swipeActionsFor(gestures.leading, item, mutable)}
               >
               <div
-                className={mutable && !isEditing ? "editable-row" : undefined}
-                role={mutable && !isEditing ? "button" : undefined}
-                tabIndex={mutable && !isEditing ? 0 : undefined}
-                aria-label={mutable && !isEditing ? `Edit ${item.name}` : undefined}
+                className={mutable ? "editable-row" : undefined}
+                role={mutable ? "button" : undefined}
+                tabIndex={mutable ? 0 : undefined}
+                aria-label={mutable ? `Edit ${item.name}` : undefined}
                 onClick={(event) => {
-                  if (!mutable || isEditing) return;
+                  if (!mutable) return;
                   const target = event.target as HTMLElement;
                   if (target.closest("button, a, input, select, textarea")) return;
                   if (window.getSelection()?.toString()) return;
                   startEdit(item);
                 }}
                 onKeyDown={(event) => {
-                  if (!mutable || isEditing || event.target !== event.currentTarget) return;
+                  if (!mutable || event.target !== event.currentTarget) return;
                   if (event.key === "Enter" || event.key === " ") {
                     event.preventDefault();
                     startEdit(item);
@@ -752,7 +887,7 @@ export const WishlistPanel: React.FC = () => {
               >
                 {/* Header: mark, name, price */}
                 <div style={{ display: "flex", gap: 10, alignItems: "flex-start", minWidth: 0 }}>
-                  <ItemMark domain={domain} accent={accent} icon={item.icon} />
+                  <ItemMark domain={iconDomain} accent={accent} icon={item.icon} />
                   <div style={{ minWidth: 0, flex: 1 }}>
                     <div
                       className="text-callout"
@@ -760,38 +895,59 @@ export const WishlistPanel: React.FC = () => {
                         fontWeight: 600,
                         color: "var(--text-primary)",
                         textDecoration: item.bought ? "line-through" : "none",
+                        // Wraps to two lines rather than truncating. On a 260px
+                        // card "Amazon Flight Simulator Hardware" became
+                        // "Amazon Fli…", which names nothing — and the card has
+                        // the vertical room the ellipsis was saving.
+                        display: "-webkit-box",
+                        WebkitLineClamp: 2,
+                        WebkitBoxOrient: "vertical",
                         overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        whiteSpace: "nowrap",
+                        overflowWrap: "anywhere",
                       }}
                       title={item.name}
                     >
                       {item.name}
                     </div>
-                    {/* `domain` and `href` come from the same validated URL, so
-                        the link is only ever http(s). */}
-                    {domain && href && (
-                      <a
-                        className="text-caption"
-                        href={href}
-                        target="_blank"
-                        rel="noreferrer noopener"
-                        style={{
-                          display: "inline-flex",
-                          alignItems: "center",
-                          gap: 4,
-                          maxWidth: "100%",
-                          color: "var(--text-secondary)",
-                          textDecoration: "none",
-                          overflow: "hidden",
-                        }}
-                      >
-                        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                          {domain}
+                    {/* `sellerDomain` and `href` come from the same validated
+                        URL, so the label always names the destination and the
+                        link is only ever http(s). */}
+                    <div style={{ display: "flex", gap: 6, alignItems: "baseline", flexWrap: "wrap", minWidth: 0 }}>
+                      {sellerDomain && href && (
+                        <a
+                          className="text-caption"
+                          href={href}
+                          target="_blank"
+                          rel="noreferrer noopener"
+                          title={`Buy from ${sellerDomain}`}
+                          style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: 4,
+                            maxWidth: "100%",
+                            color: "var(--text-secondary)",
+                            textDecoration: "none",
+                            overflow: "hidden",
+                          }}
+                        >
+                          <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            {sellerDomain}
+                          </span>
+                          <ExternalLink size={11} style={{ flexShrink: 0 }} />
+                        </a>
+                      )}
+                      {/* Named only when it differs, so the common case — shop
+                          and maker are the same — stays a single line. */}
+                      {brandDomain && brandDomain !== sellerDomain && (
+                        <span
+                          className="text-caption"
+                          style={{ color: "var(--text-tertiary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
+                          title={`Brand: ${brandDomain}`}
+                        >
+                          by {brandDomain}
                         </span>
-                        <ExternalLink size={11} style={{ flexShrink: 0 }} />
-                      </a>
-                    )}
+                      )}
+                    </div>
                   </div>
                   <strong style={{ fontSize: 14, whiteSpace: "nowrap", color: "var(--text-primary)" }}>
                     {item.actualPrice != null
@@ -865,87 +1021,8 @@ export const WishlistPanel: React.FC = () => {
                   </div>
                 )}
 
-                {/* Purchase form */}
-                {mutable && isPurchasing && purchaseDraft && (
-                  <form
-                    onSubmit={(event) => {
-                      event.preventDefault();
-                      submitPurchase(item);
-                    }}
-                    style={{
-                      display: "grid",
-                      gap: 8,
-                      padding: 10,
-                      borderRadius: "var(--radius-sm)",
-                      background: "var(--bg-inset)",
-                      minWidth: 0,
-                    }}
-                  >
-                    <div className="text-caption" style={{ color: "var(--text-secondary)" }}>
-                      Record this as spending
-                    </div>
-                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                      <input
-                        className="input"
-                        type="number"
-                        step="any"
-                        required
-                        aria-label="Purchase amount"
-                        placeholder="Amount"
-                        value={purchaseDraft.amount}
-                        onChange={(e) =>
-                          setPurchaseDraft((draft) => (draft ? { ...draft, amount: e.target.value } : draft))
-                        }
-                        style={{ flex: "1 1 120px", minWidth: 90 }}
-                      />
-                      <input
-                        className="input"
-                        type="date"
-                        required
-                        aria-label="Purchase date"
-                        value={purchaseDraft.date}
-                        onChange={(e) =>
-                          setPurchaseDraft((draft) => (draft ? { ...draft, date: e.target.value } : draft))
-                        }
-                        // Wide enough that the native control never clips the
-                        // year; on a narrow card it wraps to its own row.
-                        style={{ flex: "1 1 155px", minWidth: 150 }}
-                      />
-                    </div>
-                    <select
-                      className="select"
-                      aria-label="Purchase category"
-                      value={purchaseDraft.categoryId}
-                      onChange={(e) =>
-                        setPurchaseDraft((draft) => (draft ? { ...draft, categoryId: e.target.value } : draft))
-                      }
-                      style={{ minWidth: 0 }}
-                    >
-                      {categoryOptions.map((category) => (
-                        <option key={category.id} value={category.id}>
-                          {category.name}
-                        </option>
-                      ))}
-                    </select>
-                    <div className="text-caption" style={{ color: "var(--text-tertiary)" }}>
-                      Amount is in {item.currency}.
-                    </div>
-                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
-                      <Button type="button" variant="ghost" size="sm" onClick={resetForms}>
-                        Cancel
-                      </Button>
-                      <Button type="button" variant="secondary" size="sm" onClick={() => markBoughtOnly(item)}>
-                        Just mark bought
-                      </Button>
-                      <Button type="submit" variant="primary" size="sm">
-                        <Check size={14} /> Record purchase
-                      </Button>
-                    </div>
-                  </form>
-                )}
-
                 {/* Actions */}
-                {mutable && !isPurchasing && (
+                {mutable && (
                   <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
                     {!item.bought ? (
                       <Button size="sm" variant="secondary" onClick={() => startPurchase(item)}>
@@ -979,11 +1056,11 @@ export const WishlistPanel: React.FC = () => {
                       size="sm"
                       variant="ghost"
                       icon
-                      onClick={() => (isEditing ? resetForms() : startEdit(item))}
-                      aria-label={isEditing ? "Cancel edit" : "Edit item"}
-                      title={isEditing ? "Cancel" : "Edit"}
+                      onClick={() => startEdit(item)}
+                      aria-label={`Edit ${item.name}`}
+                      title="Edit"
                     >
-                      {isEditing ? <X size={14} /> : <Pencil size={14} />}
+                      <Pencil size={14} />
                     </Button>
                     <Button
                       size="sm"
@@ -998,17 +1075,6 @@ export const WishlistPanel: React.FC = () => {
                     </Button>
                     </span>
                   </div>
-                )}
-
-                {isEditing && editDraft && (
-                  <EditForm
-                    title={`Edit ${item.name}`}
-                    draft={editDraft}
-                    onChange={(patch) => setEditDraft((draft) => (draft ? { ...draft, ...patch } : draft))}
-                    onSave={saveEdit}
-                    onCancel={resetForms}
-                    submitLabel="Save changes"
-                  />
                 )}
               </div>
               </SwipeRow>
@@ -1028,6 +1094,12 @@ export const WishlistPanel: React.FC = () => {
             <div>
               <span style={{ color: "var(--text-secondary)" }}>Active total: </span>
               <strong>{formatDualMoney(activeTotal, settings)}</strong>
+              {activeIsMixedCurrency && (
+                <span className="text-caption" style={{ color: "var(--text-tertiary)" }}>
+                  {" "}
+                  · converted from {new Set(activeItems.map((item) => item.currency)).size} currencies
+                </span>
+              )}
             </div>
           )}
           <div>

@@ -77,6 +77,26 @@ import { Tricolour } from "./components/ui/Tricolour";
 
 type TabKey = "dashboard" | "activities" | "spending" | "wishlist" | "wallet" | "analytics" | "scenarios" | "history" | "settings" | "categories";
 
+/**
+ * Navigation order, so the transition knows which way the app moved.
+ *
+ * The same order the sidebar lists them in: moving down the list enters from
+ * the right, moving up enters from the left, matching the direction the eye
+ * travelled to make the choice.
+ */
+const TAB_ORDER: TabKey[] = [
+  "dashboard",
+  "spending",
+  "activities",
+  "wishlist",
+  "wallet",
+  "analytics",
+  "scenarios",
+  "history",
+  "categories",
+  "settings",
+];
+
 const SIDEBAR_PREF_KEY = "sidebar-collapsed";
 
 export default function App() {
@@ -322,7 +342,9 @@ export default function App() {
                 </div>
               }
             >
-              <TabTransition tabKey={activeTab}>{tabs[activeTab]}</TabTransition>
+              <TabTransition tabKey={activeTab} ordinal={TAB_ORDER.indexOf(activeTab)}>
+                {tabs[activeTab]}
+              </TabTransition>
             </Suspense>
           </div>
         </main>

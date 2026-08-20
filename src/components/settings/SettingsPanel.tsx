@@ -160,14 +160,16 @@ export const SettingsPanel: React.FC = () => {
             <span>Include Piloting in the monthly budget total</span>
           </label>
 
-          <label className="text-caption" style={checkboxStyle}>
-            <input
-              type="checkbox"
-              checked={settings.ignoreNonBudgetSpending ?? false}
-              onChange={(e) => update({ ignoreNonBudgetSpending: e.target.checked })}
-            />
-            <span>Exclude non-budget payment sources from analytics</span>
-          </label>
+          {/* This used to be a checkbox reading "Exclude non-budget payment
+              sources from analytics", off by default — which meant the app's
+              default behaviour charged the user for money somebody else spent.
+              It is a rule about what the figures mean, not a preference, so it
+              is now unconditional and stated rather than offered. */}
+          <p className="text-note" style={{ margin: 0 }}>
+            Transactions marked <strong>Someone else paid</strong> or <strong>Outside my budget</strong> are
+            kept at full value and stay visible in your spending, but never count against your budget,
+            categories, forecast or health score.
+          </p>
         </div>
       </Section>
 

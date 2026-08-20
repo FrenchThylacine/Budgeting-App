@@ -216,7 +216,6 @@ export function createSeedBudgetSnapshot(
       },
       lastUpdated: timestamp,
       darkMode: false,
-      ignoreNonBudgetSpending: false,
     },
     categories,
     years: {

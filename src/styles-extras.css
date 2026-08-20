@@ -572,39 +572,6 @@
   white-space: nowrap;
 }
 
-/* ─── Progressive disclosure inside a form ────────────────────────────────── */
-
-.wishlist-advanced {
-  border-top: 1px solid var(--separator);
-  padding-top: 8px;
-}
-
-.wishlist-advanced > summary {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  cursor: pointer;
-  padding: 4px 0;
-  font-size: var(--text-caption);
-  font-weight: var(--weight-medium);
-  color: var(--text-secondary);
-  /* The default triangle sits awkwardly beside an icon; the icon is the
-     affordance, and the row is large enough to be an obvious target. */
-  list-style: none;
-}
-
-.wishlist-advanced > summary::-webkit-details-marker { display: none; }
-.wishlist-advanced > summary:hover { color: var(--text-primary); }
-.wishlist-advanced[open] > summary { color: var(--text-primary); }
-
-/* A visible focus ring, because removing the marker also removes the only
-   other cue that this row is interactive. */
-.wishlist-advanced > summary:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-  border-radius: var(--radius-sm);
-}
-
 /* ─── Swipe to reveal ─────────────────────────────────────────────────────── */
 
 .swipe-row {
@@ -823,6 +790,34 @@
   font-size: var(--text-caption);
   font-weight: var(--weight-semibold);
   color: var(--text-secondary);
+  /* The default marker is a raw ▶ glyph set in the UA's own metrics, which
+     next to this typography reads as an escaped character rather than a
+     control. Replaced by a chevron that rotates when the section opens. */
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  user-select: none;
+}
+
+.sheet-advanced > summary::-webkit-details-marker { display: none; }
+
+.sheet-advanced > summary::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  flex: none;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(-45deg);
+  transform-origin: 60% 60%;
+  transition: transform var(--duration-fast) var(--ease-out);
+}
+
+.sheet-advanced[open] > summary::before { transform: rotate(45deg); }
+
+@media (prefers-reduced-motion: reduce) {
+  .sheet-advanced > summary::before { transition: none; }
 }
 
 .sheet-advanced > summary:hover,
@@ -929,70 +924,145 @@
 }
 
 /* ─── Tab transition ──────────────────────────────────────────────────────
-   A thin route line crosses the top of the panel and a small aircraft runs
-   along it. Deliberately small and near the edge: an aircraft flying across
-   the middle of the content is a cartoon, and it obscures exactly what the
-   user asked to see. This is a micro-interaction — noticed, not watched. */
+   Changing tab moves the whole application, not a corner of it. A navy plane
+   crosses the viewport — over the sidebar, the header and the content alike —
+   carrying a route between two waypoints with an aircraft running along it.
+   The outgoing page is underneath while it covers, the incoming one is
+   revealed as it clears, entering from the direction the navigation moved.
+
+   Full-viewport and `position: fixed`, so it is genuinely the app that
+   transitions. Everything inside is transform and opacity only: no layout, no
+   paint of the pages beneath, so it stays on the compositor. */
 
 .tab-transition { position: relative; min-width: 0; }
 
-.tab-sweep {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 20px;
-  z-index: 5;
-  overflow: hidden;
+.app-sweep {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
   pointer-events: none;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  /* Deep navy with a high, off-centre glow: the shape of a sky seen from
+     altitude rather than a flat scrim. */
+  background:
+    radial-gradient(120% 80% at 72% -10%, rgba(46, 90, 168, 0.55) 0%, rgba(9, 18, 38, 0) 62%),
+    linear-gradient(160deg, #0B1B38 0%, #081226 58%, #050B18 100%);
+  /* The plane arrives as a wipe from the leading edge rather than a fade: a
+     fade reads as a loading state, a wipe reads as a movement. */
+  clip-path: inset(0 100% 0 0);
 }
 
-/* The route: a hairline that draws itself across and then retreats. */
-.tab-sweep-route {
-  position: absolute;
-  top: 9px;
-  left: 0;
-  right: 0;
+.app-sweep-back { --sweep-from: 0 0 0 100%; }
+.app-sweep-forward { --sweep-from: 0 100% 0 0; }
+
+.app-sweep-covering { animation: appSweepCover 260ms cubic-bezier(0.4, 0, 0.2, 1) forwards; }
+.app-sweep-clearing { animation: appSweepClear 300ms cubic-bezier(0.22, 0.61, 0.36, 1) forwards; }
+
+@keyframes appSweepCover {
+  from { clip-path: inset(var(--sweep-from, 0 100% 0 0)); }
+  to   { clip-path: inset(0 0 0 0); }
+}
+
+/* Clears towards the opposite edge, so the plane continues across rather than
+   retreating the way it came — the app has moved on, not changed its mind. */
+@keyframes appSweepClear {
+  from { clip-path: inset(0 0 0 0); }
+  to   { clip-path: inset(0 0 0 100%); }
+}
+
+.app-sweep-back.app-sweep-clearing { animation-name: appSweepClearBack; }
+
+@keyframes appSweepClearBack {
+  from { clip-path: inset(0 0 0 0); }
+  to   { clip-path: inset(0 100% 0 0); }
+}
+
+/* The route sits on the optical centre line, at a width that reads as a
+   journey on a phone and on a wide desktop alike. */
+.app-sweep-route {
+  position: relative;
+  width: min(460px, 64vw);
+  height: 2px;
+  display: flex;
+  align-items: center;
+}
+
+.app-sweep-line {
+  flex: 1;
   height: 1px;
-  background: linear-gradient(90deg, transparent, var(--accent-soft) 12%, var(--accent-soft) 88%, transparent);
+  /* Dashed, like a plotted track. */
+  background-image: linear-gradient(90deg, rgba(255, 255, 255, 0.55) 50%, transparent 50%);
+  background-size: 7px 1px;
   transform: scaleX(0);
   transform-origin: left center;
-  animation: routeDraw var(--sweep-duration) var(--sweep-ease) forwards;
+  animation: routeDraw 420ms cubic-bezier(0.4, 0, 0.2, 1) 60ms forwards;
 }
 
-.tab-sweep-craft {
+.app-sweep-node {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+  opacity: 0;
+  animation: nodeAppear 220ms var(--ease-out) forwards;
+}
+
+/* Departure in the signature red, arrival in white: the two ends of the flag,
+   and the two ends of the journey. */
+.app-sweep-node-from {
+  background: #E4002B;
+  animation-delay: 40ms;
+}
+
+.app-sweep-node-to {
+  background: #FFFFFF;
+  animation-delay: 420ms;
+}
+
+.app-sweep-craft {
   position: absolute;
-  top: 1px;
   left: 0;
-  transform: translate3d(-40px, 0, 0);
-  animation: craftRun var(--sweep-duration) var(--sweep-ease) forwards;
+  top: 50%;
+  margin-top: -15px;
+  animation: craftRun 620ms cubic-bezier(0.35, 0, 0.2, 1) 40ms forwards;
   will-change: transform;
-  opacity: 0.9;
+  filter: drop-shadow(0 2px 10px rgba(0, 0, 0, 0.45));
 }
 
 @keyframes routeDraw {
-  0%   { transform: scaleX(0); }
-  55%  { transform: scaleX(1); }
-  100% { transform: scaleX(1); opacity: 0; }
+  from { transform: scaleX(0); }
+  to   { transform: scaleX(1); }
+}
+
+@keyframes nodeAppear {
+  from { opacity: 0; transform: scale(0.4); }
+  to   { opacity: 1; transform: scale(1); }
 }
 
 @keyframes craftRun {
-  from { transform: translate3d(-40px, 0, 0); }
-  to   { transform: translate3d(calc(100% + 100vw), 0, 0); }
+  from { transform: translate3d(-16px, 0, 0); }
+  to   { transform: translate3d(min(460px, 64vw), 0, 0); }
 }
 
-/* The page settles in underneath, on its own gentler curve. */
-.tab-panel-arriving {
-  animation: pageArrive calc(var(--sweep-duration) * 0.62) var(--ease-out);
+/* The page arrives from the side the navigation moved, so the direction of
+   travel is legible without reading the heading. */
+.tab-panel-arriving { animation: pageArriveForward 300ms cubic-bezier(0.22, 0.61, 0.36, 1); }
+.tab-panel-arriving.tab-panel-back { animation-name: pageArriveBack; }
+
+@keyframes pageArriveForward {
+  from { opacity: 0; transform: translate3d(26px, 0, 0); }
+  to   { opacity: 1; transform: none; }
 }
 
-@keyframes pageArrive {
-  0%   { opacity: 0; transform: translate3d(0, 10px, 0); }
-  100% { opacity: 1; transform: none; }
+@keyframes pageArriveBack {
+  from { opacity: 0; transform: translate3d(-26px, 0, 0); }
+  to   { opacity: 1; transform: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .tab-sweep { display: none; }
+  .app-sweep { display: none; }
   .tab-panel-arriving { animation: none; }
 }
 
@@ -1184,12 +1254,29 @@
 /* Pinned above everything, including sheets: it is the masthead of the whole
    application, not of one screen. */
 .tricolour-app {
+  /* A signature, not a status bar.
+
+     Full width, it read as a loading indicator or a browser chrome artefact —
+     the two meanings it must never carry — and it was the loudest thing on
+     every screen. Compressed to a centred tab at the very top it reads as what
+     it is: a small mark the application signs itself with, noticed by anyone
+     who knows what it refers to and ignorable by anyone who does not. */
   position: fixed;
   top: 0;
-  left: 0;
-  right: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 76px;
+  height: 3px;
+  border-radius: 0 0 2px 2px;
+  overflow: hidden;
   z-index: 100;
   pointer-events: none;
+  box-shadow: 0 1px 3px rgba(0, 33, 87, 0.18);
+}
+
+/* Narrower still on a phone, where 76px is a larger share of the width. */
+@media (max-width: 480px) {
+  .tricolour-app { width: 56px; }
 }
 
 /* Inside the sign-in card it sits flush with the rounded top edge. */
@@ -1277,6 +1364,63 @@
 .field > .input,
 .field > .select {
   width: 100%;
+}
+
+/* A field that needs the whole row: a name, a note, a set of weekday chips. */
+.field-span { grid-column: 1 / -1; }
+
+/* The field the current cost model actually reads. Four price boxes look
+   identical, and only one of them is doing anything. */
+.field-emphasised > .field-label {
+  color: var(--accent);
+  font-weight: var(--weight-semibold);
+}
+
+/* ─── Who paid: personal / external / all ─────────────────────────────────── */
+
+/* Three figures that must be read together. Side by side, sharing a baseline,
+   because the whole point is that the first plus the second is the third — and
+   that only the first is charged to the budget. */
+.funding-split {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr));
+  gap: var(--space-4);
+  padding: var(--space-4) var(--space-5);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--warning);
+  border-radius: var(--radius-lg);
+  background: var(--bg-elevated);
+}
+
+.funding-split-value {
+  font-size: 1.25rem;
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-snug);
+  margin: 2px 0;
+  overflow-wrap: anywhere;
+}
+
+/* ─── Editor field groups ─────────────────────────────────────────────────── */
+
+.field-group {
+  border: none;
+  margin: 0;
+  padding: 0;
+  min-width: 0;
+}
+
+.field-group > legend {
+  padding: 0;
+  margin-bottom: 8px;
+}
+
+.field-grid {
+  display: grid;
+  /* `min(100%, …)` so a single column never demands more width than a 320px
+     phone has. */
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 170px), 1fr));
+  gap: 10px;
+  align-items: start;
 }
 
 /* ─── Header actions ──────────────────────────────────────────────────────── */

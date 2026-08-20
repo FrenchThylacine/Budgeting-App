@@ -98,6 +98,12 @@ export interface Settings {
   exchangeRates: ExchangeRates;
   lastUpdated: string;
   darkMode: boolean;
+  /**
+   * @deprecated Externally funded spending is now always excluded from the
+   * personal budget — see `domain/funding.ts`. Nothing reads this. The field is
+   * still declared so snapshots written before the rule became unconditional
+   * round-trip unchanged rather than losing a key on every save.
+   */
   ignoreNonBudgetSpending?: boolean;
 }
 
@@ -419,13 +425,24 @@ export interface PeriodSummary {
   month?: number;
   week?: number;
   status: PeriodStatus;
+  /**
+   * Spend charged to the personal budget.
+   *
+   * Externally funded transactions are **never** part of this, whatever the
+   * settings say — see `domain/funding.ts`. `transactionTotal` is the figure
+   * that includes them.
+   */
   total: number | null;
   generalTotal: number | null;
   pilotingTotal: number | null;
-  /** Sum of personal-budget spend (excludes external/shared) */
+  /** The same figure as `total`, named for the personal/external/all display. */
   personalTotal?: number | null;
-  /** Sum of external/shared spend */
+  /** Spend somebody else paid for. Recorded in full, charged to nothing. */
   externalTotal?: number | null;
+  /** Every transaction in the period: `personalTotal + externalTotal`. */
+  transactionTotal?: number | null;
+  /** How many of `entryCount` were externally funded. */
+  externalCount?: number;
   entryCount: number;
   isClosed: boolean;
 }
@@ -471,13 +488,19 @@ export interface YearCalculation {
   includedBudget: number;
   selectedMonthSpend: PeriodSummary;
   selectedWeekSpend: PeriodSummary;
+  /** Personal-budget spend for the whole year. */
   totalSpend: number;
+  /** Externally funded spend for the whole year, kept out of `totalSpend`. */
+  externalSpend: number;
   delta: number | null;
   rolloverDelta: number | null;
   roundedMonthlyValue: number;
   wallet: WalletSummary;
   wishlist: WishlistSummary;
+  /** Personal-budget spend up to and including the selected month. */
   ytdTotal: number;
+  /** Externally funded spend over the same window. */
+  externalYtdTotal: number;
   activityEstimates: ActivityEstimate[];
   categoryTotals: CategoryTotal[];
   monthlyTrend: PeriodSummary[];

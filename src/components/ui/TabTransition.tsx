@@ -4,39 +4,76 @@ import { AircraftMark } from "./AircraftMark";
 interface TabTransitionProps {
   /** Changing this plays the transition. */
   tabKey: string;
+  /**
+   * Position of the tab in the navigation, so the new scene enters from the
+   * side it came from. Equal or missing values enter from the right.
+   */
+  ordinal?: number;
   children: React.ReactNode;
 }
 
 /**
- * Long enough to read as a movement rather than a flicker.
+ * Timing.
  *
- * 620ms was too quick to read as a movement. 1150ms was too long once the
- * thing it was covering — a deferred panel being fetched, measured at
- * 190–370ms locally — was removed by warming those chunks in advance.
- *
- * Measured here at a median 8.3ms per frame with no frame over 20ms, so the
- * stutter people saw was the fetch, not the animation.
+ * 260ms to cover, 130ms held, 300ms to clear: 690ms end to end. Long enough to
+ * read as a movement of the whole application rather than a flicker, short
+ * enough that a person switching tabs repeatedly is never waiting on it. The
+ * cover is the fast half deliberately — the eye forgives a quick departure and
+ * notices a slow arrival, so the reveal gets the longer, eased half.
  */
-const SWEEP_MS = 720;
+const COVER_MS = 260;
+const HOLD_MS = 130;
+const CLEAR_MS = 300;
+const TOTAL_MS = COVER_MS + HOLD_MS + CLEAR_MS;
+
+type Phase = "idle" | "covering" | "clearing";
 
 /**
  * The transition between tabs.
  *
- * An aircraft crosses the panel trailing a banner, and the incoming page is
- * revealed behind it — the page arrives *with* the aircraft rather than merely
- * fading in.
+ * A navy plane sweeps across the whole application — over the sidebar, the
+ * header and the content, not merely over the panel — carrying a route line and
+ * a small aircraft along it. The outgoing page is still underneath while it
+ * covers; the incoming page is revealed as it clears, entering from the
+ * direction the navigation moved.
  *
- * The animation is keyed on the content, not on a wrapper. Code splitting broke
- * an earlier version precisely because the wrapper mounted with a loading
- * placeholder inside it: the transition played over an empty box and the real
- * content then swapped in without remounting, so nothing ever animated.
+ * Two things this must get right, both of which earlier versions got wrong:
  *
- * The whole thing is skipped under `prefers-reduced-motion`. A shape flying
- * across the screen on every navigation is exactly what that setting is for,
- * and the page still changes — it simply appears.
+ *  - **The outgoing page has to stay put while the cover arrives.** React swaps
+ *    `children` the instant the tab changes, so without freezing them the user
+ *    catches a frame or two of the *new* page before the cover hides it, and
+ *    the effect reads as a stutter rather than a departure. `heldChildren`
+ *    keeps the outgoing tree mounted until the screen is opaque.
+ *
+ *  - **The animation must not play over a loading placeholder.** Code splitting
+ *    broke a previous version exactly that way: the wrapper mounted with a
+ *    Suspense fallback inside it, the transition played over an empty box, and
+ *    the real content arrived afterwards without remounting. The panels are
+ *    warmed in advance now (see `preloadPanels` in App), and the swap happens
+ *    while the screen is covered either way.
+ *
+ * The whole thing is skipped under `prefers-reduced-motion`: a shape flying
+ * across the screen on every navigation is precisely what that setting exists
+ * for, and the page still changes — it simply appears.
  */
-export const TabTransition: React.FC<TabTransitionProps> = ({ tabKey, children }) => {
-  const [sweeping, setSweeping] = useState(false);
+export const TabTransition: React.FC<TabTransitionProps> = ({ tabKey, ordinal, children }) => {
+  const [phase, setPhase] = useState<Phase>("idle");
+  const [shownKey, setShownKey] = useState(tabKey);
+  const [direction, setDirection] = useState<"forward" | "back">("forward");
+
+  /**
+   * The tree currently on screen, and the newest one the parent has produced.
+   *
+   * The parent stops producing the outgoing tab's element the moment the tab
+   * changes, so it has to be captured on the render *before* that — which is
+   * what assigning during render (rather than in an effect) achieves.
+   */
+  const heldChildren = useRef<React.ReactNode>(children);
+  const latestChildren = useRef<React.ReactNode>(children);
+  latestChildren.current = children;
+  if (tabKey === shownKey) heldChildren.current = children;
+
+  const previousOrdinal = useRef(ordinal ?? 0);
   const firstRender = useRef(true);
 
   useEffect(() => {
@@ -44,30 +81,70 @@ export const TabTransition: React.FC<TabTransitionProps> = ({ tabKey, children }
     // someone with an animation before they have seen the app is noise.
     if (firstRender.current) {
       firstRender.current = false;
+      previousOrdinal.current = ordinal ?? 0;
       return;
     }
-    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
 
-    setSweeping(true);
-    const timer = window.setTimeout(() => setSweeping(false), SWEEP_MS);
-    return () => window.clearTimeout(timer);
-  }, [tabKey]);
+    const nextOrdinal = ordinal ?? 0;
+    setDirection(nextOrdinal >= previousOrdinal.current ? "forward" : "back");
+    previousOrdinal.current = nextOrdinal;
+
+    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) {
+      heldChildren.current = latestChildren.current;
+      setShownKey(tabKey);
+      setPhase("idle");
+      return;
+    }
+
+    setPhase("covering");
+    // Swap under the cover, at the moment the screen is fully opaque.
+    const swap = window.setTimeout(() => {
+      heldChildren.current = latestChildren.current;
+      setShownKey(tabKey);
+      setPhase("clearing");
+    }, COVER_MS + HOLD_MS);
+    const done = window.setTimeout(() => setPhase("idle"), TOTAL_MS);
+
+    return () => {
+      window.clearTimeout(swap);
+      window.clearTimeout(done);
+      // A tab changed again mid-transition: land on the newest one rather than
+      // leaving the screen showing whichever tab the cancelled timer was for.
+      heldChildren.current = latestChildren.current;
+      setShownKey(tabKey);
+    };
+  }, [tabKey, ordinal]);
+
+  const covering = phase === "covering";
+  const clearing = phase === "clearing";
 
   return (
     <div className="tab-transition">
-      {sweeping && (
-        <div className="tab-sweep" aria-hidden="true">
-          <span className="tab-sweep-route" />
-          <span className="tab-sweep-craft">
-            {/* Small, and running along the top edge. An aircraft crossing the
-                middle of the page is a cartoon, and it covers exactly what was
-                asked for. */}
-            <AircraftMark size={22} variant="solid" hull="var(--accent)" />
-          </span>
+      {phase !== "idle" && (
+        <div
+          className={`app-sweep app-sweep-${direction}${covering ? " app-sweep-covering" : ""}${
+            clearing ? " app-sweep-clearing" : ""
+          }`}
+          aria-hidden="true"
+        >
+          {/* Route, waypoints and aircraft. A flight between two points is the
+              whole metaphor: you left one place and arrived at another. */}
+          <div className="app-sweep-route">
+            <span className="app-sweep-node app-sweep-node-from" />
+            <span className="app-sweep-line" />
+            <span className="app-sweep-node app-sweep-node-to" />
+            <span className="app-sweep-craft">
+              <AircraftMark size={30} variant="solid" hull="#FFFFFF" />
+            </span>
+          </div>
         </div>
       )}
-      <div key={tabKey} className={`tab-panel${sweeping ? " tab-panel-arriving" : ""}`}>
-        {children}
+
+      <div
+        key={shownKey}
+        className={`tab-panel${clearing ? ` tab-panel-arriving tab-panel-${direction}` : ""}`}
+      >
+        {heldChildren.current}
       </div>
     </div>
   );

@@ -10,6 +10,7 @@ import {
   cumulativeForecast,
   entriesForSelectedPeriod,
   financialHealth,
+  fundingSplit,
   monthlyTrendBars,
   periodComparison,
   spendingStats,
@@ -51,6 +52,32 @@ const GRADE_COLOR: Record<string, string> = {
   Fair: "var(--warning)",
   "At risk": "var(--danger)",
 };
+
+/**
+ * One sentence under the score.
+ *
+ * A number out of 100 with nothing beside it is a grade without a report. This
+ * says what it is describing and, where the projection allows, what it means
+ * for the end of the period.
+ */
+function healthSummary(
+  score: number,
+  projectedRemaining: number | null,
+  money: (value: number | null | undefined) => string,
+): string {
+  const lead =
+    score >= 85
+      ? "Comfortably inside your limits."
+      : score >= 70
+      ? "On track, with room to absorb a surprise."
+      : score >= 50
+      ? "Workable, but the margin is thin."
+      : "Spending is outrunning the plan.";
+  if (projectedRemaining == null) return `${lead} Scored on budget pace, caps, trend and how much is committed.`;
+  return projectedRemaining < 0
+    ? `${lead} At this pace the period ends ${money(Math.abs(projectedRemaining))} over budget.`
+    : `${lead} At this pace the period ends with ${money(projectedRemaining)} unspent.`;
+}
 
 const Figure: React.FC<{
   label: string;
@@ -111,6 +138,11 @@ export const Dashboard: React.FC<{ onNavigate?: (tab: "spending" | "activities" 
 
   const isCurrent = isViewingCurrentMonth(settings);
   const money = (value: number | null | undefined) => formatDualMoney(value, settings);
+  const healthColor = health.grade ? GRADE_COLOR[health.grade] ?? "var(--accent)" : "var(--text-tertiary)";
+
+  /** Who paid for this period's transactions. See domain/funding.ts. */
+  const allPeriodEntries = useMemo(() => entriesForSelectedPeriod(snapshot, settings), [snapshot, settings]);
+  const funding = useMemo(() => fundingSplit(allPeriodEntries, snapshot), [allPeriodEntries, snapshot]);
 
   const trendBars = useMemo(
     () =>
@@ -270,9 +302,10 @@ export const Dashboard: React.FC<{ onNavigate?: (tab: "spending" | "activities" 
                 label={health.grade ?? "Not enough data"}
                 caption={health.score != null ? "out of 100" : undefined}
                 ariaLabel={`Budget health ${health.score != null ? Math.round(health.score) : "unavailable"} out of 100`}
-                size={210}
+                size={230}
                 thickness={16}
-                color={health.grade ? GRADE_COLOR[health.grade] ?? "var(--accent)" : "var(--text-tertiary)"}
+                color={healthColor}
+                labelColor={healthColor}
                 scaleLabels={["0", "100"]}
               />
 
@@ -280,6 +313,13 @@ export const Dashboard: React.FC<{ onNavigate?: (tab: "spending" | "activities" 
                 <h2 className="text-title" style={{ margin: 0 }}>
                   Budget health · {periodLabel(settings)}
                 </h2>
+                {/* One sentence saying what the number means, so the gauge is
+                    not a score with no explanation attached to it. */}
+                {health.score != null && (
+                  <p className="text-note" style={{ margin: 0 }}>
+                    {healthSummary(health.score, pacing?.projectedRemaining ?? null, money)}
+                  </p>
+                )}
 
                 {health.factors.length > 0 ? (
                   <div style={{ display: "grid", gap: 10 }}>
@@ -362,6 +402,14 @@ export const Dashboard: React.FC<{ onNavigate?: (tab: "spending" | "activities" 
                 {stats.count} transaction{stats.count !== 1 ? "s" : ""}
                 {stats.average != null ? ` · ${money(stats.average)} average` : ""}
               </div>
+              {/* Money somebody else spent is recorded but not charged here, so
+                  the card says so rather than leaving a gap between this figure
+                  and the transaction list. */}
+              {funding.externalCount > 0 && (
+                <div className="text-caption" style={{ marginTop: 6, color: "var(--warning)" }}>
+                  Plus {money(funding.external)} paid by others — recorded, not charged to your budget.
+                </div>
+              )}
             </CardBody>
           </Card>
 
@@ -583,7 +631,15 @@ export const Dashboard: React.FC<{ onNavigate?: (tab: "spending" | "activities" 
                   value={money(calculation.wishlist.activeTotal)}
                   detail={`${calculation.wishlist.activeCount} active`}
                 />
-                <Figure label="YTD spend" value={money(calculation.ytdTotal)} />
+                <Figure
+                  label="YTD spend"
+                  value={money(calculation.ytdTotal)}
+                  detail={
+                    calculation.externalYtdTotal > 0
+                      ? `${money(calculation.externalYtdTotal)} paid by others`
+                      : undefined
+                  }
+                />
               </div>
             </div>
           </CardBody>

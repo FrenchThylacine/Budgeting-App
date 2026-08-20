@@ -2,6 +2,7 @@ import { monthName, weeksInIsoYear, isMonthClosed, isWeekClosed } from "./dates"
 import { normalizeAmount, roundAmount } from "./currency";
 import { monthlyEstimateFromSchedule, yearlyEstimateFromSchedule } from "./schedule";
 import { findSeedCategory } from "./seedCategories";
+import { externalEntries, personalEntries } from "./funding";
 import type {
   Activity,
   ActivityEstimate,
@@ -64,14 +65,22 @@ export function calculateYear(snapshot: BudgetSnapshot, now = new Date()): YearC
     includedBudget,
     selectedMonthSpend,
     selectedWeekSpend,
-    totalSpend: sum(record.spendingEntries.map((entry) => normalizeEntry(entry, snapshot))),
+    // Personal-budget figures. Externally funded spend is reported separately
+    // below rather than folded in — see domain/funding.ts.
+    totalSpend: sum(personalEntries(record.spendingEntries).map((entry) => normalizeEntry(entry, snapshot))),
+    externalSpend: sum(externalEntries(record.spendingEntries).map((entry) => normalizeEntry(entry, snapshot))),
     delta,
     rolloverDelta: delta,
     roundedMonthlyValue: roundAmount(includedBudget, snapshot.settings.roundingRule),
     wallet: summarizeWallet(record.walletEntries, snapshot),
     wishlist: summarizeWishlist(record.wishlistItems, snapshot),
     ytdTotal: sum(
-      record.spendingEntries
+      personalEntries(record.spendingEntries)
+        .filter((entry) => entry.month <= month)
+        .map((entry) => normalizeEntry(entry, snapshot)),
+    ),
+    externalYtdTotal: sum(
+      externalEntries(record.spendingEntries)
         .filter((entry) => entry.month <= month)
         .map((entry) => normalizeEntry(entry, snapshot)),
     ),
@@ -349,11 +358,10 @@ function summarizeCategories(
   selectedMonth: number,
 ): CategoryTotal[] {
   const totals = new Map<string, number>();
-  const filteredEntries = entries.filter((item) => {
-    if (item.month !== selectedMonth) return false;
-    if (snapshot.settings.ignoreNonBudgetSpending && (item.source ?? "personal") !== "personal") return false;
-    return true;
-  });
+  // Category totals are budget figures, so externally funded spend is out —
+  // otherwise a €200 dinner someone else paid would show as €200 charged to
+  // "Eating out" and blow through that category's cap.
+  const filteredEntries = personalEntries(entries).filter((item) => item.month === selectedMonth);
   for (const entry of filteredEntries) {
     totals.set(entry.categoryId, (totals.get(entry.categoryId) ?? 0) + normalizeEntry(entry, snapshot));
   }
@@ -400,26 +408,25 @@ function summarizePeriod({
       pilotingTotal: null,
       personalTotal: null,
       externalTotal: null,
+      transactionTotal: null,
+      externalCount: 0,
       entryCount: 0,
       isClosed,
     };
   }
 
-  const activeEntries = snapshot.settings.ignoreNonBudgetSpending
-    ? entries.filter((entry) => (entry.source ?? "personal") === "personal")
-    : entries;
+  // `total` is the personal-budget figure, and only that. Money somebody else
+  // paid is kept in full below, never added to this.
+  const budgetEntries = personalEntries(entries);
+  const externallyFunded = externalEntries(entries);
 
-  const generalEntries = activeEntries.filter((entry) => !entry.isPiloting);
-  const pilotingEntries = activeEntries.filter((entry) => entry.isPiloting);
+  const generalEntries = budgetEntries.filter((entry) => !entry.isPiloting);
+  const pilotingEntries = budgetEntries.filter((entry) => entry.isPiloting);
   const generalTotal = sum(generalEntries.map((entry) => normalizeEntry(entry, snapshot)));
   const pilotingTotal = sum(pilotingEntries.map((entry) => normalizeEntry(entry, snapshot)));
   const total = generalTotal + pilotingTotal;
 
-  // Separate personal vs external/shared spend for analytics clarity
-  const personalEntries = entries.filter((entry) => (entry.source ?? "personal") === "personal");
-  const externalEntries = entries.filter((entry) => (entry.source ?? "personal") !== "personal");
-  const personalTotal = sum(personalEntries.map((entry) => normalizeEntry(entry, snapshot)));
-  const externalTotal = sum(externalEntries.map((entry) => normalizeEntry(entry, snapshot)));
+  const externalTotal = sum(externallyFunded.map((entry) => normalizeEntry(entry, snapshot)));
 
   return {
     label,
@@ -430,8 +437,13 @@ function summarizePeriod({
     total,
     generalTotal,
     pilotingTotal,
-    personalTotal,
+    // The same number as `total`, named for the split display. Kept distinct so
+    // a reader of `personalTotal` never has to know that `total` means the same
+    // thing.
+    personalTotal: total,
     externalTotal,
+    transactionTotal: total + externalTotal,
+    externalCount: externallyFunded.length,
     entryCount: entries.length,
     isClosed,
   };

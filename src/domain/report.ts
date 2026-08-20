@@ -8,6 +8,7 @@ import {
   categoryBreakdown,
   entriesForSelectedPeriod,
   financialHealth,
+  fundingSplit,
   periodComparison,
   spendingStats,
   type CategoryStat,
@@ -50,7 +51,9 @@ export function buildPeriodReport(
   const scoped: BudgetSnapshot = { ...snapshot, settings };
 
   const calc = calculateYear(scoped, now);
-  const entries = budgetRelevantEntries(entriesForSelectedPeriod(scoped, settings), settings);
+  const allEntries = entriesForSelectedPeriod(scoped, settings);
+  const entries = budgetRelevantEntries(allEntries, settings);
+  const funding = fundingSplit(allEntries, scoped);
   const stats = spendingStats(entries, scoped);
   const pacing = budgetPacing(scoped, entries, now);
   const categories = categoryBreakdown(entries, scoped);
@@ -66,13 +69,30 @@ export function buildPeriodReport(
       : String(settings.selectedYear);
 
   const summary: ReportSection[] = [
-    { label: "Total spending", value: stats.total != null ? money(stats.total) : "No data recorded" },
+    {
+      label: "Total spending",
+      value: stats.total != null ? money(stats.total) : "No data recorded",
+      detail: funding.externalCount > 0 ? "Charged to your budget" : undefined,
+    },
     { label: "Transactions", value: String(stats.count) },
     { label: "Average transaction", value: stats.average != null ? money(stats.average) : "—" },
     { label: "Largest transaction", value: stats.largest != null ? money(stats.largest) : "—" },
     { label: "Recurring", value: money(stats.recurringTotal), detail: stats.recurringShare != null ? `${stats.recurringShare.toFixed(1)}% of spend` : undefined },
     { label: "One-off", value: money(stats.oneOffTotal) },
   ];
+
+  // Named only when there is something to name, so an ordinary month is not
+  // padded with a line reading "—".
+  if (funding.externalCount > 0) {
+    summary.push(
+      {
+        label: "Paid by others",
+        value: money(funding.external),
+        detail: `${funding.externalCount} transaction${funding.externalCount === 1 ? "" : "s"}, outside the budget`,
+      },
+      { label: "All transactions", value: money(funding.transactions), detail: "Personal and external together" },
+    );
+  }
 
   if (pacing) {
     summary.push(
@@ -112,6 +132,15 @@ export function buildPeriodReport(
   }
   if (stats.total == null) {
     notes.push("No spending was recorded for this period. Missing data is reported as unavailable, not as zero.");
+  }
+  if (funding.externalCount > 0) {
+    notes.push(
+      `${money(funding.external)} across ${funding.externalCount} transaction${
+        funding.externalCount === 1 ? " was" : "s were"
+      } paid by someone else. ${
+        funding.externalCount === 1 ? "It is" : "They are"
+      } recorded at full value and excluded from the budget, so every figure above is what this budget actually spent.`,
+    );
   }
 
   return {
