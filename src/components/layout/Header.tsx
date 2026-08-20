@@ -53,12 +53,17 @@ export const Header: React.FC<{
    * where "now" actually is — otherwise a view of March looks exactly like
    * today in March. Minute resolution rather than seconds: a ticking second
    * hand is a re-render per second for a number nobody is reading.
+   *
+   * The timer is not merely hidden when the clock is off — it is never
+   * started, so the setting removes the re-render rather than the sight of it.
    */
+  const liveClock = snapshot.settings.liveClockEnabled !== false;
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
+    if (!liveClock) return;
     const timer = window.setInterval(() => setNow(new Date()), 60_000);
     return () => window.clearInterval(timer);
-  }, []);
+  }, [liveClock]);
 
   const periodTitle = periodLabel(snapshot.settings);
   const atCurrentPeriod = isAtCurrentPeriod(snapshot.settings);
@@ -72,8 +77,8 @@ export const Header: React.FC<{
 
   return (
     <header className="top-header">
-      <div>
-        <div className="text-footnote" style={{ marginBottom: 4 }}>
+      <div className="header-identity">
+        <div className="text-footnote header-eyebrow" style={{ marginBottom: 4 }}>
           {atCurrentPeriod ? "Current period" : "Viewing"}
         </div>
         <h1 className="text-display" style={{ fontSize: "clamp(1.5rem, 3vw, 2rem)" }}>
@@ -106,8 +111,12 @@ export const Header: React.FC<{
           </div>
         )}
 
+        {/* Reference rather than answer, so it is the first thing a phone
+            drops: on a 390px screen it was one more line between the user and
+            the figures they opened the app for, and it says nothing they did
+            not just do themselves. */}
         {latestAudit && (
-          <div className="text-caption" style={{ marginTop: 6, display: "flex", alignItems: "center", gap: 6 }}>
+          <div className="text-caption header-audit">
             <Clock size={12} /> Last: {latestAudit.summary}
           </div>
         )}
@@ -158,7 +167,8 @@ export const Header: React.FC<{
               identical to the same month lived through at the time. */}
           <div className="period-now">
             <span className="text-caption">
-              {todayLabel} · {clockLabel}
+              {todayLabel}
+              {liveClock ? ` · ${clockLabel}` : ""}
             </span>
             <button
               className="btn btn-secondary btn-sm"

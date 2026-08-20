@@ -1624,3 +1624,155 @@
   .tab-panel-frame.period-forward,
   .tab-panel-frame.period-back { animation: none; }
 }
+
+/* ─── The header, and the identity on a phone ─────────────────────────────────
+   On a desktop the header is a heading with a period widget beside it, and the
+   navy identity lives in the sidebar. A phone has no sidebar, so before this
+   the entire application was a white page with a navy button on it — the
+   identity was, in practice, desktop-only.
+
+   The header therefore becomes the identity on a small screen: a deep navy
+   band running the full width of the viewport, white type, and the signature
+   red as a hairline at its foot. It also earns its space back, because the
+   band replaces four stacked rows of grey text with one compact block. */
+
+.header-audit {
+  margin-top: 6px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.header-audit > span,
+.header-audit {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 900px) {
+  .top-header {
+    /* Full-bleed: the band is the top of the screen, not a card floating
+       inside the page's padding. */
+    margin: calc(var(--space-4) * -1) calc(var(--space-4) * -1) var(--space-5);
+    padding: calc(var(--space-5) + 4px) var(--space-4) var(--space-4);
+    gap: var(--space-4);
+    background:
+      radial-gradient(120% 140% at 88% -30%, rgba(46, 90, 168, 0.75) 0%, rgba(0, 33, 87, 0) 60%),
+      linear-gradient(165deg, #002157 0%, #041B41 100%);
+    /* The red is a flash at the foot of the band, not a block of colour. */
+    border-bottom: 2px solid var(--brand-mark-to);
+    color: #FFFFFF;
+  }
+
+  /* The band supplies its own contrast, so the tokens inside it are
+     overridden rather than the tokens themselves being redefined — anything
+     outside the band keeps the theme it had. */
+  .top-header .text-display,
+  .top-header .text-title { color: #FFFFFF; }
+
+  .top-header .text-caption,
+  .top-header .text-footnote { color: rgba(226, 235, 250, 0.78); }
+
+  .top-header .header-eyebrow { color: rgba(226, 235, 250, 0.62); }
+
+  /* A ghost button on navy was navy-on-navy. */
+  .top-header .btn-ghost {
+    color: #FFFFFF;
+    border-color: rgba(255, 255, 255, 0.22);
+  }
+
+  .top-header .btn-ghost:hover { background: rgba(255, 255, 255, 0.12); }
+
+  .top-header .btn-primary {
+    background: #FFFFFF;
+    color: #002157;
+    border-color: transparent;
+  }
+
+  /* The one thing on the band that must still read as itself: sync state is a
+     fact about the user's data, and recolouring it would flatten the
+     difference between "saved" and "not saved". */
+  .top-header .sync-status {
+    background: rgba(255, 255, 255, 0.12);
+    border-color: rgba(255, 255, 255, 0.25);
+  }
+
+  /* Reference material, dropped where the screen is the scarcest resource. */
+  .header-audit { display: none; }
+
+  /* One row where the width allows it, reclaiming a row of a short screen.
+     The period trigger keeps a floor of 150px and wraps to its own line below
+     that: with `nowrap` and no minimum it collapsed at 320px to an empty white
+     circle with its label and icon squeezed out — a control that is there but
+     says nothing is worse than one on a second row. */
+  .header-actions {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .header-actions > *:first-child { flex: 1 1 150px; min-width: 150px; }
+  .top-header .period-trigger { width: 100%; }
+  .top-header .period-trigger-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .header-buttons { flex: 1 1 auto; flex-wrap: nowrap; justify-content: flex-end; }
+}
+
+/* A navy bar under a navy band is one bar too many, so the tab strip keeps the
+   theme's surface and marks the active tab in navy instead. */
+@media (max-width: 900px) {
+  .mobile-nav { border-top-color: var(--border-strong); }
+  .mobile-nav-item.active { color: var(--accent); }
+}
+
+/* ─── Tracked currencies ──────────────────────────────────────────────────── */
+
+.currency-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.currency-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  font-size: var(--text-caption);
+  font-weight: var(--weight-semibold);
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  /* A 44px target on a phone; the padding alone gives about 32. */
+  min-height: 34px;
+  transition: border-color var(--duration-fast) var(--ease-out),
+              background var(--duration-fast) var(--ease-out),
+              color var(--duration-fast) var(--ease-out);
+}
+
+.currency-chip:hover:not(:disabled) { border-color: var(--accent); color: var(--text-primary); }
+
+.currency-chip.active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+/* Locked rather than merely disabled: it is on, and it cannot be turned off,
+   which is a different state from "unavailable". */
+.currency-chip.locked {
+  cursor: default;
+  opacity: 1;
+  border-style: dashed;
+}
+
+.currency-chip:disabled:not(.locked) { opacity: 0.45; cursor: not-allowed; }
+
+.currency-chip-symbol { color: var(--text-tertiary); font-weight: var(--weight-medium); }
+.currency-chip.active .currency-chip-symbol { color: inherit; }
+
+.currency-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }

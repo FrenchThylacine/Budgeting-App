@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
-import { CURRENCY_OPTIONS, formatMoney, normalizeAmount } from "../../domain/currency";
+import { currencyOptionsFor, formatMoney, normalizeAmount } from "../../domain/currency";
 import { calculateYear } from "../../domain/calculations";
 import { monthName, formatDateTime } from "../../domain/dates";
 import { useBudgetStore } from "../../store/budgetStore";
@@ -139,7 +139,7 @@ export const WalletPanel: React.FC = () => {
               value={currency}
               onChange={(e) => setCurrency(e.target.value as CurrencyCode)}
             >
-              {CURRENCY_OPTIONS.map((item) => (
+              {currencyOptionsFor(snapshot.settings, currency).map((item) => (
                 <option key={item}>{item}</option>
               ))}
             </select>

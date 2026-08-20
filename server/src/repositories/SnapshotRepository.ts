@@ -8,6 +8,7 @@ import type {
   WalletEntry,
   BudgetCategory,
   MonthCloseRecord,
+  MonthlyNote,
   BudgetApproval,
   AuditLog,
   YearRecord,
@@ -29,6 +30,43 @@ interface PendingQuery {
  * a far worse failure than silently losing an exception, and the activity still
  * has its recurring rule.
  */
+/**
+ * Notes against months, stored as JSONB on the year row.
+ *
+ * The driver hands back an already-parsed object for a JSONB column, but the
+ * local node-postgres adapter and older rows can present a string, so both are
+ * accepted. A malformed value becomes "no notes" rather than throwing: one bad
+ * row must not make a whole year unloadable — the same rule the schedule and
+ * weekday parsers follow.
+ */
+function parseMonthlyNotes(raw: unknown): Record<number, MonthlyNote> {
+  if (raw == null) return {};
+  let value: unknown = raw;
+  if (typeof raw === "string") {
+    if (raw.length === 0) return {};
+    try {
+      value = JSON.parse(raw);
+    } catch {
+      return {};
+    }
+  }
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return {};
+
+  const notes: Record<number, MonthlyNote> = {};
+  for (const [key, entry] of Object.entries(value as Record<string, unknown>)) {
+    const month = Number(key);
+    if (!Number.isInteger(month) || month < 1 || month > 12) continue;
+    const note = entry as Partial<MonthlyNote> | null;
+    if (!note || typeof note.note !== "string" || note.note.length === 0) continue;
+    notes[month] = {
+      month,
+      note: note.note,
+      updatedAt: typeof note.updatedAt === "string" ? note.updatedAt : new Date().toISOString(),
+    };
+  }
+  return notes;
+}
+
 function parseScheduleOverrides(raw: unknown): ScheduleOverride[] | undefined {
   if (typeof raw !== "string" || raw.length === 0) return undefined;
   try {
@@ -382,15 +420,27 @@ export class SnapshotRepository {
     if (!yearInfo.exists) {
       writes.push({
         text: `
-        INSERT INTO years (id, snapshot_id, year, created_at, updated_at)
-        VALUES ($1, $2, $3, $4, $5)
-        ON CONFLICT (id) DO UPDATE SET updated_at = EXCLUDED.updated_at
+        INSERT INTO years (id, snapshot_id, year, created_at, updated_at, monthly_notes)
+        VALUES ($1, $2, $3, $4, $5, $6)
+        ON CONFLICT (id) DO UPDATE SET
+          updated_at = EXCLUDED.updated_at,
+          monthly_notes = EXCLUDED.monthly_notes
         WHERE years.snapshot_id = EXCLUDED.snapshot_id
       `,
-        params: [yearId, snapshotId, yearRecord.year, yearRecord.createdAt, now],
+        params: [
+          yearId,
+          snapshotId,
+          yearRecord.year,
+          yearRecord.createdAt,
+          now,
+          JSON.stringify(yearRecord.monthlyNotes ?? {}),
+        ],
       });
     } else {
-      writes.push({ text: "UPDATE years SET updated_at = $1 WHERE id = $2", params: [now, yearId] });
+      writes.push({
+        text: "UPDATE years SET updated_at = $1, monthly_notes = $2 WHERE id = $3",
+        params: [now, JSON.stringify(yearRecord.monthlyNotes ?? {}), yearId],
+      });
     }
 
     // Activities - Upsert and delete missing
@@ -402,10 +452,10 @@ export class SnapshotRepository {
          price_per_session, price_per_purchase, price_per_month, estimated_cost, yearly_estimate,
          active, visible, seasonal_tag, "order", notes,
          icon, color, cost_model, sessions_per_month, weekdays, day_of_month, start_date,
-         schedule_overrides,
+         next_renewal_date, schedule_overrides,
          created_at, updated_at)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17,
-                $18, $19, $20, $21, $22, $23, $24, $25, $26, $27)
+                $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28)
         ON CONFLICT (id) DO UPDATE SET
           name = EXCLUDED.name,
           category_id = EXCLUDED.category_id,
@@ -429,6 +479,7 @@ export class SnapshotRepository {
           weekdays = EXCLUDED.weekdays,
           day_of_month = EXCLUDED.day_of_month,
           start_date = EXCLUDED.start_date,
+          next_renewal_date = EXCLUDED.next_renewal_date,
           schedule_overrides = EXCLUDED.schedule_overrides,
           updated_at = EXCLUDED.updated_at
         WHERE activities.year_id = EXCLUDED.year_id
@@ -460,6 +511,7 @@ export class SnapshotRepository {
           activity.weekdays && activity.weekdays.length > 0 ? JSON.stringify(activity.weekdays) : null,
           activity.dayOfMonth ?? null,
           activity.startDate ?? null,
+          activity.nextRenewalDate ?? null,
           // Overrides are a small list read as a unit with the activity, so
           // JSON keeps the schema simple without a join table — the same
           // reasoning as weekdays above.
@@ -699,7 +751,9 @@ export class SnapshotRepository {
       wishlistItems: wishlistItems.map((i) => this.parseWishlistItem(i)),
       walletEntries: walletEntries.map((e) => this.parseWalletEntry(e, year)),
       closedMonths: closedMonths.map((r) => this.parseMonthCloseRecord(r, year)),
-      monthlyNotes: {},
+      // Was hardcoded to `{}`, so a note written against a month survived
+      // until the next read from the server and then vanished.
+      monthlyNotes: parseMonthlyNotes(yearRow.monthly_notes),
       createdAt: yearRow.created_at,
       updatedAt: yearRow.updated_at,
     };
@@ -815,6 +869,7 @@ export class SnapshotRepository {
       weekdays: parseWeekdays(row.weekdays),
       dayOfMonth: row.day_of_month != null ? Number(row.day_of_month) : undefined,
       startDate: row.start_date ?? undefined,
+      nextRenewalDate: row.next_renewal_date ?? undefined,
       scheduleOverrides: parseScheduleOverrides(row.schedule_overrides),
     };
   }

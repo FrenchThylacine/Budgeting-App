@@ -25,7 +25,6 @@ export function calculateYear(snapshot: BudgetSnapshot, now = new Date()): YearC
   const month = snapshot.settings.selectedMonth;
   const week = snapshot.settings.selectedWeek;
   const record = snapshot.years[String(year)] ?? emptyYearRecord(year, now.toISOString());
-  const categoryMap = new Map(snapshot.categories.map((category) => [category.id, category]));
 
   const activityEstimates = record.activities
     .filter((activity) => activity.active)
@@ -85,7 +84,6 @@ export function calculateYear(snapshot: BudgetSnapshot, now = new Date()): YearC
         .map((entry) => normalizeEntry(entry, snapshot)),
     ),
     activityEstimates,
-    categoryTotals: summarizeCategories(record.spendingEntries, snapshot.categories, categoryMap, snapshot, month),
     monthlyTrend,
     weeklyTrend,
   };
@@ -350,13 +348,24 @@ export function emptyYearRecord(year: number, timestamp = new Date().toISOString
   };
 }
 
-function summarizeCategories(
+/**
+ * Category totals for one month of a year record.
+ *
+ * This used to be computed inside `calculateYear` on every recalculation and
+ * read by nothing: the dashboard, the analytics page and the reports all go
+ * through `categoryBreakdown` in `domain/analytics.ts`, which is period-aware
+ * and tracks caps. It is exported rather than deleted because it is the
+ * cheapest correct answer when a caller already has a year record and wants
+ * one month's totals, and because the funding rule below is worth having in
+ * exactly one place.
+ */
+export function summarizeCategories(
   entries: SpendingEntry[],
   categories: BudgetCategory[],
-  categoryMap: Map<string, BudgetCategory>,
   snapshot: BudgetSnapshot,
   selectedMonth: number,
 ): CategoryTotal[] {
+  const categoryMap = new Map(categories.map((category) => [category.id, category]));
   const totals = new Map<string, number>();
   // Category totals are budget figures, so externally funded spend is out —
   // otherwise a €200 dinner someone else paid would show as €200 charged to

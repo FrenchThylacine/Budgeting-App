@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { Pencil, Plus, ShoppingBag, Trash2, X } from "lucide-react";
-import { CURRENCY_OPTIONS, formatMoney } from "../../domain/currency";
+import { currencyOptionsFor, formatMoney } from "../../domain/currency";
 import { monthFromDateInput, todayDateInput, weekFromDateInput, weekYear } from "../../domain/dates";
 import { selectedIsoWeekYear } from "../../domain/periods";
 import { FUNDING_SOURCES, fundingLabel, isExternallyFunded } from "../../domain/funding";
@@ -363,7 +363,7 @@ export const SpendingPanel: React.FC = () => {
                 value={draft.currency}
                 onChange={(e) => setDraft({ ...draft, currency: e.target.value as CurrencyCode })}
               >
-                {CURRENCY_OPTIONS.map((currency) => (
+                {currencyOptionsFor(snapshot.settings, draft.currency).map((currency) => (
                   <option key={currency}>{currency}</option>
                 ))}
               </select>

@@ -1,5 +1,6 @@
-import type { CurrencyCode, CurrencyDisplayMode, ExchangeRates, RoundingRule, Settings } from "./types";
+import type { BudgetSnapshot, CurrencyCode, CurrencyDisplayMode, ExchangeRates, RoundingRule, Settings } from "./types";
 
+/** Every currency the application knows how to name, symbolise and convert. */
 export const CURRENCY_OPTIONS: CurrencyCode[] = ["EUR", "USD", "LBP", "GBP", "CAD", "AUD", "JPY", "TRY", "SAR", "AED"];
 
 export const CURRENCY_SYMBOLS: Record<CurrencyCode, string> = {
@@ -14,6 +15,68 @@ export const CURRENCY_SYMBOLS: Record<CurrencyCode, string> = {
   SAR: "SAR",
   AED: "AED",
 };
+
+// ─── Which currencies this budget actually deals in ─────────────────────────
+
+/**
+ * The currencies offered in the app's dropdowns.
+ *
+ * Every editor used to list all ten, which is nine wrong answers for someone
+ * who only ever spends in two. `settings.trackedCurrencies` narrows that to a
+ * chosen set; absent, the full list applies, so nothing changes for a budget
+ * that has never touched the setting.
+ *
+ * The base currency is always included whatever the stored list says: a budget
+ * whose display currency is not selectable is a budget that cannot state its
+ * own totals.
+ */
+export function trackedCurrencies(settings: Pick<Settings, "trackedCurrencies" | "baseCurrency">): CurrencyCode[] {
+  const stored = settings.trackedCurrencies;
+  const chosen = Array.isArray(stored) && stored.length > 0
+    ? stored.filter((code) => CURRENCY_OPTIONS.includes(code))
+    : CURRENCY_OPTIONS;
+  const withBase = chosen.includes(settings.baseCurrency) ? chosen : [settings.baseCurrency, ...chosen];
+  // Presented in the canonical order rather than the order they were added, so
+  // the dropdown does not reshuffle itself when the set changes.
+  return CURRENCY_OPTIONS.filter((code) => withBase.includes(code));
+}
+
+/**
+ * The tracked list, plus whatever `current` is.
+ *
+ * A record keeps its own currency even after that currency stops being
+ * tracked — the money was spent in it, and rewriting the field would falsify
+ * the record. A `<select>` whose value is not among its options silently shows
+ * a different one, so the record's own currency is always offered while it is
+ * being edited. Exactly the treatment archived categories get.
+ */
+export function currencyOptionsFor(
+  settings: Pick<Settings, "trackedCurrencies" | "baseCurrency">,
+  current?: CurrencyCode | null,
+): CurrencyCode[] {
+  const tracked = trackedCurrencies(settings);
+  if (current && !tracked.includes(current)) return [...tracked, current];
+  return tracked;
+}
+
+/**
+ * Currencies this budget has actually recorded something in.
+ *
+ * Used to refuse an untracking that would orphan real data, and to say which
+ * records are in the way. Covers every store of money in a snapshot:
+ * activities, transactions, wishlist items and wallet entries, plus the two
+ * currencies the settings themselves name.
+ */
+export function currenciesInUse(snapshot: BudgetSnapshot): Set<CurrencyCode> {
+  const used = new Set<CurrencyCode>([snapshot.settings.baseCurrency, snapshot.settings.monthlyBudgetCurrency]);
+  for (const record of Object.values(snapshot.years)) {
+    for (const activity of record.activities) used.add(activity.currency);
+    for (const entry of record.spendingEntries) used.add(entry.currency);
+    for (const item of record.wishlistItems) used.add(item.currency);
+    for (const entry of record.walletEntries) used.add(entry.currency);
+  }
+  return used;
+}
 
 export function parseAmount(value: unknown): number | null {
   if (typeof value === "number" && Number.isFinite(value)) return value;

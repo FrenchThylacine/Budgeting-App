@@ -59,6 +59,11 @@ export async function initializeSchema(
       year INTEGER NOT NULL,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL,
+      -- Notes against a month of this year, keyed by month number. At most
+      -- twelve, always read with the year and never queried across years, so a
+      -- JSONB column beats a table and a join. Migration 011 adds it to
+      -- databases created before this line existed.
+      monthly_notes JSONB NOT NULL DEFAULT '{}'::jsonb,
       FOREIGN KEY(snapshot_id)
         REFERENCES snapshots(id)
         ON DELETE CASCADE,
@@ -97,6 +102,10 @@ export async function initializeSchema(
       weekdays TEXT,
       day_of_month INTEGER,
       start_date TEXT,
+      -- A renewal date the user knows and the rule cannot derive. Display
+      -- only: it overrides the next date shown, never a cost. Migration 012
+      -- adds it to databases created before this line existed.
+      next_renewal_date TEXT,
       -- One-off exceptions to the recurring rule, as a JSON array. Safe to
       -- declare here as well as in migration 008: nothing in this file
       -- references it, so an existing database that lacks it is unaffected.

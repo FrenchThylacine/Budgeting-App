@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowDown, ArrowUp, Copy, Eye, EyeOff, GripVertical, Pencil, Plus, Trash2 } from "lucide-react";
-import { CURRENCY_OPTIONS, formatMoney } from "../../domain/currency";
+import { currencyOptionsFor, formatMoney } from "../../domain/currency";
 import { SwipeRow } from "../ui/SwipeRow";
 import { gesturesFor } from "../../domain/gestures";
 import { AdvancedFields, EditorSheet } from "../ui/EditorSheet";
@@ -13,6 +13,7 @@ import {
   hasSchedule,
   nextOccurrences,
   occurrencesInMonth,
+  parseLocalDate,
 } from "../../domain/schedule";
 import type { Activity, CostModel, IsoWeekday, RecurrenceType, SwipeActionId } from "../../domain/types";
 import { useBudgetStore } from "../../store/budgetStore";
@@ -153,6 +154,23 @@ export const ActivityPanel: React.FC = () => {
 
   const preview = useMemo(() => buildPreview(form, editing, year, month), [form, editing, year, month]);
 
+  /**
+   * What the renewal date is currently doing, said where it is entered.
+   *
+   * Three states worth distinguishing: none set (the rule decides), set and
+   * ahead (it wins), and set but already past (it is ignored, and saying so is
+   * the difference between a stale field and a broken feature).
+   */
+  const renewalHint = (() => {
+    const parsed = parseLocalDate(form.nextRenewalDate);
+    if (!parsed) return "Optional. Leave empty to let the schedule decide the next date.";
+    const today = new Date();
+    if (parsed < new Date(today.getFullYear(), today.getMonth(), today.getDate())) {
+      return "This date has passed, so it is ignored and the schedule decides again. Set the next one, or clear it.";
+    }
+    return "Overrides the next date in the upcoming timeline. It never changes what the activity costs.";
+  })();
+
   const draftAccent = form.color || "";
 
   return (
@@ -265,7 +283,7 @@ export const ActivityPanel: React.FC = () => {
                   value={form.currency}
                   onChange={(event) => patch({ currency: event.target.value as ActivityDraft["currency"] })}
                 >
-                  {CURRENCY_OPTIONS.map((currency) => (
+                  {currencyOptionsFor(snapshot.settings, form.currency as ActivityDraft["currency"]).map((currency) => (
                     <option key={currency}>{currency}</option>
                   ))}
                 </select>
@@ -456,6 +474,32 @@ export const ActivityPanel: React.FC = () => {
                 </div>
               )}
             </div>
+
+            {/* Not inside the schedule group: it applies whether or not there
+                is a schedule, and it is most useful precisely where there is
+                not one — an annual subscription that renews on the day it was
+                bought, which no recurrence rule can know. */}
+            <FieldGroup title="Next renewal">
+              <Field
+                label="Renews on"
+                span
+                hint={renewalHint}
+              >
+                <input
+                  className="input"
+                  type="date"
+                  value={form.nextRenewalDate}
+                  onChange={(event) => patch({ nextRenewalDate: event.target.value })}
+                />
+              </Field>
+              {form.nextRenewalDate && (
+                <Field label="Clear it" group>
+                  <Button type="button" variant="ghost" size="sm" onClick={() => patch({ nextRenewalDate: "" })}>
+                    Use the schedule instead
+                  </Button>
+                </Field>
+              )}
+            </FieldGroup>
 
             <AdvancedFields label="Season, notes and visibility">
             <FieldGroup title="Details">

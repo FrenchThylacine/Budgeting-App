@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { calculateRolloverDelta, createNextYearRecord } from "../domain/calculations";
-import { monthFromDateInput, todayDateInput, weekFromDateInput } from "../domain/dates";
+import { monthFromDateInput, monthName, todayDateInput, weekFromDateInput } from "../domain/dates";
 import { isUsableAmount } from "../domain/wishlist";
 import type { WishlistLinkResult, WishlistPurchaseOverrides } from "../domain/wishlist";
 import type {
@@ -141,6 +141,15 @@ interface BudgetStore {
   removeWalletEntry: (id: string) => void;
   closeMonth: (year: number, month: number, applyRollover: boolean) => void;
   recordBudgetApproval: (approval: Omit<BudgetApproval, "id" | "createdAt" | "decidedAt">) => void;
+  /**
+   * A note against one month of one year.
+   *
+   * `YearRecord.monthlyNotes` has existed as a type since the beginning with
+   * no action and no interface, so it was carried through every save and read
+   * by nothing. An empty note removes the entry rather than storing a blank
+   * one, so "no note" is one state rather than two.
+   */
+  setMonthlyNote: (year: number, month: number, note: string) => void;
   applySeasonalPreset: (presetId: string) => void;
   applyScenarioPreset: (presetId: string) => void;
   addScenarioPreset: (preset: Omit<ScenarioPreset, "id">) => void;
@@ -847,6 +856,29 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
       "settings",
       approval.status === "approved" ? "Approved suggested monthly budget." : "Rejected suggested monthly budget.",
       approval,
+    );
+  },
+
+  setMonthlyNote: (year, month, note) => {
+    const trimmed = note.trim();
+    commit(
+      set,
+      get,
+      (snapshot) => {
+        const record = snapshot.years[String(year)];
+        if (!record) return;
+        if (!record.monthlyNotes) record.monthlyNotes = {};
+        if (trimmed) {
+          record.monthlyNotes[month] = { month, note: trimmed, updatedAt: new Date().toISOString() };
+        } else {
+          delete record.monthlyNotes[month];
+        }
+      },
+      "settings",
+      trimmed
+        ? `Noted against ${monthName(month)} ${year}.`
+        : `Cleared the note on ${monthName(month)} ${year}.`,
+      { year, month },
     );
   },
 

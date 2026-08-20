@@ -34,6 +34,81 @@ function validateSnapshotPayload(snapshot: unknown): void {
   }
 }
 
+/**
+ * Settings a client is allowed to PATCH, and what each one must be.
+ *
+ * The route used to spread `req.body` straight into the stored settings. That
+ * accepted any key with any value: `baseCurrency: {}` would have been written
+ * and then formatted every amount in the app as `[object Object]`;
+ * `monthlyBudget: "lots"` would have made every budget figure `NaN`; and a key
+ * nobody has ever heard of would have been stored forever and synced to every
+ * device. Financial settings decide what every number on every screen means,
+ * so they are checked one at a time and anything unrecognised is refused
+ * rather than quietly kept.
+ */
+const CURRENCY_CODES = new Set(["EUR", "USD", "LBP", "GBP", "CAD", "AUD", "JPY", "TRY", "SAR", "AED"]);
+
+type SettingsFieldCheck = (value: unknown) => boolean;
+
+const isBoolean: SettingsFieldCheck = (value) => typeof value === "boolean";
+const isCurrency: SettingsFieldCheck = (value) => typeof value === "string" && CURRENCY_CODES.has(value);
+const isFiniteNumber: SettingsFieldCheck = (value) => typeof value === "number" && Number.isFinite(value);
+const isString: SettingsFieldCheck = (value) => typeof value === "string";
+const isOneOf = (allowed: readonly string[]): SettingsFieldCheck => (value) =>
+  typeof value === "string" && allowed.includes(value);
+/** A month, week or year index: whole, positive, and inside a sane range. */
+const isIndex = (min: number, max: number): SettingsFieldCheck => (value) =>
+  typeof value === "number" && Number.isInteger(value) && value >= min && value <= max;
+
+const SETTINGS_FIELDS: Record<string, SettingsFieldCheck> = {
+  selectedYear: isIndex(1970, 3000),
+  selectedMonth: isIndex(1, 12),
+  selectedWeek: isIndex(1, 53),
+  selectedWeekYear: isIndex(1970, 3000),
+  selectedPeriodMode: isOneOf(["month", "week", "year"]),
+  selectedSeason: isString,
+  baseCurrency: isCurrency,
+  monthlyBudgetCurrency: isCurrency,
+  trackedCurrencies: (value) =>
+    Array.isArray(value) && value.length > 0 && value.every((code) => typeof code === "string" && CURRENCY_CODES.has(code)),
+  currencyDisplayMode: isOneOf(["symbol", "code", "both"]),
+  roundingRule: isOneOf(["none", "nearest-1", "nearest-5", "nearest-10", "ceil-10"]),
+  monthlyBudget: isFiniteNumber,
+  autoWishlistFlushEnabled: isBoolean,
+  pilotIncludedInBudget: isBoolean,
+  liveClockEnabled: isBoolean,
+  saveTimestampEnabled: isBoolean,
+  darkMode: isBoolean,
+  // Structured values are checked for shape rather than field by field: their
+  // own contents are validated where they are used, and the point here is to
+  // refuse a string or a number where an object belongs.
+  exchangeRates: (value) => value != null && typeof value === "object" && !Array.isArray(value),
+  gestures: (value) => value != null && typeof value === "object" && !Array.isArray(value),
+};
+
+export function validateSettingsPatch(body: unknown): Record<string, unknown> {
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    throw new AppError(400, "Invalid settings payload: expected an object");
+  }
+  const patch = body as Record<string, unknown>;
+  const clean: Record<string, unknown> = {};
+
+  for (const [key, value] of Object.entries(patch)) {
+    // `lastUpdated` is stamped by the server on every write; accepting one from
+    // a client would let a device claim its stale copy was the newest.
+    if (key === "lastUpdated") continue;
+    const check = SETTINGS_FIELDS[key];
+    if (!check) throw new AppError(400, `Invalid settings payload: unknown field "${key}"`);
+    if (!check(value)) throw new AppError(400, `Invalid settings payload: bad value for "${key}"`);
+    clean[key] = value;
+  }
+
+  if (Object.keys(clean).length === 0) {
+    throw new AppError(400, "Invalid settings payload: nothing to update");
+  }
+  return clean;
+}
+
 export function createSnapshotRoutes(): Router {
   const router = Router();
   // Bound to the authenticated account's budget. `requireAuth` runs before
@@ -147,24 +222,26 @@ export function createSnapshotRoutes(): Router {
     asyncHandler(async (req: Request, res: Response) => {
       const service = getService(req);
       let snapshot = await service.getOrThrow();
-      snapshot = await service.updateSettings(snapshot, req.body);
+      snapshot = await service.updateSettings(snapshot, validateSettingsPatch(req.body));
       res.json(snapshot.settings);
     }),
   );
 
-  /**
-   * POST /api/snapshot/reset
-   * Reset to seed snapshot (for testing/dev)
+  /*
+   * There is deliberately no POST /api/snapshot/reset.
+   *
+   * There used to be one, and it answered `{ success: true, message: "Reset
+   * would happen here" }` without touching anything. An endpoint that reports
+   * success for a destructive operation it did not perform is the worst
+   * possible shape for one: a caller has no way to tell it from a real reset,
+   * and the next thing it does is act on the belief that the data is gone.
+   *
+   * Nothing called it — the client's own "Reset" writes an empty snapshot
+   * through the ordinary guarded PUT path, so the reset is revisioned,
+   * synced, and undoable like any other change. That is the right way to do
+   * it, and a second, unguarded path to erase a budget is not something this
+   * API should offer at all.
    */
-  router.post(
-    "/reset",
-    asyncHandler(async (req: Request, res: Response) => {
-      if (process.env.NODE_ENV === "production") {
-        throw new AppError(403, "Reset endpoint not available in production");
-      }
-      res.json({ success: true, message: "Reset would happen here" });
-    }),
-  );
 
   return router;
 }

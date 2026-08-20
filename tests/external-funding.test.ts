@@ -28,7 +28,7 @@ import {
   recurringMonthlySplit,
   spendingStats,
 } from "../src/domain/analytics";
-import { calculateYear, summarizeMonth } from "../src/domain/calculations";
+import { calculateYear, summarizeCategories, summarizeMonth } from "../src/domain/calculations";
 import {
   externalEntries,
   fundingLabel,
@@ -173,9 +173,9 @@ describe("the worked example: €1,000 budget, €300 personal, €200 external"
     const total = stats.reduce((sum, stat) => sum + stat.total, 0);
     expect(total).toBe(300);
 
-    // And the raw calculation's own category totals agree.
-    const calc = calculateYear(snap, NOW);
-    expect(calc.categoryTotals.reduce((sum, row) => sum + row.total, 0)).toBe(300);
+    // And the month-level helper agrees with the period-aware selector.
+    const rows = summarizeCategories(snap.years["2026"].spendingEntries, snap.categories, snap, 7);
+    expect(rows.reduce((sum, row) => sum + row.total, 0)).toBe(300);
   });
 
   it("counts one transaction, not two, in the spending statistics", () => {

@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { Check, ExternalLink, Link2Off, Pencil, Plus, Receipt, ShoppingBag, Trash2, X } from "lucide-react";
-import { CURRENCY_OPTIONS, formatMoney, normalizeAmount } from "../../domain/currency";
+import { currencyOptionsFor, formatMoney, normalizeAmount } from "../../domain/currency";
 import { todayDateInput } from "../../domain/dates";
 import {
   PRIORITY_META,
@@ -122,6 +122,8 @@ interface EditFormProps {
   title: string;
   /** Selectable categories, passed in so the form stays free of the store. */
   categories: BudgetCategory[];
+  /** Selectable currencies, already including the draft's own. */
+  currencies: CurrencyCode[];
   draft: WishlistDraft;
   onChange: (patch: Partial<WishlistDraft>) => void;
   onSave: () => void;
@@ -129,7 +131,7 @@ interface EditFormProps {
   submitLabel: string;
 }
 
-const EditForm: React.FC<EditFormProps> = ({ title, categories, draft, onChange, onSave, onCancel, submitLabel }) => {
+const EditForm: React.FC<EditFormProps> = ({ title, categories, currencies, draft, onChange, onSave, onCancel, submitLabel }) => {
   const urlError = draft.url.trim().length > 0 && normalizeItemUrl(draft.url) == null;
   const brandUrlError = draft.brandUrl.trim().length > 0 && normalizeItemUrl(draft.brandUrl) == null;
   const valid = draft.name.trim().length > 0 && !urlError && !brandUrlError;
@@ -202,7 +204,7 @@ const EditForm: React.FC<EditFormProps> = ({ title, categories, draft, onChange,
             value={draft.currency}
             onChange={(e) => onChange({ currency: e.target.value })}
           >
-            {CURRENCY_OPTIONS.map((currency) => (
+            {currencies.map((currency) => (
               <option key={currency}>{currency}</option>
             ))}
           </select>
@@ -721,6 +723,7 @@ export const WishlistPanel: React.FC = () => {
         <EditForm
           title={editorId === "new" ? "New wishlist item" : `Edit ${editingItem?.name ?? "item"}`}
           categories={categoryOptions}
+          currencies={currencyOptionsFor(settings, draft.currency as CurrencyCode)}
           draft={draft}
           onChange={(patch) => setDraft((current) => (current ? { ...current, ...patch } : current))}
           onSave={saveEditor}

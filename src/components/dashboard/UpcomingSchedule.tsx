@@ -79,7 +79,13 @@ export const UpcomingSchedule: React.FC<UpcomingScheduleProps> = ({ snapshot, mo
                         aria-hidden="true"
                       />
                       <span className="upcoming-name">{item.activity.name}</span>
-                      <span className="upcoming-cadence text-footnote">{describeSchedule(item.activity)}</span>
+                      <span className="upcoming-cadence text-footnote">
+                        {describeSchedule(item.activity)}
+                        {/* A date the user typed, not one the rule produced.
+                            Marked, because the two are worth telling apart
+                            when the timeline disagrees with the cadence. */}
+                        {item.manual && " · renewal date you set"}
+                      </span>
                       <span className="upcoming-amount money">
                         {/* An occurrence whose price is not stated shows a dash,
                             not a zero: the app does not know what it costs. */}
