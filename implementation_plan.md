@@ -80,6 +80,15 @@ Anything that could not be verified this way is under *Not verified* and stays u
 - [x] Brand marks are deliberately **not** drawn. Every name in the brief is a trademark, and the app already has the right answer: give a wishlist item the maker's site and it uses their real icon, which is what the separate brand link is for (2026-08-21).
 - [x] **Vendor code split from application code.** Everything landed in one 900 kB chunk, so a one-line fix invalidated React, the icons and the store for every returning visitor. Now app 94 kB gz, react 101 kB, icons 29 kB, `xlsx` 143 kB still on demand. First load is unchanged; the cost of the *next* deploy drops from 222 kB to 94 kB (2026-08-21; measured).
 
+### Interaction and honesty
+
+- [x] **Swiping to delete a wishlist item skipped the confirmation the Delete button showed.** The same action, reached two ways, behaved differently — and the *more* dangerous route had the *less* protection. On a phone there is no Ctrl+Z, so it was a one-swipe unrecoverable delete (2026-08-21; browser-verified with touch emulation that declining now leaves the item).
+- [x] Nine exported functions were called from nowhere, including two complete-but-unreachable CSV exports duplicating data the Excel export already writes, and a pair of cost helpers that picked whichever price field happened to be filled in — a second, simpler, wrong answer sitting one import away from the right one (2026-08-21).
+- [x] A €81.64/year subscription showed "€6.80 /month" in the same style a monthly one does. It reads "/month avg." now, and the estimate says you are billed once (2026-08-21).
+- [x] The timeline showed "—" for an annual charge on a known renewal date, declining to state a figure it holds (2026-08-21; three tests, including that a missing amount stays missing and a zero stays zero).
+- [x] `.text-footnote` uppercases its content, and the transaction, month-close and wallet rows put the **user's own note** inside it — "Winwing Orion throttle" was displayed as "WINWING ORION THROTTLE" (2026-08-21).
+- [x] Seven explanatory sentences across Settings, the import preview and History were set in the same label style and rendered in full caps (2026-08-21).
+
 ### Misleading UI
 
 - [x] The link on a wishlist card was labelled with the **brand's** domain but opened the **seller's** — the one place in the app where the text and the destination disagreed. The label now names the destination and the brand is stated separately when it differs (2026-08-21).
@@ -162,12 +171,31 @@ Verified in a real browser at 390px and 1440px against a throwaway local Postgre
 - [x] The boot route line drew a bright streak off across the whole screen — its travelling highlight is animated a full width past each end and the track was `overflow: visible` (2026-08-17; measured: track 260px, `scrollWidth` 260).
 - [x] **Account settings.** Change email and change password, both behind the current password. The change-password endpoint, its client and its store action existed and were reachable from nowhere in the interface (2026-08-17; five integration tests against real PostgreSQL).
 
+## Verified this session, in a browser, against real PostgreSQL
+
+Each of these is one of the specification's own examples, checked rather than assumed:
+
+| Check | Result |
+| --- | --- |
+| €1,000 budget, €300 personal, €200 external | Remaining **€700**; the €200 named separately and charged to nothing |
+| "Amazon Flight Simulator Hardware", typed one key at a time | 32 characters, no focus loss, no caret movement, no remount |
+| Padel on Monday + Thursday at €30/session | **9 occurrences in August**, €270/month, €3,150/year — the calendar, not four weeks |
+| €30/session × 8 sessions per month | **€240/month** |
+| A transaction linked to a wishlist item | Transaction created, item marked bought, and the item then stops being offered to any second transaction |
+| Live exchange rates | Fetched from `open.er-api.com`, timestamped and attributed |
+| Historical period | Banner shown, Add disabled, no editable rows; "Go to current month" returns cleanly |
+| Server stopped mid-edit | "Offline — this device only", never "Saved"; Retry after restart put the row in PostgreSQL |
+| Dashboard reorder and hide | Survived a full reload through the server |
+| A note against a month | Written, read out of PostgreSQL, and still there after a full reload |
+| Contrast, ten tabs, both themes | Zero WCAG AA failures |
+| 320px and 390px | No horizontal overflow; header 197px; every control named; no target under 24px |
+
 ## Not verified
 
 - [ ] Multi-device sync **in production**. Verified locally against PostgreSQL with two isolated contexts; the production instance has no data in it yet.
-- [ ] Live exchange rates against the real provider from the production runtime.
+- [ ] Live exchange rates **from the production runtime**. Verified from the development runtime on 2026-08-21: the fetch reached `open.er-api.com`, the settings reported "Exchange rates updated", and the panel showed the timestamp and the source.
 - [ ] Print/PDF output of the reports on a real printer dialog. The HTML is generated, self-contained, and rendered in a browser tab with a print button; nobody has pressed it against a physical printer.
-- [ ] Swipe gestures since the 2026-08-21 changes. The gesture code is untouched and its unit tests pass, but this session's browser work was mouse-driven.
+- [ ] Swipe gestures on a **physical touchscreen**. Driven with synthetic pointer events under touch emulation on 2026-08-21: 1:1 tracking to the panel edge, 45% rubber-banding past it, arming at 150px of travel, and — after the fix below — declining the confirmation leaves the row.
 
 ## Actions needed from the repository owner
 
