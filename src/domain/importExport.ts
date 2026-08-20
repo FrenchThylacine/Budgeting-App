@@ -75,17 +75,16 @@ export function exportJson(snapshot: BudgetSnapshot): void {
   downloadBlob(JSON.stringify(snapshot, null, 2), `premium-budget-backup-${safeDate()}.json`, "application/json");
 }
 
-export function exportWishlistCsv(snapshot: BudgetSnapshot): void {
-  const record = snapshot.years[String(snapshot.settings.selectedYear)];
-  if (!record) return;
-  downloadBlob(toCsv(record.wishlistItems.map((item) => ({ ...item }))), `wishlist-${record.year}-${safeDate()}.csv`, "text/csv;charset=utf-8");
-}
-
-export function exportWalletCsv(snapshot: BudgetSnapshot): void {
-  const record = snapshot.years[String(snapshot.settings.selectedYear)];
-  if (!record) return;
-  downloadBlob(toCsv(record.walletEntries.map((item) => ({ ...item }))), `wallet-${record.year}-${safeDate()}.csv`, "text/csv;charset=utf-8");
-}
+/*
+ * There is no CSV export.
+ *
+ * There were two — wishlist and wallet — written, exported, and called from
+ * nowhere. They were also redundant: `exportCurrentYearToExcel` above already
+ * writes a Wishlist sheet and a Wallet sheet from exactly the same arrays, and
+ * `exportJson` writes the whole snapshot. Two unreachable formats of data that
+ * is already exportable twice is not a missing feature, so they are gone
+ * rather than wired to a button the sidebar does not have room for.
+ */
 
 export async function importJsonBackup(file: File): Promise<BudgetSnapshot> {
   const text = await file.text();
@@ -120,12 +119,6 @@ function downloadBlob(content: string, fileName: string, type: string): void {
   URL.revokeObjectURL(url);
 }
 
-function toCsv(rowsValue: Array<Record<string, unknown>>): string {
-  if (rowsValue.length === 0) return "";
-  const headers = Array.from(new Set(rowsValue.flatMap((row) => Object.keys(row))));
-  const body = rowsValue.map((row) => headers.map((header) => csvCell(row[header])).join(","));
-  return [headers.join(","), ...body].join("\n");
-}
 
 function csvCell(value: unknown): string {
   const text = value == null ? "" : String(value);

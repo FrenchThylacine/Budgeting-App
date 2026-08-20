@@ -221,26 +221,6 @@ export function parseAmount(input: string | number | null | undefined): number |
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-export function activityPrimaryCostLabel(activity: Activity): string {
-  if (activity.pricePerMonth != null) return "/month";
-  if (activity.pricePerSession != null) return "/session";
-  if (activity.pricePerPurchase != null) return "/purchase";
-  if (activity.yearlyEstimate != null) return "/year";
-  if (activity.estimatedCost != null) return "estimated";
-  return "";
-}
-
-export function activityPrimaryCost(activity: Activity, snapshot: BudgetSnapshot): string {
-  const val =
-    activity.pricePerMonth ??
-    activity.pricePerSession ??
-    activity.pricePerPurchase ??
-    activity.yearlyEstimate ??
-    activity.estimatedCost ??
-    0;
-  return formatMoney(val, activity.currency, snapshot.settings.currencyDisplayMode);
-}
-
 export function matchesActivityFilters(activity: Activity, filters: { search?: string; categoryId?: string }): boolean {
   if (filters.search && !activity.name.toLowerCase().includes(filters.search.toLowerCase())) return false;
   if (filters.categoryId && activity.categoryId !== filters.categoryId) return false;
@@ -251,12 +231,6 @@ export function matchesEntryFilters(entry: { note?: string; categoryId?: string;
   if (filters.search && !(entry.note ?? "").toLowerCase().includes(filters.search.toLowerCase())) return false;
   if (filters.categoryId && entry.categoryId !== filters.categoryId) return false;
   if (filters.activityId && entry.activityId !== filters.activityId) return false;
-  return true;
-}
-
-export function matchesWishlistFilters(item: WishlistItem, filters: { search?: string; categoryId?: string }): boolean {
-  if (filters.search && !item.name.toLowerCase().includes(filters.search.toLowerCase())) return false;
-  if (filters.categoryId && item.categoryId !== filters.categoryId) return false;
   return true;
 }
 
@@ -286,10 +260,14 @@ export function sortActivities(
   return eb - ea;
 }
 
-export function getCategoryIcon(category: BudgetCategory): string {
-  return category.icon ?? "Circle";
-}
-
-export function getCategoryColor(category: BudgetCategory): string {
-  return category.color ?? "#64748B";
-}
+/*
+ * Removed rather than kept "in case": `activityPrimaryCost`,
+ * `activityPrimaryCostLabel`, `matchesWishlistFilters`, `getCategoryIcon` and
+ * `getCategoryColor` were exported and called from nowhere.
+ *
+ * The two cost helpers in particular were a hazard: they picked whichever
+ * price field happened to be filled in, which is not how an activity is priced
+ * — `costModel` decides that, and `monthlyEstimateNative` implements it. A
+ * second, simpler, wrong answer sitting next to the right one is how a figure
+ * ends up disagreeing with itself on two screens.
+ */

@@ -402,7 +402,13 @@ export const WishlistPanel: React.FC = () => {
     if (!enabled || action === "none") return [];
     switch (action) {
       case "delete":
-        return [{ label: "Delete", icon: <Trash2 size={18} />, destructive: true, onAction: () => remove(item.id) }];
+        // `handleDelete`, not `remove`: the swipe and the card's Delete button
+        // are the same action and must behave identically. This called `remove`
+        // directly, so the *gesture* — the route with no second target to aim
+        // at and no undo on a phone — deleted without the confirmation, and
+        // without the warning that a linked transaction stays behind, that the
+        // deliberate button click showed.
+        return [{ label: "Delete", icon: <Trash2 size={18} />, destructive: true, onAction: () => handleDelete(item) }];
       case "buy":
         // Buying something already bought is not an action, so the panel is
         // simply absent rather than present and inert.

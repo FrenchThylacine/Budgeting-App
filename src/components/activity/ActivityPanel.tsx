@@ -136,13 +136,22 @@ export const ActivityPanel: React.FC = () => {
       case "delete":
         return [{
           label: "Delete", icon: <Trash2 size={18} />, destructive: true,
-          onAction: () => {
-            if (window.confirm(`Delete "${activity.name}"? Linked spending is kept.`)) remove(activity.id);
-          },
+          onAction: () => confirmDelete(activity),
         }];
       default:
         return [];
     }
+  };
+
+  /**
+   * One delete, two ways in.
+   *
+   * The swipe and the card's Delete button had the same confirmation text
+   * written out twice. Two copies of a warning drift, and the one that drifts
+   * is usually the one nobody is looking at.
+   */
+  const confirmDelete = (activity: Activity) => {
+    if (window.confirm(`Delete "${activity.name}"? Linked spending is kept.`)) remove(activity.id);
   };
 
   const move = (activity: Activity, direction: -1 | 1) => {
@@ -711,9 +720,7 @@ export const ActivityPanel: React.FC = () => {
                         variant="ghost"
                         size="sm"
                         icon
-                        onClick={() => {
-                          if (window.confirm(`Delete "${activity.name}"? Linked spending is kept.`)) remove(activity.id);
-                        }}
+                        onClick={() => confirmDelete(activity)}
                         aria-label={`Delete ${activity.name}`}
                       >
                         <Trash2 size={15} />

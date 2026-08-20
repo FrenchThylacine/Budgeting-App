@@ -1,5 +1,5 @@
 import { estimateActivity } from "./calculations";
-import { describeSchedule, nextOccurrences, parseLocalDate } from "./schedule";
+import { nextOccurrences, parseLocalDate } from "./schedule";
 import type { Activity, BudgetSnapshot } from "./types";
 
 /**
@@ -118,11 +118,6 @@ export function upcomingSchedule(
   undated.sort((a, b) => b.monthlyBase - a.monthlyBase || a.activity.name.localeCompare(b.activity.name));
 
   return { occurrences, undated, horizonDays };
-}
-
-/** "Every Monday", "The 15th", … — for activities that do carry a schedule. */
-export function scheduleSummary(activity: Activity): string {
-  return describeSchedule(activity);
 }
 
 /**

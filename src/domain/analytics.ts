@@ -54,11 +54,6 @@ export function budgetRelevantEntries(entries: SpendingEntry[], _settings?: Sett
   return personalEntries(entries);
 }
 
-/** The counterpart: what somebody else paid for, shown alongside but never mixed in. */
-export function externallyFundedEntries(entries: SpendingEntry[]): SpendingEntry[] {
-  return externalEntries(entries);
-}
-
 export interface FundingSplit {
   /** Spend charged to this budget. `null` when the period holds no entries at all. */
   personal: number | null;
@@ -431,11 +426,6 @@ export function weeklyTrendBars(
       highlight: week === selectedWeek,
     };
   });
-}
-
-/** Number of ISO weeks in the selected week-year (needed by weekly windows). */
-export function weeksInSelectedWeekYear(settings: Settings): number {
-  return weeksInIsoYear(selectedIsoWeekYear(settings));
 }
 
 /**
