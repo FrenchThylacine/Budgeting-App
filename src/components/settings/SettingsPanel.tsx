@@ -80,7 +80,7 @@ export const SettingsPanel: React.FC = () => {
               somebody who deals in two. */}
           <div>
             <div className="text-callout" style={{ marginBottom: 4 }}>Currencies you use</div>
-            <p className="text-footnote" style={{ marginBottom: 10 }}>
+            <p className="text-note" style={{ marginBottom: 10 }}>
               Only these appear in the amount fields across the app. A record always keeps the
               currency it was entered in, even if you stop tracking it.
             </p>
@@ -145,7 +145,7 @@ export const SettingsPanel: React.FC = () => {
                 <option key={currency}>{currency}</option>
               ))}
             </select>
-            <span className="text-footnote">Everything is converted to this currency for display only.</span>
+            <span className="text-note">Everything is converted to this currency for display only.</span>
           </label>
 
           <label className="text-callout" style={fieldStyle}>
@@ -247,7 +247,7 @@ export const SettingsPanel: React.FC = () => {
             />
             <span>
               Carry only unbought wishlist items into a new year
-              <span className="text-footnote" style={{ display: "block" }}>
+              <span className="text-note" style={{ display: "block" }}>
                 When off, the whole wishlist is copied forward.
               </span>
             </span>
@@ -283,7 +283,7 @@ export const SettingsPanel: React.FC = () => {
             />
             <span>
               Show a live clock in the period selector
-              <span className="text-footnote" style={{ display: "block" }}>
+              <span className="text-note" style={{ display: "block" }}>
                 The date is always shown. Off, the time is omitted and the minute timer
                 behind it stops.
               </span>
@@ -303,7 +303,7 @@ export const SettingsPanel: React.FC = () => {
           {syncError && (
             <div className="text-caption" style={{ color: "var(--warning-text)" }}>{syncError}</div>
           )}
-          <div className="text-footnote">
+          <div className="text-note">
             The server is the source of truth. This device keeps a local copy so the app works offline, but a
             change only reaches your other devices once it has been sent.
           </div>
@@ -432,7 +432,7 @@ export const SettingsPanel: React.FC = () => {
             </label>
           </div>
 
-          <div className="text-footnote">
+          <div className="text-note">
             A rate must stay above zero: a zero or negative rate would make every converted figure meaningless.
           </div>
         </div>

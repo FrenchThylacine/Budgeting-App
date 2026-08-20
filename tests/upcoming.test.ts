@@ -257,3 +257,54 @@ describe("a manual renewal date", () => {
     );
   });
 });
+
+describe("the amount shown against an occurrence", () => {
+  const NOW = new Date(2026, 7, 21, 12, 0, 0);
+
+  function yearlyActivity(overrides: Partial<Activity>): BudgetSnapshot {
+    const snap = createSeedBudgetSnapshot(NOW);
+    snap.settings.selectedYear = 2026;
+    snap.years["2026"].activities = [
+      {
+        id: "act-sub",
+        name: "Navigraph",
+        categoryId: snap.categories[0].id,
+        currency: "EUR",
+        recurrenceType: "yearly",
+        recurrenceInterval: 1,
+        pricePerSession: null,
+        pricePerPurchase: null,
+        pricePerMonth: null,
+        estimatedCost: null,
+        yearlyEstimate: 81.64,
+        active: true,
+        visible: true,
+        seasonalTag: "normal",
+        order: 0,
+        notes: "",
+        nextRenewalDate: "2026-08-28",
+        ...overrides,
+      } as Activity,
+    ];
+    snap.years["2026"].spendingEntries = [];
+    return snap;
+  }
+
+  it("states the whole year on the day an annual charge lands", () => {
+    // The timeline used to show "—" here: the app declining to state a figure
+    // it holds. The yearly estimate *is* the charge; the renewal date is when.
+    const result = upcomingSchedule(yearlyActivity({}), NOW);
+    expect(result.occurrences[0].amountNative).toBe(81.64);
+  });
+
+  it("still says nothing when the yearly amount is genuinely unknown", () => {
+    // Missing stays missing — it must not become 0.
+    const result = upcomingSchedule(yearlyActivity({ yearlyEstimate: null }), NOW);
+    expect(result.occurrences[0].amountNative).toBeNull();
+  });
+
+  it("keeps a yearly estimate of 0 as a real zero", () => {
+    const result = upcomingSchedule(yearlyActivity({ yearlyEstimate: 0 }), NOW);
+    expect(result.occurrences[0].amountNative).toBe(0);
+  });
+});

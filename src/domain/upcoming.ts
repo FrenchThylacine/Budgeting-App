@@ -58,6 +58,16 @@ function occurrenceAmount(activity: Activity): number | null {
   if (activity.recurrenceType === "monthly" && activity.dayOfMonth != null && activity.pricePerMonth != null) {
     return activity.pricePerMonth;
   }
+
+  // An annual charge on a known date costs the whole year on that date. The
+  // timeline showed "—" for it, which is the app declining to state a figure it
+  // has: the yearly estimate *is* the charge, and the renewal date is when it
+  // lands. The month card still shows the twelfth, labelled as an average,
+  // because that is the right figure for comparing commitments — this is the
+  // right figure for the day the money leaves.
+  if (activity.recurrenceType === "yearly" && activity.yearlyEstimate != null) {
+    return activity.yearlyEstimate;
+  }
   return null;
 }
 

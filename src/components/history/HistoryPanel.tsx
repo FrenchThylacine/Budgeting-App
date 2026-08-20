@@ -333,7 +333,7 @@ export const HistoryPanel: React.FC = () => {
           )}
 
           {auditEntries.length > 200 && (
-            <div className="text-footnote" style={{ textAlign: "center" }}>
+            <div className="text-note" style={{ textAlign: "center" }}>
               Showing the 200 most recent of {auditEntries.length} entries.
             </div>
           )}

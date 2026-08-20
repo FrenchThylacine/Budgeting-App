@@ -663,7 +663,15 @@ export const ActivityPanel: React.FC = () => {
                   <div style={{ textAlign: "right", minWidth: 0 }}>
                     <strong style={{ whiteSpace: "nowrap" }}>
                       {formatMoney(estimate?.monthlyNative ?? 0, activity.currency, snapshot.settings.currencyDisplayMode)}
-                      <span className="text-caption"> /month</span>
+                      {/* An annual charge divided by twelve is an average, not
+                          a payment. Labelling it "/month" like a subscription
+                          invites someone to look for a charge that never
+                          arrives. */}
+                      <span className="text-caption">
+                        {activity.recurrenceType === "yearly" && (activity.costModel ?? "auto") === "auto"
+                          ? " /month avg."
+                          : " /month"}
+                      </span>
                     </strong>
                     <div className="text-caption" style={{ whiteSpace: "nowrap" }}>
                       {formatMoney(estimate?.yearlyNative ?? 0, activity.currency, snapshot.settings.currencyDisplayMode)} /year
@@ -804,11 +812,23 @@ function buildPreview(draft: ActivityDraft, editing: Activity | null, year: numb
       if (activity.pricePerMonth == null) return { headline: "Add a monthly cost to see the estimate.", detail: "" };
       return { headline: `${money(activity.pricePerMonth)}/month ${totals}`, detail: "A flat amount, whatever the calendar does." };
     }
-    default:
+    default: {
+      /*
+       * A yearly charge is not a monthly payment.
+       *
+       * The monthly figure for an annual subscription is the year divided by
+       * twelve — useful for comparing commitments, and wrong as a description
+       * of when money leaves the account. Saying so is the difference between
+       * a budgeting average and a bill the user starts looking for.
+       */
+      const yearly = activity.recurrenceType === "yearly";
       return {
         headline: `Automatic from “${activity.recurrenceType}” ${totals}`,
-        detail: "Switch cost model for per-session, real-schedule, or fixed pricing.",
+        detail: yearly
+          ? "The monthly figure is the year averaged over twelve — you are billed once. Give it a renewal date below to put the real charge on the timeline."
+          : "Switch cost model for per-session, real-schedule, or fixed pricing.",
       };
+    }
   }
 }
 
