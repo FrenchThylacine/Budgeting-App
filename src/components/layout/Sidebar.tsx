@@ -1,16 +1,20 @@
-import React from "react";
+import React, { useState } from "react";
 import { useAuthStore } from "../../store/authStore";
 import { useBudgetStore } from "../../store/budgetStore";
 import {
   LayoutDashboard, ListTodo, Receipt, Gift, Wallet, BarChart3,
   FlaskConical, History, Settings, Tags, ChevronLeft, ChevronRight,
   FileSpreadsheet, Download, FileJson, RefreshCw, FileText,
-  LogOut, UserRound, Upload
+  LogOut, UserRound, Upload, CalendarRange
 } from "lucide-react";
 import { exportCurrentYearToExcel, exportAllYearsToExcel, exportJson } from "../../domain/importExport";
 import { AircraftMark } from "../ui/AircraftMark";
 import { ImportControl } from "../data/ImportControl";
-import { buildPeriodReport, reportHtml, type ReportScope } from "../../domain/report";
+import { buildPeriodReport, reportHtml, type CustomRange, type ReportScope } from "../../domain/report";
+import { EditorSheet } from "../ui/EditorSheet";
+import { Button } from "../ui/Button";
+import { Field, FieldGroup } from "../ui/Field";
+import { todayDateInput } from "../../domain/dates";
 import { formatMoney } from "../../domain/currency";
 import type { BudgetSnapshot } from "../../domain/types";
 
@@ -69,6 +73,7 @@ export const Sidebar: React.FC<{
   const importSnapshot = useBudgetStore((s) => s.importSnapshot);
   const user = useAuthStore((s) => s.user);
   const signOut = useAuthStore((s) => s.signOut);
+  const [rangeOpen, setRangeOpen] = useState(false);
 
   const overviewItems = navItems.slice(0, 6);
   const systemItems = navItems.slice(6);
@@ -127,6 +132,17 @@ export const Sidebar: React.FC<{
         ))}
       </nav>
 
+      {rangeOpen && (
+        <CustomRangeReport
+          snapshot={snapshot}
+          onClose={() => setRangeOpen(false)}
+          onGenerate={(range) => {
+            openPeriodReport(snapshot, range);
+            setRangeOpen(false);
+          }}
+        />
+      )}
+
       {!collapsed && (
         <div className="nav-section" style={{ marginTop: "auto" }}>
           <div className="nav-section-title">Reports</div>
@@ -136,6 +152,11 @@ export const Sidebar: React.FC<{
             </button>
             <button className="btn btn-secondary btn-sm" onClick={() => openPeriodReport(snapshot, "year")}>
               <FileText size={14} /> Annual report
+            </button>
+            {/* Any window, not only the ones the period selector offers: a
+                quarter, a trip, the six weeks a renovation took. */}
+            <button className="btn btn-secondary btn-sm" onClick={() => setRangeOpen(true)}>
+              <CalendarRange size={14} /> Custom range
             </button>
           </div>
 
@@ -176,5 +197,127 @@ export const Sidebar: React.FC<{
         </div>
       )}
     </aside>
+  );
+};
+
+
+/**
+ * Choose the window a report covers.
+ *
+ * Presets first, because "this quarter" and "the last 90 days" are what people
+ * actually ask for, and typing two dates to express them is friction for no
+ * gain. The two date fields remain, for the windows no preset can name.
+ */
+const CustomRangeReport: React.FC<{
+  snapshot: BudgetSnapshot;
+  onClose: () => void;
+  onGenerate: (range: CustomRange) => void;
+}> = ({ snapshot, onClose, onGenerate }) => {
+  const today = todayDateInput();
+  const [from, setFrom] = useState(() => {
+    const date = new Date();
+    date.setMonth(date.getMonth() - 3);
+    return date.toISOString().slice(0, 10);
+  });
+  const [to, setTo] = useState(today);
+
+  const daysBack = (days: number): string => {
+    const date = new Date();
+    date.setDate(date.getDate() - (days - 1));
+    return date.toISOString().slice(0, 10);
+  };
+
+  const presets: { label: string; apply: () => void }[] = [
+    { label: "Last 30 days", apply: () => { setFrom(daysBack(30)); setTo(today); } },
+    { label: "Last 90 days", apply: () => { setFrom(daysBack(90)); setTo(today); } },
+    {
+      label: "This quarter",
+      apply: () => {
+        const now = new Date();
+        const quarterStart = new Date(now.getFullYear(), Math.floor(now.getMonth() / 3) * 3, 1);
+        setFrom(quarterStart.toISOString().slice(0, 10));
+        setTo(today);
+      },
+    },
+    {
+      label: "Year to date",
+      apply: () => {
+        setFrom(`${new Date().getFullYear()}-01-01`);
+        setTo(today);
+      },
+    },
+  ];
+
+  // An inverted range is not a range. Refusing beats silently swapping the
+  // dates, which would produce a report for a window nobody asked for.
+  const valid = from !== "" && to !== "" && from <= to;
+  const entryCount = valid
+    ? Object.values(snapshot.years)
+        .flatMap((record) => record.spendingEntries)
+        .filter((entry) => entry.date >= from && entry.date <= to).length
+    : 0;
+
+  return (
+    <EditorSheet
+      title="Report for a custom range"
+      subtitle="Any window you like. Opens in a new tab, ready to print or save as a PDF."
+      onClose={onClose}
+      footer={
+        <>
+          <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button type="submit" variant="primary" form="range-report-form" disabled={!valid}>
+            <FileText size={14} /> Generate report
+          </Button>
+        </>
+      }
+    >
+      <form
+        id="range-report-form"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (valid) onGenerate({ from, to });
+        }}
+        style={{ display: "grid", gap: 20 }}
+      >
+        <FieldGroup title="Quick ranges">
+          <Field label="Common windows" span group>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              {presets.map((preset) => (
+                <button key={preset.label} type="button" className="chip" onClick={preset.apply}>
+                  {preset.label}
+                </button>
+              ))}
+            </div>
+          </Field>
+        </FieldGroup>
+
+        <FieldGroup title="Dates">
+          <Field label="From">
+            <input className="input" type="date" required value={from} onChange={(e) => setFrom(e.target.value)} />
+          </Field>
+          <Field label="To">
+            <input className="input" type="date" required value={to} onChange={(e) => setTo(e.target.value)} />
+          </Field>
+          <Field
+            label="What this covers"
+            span
+            group
+            hint={
+              valid
+                ? "Your budget is set per month, so a range has no budget figure to measure against — the report says so rather than prorating one."
+                : undefined
+            }
+          >
+            <p className="text-callout" style={{ margin: 0 }}>
+              {!valid
+                ? "The end date must not be before the start date."
+                : entryCount === 0
+                  ? "No transactions fall in this range. The report will say so rather than showing zeroes."
+                  : `${entryCount} transaction${entryCount === 1 ? "" : "s"}.`}
+            </p>
+          </Field>
+        </FieldGroup>
+      </form>
+    </EditorSheet>
   );
 };

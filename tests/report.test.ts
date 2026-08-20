@@ -153,3 +153,115 @@ describe("reportHtml", () => {
     expect(html).toContain("bar-missing");
   });
 });
+
+describe("reports for a custom range", () => {
+  const NOW = new Date("2026-08-21T12:00:00Z");
+
+  function snapshotWithDates(dates: { date: string; amount: number; source?: string }[]): BudgetSnapshot {
+    const snap = createSeedBudgetSnapshot(NOW);
+    snap.settings.selectedYear = 2026;
+    snap.settings.selectedMonth = 8;
+    snap.settings.baseCurrency = "EUR";
+    snap.settings.monthlyBudget = 1000;
+    snap.settings.monthlyBudgetCurrency = "EUR";
+    snap.years["2026"] = {
+      year: 2026,
+      activities: [],
+      spendingEntries: dates.map((item, index) => ({
+        id: `entry-${index}`,
+        year: Number(item.date.slice(0, 4)),
+        month: Number(item.date.slice(5, 7)),
+        week: 1,
+        date: item.date,
+        categoryId: snap.categories[0].id,
+        amount: item.amount,
+        currency: "EUR" as const,
+        recurrenceType: "none" as const,
+        isPiloting: false,
+        source: item.source,
+        note: "",
+        createdAt: `${item.date}T00:00:00Z`,
+        updatedAt: `${item.date}T00:00:00Z`,
+      })),
+      wishlistItems: [],
+      walletEntries: [],
+      closedMonths: [],
+      monthlyNotes: {},
+      createdAt: "2026-01-01T00:00:00Z",
+      updatedAt: "2026-01-01T00:00:00Z",
+    };
+    return snap;
+  }
+
+  it("counts only the transactions inside the range, at both ends inclusively", () => {
+    const snap = snapshotWithDates([
+      { date: "2026-03-31", amount: 10 }, // the day before
+      { date: "2026-04-01", amount: 20 }, // first day
+      { date: "2026-04-15", amount: 30 },
+      { date: "2026-04-30", amount: 40 }, // last day
+      { date: "2026-05-01", amount: 50 }, // the day after
+    ]);
+    const report = buildPeriodReport(snap, { from: "2026-04-01", to: "2026-04-30" }, NOW);
+    const line = (label: string) => report.summary.find((item) => item.label === label)?.value;
+    expect(line("Transactions")).toBe("3");
+    expect(line("Total spending")).toContain("90");
+  });
+
+  it("states no budget figure rather than prorating one", () => {
+    // The budget is monthly. A "budget" for six weeks is a number the user
+    // never chose, and "remaining" measured against it would be fabricated.
+    const snap = snapshotWithDates([{ date: "2026-04-10", amount: 100 }]);
+    const report = buildPeriodReport(snap, { from: "2026-04-01", to: "2026-05-15" }, NOW);
+    expect(report.summary.find((item) => item.label === "Budget")).toBeUndefined();
+    expect(report.summary.find((item) => item.label === "Remaining")).toBeUndefined();
+    expect(report.notes.join(" ")).toMatch(/budget is set per month/i);
+  });
+
+  it("compares against the range of equal length immediately before", () => {
+    const snap = snapshotWithDates([
+      { date: "2026-04-05", amount: 200 },
+      { date: "2026-03-20", amount: 150 },
+    ]);
+    const report = buildPeriodReport(snap, { from: "2026-04-01", to: "2026-04-30" }, NOW);
+    const comparison = report.summary.find((item) => item.label.startsWith("vs "))!;
+    // March is the preceding 30 days: 200 − 150 = 50.
+    expect(comparison.value).toContain("50");
+  });
+
+  it("still excludes money somebody else paid", () => {
+    const snap = snapshotWithDates([
+      { date: "2026-04-05", amount: 300, source: "personal" },
+      { date: "2026-04-06", amount: 200, source: "shared" },
+    ]);
+    const report = buildPeriodReport(snap, { from: "2026-04-01", to: "2026-04-30" }, NOW);
+    const line = (label: string) => report.summary.find((item) => item.label === label)?.value;
+    expect(line("Total spending")).toContain("300");
+    expect(line("Paid by others")).toContain("200");
+  });
+
+  it("reports an empty range as unavailable rather than as zero", () => {
+    const snap = snapshotWithDates([{ date: "2026-04-05", amount: 100 }]);
+    const report = buildPeriodReport(snap, { from: "2026-06-01", to: "2026-06-30" }, NOW);
+    expect(report.summary.find((item) => item.label === "Total spending")?.value).toBe("No data recorded");
+    expect(report.notes.join(" ")).toMatch(/Missing data is reported as unavailable, not as zero/);
+  });
+
+  it("titles the report with the range it covers", () => {
+    const snap = snapshotWithDates([]);
+    const report = buildPeriodReport(snap, { from: "2026-04-01", to: "2026-04-30" }, NOW);
+    // Locale-formatted, so the assertion is on the structure rather than on
+    // English month names: this suite runs under whatever locale the machine
+    // has, and "avr." is as correct as "Apr".
+    expect(report.title).toMatch(/^1 .+ – 30 .+ 2026$/);
+    expect(report.subtitle).toBe("Report for 30 days");
+  });
+
+  it("renders to self-contained HTML like any other report", () => {
+    const snap = snapshotWithDates([{ date: "2026-04-05", amount: 100 }]);
+    const report = buildPeriodReport(snap, { from: "2026-04-01", to: "2026-04-30" }, NOW);
+    const html = reportHtml(report, (value) => `EUR ${value.toFixed(2)}`);
+    expect(html).toContain("<!doctype html>");
+    expect(html).not.toContain("http://");
+    expect(html).toContain("Print / Save as PDF");
+  });
+});

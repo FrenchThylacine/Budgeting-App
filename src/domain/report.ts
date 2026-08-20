@@ -1,5 +1,5 @@
 import type { BudgetSnapshot, Settings } from "./types";
-import { calculateYear } from "./calculations";
+import { calculateYear, normalizeEntry } from "./calculations";
 import { formatMoney } from "./currency";
 import { monthName } from "./dates";
 import {
@@ -40,31 +40,107 @@ export interface PeriodReport {
   notes: string[];
 }
 
-export type ReportScope = "month" | "year";
+/**
+ * What a report covers.
+ *
+ * `month` and `year` follow the period currently selected in the app. A
+ * `{ from, to }` range is a report the user asked for explicitly — a quarter,
+ * a trip, the six weeks a renovation took — and is answered from the dates on
+ * the transactions rather than from the period selector.
+ */
+export type ReportScope = "month" | "year" | CustomRange;
+
+export interface CustomRange {
+  /** Inclusive, YYYY-MM-DD. */
+  from: string;
+  /** Inclusive, YYYY-MM-DD. */
+  to: string;
+}
+
+export function isCustomRange(scope: ReportScope): scope is CustomRange {
+  return typeof scope === "object" && scope !== null;
+}
+
+/** Written form of a range, e.g. "1 Mar – 15 Apr 2026". */
+function rangeTitle(range: CustomRange): string {
+  const start = new Date(`${range.from}T12:00:00`);
+  const end = new Date(`${range.to}T12:00:00`);
+  const sameYear = start.getFullYear() === end.getFullYear();
+  const startText = start.toLocaleDateString(undefined, {
+    day: "numeric",
+    month: "short",
+    ...(sameYear ? {} : { year: "numeric" }),
+  });
+  const endText = end.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
+  return `${startText} – ${endText}`;
+}
+
+/** Whole days between two ISO dates, inclusive of both ends. */
+function inclusiveDays(from: string, to: string): number {
+  const start = Date.parse(`${from}T00:00:00Z`);
+  const end = Date.parse(`${to}T00:00:00Z`);
+  if (!Number.isFinite(start) || !Number.isFinite(end)) return 0;
+  return Math.floor((end - start) / 86_400_000) + 1;
+}
+
+/** The range of equal length immediately before this one, for comparison. */
+function precedingRange(range: CustomRange): CustomRange {
+  const length = inclusiveDays(range.from, range.to);
+  const end = new Date(Date.parse(`${range.from}T00:00:00Z`) - 86_400_000);
+  const start = new Date(end.getTime() - (length - 1) * 86_400_000);
+  const iso = (date: Date) => date.toISOString().slice(0, 10);
+  return { from: iso(start), to: iso(end) };
+}
+
+/** Every transaction dated inside a range, across all years. */
+function entriesInRange(snapshot: BudgetSnapshot, range: CustomRange) {
+  return Object.values(snapshot.years)
+    .flatMap((record) => record.spendingEntries)
+    .filter((entry) => entry.date >= range.from && entry.date <= range.to);
+}
 
 export function buildPeriodReport(
   snapshot: BudgetSnapshot,
   scope: ReportScope,
   now = new Date(),
 ): PeriodReport {
-  const settings: Settings = { ...snapshot.settings, selectedPeriodMode: scope };
+  const custom = isCustomRange(scope) ? scope : null;
+  const settings: Settings = {
+    ...snapshot.settings,
+    // A custom range is not a period mode. The month view is used only so the
+    // helpers that need *some* mode have a defined one; every figure below
+    // comes from the range's own entries.
+    selectedPeriodMode: custom ? "month" : (scope as "month" | "year"),
+  };
   const scoped: BudgetSnapshot = { ...snapshot, settings };
 
   const calc = calculateYear(scoped, now);
-  const allEntries = entriesForSelectedPeriod(scoped, settings);
+  const allEntries = custom ? entriesInRange(scoped, custom) : entriesForSelectedPeriod(scoped, settings);
   const entries = budgetRelevantEntries(allEntries, settings);
   const funding = fundingSplit(allEntries, scoped);
   const stats = spendingStats(entries, scoped);
-  const pacing = budgetPacing(scoped, entries, now);
-  const categories = categoryBreakdown(entries, scoped);
-  const comparison = periodComparison(scoped, settings);
+  /*
+   * No pacing for a custom range.
+   *
+   * The budget is defined per month. Prorating it across six weeks would
+   * produce a "budget" the user never set and a "remaining" measured against
+   * it — a fabricated figure presented with the same authority as a real one,
+   * which is exactly what the project's rules forbid. The report says so
+   * instead.
+   */
+  const pacing = custom ? null : budgetPacing(scoped, entries, now);
+  const categories = categoryBreakdown(entries, scoped, custom ? false : undefined);
+  const comparison = custom
+    ? rangeComparison(scoped, custom)
+    : periodComparison(scoped, settings);
   const health = financialHealth({ pacing, categories, comparison, stats });
 
   const money = (value: number | null | undefined) =>
     value == null || !Number.isFinite(value) ? "—" : formatMoney(value, settings.baseCurrency, settings.currencyDisplayMode);
 
-  const title =
-    scope === "month"
+  const title = custom
+    ? rangeTitle(custom)
+    : scope === "month"
       ? `${monthName(settings.selectedMonth)} ${settings.selectedYear}`
       : String(settings.selectedYear);
 
@@ -111,7 +187,21 @@ export function buildPeriodReport(
     },
   );
 
-  const monthly = calc.monthlyTrend.map((period, index) => ({
+  const monthly = (custom
+    ? calc.monthlyTrend.filter((_, index) => {
+        const month = index + 1;
+        const startMonth = Number(custom.from.slice(5, 7));
+        const endMonth = Number(custom.to.slice(5, 7));
+        const startYear = Number(custom.from.slice(0, 4));
+        const endYear = Number(custom.to.slice(0, 4));
+        // Only meaningful when the range sits inside one calendar year; a
+        // range that crosses new year is shown in full rather than clipped to
+        // a misleading slice of one of them.
+        if (startYear !== endYear) return true;
+        return month >= startMonth && month <= endMonth;
+      })
+    : calc.monthlyTrend
+  ).map((period, index) => ({
     label: monthName(index + 1).slice(0, 3),
     // A month with no records stays null: the report must not print a
     // fabricated zero for a month we know nothing about.
@@ -133,6 +223,11 @@ export function buildPeriodReport(
   if (stats.total == null) {
     notes.push("No spending was recorded for this period. Missing data is reported as unavailable, not as zero.");
   }
+  if (custom) {
+    notes.push(
+      "This is a custom range. Your budget is set per month, so there is no budget figure to measure a range against — prorating one would be a number you never chose. Category caps are reported as totals rather than as breaches for the same reason.",
+    );
+  }
   if (funding.externalCount > 0) {
     notes.push(
       `${money(funding.external)} across ${funding.externalCount} transaction${
@@ -145,7 +240,11 @@ export function buildPeriodReport(
 
   return {
     title,
-    subtitle: scope === "month" ? "Monthly financial report" : "Annual financial report",
+    subtitle: custom
+      ? `Report for ${inclusiveDays(custom.from, custom.to)} days`
+      : scope === "month"
+        ? "Monthly financial report"
+        : "Annual financial report",
     generatedAt: now.toISOString(),
     currency: settings.baseCurrency,
     summary,
@@ -157,6 +256,31 @@ export function buildPeriodReport(
       factors: health.factors.map((f) => ({ label: f.label, score: f.score, detail: f.detail })),
     },
     notes,
+  };
+}
+
+/**
+ * The same range, immediately before.
+ *
+ * A well-defined comparison for an arbitrary window: six weeks against the six
+ * weeks before them. A range with no records on either side stays `null` on
+ * that side — missing is not zero.
+ */
+function rangeComparison(snapshot: BudgetSnapshot, range: CustomRange) {
+  const previous = precedingRange(range);
+  const total = (window: CustomRange): number | null => {
+    const found = budgetRelevantEntries(entriesInRange(snapshot, window), snapshot.settings);
+    return found.length > 0 ? found.reduce((sum, entry) => sum + normalizeEntry(entry, snapshot), 0) : null;
+  };
+  const currentTotal = total(range);
+  const previousTotal = total(previous);
+  const comparable = currentTotal != null && previousTotal != null;
+  return {
+    currentTotal,
+    previousTotal,
+    previousLabel: rangeTitle(previous),
+    deltaAbs: comparable ? currentTotal - previousTotal : null,
+    deltaPct: comparable && previousTotal !== 0 ? ((currentTotal - previousTotal) / previousTotal) * 100 : null,
   };
 }
 
