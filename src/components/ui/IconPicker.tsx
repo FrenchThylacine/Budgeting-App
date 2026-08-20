@@ -89,6 +89,12 @@ import {
   Wrench,
   X,
   Ambulance, Anchor, Armchair, Baby, Bath, BatteryCharging, Bird, Bitcoin, Bookmark, Bot, BrainCircuit, Briefcase, Building2, Cake, Calculator, Caravan, Carrot, Cat, ChartColumn, ChartPie, ChefHat, Cherry, ClipboardList, Cloud, CloudSun, Code, Coins, Croissant, CupSoda, Database, Dices, Disc3, Dog, DollarSign, Donut, DoorOpen, Egg, Euro, FileText, Fish, Flag, Flower, Forklift, Gauge, GitBranch, Glasses, Hammer, Handshake, HardDrive, IceCream, Joystick, Keyboard, Library, ListMusic, Martini, Mic, Microwave, Milk, MonitorPlay, Mouse, Navigation, Package, Percent, PlaneLanding, PlaneTakeoff, Podcast, Popcorn, Presentation, Printer, Projector, Puzzle, Radar, Radio, Receipt, Recycle, Refrigerator, Repeat, Rocket, Route, Sailboat, Satellite, School, Server, Shirt, Snowflake, Soup, Speaker, Sprout, Store, Sun, Swords, Tag, Target, Terminal, TowerControl, TrafficCone, TramFront, Trees, Truck, Twitch, Umbrella, University, Video, Warehouse, WashingMachine, Watch, Wind, Youtube,
+  Activity, Amphora, Antenna, Aperture, Binoculars, BookA, BookMarked, Boxes, Brush, Cable, Castle,
+  Cctv, Church, Cog, Crosshair, Drama, Earth, Fan, Feather, Headset, Images, Layers, Locate,
+  MemoryStick, MessageSquareQuote, Milestone, MonitorSpeaker, MountainSnow, Music4, Newspaper,
+  Origami, PaintRoller, PersonStanding, Piano, Pyramid, Quote, Ruler, ScanEye, ScrollText,
+  Signpost, SlidersVertical, Stamp, Sunrise, Sunset, Telescope, TentTree, Theater, Thermometer,
+  Orbit, Usb, Waypoints, Webcam,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -157,6 +163,10 @@ export const ICON_CATEGORIES: IconCategory[] = [
       { name: "Swords", label: "Fencing", icon: Swords, keywords: "martial arts combat sparring" },
       { name: "Target", label: "Archery", icon: Target, keywords: "aim shooting darts precision" },
       { name: "Snowflake", label: "Winter sport", icon: Snowflake, keywords: "ski snowboard ice skating" },
+      { name: "Activity", label: "Cardio", icon: Activity, keywords: "heart rate training zone fitness" },
+      { name: "PersonStanding", label: "Coaching", icon: PersonStanding, keywords: "trainer instructor lesson class" },
+      { name: "MountainSnow", label: "Skiing", icon: MountainSnow, keywords: "alps piste lift pass snowboard" },
+      { name: "TentTree", label: "Trekking", icon: TentTree, keywords: "hiking wild camping trail" },
     ],
   },
   {
@@ -344,7 +354,28 @@ export const ICON_CATEGORIES: IconCategory[] = [
       { name: "Languages", label: "Languages", icon: Languages, keywords: "translation lessons arabic french spanish" },
       { name: "Globe", label: "Culture", icon: Globe, keywords: "world international global abroad" },
       { name: "BookOpen", label: "Reading", icon: BookOpen, keywords: "study literature learning library" },
-      { name: "Speech", label: "Conversation", icon: Speech, keywords: "speaking practice tutor class" },
+      { name: "Speech", label: "Conversation", icon: Speech, keywords: "speaking practice tutor class arabic french conversation partner" },
+      { name: "BookA", label: "Vocabulary", icon: BookA, keywords: "dictionary alphabet arabic script characters flashcards" },
+      { name: "Feather", label: "Calligraphy", icon: Feather, keywords: "arabic script handwriting brush pen" },
+      { name: "ScrollText", label: "Literature", icon: ScrollText, keywords: "poetry text classic reading" },
+      { name: "BookMarked", label: "Study", icon: BookMarked, keywords: "textbook course revision" },
+      { name: "Drama", label: "Theatre", icon: Drama, keywords: "play stage performance comedie theatre" },
+      { name: "Theater", label: "Opera", icon: Theater, keywords: "concert hall stage ballet performance" },
+      { name: "Amphora", label: "Museum", icon: Amphora, keywords: "gallery exhibition antiquities collection" },
+      { name: "Castle", label: "Heritage", icon: Castle, keywords: "chateau monument historic visit" },
+      { name: "Church", label: "Architecture", icon: Church, keywords: "cathedral monument visit sightseeing" },
+      { name: "Pyramid", label: "Antiquity", icon: Pyramid, keywords: "archaeology ancient history museum" },
+      { name: "Newspaper", label: "News", icon: Newspaper, keywords: "press subscription magazine le monde" },
+      { name: "Quote", label: "Writing", icon: Quote, keywords: "essay journal blog author" },
+      { name: "MessageSquareQuote", label: "Translation", icon: MessageSquareQuote, keywords: "interpret subtitles language service" },
+      { name: "Piano", label: "Piano", icon: Piano, keywords: "lessons keyboard music conservatoire" },
+      { name: "Music4", label: "Sheet music", icon: Music4, keywords: "score lessons practice theory" },
+      { name: "Brush", label: "Painting", icon: Brush, keywords: "art class studio canvas" },
+      { name: "PaintRoller", label: "Decorating", icon: PaintRoller, keywords: "diy interior paint" },
+      { name: "Origami", label: "Craft", icon: Origami, keywords: "paper hobby making model" },
+      { name: "Stamp", label: "Collecting", icon: Stamp, keywords: "philately hobby collection" },
+      { name: "Aperture", label: "Photography", icon: Aperture, keywords: "lens camera club printing" },
+      { name: "Images", label: "Prints", icon: Images, keywords: "gallery framing photo album" },
       { name: "Sparkles", label: "Other", icon: Sparkles, keywords: "misc general anything" },
     ],
   },
@@ -375,6 +406,55 @@ export const ICON_CATEGORIES: IconCategory[] = [
       { name: "Wind", label: "Weather", icon: Wind, keywords: "metar wind conditions" },
       { name: "CloudSun", label: "Forecast", icon: CloudSun, keywords: "weather metar taf conditions" },
       { name: "Anchor", label: "Marine", icon: Anchor, keywords: "harbour port boat" },
+      { name: "Signpost", label: "Waypoint", icon: Signpost, keywords: "fix intersection navaid vor" },
+      { name: "Locate", label: "Position", icon: Locate, keywords: "gps location transponder squawk" },
+      { name: "Telescope", label: "Observation", icon: Telescope, keywords: "spotting sky watching" },
+      { name: "Orbit", label: "Holding", icon: Orbit, keywords: "hold pattern circuit stack" },
+      { name: "Earth", label: "Long haul", icon: Earth, keywords: "intercontinental world route ultra long range" },
+      { name: "Sunset", label: "Night flight", icon: Sunset, keywords: "evening dusk time of day" },
+    ],
+  },
+  {
+    /*
+     * Flight simulation.
+     *
+     * Deliberately generic shapes rather than brand marks. Every name in the
+     * brief — MSFS, X-Plane, Navigraph, iniBuilds, PESIM, Azur Poly, Contrail,
+     * Thrustmaster, Winwing, Honeycomb — is a trademark, and a hand-drawn
+     * approximation of somebody's logo is both worse than their own and
+     * misleading about who made it. The app already has the right answer for
+     * a brand: give the wishlist item the maker's site and it uses their real
+     * icon, which is the point of the separate brand link. These cover the
+     * *kinds* of thing, which is what the picker is for — and the keywords are
+     * the product names, so searching "winwing" or "navigraph" lands on the
+     * right shape.
+     */
+    id: "flightsim",
+    label: "Flight simulation",
+    icons: [
+      { name: "Joystick", label: "Yoke & stick", icon: Joystick, keywords: "yoke sidestick honeycomb alpha bravo thrustmaster winwing controller" },
+      { name: "SlidersVertical", label: "Throttle quadrant", icon: SlidersVertical, keywords: "throttle levers quadrant bravo tca winwing thrust" },
+      { name: "Footprints", label: "Rudder pedals", icon: Footprints, keywords: "rudder pedals toe brakes crosswind thrustmaster" },
+      { name: "MonitorSpeaker", label: "Sim rig", icon: MonitorSpeaker, keywords: "cockpit rig setup home simulator desk" },
+      { name: "Headset", label: "Headset", icon: Headset, keywords: "comms atc vatsim voice pilot" },
+      { name: "Waypoints", label: "Navigation data", icon: Waypoints, keywords: "navigraph airac charts fixes navdata subscription" },
+      { name: "Layers", label: "Scenery", icon: Layers, keywords: "orthos mesh photogrammetry addon terrain" },
+      { name: "Boxes", label: "Aircraft add-on", icon: Boxes, keywords: "inibuilds pmdg fenix aircraft module payware a350 a320 a330" },
+      { name: "Milestone", label: "Airport add-on", icon: Milestone, keywords: "pesim scenery airport terminal gate cdg" },
+      { name: "Cctv", label: "Ground services", icon: Cctv, keywords: "gsx pushback jetway handling" },
+      { name: "Crosshair", label: "Approach", icon: Crosshair, keywords: "ils approach minima autoland precision" },
+      { name: "ScanEye", label: "Traffic", icon: ScanEye, keywords: "vatsim ivao online network traffic" },
+      { name: "Antenna", label: "Comms", icon: Antenna, keywords: "vhf frequency atc radio pilot" },
+      { name: "Cog", label: "Systems", icon: Cog, keywords: "failures avionics systems study level" },
+      { name: "Fan", label: "Engines", icon: Fan, keywords: "turbofan thrust n1 engine trent" },
+      { name: "Thermometer", label: "Conditions", icon: Thermometer, keywords: "oat temperature icing metar" },
+      { name: "Sunrise", label: "Dawn departure", icon: Sunrise, keywords: "early morning flight time of day" },
+      { name: "Binoculars", label: "Spotting", icon: Binoculars, keywords: "planespotting airport watching photography" },
+      { name: "Ruler", label: "Charts", icon: Ruler, keywords: "plates jeppesen approach chart plotting" },
+      { name: "Cable", label: "Wiring", icon: Cable, keywords: "usb hub peripherals rig cables" },
+      { name: "Usb", label: "Peripherals", icon: Usb, keywords: "controller hardware connection device" },
+      { name: "MemoryStick", label: "Memory", icon: MemoryStick, keywords: "ram upgrade pc build performance" },
+      { name: "Webcam", label: "Streaming rig", icon: Webcam, keywords: "camera capture broadcast twitch" },
     ],
   },
   {
@@ -408,9 +488,23 @@ export const ICON_CATEGORIES: IconCategory[] = [
 /** Shown when an activity has no icon, or names an icon this build does not know. */
 export const FALLBACK_ICON: LucideIcon = Circle;
 
-const ICON_INDEX: Map<string, IconOption> = new Map(
-  ICON_CATEGORIES.flatMap((category) => category.icons).map((option) => [option.name, option]),
-);
+/**
+ * Name → option, for resolving a stored icon.
+ *
+ * An icon may legitimately appear in more than one group: a joystick is an
+ * arcade stick and it is a sidestick, and someone looking under "Gaming" and
+ * someone looking under "Flight simulation" should both find it. The groups
+ * are a way of browsing, not a partition.
+ *
+ * The first occurrence wins, so the label and keywords a stored name resolves
+ * to are stable and do not depend on the order the groups happen to be
+ * declared in. `Map` would otherwise keep the *last*, which is the one nobody
+ * chose deliberately.
+ */
+const ICON_INDEX: Map<string, IconOption> = new Map();
+for (const option of ICON_CATEGORIES.flatMap((category) => category.icons)) {
+  if (!ICON_INDEX.has(option.name)) ICON_INDEX.set(option.name, option);
+}
 
 export const ICON_COUNT = ICON_INDEX.size;
 
@@ -697,7 +791,9 @@ export const IconPicker: React.FC<IconPickerProps> = ({ value, onChange, accent,
                       const isSelected = option.name === value;
                       return (
                         <button
-                          key={option.name}
+                          // Scoped to the group: the same icon can appear in two,
+                          // and a bare name would collide as a React key.
+                          key={`${group.id}-${option.name}`}
                           ref={(node) => {
                             optionRefs.current[index] = node;
                           }}
