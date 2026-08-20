@@ -12,6 +12,7 @@ import type {
   CurrencyCode,
   MonthCloseRecord,
   ScenarioPreset,
+  SeasonalPreset,
   Settings,
   SpendingEntry,
   WalletEntry,
@@ -151,6 +152,17 @@ interface BudgetStore {
    */
   setMonthlyNote: (year: number, month: number, note: string) => void;
   applySeasonalPreset: (presetId: string) => void;
+  /**
+   * Capture the current activity states as a named season.
+   *
+   * Seasonal presets were seeded and applicable but creatable from nowhere, so
+   * on a real account — which is seeded with none — the feature could never be
+   * used at all. Capturing is the natural way in: set the activities up for
+   * winter, then name it, rather than filling in a form describing a state you
+   * are already looking at.
+   */
+  captureSeasonalPreset: (name: string, season: string) => void;
+  removeSeasonalPreset: (presetId: string) => void;
   applyScenarioPreset: (presetId: string) => void;
   addScenarioPreset: (preset: Omit<ScenarioPreset, "id">) => void;
   updateScenarioPreset: (id: string, patch: Partial<Omit<ScenarioPreset, "id">>) => void;
@@ -879,6 +891,51 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
         ? `Noted against ${monthName(month)} ${year}.`
         : `Cleared the note on ${monthName(month)} ${year}.`,
       { year, month },
+    );
+  },
+
+  captureSeasonalPreset: (name, season) => {
+    commit(
+      set,
+      get,
+      (snapshot) => {
+        const year = currentYear(snapshot);
+        const activityOverrides: SeasonalPreset["activityOverrides"] = {};
+        for (const activity of year.activities) {
+          // Only the fields a season is about. Capturing everything would make
+          // applying a season overwrite names, categories and schedules too.
+          activityOverrides[activity.id] = {
+            active: activity.active,
+            visible: activity.visible,
+            pricePerMonth: activity.pricePerMonth,
+            recurrenceType: activity.recurrenceType,
+            recurrenceInterval: activity.recurrenceInterval,
+            currency: activity.currency,
+          };
+        }
+        snapshot.seasonalPresets.push({
+          id: id("season"),
+          name,
+          season,
+          activityOverrides,
+          notes: `Captured from ${year.activities.length} activities.`,
+        });
+      },
+      "preset",
+      `Saved the current activities as the "${name}" season.`,
+    );
+  },
+
+  removeSeasonalPreset: (presetId) => {
+    commit(
+      set,
+      get,
+      (snapshot) => {
+        snapshot.seasonalPresets = snapshot.seasonalPresets.filter((item) => item.id !== presetId);
+      },
+      "delete",
+      "Deleted a season.",
+      { presetId },
     );
   },
 

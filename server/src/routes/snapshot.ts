@@ -84,6 +84,15 @@ const SETTINGS_FIELDS: Record<string, SettingsFieldCheck> = {
   // refuse a string or a number where an object belongs.
   exchangeRates: (value) => value != null && typeof value === "object" && !Array.isArray(value),
   gestures: (value) => value != null && typeof value === "object" && !Array.isArray(value),
+  dashboard: (value) =>
+    Array.isArray(value) &&
+    value.every(
+      (entry) =>
+        entry != null &&
+        typeof entry === "object" &&
+        typeof (entry as { id?: unknown }).id === "string" &&
+        typeof (entry as { visible?: unknown }).visible === "boolean",
+    ),
 };
 
 export function validateSettingsPatch(body: unknown): Record<string, unknown> {

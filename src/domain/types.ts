@@ -111,6 +111,15 @@ export interface Settings {
    */
   liveClockEnabled: boolean;
   /**
+   * Which dashboard sections appear, and in what order.
+   *
+   * Absent means the default arrangement, so an account that has never opened
+   * the customiser is unaffected — and a section added in a later version
+   * appears for everyone instead of being silently missing for anyone who has
+   * ever saved a list. See `dashboardWidgets` in `domain/dashboard.ts`.
+   */
+  dashboard?: { id: string; visible: boolean }[];
+  /**
    * Swipe actions per list.
    *
    * Optional: an account that has never opened the gesture settings has no

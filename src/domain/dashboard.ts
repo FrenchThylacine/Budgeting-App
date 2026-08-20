@@ -1,0 +1,138 @@
+import type { Settings } from "./types";
+
+/**
+ * Which sections the dashboard shows, and in what order.
+ *
+ * The dashboard answers four questions — how healthy am I, where is the budget
+ * heading, what is coming, and what needs attention — but which of those
+ * matters most is a matter of how somebody actually uses the app. Someone with
+ * no recurring costs has no use for the schedule; someone tracking a single
+ * month has no use for the year-to-date figures.
+ *
+ * Preferences are stored as an ordered list of `{ id, visible }` rather than as
+ * a set of booleans, so one field carries both order and visibility and the two
+ * can never disagree about which sections exist.
+ */
+
+export type DashboardWidgetId =
+  | "alerts"
+  | "health"
+  | "charts"
+  | "detail"
+  | "budget"
+  | "upcoming"
+  | "savings";
+
+export interface DashboardWidget {
+  id: DashboardWidgetId;
+  label: string;
+  /** What the section actually shows, for the customiser's list. */
+  description: string;
+  /**
+   * Sections that answer a question nothing else answers. They can be
+   * reordered but not hidden: a dashboard with no figures on it is not a
+   * simplified dashboard, it is a blank page.
+   */
+  required?: boolean;
+}
+
+/** The default arrangement: alerts, then answers, then reference. */
+export const DASHBOARD_WIDGETS: readonly DashboardWidget[] = [
+  {
+    id: "alerts",
+    label: "Alerts",
+    description: "Categories over their monthly cap. Hidden automatically when there are none.",
+  },
+  {
+    id: "health",
+    label: "Health and headline figures",
+    description: "The score, what is left of the budget, this period's spending, and the change since last time.",
+    required: true,
+  },
+  {
+    id: "charts",
+    label: "Trend and forecast",
+    description: "Spending per period against the budget, and where this period lands at the current pace.",
+  },
+  {
+    id: "upcoming",
+    label: "Upcoming",
+    description: "Dated timeline of what is scheduled next, and what recurs without a date.",
+  },
+  {
+    id: "budget",
+    label: "Budget suggestion",
+    description: "The suggested monthly budget from your recurring costs, and the decision once made.",
+  },
+  {
+    id: "detail",
+    label: "Detail",
+    description: "Category split and the recurring share of this period. Collapsed by default.",
+  },
+  {
+    id: "savings",
+    label: "Savings and wallet",
+    description: "Wallet balance, rollover, wishlist and year to date. Collapsed by default.",
+  },
+];
+
+const DEFAULT_ORDER = DASHBOARD_WIDGETS.map((widget) => widget.id);
+
+export interface ResolvedWidget {
+  id: DashboardWidgetId;
+  visible: boolean;
+}
+
+/**
+ * The stored arrangement, reconciled against the sections that actually exist.
+ *
+ * Unknown ids are dropped (a section removed in a later version) and missing
+ * ones are appended in their default position (a section added in a later
+ * version), so an old stored list never hides something new or resurrects
+ * something gone. Required sections are forced visible whatever was stored.
+ */
+export function dashboardWidgets(settings: Pick<Settings, "dashboard">): ResolvedWidget[] {
+  const stored = Array.isArray(settings.dashboard) ? settings.dashboard : [];
+  const byId = new Map(stored.map((entry) => [entry.id, entry]));
+  const required = new Set(DASHBOARD_WIDGETS.filter((widget) => widget.required).map((widget) => widget.id));
+
+  const known = stored
+    .filter((entry) => DEFAULT_ORDER.includes(entry.id as DashboardWidgetId))
+    .map((entry) => ({
+      id: entry.id as DashboardWidgetId,
+      visible: required.has(entry.id as DashboardWidgetId) ? true : entry.visible !== false,
+    }));
+
+  // Appended rather than prepended: a section the user has never seen should
+  // not push the ones they arranged down the page.
+  for (const id of DEFAULT_ORDER) {
+    if (!byId.has(id)) known.push({ id, visible: true });
+  }
+  return known;
+}
+
+/** Move one section up or down, clamped at the ends. */
+export function moveWidget(
+  widgets: ResolvedWidget[],
+  id: DashboardWidgetId,
+  direction: -1 | 1,
+): ResolvedWidget[] {
+  const index = widgets.findIndex((widget) => widget.id === id);
+  const target = index + direction;
+  if (index === -1 || target < 0 || target >= widgets.length) return widgets;
+  const next = [...widgets];
+  [next[index], next[target]] = [next[target], next[index]];
+  return next;
+}
+
+/** Toggle a section, refusing to hide one the dashboard cannot do without. */
+export function toggleWidget(widgets: ResolvedWidget[], id: DashboardWidgetId): ResolvedWidget[] {
+  const definition = DASHBOARD_WIDGETS.find((widget) => widget.id === id);
+  if (definition?.required) return widgets;
+  return widgets.map((widget) => (widget.id === id ? { ...widget, visible: !widget.visible } : widget));
+}
+
+export function widgetDefinition(id: DashboardWidgetId): DashboardWidget {
+  // Unreachable for a resolved list: `dashboardWidgets` drops unknown ids.
+  return DASHBOARD_WIDGETS.find((widget) => widget.id === id) ?? DASHBOARD_WIDGETS[0];
+}
