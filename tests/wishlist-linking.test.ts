@@ -149,11 +149,19 @@ describe("wishlist priority ordering", () => {
     expect(priorityRank(undefined)).toBeGreaterThan(priorityRank("dream"));
   });
 
-  it("colours priorities by meaning", () => {
-    expect(PRIORITY_META.high.color).toBe("var(--danger)");
-    expect(PRIORITY_META.medium.color).toBe("var(--warning)");
+  it("colours priorities by meaning, in the readable variant of each hue", () => {
+    // The badge sets its label *in* the colour, so these are the `-text`
+    // tokens: the saturated fill values read at 2.4–4.2 against the badge's
+    // own tinted background, which is under the minimum for 12px type. The
+    // soft backgrounds stay on the fill hue, which is what they are for.
+    expect(PRIORITY_META.high.color).toBe("var(--danger-text)");
+    expect(PRIORITY_META.medium.color).toBe("var(--warning-text)");
     expect(PRIORITY_META.low.color).toBe("var(--accent)");
-    expect(PRIORITY_META.dream.color).toBe("var(--purple)");
+    expect(PRIORITY_META.dream.color).toBe("var(--purple-text)");
+
+    expect(PRIORITY_META.high.soft).toBe("var(--danger-soft)");
+    expect(PRIORITY_META.medium.soft).toBe("var(--warning-soft)");
+    expect(PRIORITY_META.dream.soft).toBe("var(--purple-soft)");
   });
 });
 

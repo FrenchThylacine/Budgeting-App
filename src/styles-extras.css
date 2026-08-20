@@ -160,12 +160,12 @@
 
 .auth-banner-error {
   background: var(--danger-soft);
-  color: var(--danger);
+  color: var(--danger-text);
 }
 
 .auth-banner-ok {
   background: var(--success-soft);
-  color: var(--success);
+  color: var(--success-text);
 }
 
 .auth-links {
@@ -875,7 +875,7 @@
    opening anything, or the app quietly pretends the date changed. */
 .period-trigger-historical {
   border-color: var(--warning);
-  color: var(--warning);
+  color: var(--warning-text);
   background: var(--warning-soft);
 }
 
@@ -1827,3 +1827,32 @@
 }
 
 .widget-controls { display: flex; gap: 2px; flex: none; }
+
+/* ─── Checkboxes and radios ───────────────────────────────────────────────── */
+
+/* The user agent's default is 13×13, which is below every touch-target
+   guideline and visually lost beside 15px labels. `accent-color` also brings
+   them into the app's palette: without it they render in the platform's own
+   blue, which is the one control on the page ignoring the identity. */
+input[type="checkbox"],
+input[type="radio"] {
+  width: 18px;
+  height: 18px;
+  flex: none;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+input[type="checkbox"]:focus-visible,
+input[type="radio"]:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* The label is the real target — it wraps the control and its text — so it
+   gets the height a finger needs rather than the control being grown further. */
+label:has(> input[type="checkbox"]),
+label:has(> input[type="radio"]) {
+  min-height: 32px;
+  align-items: center;
+}

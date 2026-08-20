@@ -30,11 +30,16 @@ const BUCKET_LABELS: Record<BudgetBucket, string> = {
   wallet: "Wallet",
 };
 
+/**
+ * The bucket name is set *in* its colour, so these are the text variants
+ * rather than the fill ones — the saturated tokens read at 2.6–4.0 against the
+ * card, which is under the minimum for 12px type.
+ */
 const BUCKET_COLORS: Record<BudgetBucket, string> = {
   general: "var(--accent)",
-  piloting: "var(--purple)",
-  personal: "var(--success)",
-  wallet: "var(--warning)",
+  piloting: "var(--purple-text)",
+  personal: "var(--success-text)",
+  wallet: "var(--warning-text)",
 };
 
 function emptyDraft(): CategoryDraft {
@@ -170,7 +175,7 @@ const CategoryForm: React.FC<CategoryFormProps> = ({
             style={{ width: "100%" }}
           />
           {!capValid && (
-            <div style={{ fontSize: 11, color: "var(--danger)", marginTop: 2 }}>
+            <div style={{ fontSize: 11, color: "var(--danger-text)", marginTop: 2 }}>
               Must be a non-negative number
             </div>
           )}
@@ -529,7 +534,12 @@ export const CategoryManager: React.FC = () => {
       <div
         style={{
           fontSize: 12,
-          color: "var(--text-tertiary)",
+          // Secondary rather than tertiary: the inset ground is darker than
+          // the card, so tertiary lands at 4.2 here — under the minimum for
+          // 12px type, and this paragraph explains why an edit changes how
+          // past periods are reported, which is not a thing to make people
+          // squint at.
+          color: "var(--text-secondary)",
           padding: "10px 14px",
           background: "var(--bg-inset)",
           borderRadius: "var(--radius-sm)",

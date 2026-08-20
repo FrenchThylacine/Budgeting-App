@@ -101,11 +101,11 @@ const StatRow: React.FC<{ items: Stat[]; columns?: number }> = ({ items, columns
             fontWeight: 600,
             color:
               item.tone === "positive"
-                ? "var(--success)"
+                ? "var(--success-text)"
                 : item.tone === "negative"
-                ? "var(--danger)"
+                ? "var(--danger-text)"
                 : item.tone === "warning"
-                ? "var(--warning)"
+                ? "var(--warning-text)"
                 : "var(--text-primary)",
             overflowWrap: "anywhere",
           }}
@@ -123,8 +123,8 @@ const StatRow: React.FC<{ items: Stat[]; columns?: number }> = ({ items, columns
 );
 
 const GRADE_COLOR: Record<string, string> = {
-  Excellent: "var(--success)",
-  Good: "var(--success)",
+  Excellent: "var(--success-text)",
+  Good: "var(--success-text)",
   Fair: "var(--warning)",
   "At risk": "var(--danger)",
 };
@@ -310,7 +310,7 @@ export const AnalyticsPanel: React.FC = () => {
                       ? "var(--text-tertiary)"
                       : comparison.deltaAbs > 0
                       ? "var(--danger)"
-                      : "var(--success)",
+                      : "var(--success-text)",
                   fontWeight: 600,
                 }}
               >
@@ -498,7 +498,7 @@ export const AnalyticsPanel: React.FC = () => {
                   {
                     id: "projected",
                     name: "Projected at this pace",
-                    color: "var(--warning)",
+                    color: "var(--warning-text)",
                     values: forecast.projected,
                     dashed: true,
                   },
@@ -583,7 +583,7 @@ export const AnalyticsPanel: React.FC = () => {
                   </span>
                 )}
                 {overCap.length > 0 && (
-                  <span className="text-caption" style={{ color: "var(--danger)", fontWeight: 600 }}>
+                  <span className="text-caption" style={{ color: "var(--danger-text)", fontWeight: 600 }}>
                     {overCap.length} categor{overCap.length === 1 ? "y is" : "ies are"} over cap
                   </span>
                 )}

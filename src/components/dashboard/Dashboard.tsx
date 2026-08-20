@@ -296,7 +296,7 @@ export const Dashboard: React.FC<{ onNavigate?: (tab: "spending" | "activities" 
           <Card style={{ borderColor: "var(--danger)", background: "var(--danger-soft)" }}>
             <CardBody>
               <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-                <AlertTriangle size={18} style={{ color: "var(--danger)", flexShrink: 0 }} />
+                <AlertTriangle size={18} style={{ color: "var(--danger-text)", flexShrink: 0 }} />
                 <div style={{ minWidth: 0 }}>
                   <div className="text-title">
                     {overCap.length === 1
@@ -432,7 +432,7 @@ export const Dashboard: React.FC<{ onNavigate?: (tab: "spending" | "activities" 
                       the card says so rather than leaving a gap between this figure
                       and the transaction list. */}
                   {funding.externalCount > 0 && (
-                    <div className="text-caption" style={{ marginTop: 6, color: "var(--warning)" }}>
+                    <div className="text-caption" style={{ marginTop: 6, color: "var(--warning-text)" }}>
                       Plus {money(funding.external)} paid by others — recorded, not charged to your budget.
                     </div>
                   )}
@@ -516,7 +516,7 @@ export const Dashboard: React.FC<{ onNavigate?: (tab: "spending" | "activities" 
                   {pacing?.projectedRemaining != null && (
                     <div
                       className="text-caption"
-                      style={{ marginTop: 10, color: pacing.projectedRemaining < 0 ? "var(--danger)" : "var(--success)" }}
+                      style={{ marginTop: 10, color: pacing.projectedRemaining < 0 ? "var(--danger-text)" : "var(--success-text)" }}
                     >
                       {pacing.projectedRemaining < 0
                         ? `On this pace you end ${money(Math.abs(pacing.projectedRemaining))} over budget.`

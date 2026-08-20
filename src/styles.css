@@ -41,8 +41,16 @@
   --bg-inset: #E8ECF2;
 
   --text-primary: #0B1B33;
-  --text-secondary: #55637A;
-  --text-tertiary: #8D99AC;
+  /* The grey ramp is measured, not eyeballed. Against the page background
+     (#F2F4F7) these read 15.6 : 6.7 : 4.9, and against the darkest surface
+     they sit on (`--bg-inset`) still 12.4 : 6.2 : 4.6 — so every step clears
+     WCAG AA for body text on every ground the app puts it on. The previous
+     tertiary was 2.6, which meant every caption, footnote and hint in the
+     application failed. The hierarchy is widened at the top rather than
+     compressed at the bottom, so the three steps stay visibly distinct while
+     all three remain legible. */
+  --text-secondary: #4A5769;
+  --text-tertiary: #606B7A;
   --text-inverse: #FFFFFF;
 
   --border: rgba(11, 27, 51, 0.08);
@@ -77,12 +85,25 @@
   --brand-mark-to: #E4002B;
 
   --success: #1DA45A;
+  /* Status colours have two jobs, and one colour cannot do both. `--success`
+     fills a chart series, a progress bar and a badge, where a saturated green
+     is right and contrast is judged against the shape next to it. As 13px
+     text on a page it reads at 2.9:1. The `-text` variants are the same hues
+     darkened until they clear 4.5:1, and are used wherever the colour *is*
+     the text. */
+  --success-text: #0F6B39;
   --success-soft: rgba(29, 164, 90, 0.12);
   --warning: #E8850C;
+  --warning-text: #9A4A08;
   --warning-soft: rgba(232, 133, 12, 0.12);
   --danger: #E5342A;
+  --danger-text: #B3261E;
   --danger-soft: rgba(229, 52, 42, 0.12);
   --purple: #8B5CF6;
+  /* 5.7:1 on the page; the fill value above is 3.8 and is kept for chips,
+     chart series and swatches, where contrast is judged against the shape
+     beside it rather than against the page. */
+  --purple-text: #7C3AED;
   --purple-soft: rgba(139, 92, 246, 0.12);
   --teal: #0EA5B7;
   --teal-soft: rgba(14, 165, 183, 0.12);
@@ -155,7 +176,9 @@
 
   --text-primary: #EEF2F8;
   --text-secondary: #93A1B8;
-  --text-tertiary: #64748B;
+  /* 6.7:1 against the elevated surface. The previous #64748B was 3.7, which
+     fails for body text on the surface most of the app's captions sit on. */
+  --text-tertiary: #8B98AD;
 
   --border: rgba(255, 255, 255, 0.09);
   --border-strong: rgba(255, 255, 255, 0.16);
@@ -175,12 +198,19 @@
   /* Dark surfaces swallow a light tint, so fills are strengthened and hues
      lightened to keep the same perceived emphasis and contrast as light mode. */
   --success: #34D073;
+  /* Against a dark ground the saturated hues already read at 8:1 and above,
+     so no darkened variant is needed — but the tokens must exist, or every
+     rule using them would fall back to nothing in dark mode. */
+  --success-text: #34D073;
   --success-soft: rgba(52, 208, 115, 0.18);
   --warning: #FFA726;
+  --warning-text: #FFA726;
   --warning-soft: rgba(255, 167, 38, 0.18);
   --danger: #FF5B52;
+  --danger-text: #FF5B52;
   --danger-soft: rgba(255, 91, 82, 0.18);
   --purple: #A78BFA;
+  --purple-text: #A78BFA;
   --purple-soft: rgba(167, 139, 250, 0.18);
   --teal: #22D3EE;
   --teal-soft: rgba(34, 211, 238, 0.18);
@@ -406,9 +436,9 @@ strong {
   line-height: var(--leading-tight);
 }
 
-.metric-value.positive { color: var(--success); }
-.metric-value.negative { color: var(--danger); }
-.metric-value.warning { color: var(--warning); }
+.metric-value.positive { color: var(--success-text); }
+.metric-value.negative { color: var(--danger-text); }
+.metric-value.warning { color: var(--warning-text); }
 .metric-value.accent { color: var(--accent); }
 
 .metric-delta {
@@ -465,7 +495,7 @@ strong {
 
 .btn-danger {
   background: var(--danger-soft);
-  color: var(--danger);
+  color: var(--danger-text);
 }
 .btn-danger:hover { background: rgba(255,59,48,0.15); }
 
@@ -496,9 +526,9 @@ strong {
 
 .badge-neutral { background: var(--bg-inset); color: var(--text-secondary); }
 .badge-info { background: var(--accent-soft); color: var(--accent); }
-.badge-success { background: var(--success-soft); color: var(--success); }
-.badge-warning { background: var(--warning-soft); color: var(--warning); }
-.badge-danger { background: var(--danger-soft); color: var(--danger); }
+.badge-success { background: var(--success-soft); color: var(--success-text); }
+.badge-warning { background: var(--warning-soft); color: var(--warning-text); }
+.badge-danger { background: var(--danger-soft); color: var(--danger-text); }
 
 /* =========================================================
    COMPONENTS — Progress
@@ -967,10 +997,10 @@ strong {
   white-space: nowrap;
 }
 
-.sync-status-success { color: var(--success); background: var(--success-soft); border-color: transparent; }
+.sync-status-success { color: var(--success-text); background: var(--success-soft); border-color: transparent; }
 .sync-status-neutral { color: var(--text-secondary); background: var(--bg-inset); border-color: transparent; }
-.sync-status-warning { color: var(--warning); background: var(--warning-soft); border-color: transparent; }
-.sync-status-danger { color: var(--danger); background: var(--danger-soft); border-color: transparent; }
+.sync-status-warning { color: var(--warning-text); background: var(--warning-soft); border-color: transparent; }
+.sync-status-danger { color: var(--danger-text); background: var(--danger-soft); border-color: transparent; }
 
 .sync-status-action {
   display: inline-flex;
@@ -1046,7 +1076,10 @@ strong {
   padding: 1px 6px;
   border-radius: var(--radius-full);
   background: var(--bg-inset);
-  color: var(--text-tertiary);
+  /* Secondary rather than tertiary: an inset background darkens what sits on
+     it, and tertiary on inset lands at 4.25 — under the 4.5 a count of items
+     needs to be readable at 11px. */
+  color: var(--text-secondary);
   font-size: 0.6875rem;
   font-weight: 600;
 }
@@ -1082,7 +1115,7 @@ strong {
 .historical-banner-unlocked {
   background: var(--danger-soft);
   border-color: var(--danger);
-  color: var(--danger);
+  color: var(--danger-text);
 }
 
 .modal-icon-warning {
@@ -1093,7 +1126,7 @@ strong {
   flex-shrink: 0;
   border-radius: var(--radius-md);
   background: var(--danger-soft);
-  color: var(--danger);
+  color: var(--danger-text);
 }
 
 .modal-consequences {
@@ -1116,7 +1149,7 @@ strong {
   background: var(--warning-soft);
   border: 1px solid rgba(255,149,0,0.15);
   border-radius: var(--radius-lg);
-  color: var(--warning);
+  color: var(--warning-text);
   font-size: 0.875rem;
   font-weight: 600;
 }

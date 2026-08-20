@@ -308,7 +308,7 @@ export const SpendingPanel: React.FC = () => {
               marginBottom: 12,
               borderRadius: "var(--radius-md)",
               background: "var(--warning-soft)",
-              color: "var(--warning)",
+              color: "var(--warning-text)",
             }}
           >
             <span style={{ flex: 1, minWidth: 0 }}>{notice}</span>
@@ -496,7 +496,7 @@ export const SpendingPanel: React.FC = () => {
           </div>
           <div>
             <div className="text-footnote">Paid by others</div>
-            <div className="money funding-split-value" style={{ color: "var(--warning)" }}>
+            <div className="money funding-split-value" style={{ color: "var(--warning-text)" }}>
               {formatDualMoney(split.external, snapshot.settings)}
             </div>
             <div className="text-caption">

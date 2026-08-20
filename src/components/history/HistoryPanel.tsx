@@ -87,7 +87,7 @@ export const HistoryPanel: React.FC = () => {
               fontSize: 13,
             }}
           >
-            <ShieldAlert size={16} style={{ color: "var(--warning)", flexShrink: 0 }} />
+            <ShieldAlert size={16} style={{ color: "var(--warning-text)", flexShrink: 0 }} />
             <span>
               {historicalEditCount} change{historicalEditCount !== 1 ? "s" : ""} rewrote a closed period.
             </span>
@@ -262,7 +262,7 @@ export const HistoryPanel: React.FC = () => {
                       style={{ fontWeight: 600, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}
                     >
                       {isApproved ? (
-                        <CheckCircle2 size={15} style={{ color: "var(--success)" }} />
+                        <CheckCircle2 size={15} style={{ color: "var(--success-text)" }} />
                       ) : (
                         <AlertTriangle size={15} style={{ color: "var(--text-tertiary)" }} />
                       )}
@@ -356,7 +356,7 @@ const AuditRow: React.FC<{ entry: AuditLog }> = ({ entry }) => (
         className="text-callout"
         style={{ fontWeight: 600, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}
       >
-        {entry.historicalEdit && <ShieldAlert size={14} style={{ color: "var(--warning)", flexShrink: 0 }} />}
+        {entry.historicalEdit && <ShieldAlert size={14} style={{ color: "var(--warning-text)", flexShrink: 0 }} />}
         <span style={{ overflowWrap: "anywhere" }}>{entry.summary}</span>
       </div>
       <div className="text-footnote">

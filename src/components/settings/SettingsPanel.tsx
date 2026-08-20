@@ -120,13 +120,13 @@ export const SettingsPanel: React.FC = () => {
                     {/* A currency with no usable rate would be converted 1:1,
                         which is a number rather than an answer. Saying so is
                         the difference between a stale figure and a wrong one. */}
-                    {noRate && !locked && <AlertTriangle size={11} aria-hidden="true" style={{ color: "var(--warning)" }} />}
+                    {noRate && !locked && <AlertTriangle size={11} aria-hidden="true" style={{ color: "var(--warning-text)" }} />}
                   </button>
                 );
               })}
             </div>
             {tracked.some((c) => !canConvert(c, settings.baseCurrency, settings.exchangeRates)) && (
-              <p className="text-caption" style={{ color: "var(--warning)", marginTop: 8 }}>
+              <p className="text-caption" style={{ color: "var(--warning-text)", marginTop: 8 }}>
                 Some tracked currencies have no rate against {settings.baseCurrency}. Update the rates
                 below, or set one by hand, before recording amounts in them — without a rate they would
                 be converted one-for-one.
@@ -301,7 +301,7 @@ export const SettingsPanel: React.FC = () => {
             </span>
           </div>
           {syncError && (
-            <div className="text-caption" style={{ color: "var(--warning)" }}>{syncError}</div>
+            <div className="text-caption" style={{ color: "var(--warning-text)" }}>{syncError}</div>
           )}
           <div className="text-footnote">
             The server is the source of truth. This device keeps a local copy so the app works offline, but a
@@ -389,7 +389,7 @@ export const SettingsPanel: React.FC = () => {
           {rateMessage && (
             <div
               className="text-caption"
-              style={{ color: rateMessage.ok ? "var(--success)" : "var(--warning)" }}
+              style={{ color: rateMessage.ok ? "var(--success-text)" : "var(--warning-text)" }}
               role="status"
             >
               {rateMessage.text}

@@ -249,7 +249,7 @@ export const WalletPanel: React.FC = () => {
                 </div>
                 <div style={{ display: "flex", gap: 8, alignItems: "center", flexShrink: 0 }}>
                   <div style={{ textAlign: "right" }}>
-                    <strong style={{ color: entry.amount < 0 ? "var(--danger)" : undefined }}>
+                    <strong style={{ color: entry.amount < 0 ? "var(--danger-text)" : undefined }}>
                       {formatMoney(entry.amount, entry.currency, snapshot.settings.currencyDisplayMode)}
                     </strong>
                     {entry.currency !== snapshot.settings.baseCurrency && (

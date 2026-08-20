@@ -243,7 +243,7 @@ const EditForm: React.FC<EditFormProps> = ({ title, categories, currencies, draf
           span
           hint={
             urlError ? (
-              <span style={{ color: "var(--danger)" }}>Enter a valid web address (http or https only).</span>
+              <span style={{ color: "var(--danger-text)" }}>Enter a valid web address (http or https only).</span>
             ) : (
               "The shop this is bought from. Opened by the link on the card."
             )
@@ -301,7 +301,7 @@ const EditForm: React.FC<EditFormProps> = ({ title, categories, currencies, draf
             span
             hint={
               brandUrlError ? (
-                <span style={{ color: "var(--danger)" }}>Enter a valid web address (http or https only).</span>
+                <span style={{ color: "var(--danger-text)" }}>Enter a valid web address (http or https only).</span>
               ) : (
                 "Use this when the maker is not the shop — a model kit from a marketplace, an add-on sold on one store and built by another. The seller link above is never changed."
               )
@@ -660,8 +660,8 @@ export const WishlistPanel: React.FC = () => {
 
   const noticeTone = {
     info: { background: "var(--accent-soft)", color: "var(--accent)" },
-    success: { background: "var(--success-soft)", color: "var(--success)" },
-    warning: { background: "var(--warning-soft)", color: "var(--warning)" },
+    success: { background: "var(--success-soft)", color: "var(--success-text)" },
+    warning: { background: "var(--warning-soft)", color: "var(--warning-text)" },
   };
 
   return (
@@ -931,6 +931,10 @@ export const WishlistPanel: React.FC = () => {
                             color: "var(--text-secondary)",
                             textDecoration: "none",
                             overflow: "hidden",
+                            // An 18px-tall link is a poor target on a phone,
+                            // and this one leaves the app for a shop.
+                            padding: "4px 0",
+                            minHeight: 26,
                           }}
                         >
                           <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
@@ -952,15 +956,20 @@ export const WishlistPanel: React.FC = () => {
                       )}
                     </div>
                   </div>
-                  <strong style={{ fontSize: 14, whiteSpace: "nowrap", color: "var(--text-primary)" }}>
+                </div>
+
+                {/* Price and state.
+
+                    The price sits here rather than beside the name: on a
+                    260px card the two competed, and the name — which is the
+                    thing being identified — lost, truncating to "Amazon
+                    Fli…". A price is short and fixed-width; a name is not. */}
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                  <strong className="money" style={{ fontSize: 15, color: "var(--text-primary)", marginRight: 2 }}>
                     {item.actualPrice != null
                       ? formatMoney(item.actualPrice, item.currency, settings.currencyDisplayMode)
                       : "—"}
                   </strong>
-                </div>
-
-                {/* Meta row */}
-                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
                   <span
                     className="badge"
                     style={{ background: priority.soft, color: priority.color }}
@@ -1072,7 +1081,7 @@ export const WishlistPanel: React.FC = () => {
                       onClick={() => handleDelete(item)}
                       aria-label="Delete wishlist item"
                       title="Delete"
-                      style={{ color: "var(--danger)" }}
+                      style={{ color: "var(--danger-text)" }}
                     >
                       <Trash2 size={14} />
                     </Button>
