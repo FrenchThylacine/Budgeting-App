@@ -572,7 +572,7 @@ export const Dashboard: React.FC<{ onNavigate?: (tab: "spending" | "activities" 
                 <Figure
                   label="Committed monthly"
                   value={money(calculation.generalBudget)}
-                  detail={`${calculation.activityEstimates.length} activities`}
+                  detail={`${calculation.activityEstimates.length} ${calculation.activityEstimates.length === 1 ? "activity" : "activities"}`}
                 />
               </div>
             </CardBody>

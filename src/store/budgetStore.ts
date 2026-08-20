@@ -918,7 +918,7 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
           name,
           season,
           activityOverrides,
-          notes: `Captured from ${year.activities.length} activities.`,
+          notes: `Captured from ${year.activities.length} ${year.activities.length === 1 ? "activity" : "activities"}.`,
         });
       },
       "preset",
