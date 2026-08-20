@@ -1488,3 +1488,15 @@ strong {
   opacity: 0;
   animation: pageEnter 0.3s ease-out forwards;
 }
+
+/* Text the user typed, inside a style that would otherwise transform it.
+
+   `.text-footnote` uppercases — correct for a label, wrong for a note somebody
+   wrote. A transaction annotated "Winwing Orion throttle" was being displayed
+   as "WINWING ORION THROTTLE", which is the application editing the user's own
+   words. Anything carrying user content inside a transforming style takes this
+   class. */
+.user-text {
+  text-transform: none;
+  letter-spacing: normal;
+}

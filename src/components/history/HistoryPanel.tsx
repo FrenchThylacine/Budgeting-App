@@ -218,7 +218,7 @@ export const HistoryPanel: React.FC = () => {
                     </div>
                     <div className="text-footnote">
                       {formatDateTime(record.confirmedAt)}
-                      {record.note ? ` · ${record.note}` : ""}
+                      {record.note ? <span className="user-text"> · {record.note}</span> : ""}
                     </div>
                   </div>
                   <div style={{ textAlign: "right", flexShrink: 0 }}>

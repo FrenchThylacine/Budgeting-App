@@ -589,7 +589,7 @@ export const SpendingPanel: React.FC = () => {
                   </div>
                   <div className="text-footnote">
                     {entry.date}
-                    {entry.note ? ` · ${entry.note}` : ""}
+                    {entry.note ? <span className="user-text"> · {entry.note}</span> : ""}
                   </div>
                 </div>
                 {/* The amount sits outside `.row-actions`: that container is

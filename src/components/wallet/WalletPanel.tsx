@@ -244,7 +244,7 @@ export const WalletPanel: React.FC = () => {
                   <div className="text-footnote">
                     {monthName(entry.month)} {entry.year}
                     {entry.createdAt ? ` · ${formatDateTime(entry.createdAt)}` : ""}
-                    {entry.note ? ` · ${entry.note}` : ""}
+                    {entry.note ? <span className="user-text"> · {entry.note}</span> : ""}
                   </div>
                 </div>
                 <div style={{ display: "flex", gap: 8, alignItems: "center", flexShrink: 0 }}>

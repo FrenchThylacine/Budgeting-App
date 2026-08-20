@@ -315,6 +315,17 @@
   white-space: nowrap;
 }
 
+/* On a phone this line loses its informative half to the ellipsis: "Mon, Thu ·
+   renewal date you set" becomes "Mon, Thu · …", and the marker explaining
+   where the date came from is exactly what gets cut. Two lines cost less than
+   the missing words. */
+@media (max-width: 640px) {
+  .upcoming-cadence {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+}
+
 .upcoming-amount {
   grid-row: 1 / span 2;
   grid-column: 3;
