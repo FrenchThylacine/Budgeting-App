@@ -22,13 +22,30 @@ Testing is part of development.
 
 Run this checklist before every release.
 
-## Last recorded automated run — 2026-08-16
+## Last recorded automated run — 2026-08-21
 
-- `npm test`: passed — 240+ tests.
+- `npm test`: passed — **433 tests**.
+- `npm run test:db` against local PostgreSQL 17: passed — **71 integration tests**.
 - `npm run build` and `npm run server:build`: passed.
-- `npm run test:db` against local PostgreSQL 17: passed.
 
-New suites this pass: chart scales and axis ticks, activity schedule maths, exchange rates, reports, wishlist linking, and multi-device concurrency.
+New suites this pass:
+
+| Suite | Covers |
+| --- | --- |
+| `tests/external-funding.test.ts` | Rule 7, built on the specification's own worked example — €1,000 budget, €300 personal, €200 external, €700 remaining — asserted across pacing, burn rate, forecast, categories, comparisons, week/month/year, and the report |
+| `tests/editor-typing.test.tsx` | The editor focus bug. Types "Amazon Flight Simulator Hardware" one character at a time and asserts focus and caret after each one |
+| `tests/dashboard-widgets.test.ts` | Reconciling a stored dashboard arrangement against the sections that exist |
+| additions to `tests/api-validation.test.ts` | Per-field validation of `PATCH /snapshot/settings` |
+| additions to `tests/upcoming.test.ts` | The manual next-renewal date, including that it never changes a cost |
+| additions to `tests/exchange-rates.test.ts` | Tracked currencies, and what may not be untracked |
+| additions to `tests/report.test.ts` | Custom-range reports, and what they refuse to state |
+| additions to `tests/db-integration.test.ts` | Round trips for `monthly_notes` and `next_renewal_date`, including malformed stored values |
+
+### The first component test, and why there is only one
+
+`tests/editor-typing.test.tsx` runs under jsdom (`// @vitest-environment jsdom` — no global config change, so every other suite stays in Node and stays fast). It exists because the bug it covers cost more time than any other in the project, and because a unit test could not have caught it: the defect was a React effect dependency, visible only when a component re-renders.
+
+It was written against the *broken* code first and confirmed to fail. A regression test that has never failed is a guess.
 
 ### Multi-device concurrency
 
@@ -70,8 +87,17 @@ npm run dev                                                                    #
 - The Neon HTTP transport itself, notably `sql.transaction([...])`.
 - Production Vercel routing and a production `DATABASE_URL`.
 - Physically separate devices (two isolated browser contexts were used instead).
+- Swipe gestures end to end. The maths is unit-tested (`tests/swipe.test.ts`); the pointer sequence is not.
 
-Browser checks — theme switching, period navigation, historical mode, mobile widths from 320 px, landscape, and tablet — were performed manually this session and are recorded in `implementation_plan.md`. They are not yet automated; a Playwright suite is the obvious next step.
+Browser checks — theme switching, period navigation, historical mode, mobile widths from 320px, and both themes — were driven through Chrome DevTools this session and are recorded in `implementation_plan.md`. They are not yet automated; a Playwright suite is the obvious next step.
+
+### Scripted browser checks worth repeating
+
+Two of this session's checks were scripts run in the DevTools console rather than assertions in a file, and both are worth re-running after any change in their area. Neither needs a framework.
+
+**Typing, in the real browser.** Set the value character by character through the native setter and dispatch `input`, asserting `document.activeElement`, `selectionStart` and node identity after each keystroke. This is what proved the editor fix against a real React render, rather than against jsdom's approximation of one.
+
+**Contrast, everywhere.** Walk every text node on every tab, composite the translucent backgrounds behind it, compute the ratio against the computed font size and weight, and report anything under AA. The last run covered ten tabs in both themes and returned zero. Before it, twenty elements failed — including `--text-tertiary`, the token behind every caption in the app. **Do not eyeball a colour change**; this is how the failing value got in.
 
 ## General
 

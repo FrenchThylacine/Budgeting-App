@@ -112,10 +112,18 @@ Presentation is layered on top:
 
 ```
 src/domain/analytics.ts     selectors — totals, pacing, breakdowns, forecast, health
+src/domain/funding.ts       who paid — the one place the budget/external rule exists
 src/domain/schedule.ts      recurrence maths — real occurrences per calendar month
+src/domain/dashboard.ts     which dashboard sections appear, and in what order
 src/domain/report.ts        report model + printable HTML, from the same selectors
 src/components/charts/      dependency-free SVG chart library
 ```
+
+### Leaf modules for rules that must not be expressible twice
+
+`funding.ts`, `schedule.ts` and `dashboard.ts` import nothing from the rest of the domain. That is the point: a rule with one definition cannot be honoured by one view and ignored by another.
+
+`funding.ts` is the clearest case. "Money somebody else paid does not count against your budget" used to be a *setting*, checked independently in `calculations.ts` and in `analytics.ts` — and `calculateYear` did not check it at all for `totalSpend` or `ytdTotal`, so those two figures disagreed with every other figure in the app. It is now one predicate that every budget selector filters through, and the setting is gone. A figure is either derived from `personalEntries(...)` or it is explicitly the full ledger and says so.
 
 `src/components/charts/scale.tsx` holds the pure maths (`niceTicks`, path builders, `compactNumber`) with no React or DOM, so axis and tick behaviour is unit-testable on its own.
 

@@ -73,9 +73,34 @@ Category `bucket` and `monthlyCap` remain blocked while viewing a historical per
 
 Still permissive by design: back-dating a transaction from the current period. Entering a receipt a few days late is normal, and blocking it would make late entry impossible now that the dedicated, audited path exists for rewriting a closed period.
 
+## Resolved on 2026-08-21
+
+Each of these was open in this file or in `implementation_plan.md` and is now closed. The detail is in the plan; this is the index so the same problem is not solved twice.
+
+| Was | Now |
+| --- | --- |
+| Externally funded spending charged to the budget by default | Excluded unconditionally, `src/domain/funding.ts` |
+| Typing in any editor moved focus to the first field | `EditorSheet`'s set-up effect depends on nothing |
+| The wishlist editor was clipped inside the card it was opened from | One editor at the panel root |
+| Wishlist totals summed across currencies without converting | Converted |
+| A wishlist card's link was labelled with the brand and opened the seller | The label names the destination |
+| Currency display list fixed in `CURRENCY_OPTIONS` | `trackedCurrencies`, with what may not be untracked enforced |
+| No manual next-renewal date | `Activity.nextRenewalDate`, migration 012, display-only |
+| No manual reports | Custom ranges, which refuse to state a budget they cannot know |
+| `PATCH /snapshot/settings` spread the body unvalidated | Per-field whitelist, ten tests |
+| `POST /snapshot/reset` reported success without doing anything | Removed |
+| Seasonal presets implemented and reachable from nowhere | Seasons section in the Scenario Lab, created by capture |
+| `YearRecord.monthlyNotes` had no action, no UI, and was never persisted | All three, migration 011 |
+| `calculation.categoryTotals` computed and read by nothing | Removed |
+| Four settings stored and read by nothing | One wired, three removed |
+| Dashboard sections not selectable or reorderable | Seven sections, shown/hidden and reordered, stored with the budget |
+| Every caption in the app below the contrast minimum | Measured palette; zero failures across ten tabs, both themes |
+
 ## Granular REST routes are not on the live write path — 2026-08-15
 
 The client persists exclusively through `GET`/`PUT /api/snapshot` (see `src/store/budgetStore.ts`). The per-entity routes under `server/src/routes/` (spending, categories, activities, approvals) are fully implemented and validated but are not called by the UI. Their validation therefore protects nothing today; snapshot-level validation in `routes/snapshot.ts` is what guards the real path. Either wire the client to the granular routes or treat them as an external API surface — but do not assume their validation constrains the app.
+
+**Partially addressed 2026-08-21.** `PATCH /snapshot/settings` is the one granular route a client could plausibly reach for, and it now validates per field. The rest remain documented surface with no live caller.
 
 ## Financial calculations
 

@@ -80,7 +80,7 @@ Recurring Expenses
 
 ## Implemented routes — 2026-08-15
 
-The Express app exposes these unversioned routes beneath `/api`, served identically in local development and through `api/[...path].ts` on Vercel:
+The Express app exposes these unversioned routes beneath `/api`, served identically in local development and through `api/index.ts` on Vercel:
 
 - `GET /health`
 - `GET`, `PUT /snapshot` and `PATCH /snapshot/settings`
@@ -88,6 +88,8 @@ The Express app exposes these unversioned routes beneath `/api`, served identica
 - `GET`, `POST /categories`, `PATCH /categories/reorder`, `PATCH /categories/:id`, `PATCH /categories/:id/archive`
 - `GET /activities/:year`, `POST /activities`, `PATCH`/`DELETE /activities/:id`
 - approval read/create/update routes under `/approvals`
+
+There is deliberately **no** `POST /snapshot/reset`. One existed and answered `{"success": true, "message": "Reset would happen here"}` without touching anything — the worst possible shape for a destructive endpoint, because a caller has no way to tell it from a real reset and the next thing it does is act on the belief that the data is gone. Nothing called it: the client's own Reset writes an empty snapshot through the guarded `PUT` path, so it is revisioned, synced and undoable like any other change. A second, unguarded way to erase a budget is not something this API should offer.
 
 > **Which routes the client actually uses.** `src/store/budgetStore.ts` persists exclusively through `GET`/`PUT /snapshot`. The per-entity routes are implemented and validated but are not on the live write path today, so their validation does not constrain the app. Treat `PUT /snapshot` as the endpoint that must be correct.
 
@@ -138,7 +140,9 @@ The client's own `revision` field is **not** trusted for concurrency. A device t
 
 Spending writes validate finite amounts, date format, date/month agreement, active category references, supported currencies, and recurrence values; a date edit recalculates month, ISO week, **and year**, moving the entry into the matching year record. Category writes validate name, bucket enum, colour, non-negative cap, and parent references, rejecting self-parenting and cycles. Activity writes validate year, category reference, currency, recurrence type and interval, and non-negative prices. Approvals reject any re-proposal or mutation of an already-approved month.
 
-Known gaps are tracked in `docs/KNOWN_ISSUES.md` — most notably that `PATCH /snapshot/settings` spreads the request body without per-field validation, and that no route enforces historical/closed-period write protection.
+`PATCH /snapshot/settings` validates **per field** against a whitelist (`validateSettingsPatch` in `server/src/routes/snapshot.ts`). It previously spread `req.body` straight into the stored settings, which accepted any key with any value: `baseCurrency: {}` would have been written and then formatted every amount in the app as `[object Object]`; `monthlyBudget: "lots"` would have made every budget figure `NaN`; and a key nobody has ever heard of would have been stored forever and synced to every device. Unknown fields are now rejected rather than kept, and a client-supplied `lastUpdated` is ignored because the server stamps it — accepting one would let a device claim its stale copy was the newest.
+
+Known gaps are tracked in `docs/KNOWN_ISSUES.md` — most notably that no route enforces historical/closed-period write protection. That guard lives in the store, which is sound only while the store is the sole writer.
 
 Future:
 

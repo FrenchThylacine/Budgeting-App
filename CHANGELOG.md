@@ -1,5 +1,105 @@
 # Changelog
 
+## 2026-08-21 — Money someone else spent, and a caret that would not stay still
+
+### The budget was charging you for other people's spending
+
+There is a switch in Settings reading "Exclude non-budget payment sources from analytics". It was off by default. That single default meant a €200 dinner a friend paid for was charged to a €1,000 budget: remaining read €500 instead of €700, and the burn rate, the forecast, the category caps and the health score were every one of them wrong by the amount somebody else had paid.
+
+Underneath, it was worse than a bad default. The check was written twice, in `calculations.ts` and in `analytics.ts` — and `calculateYear` did not apply it to `totalSpend` or `ytdTotal` at all, so the year-to-date figure on the dashboard disagreed with the month figure above it whenever anyone had marked a transaction as somebody else's.
+
+Whether €200 you did not spend counts as your spending is not a matter of taste. It is now a rule with one definition, in `src/domain/funding.ts`, which imports nothing and which every budget selector filters through. The switch is gone.
+
+The transaction is untouched: it keeps its full amount, stays in the ledger, and stays auditable. It is simply not charged to a budget it did not come out of, and the three figures are shown side by side where that matters — Personal / Paid by others / All transactions on Spending, a line on the dashboard's spending card, its own section and a plain-English note in every report.
+
+Verified against the worked example, in a browser, against real PostgreSQL: €1,000 budget, €300 personal, €200 external, **€700 remaining**.
+
+### Typing
+
+Editing had a reputation in this project. Type one character into a wishlist item and the caret would jump back to the start of the field; type into any field but the first and focus would be snatched away to the first.
+
+It was one line. `EditorSheet` set focus inside an effect that listed `onClose` in its dependencies. Every caller passes a fresh closure, and the draft lives in the parent's state — so a keystroke re-rendered the parent, which handed the sheet a new `onClose`, which tore the effect down and re-ran it, and the first thing it does is focus the sheet's first field.
+
+The tempting fixes are all wrong. A `setTimeout` before focusing, a saved selection restored afterwards, a `useCallback` on every caller: the first two fight the symptom, and the third is a rule every future caller has to remember, failing silently when they forget. The effect is now genuinely a mount effect, with `onClose` read through a ref at call time. The caret is never moved in the first place.
+
+It was never only the wishlist. The same bug was in the transaction editor, the activity editor and the category editor, and Scenarios shipped a bespoke modal carrying its own copy. Scenarios now uses the shared shell too.
+
+`tests/editor-typing.test.tsx` types "Amazon Flight Simulator Hardware" one character at a time and asserts focus and caret after every one. It was written against the broken code first and confirmed to fail; a regression test that has never failed is a guess.
+
+The wishlist editor had a second fault on top of the first. It was rendered *inside* the card being edited, which puts a `position: fixed` backdrop inside `.swipe-content` — and that element carries `will-change: transform`, which makes it the containing block for fixed descendants. The full-screen sheet was being laid out inside a 260px card and then clipped by the row's `overflow: hidden`. There is now one editor, at the panel root.
+
+### The whole app moves when you change tab
+
+The transition was a hairline and a 22px aircraft along the top of the content panel. It is now the application: a navy plane covers the viewport — over the sidebar and the header, not merely the content — a dashed route draws between a red departure node and a white arrival node, an airliner runs along it, and the new page enters from the direction the navigation moved.
+
+The part that took the longest is invisible. React swaps the children the instant the tab changes, so without holding the outgoing tree the user catches a frame or two of the *new* page before the cover hides it, and the whole thing reads as a stutter rather than a departure. The outgoing page is now held until the screen is opaque.
+
+690ms end to end, transform and opacity only, and skipped entirely under `prefers-reduced-motion` — a shape flying across the screen on every navigation is precisely what that setting exists for.
+
+### A tab you can find
+
+The app had no favicon at all. It has one now, and it is deliberately not the A350: at 16 pixels a wide-body seen from above is four grey smudges and a line. What survives at that size is one bold silhouette and two colours, so the mark is the part of an airliner that is a silhouette even in life — the swept fin — in navy with the signature red across its base. SVG, ICO, an apple-touch icon and a manifest, plus a real title, a description, two theme colours, and `noindex`, because a private financial tool has no business being in a search index.
+
+### The identity reaches the phone
+
+On a desktop the navy lives in the sidebar. A phone has no sidebar, so in practice the identity was desktop-only: the whole app was a white page with a navy button on it. The header is now a full-bleed deep-navy band with a blue glow, white type, and the red as a hairline at its foot — and it *reclaims* space rather than spending it, 241px down to 197px, by making one row do the work of two.
+
+The tricolour signature ran the full width of the window, which its own source comment said it should not: full width it reads as a status bar or a loading indicator, which are the two meanings it must never carry. It is now a 76px centred tab, 56px on a phone.
+
+### Every caption in the app failed the contrast minimum
+
+Measured, not eyeballed. A script walked every text node on all ten tabs in both themes, composited the translucent backgrounds behind each one, and computed the real ratio against the computed font size and weight. Twenty elements failed.
+
+`--text-tertiary` was 2.6:1 against the page — the token behind every caption, footnote, hint and empty-state line in the application. The grey ramp is now 15.6 : 6.7 : 4.9 and clears the minimum on the page, the card and the inset ground alike.
+
+The status colours failed for a different reason: one colour was doing two jobs. `--success` at 2.9:1 and `--warning` at 2.5:1 are right as a chart series or a badge tint, where contrast is read against the shape beside them, and illegible as 13px text. They now have `-text` variants — the same hues darkened until they clear the minimum — and fills keep the saturated value.
+
+Re-measured after: zero failures, ten tabs, both themes.
+
+Checkboxes were the user agent's 13×13 default, below every touch-target guideline and visually lost beside 15px labels; they are 18px now, and they finally take the app's own accent colour instead of the platform's blue.
+
+### Things that were there and could not be reached
+
+**Seasonal presets.** Implemented, seeded, applicable — and called from nowhere at all. A real account is seeded with none, so the feature could not be used even in principle. Seasons now have a section in the Scenario Lab, and the way in is capture rather than a form: arrange the activities for summer, then name what you are already looking at.
+
+**Notes against a month.** `monthlyNotes` has been in the model since the beginning. The loader returned a hardcoded `{}`, so anything written survived until the next read from the server and then vanished. It has a column now (migration 011), a store action, and a place in History — where a note is the one thing that still explains why March cost what it did a year later.
+
+**A dashboard you arrange.** Seven sections, shown or hidden and moved up or down, stored with your budget so the arrangement follows you between devices. The health score and headline figures cannot be hidden, because a dashboard with no figures on it is a blank page rather than a simpler one.
+
+### Things that were there and lied
+
+**`POST /api/snapshot/reset`** answered `{"success": true, "message": "Reset would happen here"}` without touching anything. For a destructive endpoint that is the worst possible shape: a caller cannot tell it from a real reset, and the next thing it does is act on the belief that the data is gone. Nothing called it — the client's own Reset writes an empty snapshot through the guarded `PUT` path, which is revisioned, synced and undoable — so it is deleted rather than implemented. A second, unguarded way to erase a budget is not something this API should offer.
+
+**`PATCH /api/snapshot/settings`** spread the request body straight into the stored settings. `baseCurrency: {}` would have been written and then formatted every amount in the app as `[object Object]`. `monthlyBudget: "lots"` would have made every figure `NaN`. A key nobody has ever heard of would have been stored forever and synced to every device. Each field is checked now, and unknown ones are refused.
+
+**The link on a wishlist card** was labelled with the brand's domain and opened the seller's — the one place in the app where the text and the destination disagreed. The label names the destination now, and the brand is stated separately when it differs.
+
+**Four settings** were stored, synced, and read by nothing. `liveClockEnabled` is wired, and turning it off stops the minute timer rather than merely hiding its output. `autoWalletRollupEnabled` and `promptBeforeMonthClose` are gone: the close-month dialog already asks every time, with the actual figure in front of the user, and a stored default for a permanent financial record is the wrong affordance. `nanPolicy` had exactly one legal value, which made an invariant look like a preference.
+
+### Smaller, but not small
+
+**Currencies you actually use.** Every amount field offered all ten, which is eight wrong answers for someone who deals in two. You choose the set now — but the display currency can never be untracked, nor can one that real records are denominated in, and a record keeps its own currency for editing even after it stops being tracked. The money was spent in it; rewriting the field would falsify the record.
+
+**Reports for any window.** Presets for the last 30 days, the last 90, this quarter and year to date, plus two date fields. The interesting part is what a custom range refuses to say: the budget is set per month, so there is no budget figure to measure six weeks against, and prorating one would be a number nobody chose presented with the authority of a real one. It omits both and explains why.
+
+**A renewal date the rule cannot know.** An annual subscription renews on the day it was bought. That is a fact about the past no recurrence rule contains, and a monthly charge with no day set has no derivable date at all. You can state the next one, and it overrides the calculated date in the timeline — but deliberately never touches a cost, because letting a typed date into the estimate would mean one keystroke could rewrite a year of budget figures.
+
+**The wishlist's active total** was adding $600 and €40 into "€640".
+
+**A wishlist item's name and its price** were competing for a 260px card, and the name lost: "Amazon Flight Simulator Hardware" rendered as "Amazon Fli…".
+
+**Form controls had no `font-family`**, so every textarea in the app was set in the user agent's monospace next to sans-serif labels.
+
+**52 more icons**, a flight-simulation group, and every name checked against the installed lucide build — searching "winwing", "navigraph", "rudder", "a350", "pesim", "theatre", "museum" or "arabic" now lands somewhere sensible. Brand marks are deliberately not drawn: they are trademarks, a hand-drawn approximation is worse than the real one and misleading about who made it, and the app already has the right answer in the separate brand link.
+
+**Vendor code split from application code.** Everything landed in one 900 kB chunk, so a one-line fix invalidated React, the icon set and the store for every returning visitor. First load is unchanged; the cost of the *next* deploy drops from 222 kB to 94 kB.
+
+### Verified
+
+433 unit tests and 71 integration tests against a real PostgreSQL 17 database. Migrations 011 and 012 were run against a database that already held data — the upgrade path that once answered every request with 503 — and both are additive, with nothing dropped, truncated or rewritten. Browser work was driven through Chrome DevTools at 320px, 390px and 1440px in both themes.
+
+Not deployed. Nothing here is verified in production.
+
 ## 2026-08-17 — Three rules that had never once applied
 
 Three pieces of this app were written, committed, and never ran.
