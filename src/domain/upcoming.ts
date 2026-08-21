@@ -1,5 +1,6 @@
 import { estimateActivity } from "./calculations";
 import { nextOccurrences, parseLocalDate } from "./schedule";
+import { describePaymentCycle, paymentsBetween } from "./payments";
 import type { Activity, BudgetSnapshot } from "./types";
 
 /**
@@ -27,6 +28,20 @@ export interface UpcomingOccurrence {
    * than from its recurrence rule, so the timeline can say which it is.
    */
   manual?: boolean;
+  /**
+   * What the entry is.
+   *
+   * `occurrence` is the historical meaning — a session that is also its own
+   * charge, or a subscription's renewal. `payment` is money leaving on a cycle
+   * of its own, which for a session pack is *not* one per session. The two are
+   * distinguished so the timeline can label a €200 gym payment as covering ten
+   * sessions rather than implying a €200 session.
+   */
+  kind?: "occurrence" | "payment";
+  /** Sessions a `payment` covers, when the model states one. */
+  sessions?: number;
+  /** A sentence describing the cycle, for entries whose cadence needs saying. */
+  cycleNote?: string;
 }
 
 export interface UpcomingSchedule {
@@ -71,6 +86,11 @@ function occurrenceAmount(activity: Activity): number | null {
   return null;
 }
 
+/** True when a payment-cycle model has a date to count from. */
+function hasPaymentBaseline(activity: Activity): boolean {
+  return parseLocalDate(activity.nextRenewalDate) != null || parseLocalDate(activity.startDate) != null;
+}
+
 export function upcomingSchedule(
   snapshot: BudgetSnapshot,
   from = new Date(),
@@ -90,6 +110,43 @@ export function upcomingSchedule(
   const startOfToday = new Date(from.getFullYear(), from.getMonth(), from.getDate());
 
   for (const activity of activities) {
+    /*
+     * Models with a payment cycle of their own are asked first.
+     *
+     * A fixed-yearly activity is billed once a year on a date the user knows,
+     * and a session pack is billed once every N sessions. Neither is derivable
+     * from a recurrence rule, and running them through the rule below is
+     * exactly how a €60/year subscription ends up looking like €60 a month.
+     * `paymentsBetween` returns null for every other model, so nothing else
+     * changes.
+     */
+    const payments = paymentsBetween(activity, startOfToday, horizon);
+    if (payments) {
+      if (payments.length === 0) {
+        // No payment in the window is not the same as no schedule: an annual
+        // charge eleven months out is dated and simply not due yet. It is only
+        // "undated" when the activity carries no baseline at all.
+        if (activity.recurrenceType === "none") continue;
+        if (!hasPaymentBaseline(activity)) {
+          undated.push({ activity, monthlyBase: estimateActivity(activity, snapshot).monthlyBase });
+        }
+        continue;
+      }
+      const cycleNote = describePaymentCycle(activity) ?? undefined;
+      for (const payment of payments) {
+        occurrences.push({
+          activity,
+          date: payment.date,
+          amountNative: payment.amountNative,
+          manual: payment.fromRenewalDate,
+          kind: "payment",
+          sessions: payment.sessions,
+          cycleNote,
+        });
+      }
+      continue;
+    }
+
     // Ask for a generous count and then cut by date: a daily schedule produces
     // far more hits in the window than a monthly one, and a fixed count would
     // silently truncate the frequent ones.
@@ -116,7 +173,13 @@ export function upcomingSchedule(
 
     const amountNative = occurrenceAmount(activity);
     dates.forEach((date, index) => {
-      occurrences.push({ activity, date, amountNative, manual: manualUpcoming && index === 0 });
+      occurrences.push({
+        activity,
+        date,
+        amountNative,
+        manual: manualUpcoming && index === 0,
+        kind: "occurrence",
+      });
     });
   }
 

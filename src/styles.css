@@ -749,104 +749,88 @@ strong {
   margin-bottom: var(--space-8);
 }
 
-.period-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-2) var(--space-4);
-  background: var(--bg-elevated);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  font-size: 0.875rem;
-  font-weight: 600;
-  color: var(--text-secondary);
-}
-
-.period-nav {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-}
-
-.period-selector {
-  display: grid;
-  gap: var(--space-2);
-  justify-items: end;
-}
-
-.period-mode-toggle {
-  display: inline-flex;
-  gap: 2px;
-  padding: 3px;
-  background: var(--bg-inset);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-}
-
-.period-mode {
-  border: 0;
-  border-radius: 8px;
-  padding: 5px 9px;
-  background: transparent;
-  color: var(--text-secondary);
-  font: inherit;
-  font-size: 0.75rem;
-  font-weight: 700;
-  text-transform: capitalize;
-  cursor: pointer;
-}
-
-.period-mode.active {
-  background: var(--brand-mark-from);
-  color: #FFFFFF;
-  box-shadow: var(--shadow-xs);
-}
-
-:root.dark .period-mode.active {
-  background: #FFFFFF;
-  color: var(--brand-mark-from);
-}
-
-.period-current-label {
-  min-width: 72px;
-  padding: 0 var(--space-3);
-  color: var(--text-primary);
-  font-size: 0.8125rem;
-  font-weight: 700;
-  text-align: center;
-}
+/*
+ * The period selector's styles live in `styles-extras.css`, in one block.
+ *
+ * They used to be split across both stylesheets: the collapsed widget here,
+ * the popover there. Two files defining `.period-mode` at the same specificity
+ * meant the winner depended on import order, which is not a thing anyone
+ * should have to know to change a colour.
+ */
 
 /* =========================================================
    LAYOUT — Navigation
    ========================================================= */
 
+/* The brand block is a button: pressing it collapses and expands the panel.
+   It has to look pressable without looking like a toolbar button, so the
+   affordance is carried by the hover and press states rather than by a border
+   sitting around the logo at rest. */
 .nav-brand {
   display: flex;
   align-items: center;
   gap: var(--space-3);
+  width: 100%;
   padding: var(--space-2);
   margin-bottom: var(--space-2);
+  border: 1px solid transparent;
+  border-radius: var(--radius-lg);
+  background: transparent;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--duration-fast) var(--ease-out), border-color var(--duration-fast) var(--ease-out);
 }
+
+.nav-brand:hover { background: var(--bg-inset); border-color: var(--border); }
+.nav-brand:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.nav-brand:active .brand-icon { transform: scale(0.94); }
 
 .brand-icon {
   width: 40px;
   height: 40px;
   border-radius: var(--radius-md);
-  /* Navy into the signature red: the one place the red appears, where it
-     reads unmistakably as a logo rather than as an error. Fixed values, so the
-     mark is identical in both themes. */
-  background: linear-gradient(135deg, var(--brand-mark-from), var(--brand-mark-to));
   display: grid;
   place-items: center;
-  color: #FFFFFF;
   flex-shrink: 0;
+  overflow: hidden;
   box-shadow: var(--shadow-sm);
+  /* The mark carries its own navy ground, so the tile behind it exists only to
+     round the corners. It was a navy-to-red gradient, which fought the fin's
+     own red outline for the same job. */
+  background: #14264F;
+  transition: transform var(--duration-fast) var(--ease-out);
+}
+
+.nav-brand:hover .brand-icon { transform: scale(1.04); }
+
+/* The chevron says what the press will do. It sits at the trailing edge when
+   there is room and disappears when the panel is collapsed to a 72px rail,
+   where the mark is the only thing left and is itself the target. */
+.brand-chevron {
+  display: grid;
+  place-items: center;
+  margin-left: auto;
+  color: var(--text-tertiary);
+  transition: color var(--duration-fast) var(--ease-out);
+}
+
+.nav-brand:hover .brand-chevron { color: var(--text-primary); }
+
+.sidebar-collapsed .brand-chevron { display: none; }
+.sidebar-collapsed .nav-brand { justify-content: center; padding: var(--space-2) 0; }
+
+@media (prefers-reduced-motion: reduce) {
+  .nav-brand, .brand-icon, .brand-chevron { transition: none; }
+  .nav-brand:hover .brand-icon, .nav-brand:active .brand-icon { transform: none; }
 }
 
 .brand-text {
   display: flex;
   flex-direction: column;
   gap: 2px;
+  min-width: 0;
 }
 
 .brand-text strong {
@@ -978,10 +962,6 @@ strong {
   .main-area { padding: var(--space-4); }
   .dashboard-hero { grid-template-columns: minmax(0, 1fr); }
   .top-header { grid-template-columns: minmax(0, 1fr); }
-  .period-selector { justify-items: stretch; width: 100%; }
-  .period-mode-toggle { width: 100%; }
-  .period-mode { flex: 1; }
-  .period-nav { justify-content: space-between; flex-wrap: wrap; }
 }
 
 /* Sync status — persistence state must be visible, never implied */
@@ -1111,12 +1091,20 @@ strong {
   font-weight: 600;
 }
 
-/* Editing a closed period: a deliberately louder, unmistakable state. */
+/* Editing a closed period: a deliberately louder, unmistakable state.
+
+   Opaque like the banner it replaces, and in the signature red rather than a
+   translucent wash of it — this is the one state in the application where a
+   keystroke rewrites a closed month, and it must not be something the page
+   behind it can be read through. */
 .historical-banner-unlocked {
-  background: var(--danger-soft);
-  border-color: var(--danger);
-  color: var(--danger-text);
+  background: linear-gradient(120deg, #7A0018 0%, #A3001F 55%, #E4002B 100%);
+  border-color: #E4002B;
+  color: #FFFFFF;
 }
+
+.historical-banner-unlocked::before { background: #FFFFFF; }
+.historical-banner-unlocked .btn { color: #FFFFFF; }
 
 .modal-icon-warning {
   display: grid;
@@ -1139,20 +1127,97 @@ strong {
   line-height: 1.5;
 }
 
-/* Historical period indicator */
+/* ─── Historical period ──────────────────────────────────────────────────────
+   The banner explains the state; the dashed frame around the page marks it.
+   Both sit *below* the period selector, and neither may take a click that was
+   aimed at it.
+
+   Three things were wrong here and all three are fixed below.
+
+   1. **Opacity.** The banner was a translucent wash (`--warning-soft`), so the
+      page behind it showed through — which reads as a rendering fault rather
+      than as a state, and made its own text harder to read than any other text
+      in the application. It is now an opaque navy band in the app's own
+      palette, with the signature red as a hairline at its leading edge.
+
+   2. **Stacking.** `.historical-period > *` gave every child of the main area
+      `z-index: 1`. Each of them therefore became a stacking context, which
+      trapped the period selector's popover inside the header's layer — and the
+      banner, being a later sibling at the same z-index, painted over the whole
+      header and swallowed the clicks. The children are still positioned, so
+      they sit above the dashed frame, but they no longer create contexts of
+      their own; `.period-bar` raises itself and takes its popover with it.
+
+   3. **Pointer events.** The dashed frame was already inert. The banner is
+      informational apart from one button, so the band itself no longer holds
+      the pointer at all — only its own controls do. */
+
 .historical-banner {
+  position: relative;
   display: flex;
   align-items: center;
   gap: var(--space-3);
   padding: var(--space-3) var(--space-5);
   margin-bottom: var(--space-6);
-  background: var(--warning-soft);
-  border: 1px solid rgba(255,149,0,0.15);
+  overflow: hidden;
+  /* Deep navy, fully opaque. Fixed values rather than theme tokens: this band
+     states the same fact in both themes and must look the same doing it. */
+  background: linear-gradient(120deg, #001A46 0%, #002157 52%, #0B3B7A 100%);
+  border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: var(--radius-lg);
-  color: var(--warning-text);
+  color: #EAF1FC;
   font-size: 0.875rem;
   font-weight: 600;
+  /* Informational. Its own controls opt back in below, so the band cannot take
+     a press meant for anything else — including a period popover opened over
+     it. */
+  pointer-events: none;
 }
+
+/* The signature, as a hairline down the leading edge. */
+.historical-banner::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: #E4002B;
+}
+
+/* Only the controls are interactive, which is what the band is for. */
+.historical-banner .btn,
+.historical-banner button,
+.historical-banner a { pointer-events: auto; }
+
+/* The control sits at the trailing edge. In the stylesheet rather than as an
+   inline style, so the phone layout below can put it somewhere else — an
+   inline style beats every rule that is not marked `!important`. */
+.historical-banner .btn { margin-left: auto; }
+
+/* The icon is a fixed 16px mark, not a flex item to be squeezed: without this
+   it was crushed to a couple of pixels the moment the text needed the room. */
+.historical-banner > svg { flex: 0 0 auto; }
+
+/* On a phone the band stacks. Side by side, its sentence was reduced to a
+   seven-line column beside a button — the button had the width and the text
+   had none, which is exactly backwards. */
+@media (max-width: 560px) {
+  .historical-banner {
+    flex-wrap: wrap;
+    padding: var(--space-3) var(--space-4);
+  }
+  .historical-banner > span { flex: 1 1 100%; }
+  .historical-banner .btn { margin-left: 0; }
+}
+
+/* A ghost button on navy needs the navy's own contrast, not the page's. */
+.historical-banner .btn-ghost {
+  color: #EAF1FC;
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.historical-banner .btn-ghost:hover { background: rgba(255, 255, 255, 0.12); }
 
 .historical-period {
   position: relative;
@@ -1168,7 +1233,14 @@ strong {
   z-index: 0;
 }
 
-.historical-period > * { position: relative; z-index: 1; }
+/*
+ * Positioned, so the page content paints above the dashed frame — and
+ * deliberately *without* a z-index, so no child becomes a stacking context.
+ * A positioned element with `z-index: auto` paints in tree order in the same
+ * layer as the frame's `z-index: 0`, which puts every child above it while
+ * leaving the period selector free to raise its popover over the banner.
+ */
+.historical-period > * { position: relative; }
 
 /* Section divider */
 .section-divider {
@@ -1392,6 +1464,34 @@ strong {
 }
 
 /* Tinted cards — colour carries meaning without shouting */
+/*
+ * Grey text on a tinted card, in dark mode.
+ *
+ * A status tint over a dark surface *lightens* it — `--success-soft` at 18%
+ * over `#121A28` lands around `#183B36`, three times the luminance of the bare
+ * card. The grey ramp was tuned against the untinted surfaces, so on a tinted
+ * one the two lower greys drop to 3.7–4.2 : 1 and fail the 4.5 minimum. Light
+ * mode is unaffected: there the ground is white and the same tint darkens it.
+ *
+ * Fixed by lifting the two greys inside tinted cards only, rather than by
+ * lifting the whole ramp (which would wash out every ordinary caption) or by
+ * weakening the tints (which would cost the tone cue they exist to give). The
+ * gap between the two is widened slightly at the same time, so the hierarchy
+ * survives the lift: 1.26× luminance apart here against 1.14× elsewhere.
+ *
+ * Worst case after this, measured over five hues on two surfaces: 4.52 : 1.
+ */
+:root.dark .metric-card.tone-positive,
+:root.dark .metric-card.tone-negative,
+:root.dark .metric-card.tone-warning,
+:root.dark .tone-card-accent,
+:root.dark .tone-card-success,
+:root.dark .tone-card-warning,
+:root.dark .tone-card-danger {
+  --text-secondary: #AEBACD;
+  --text-tertiary: #9BA8BD;
+}
+
 .tone-card-accent { background: linear-gradient(160deg, var(--accent-soft), transparent 70%), var(--bg-elevated); }
 .tone-card-success { background: linear-gradient(160deg, var(--success-soft), transparent 70%), var(--bg-elevated); }
 .tone-card-warning { background: linear-gradient(160deg, var(--warning-soft), transparent 70%), var(--bg-elevated); }

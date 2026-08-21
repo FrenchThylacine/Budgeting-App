@@ -125,8 +125,8 @@ const StatRow: React.FC<{ items: Stat[]; columns?: number }> = ({ items, columns
 const GRADE_COLOR: Record<string, string> = {
   Excellent: "var(--success-text)",
   Good: "var(--success-text)",
-  Fair: "var(--warning)",
-  "At risk": "var(--danger)",
+  Fair: "var(--warning-text)",
+  "At risk": "var(--danger-text)",
 };
 
 // ─── Main Panel ───────────────────────────────────────────────────────────────
@@ -309,7 +309,7 @@ export const AnalyticsPanel: React.FC = () => {
                     comparison.deltaAbs == null
                       ? "var(--text-tertiary)"
                       : comparison.deltaAbs > 0
-                      ? "var(--danger)"
+                      ? "var(--danger-text)"
                       : "var(--success-text)",
                   fontWeight: 600,
                 }}

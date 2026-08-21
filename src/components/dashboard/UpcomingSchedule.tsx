@@ -79,19 +79,47 @@ export const UpcomingSchedule: React.FC<UpcomingScheduleProps> = ({ snapshot, mo
                         aria-hidden="true"
                       />
                       <span className="upcoming-name">{item.activity.name}</span>
-                      <span className="upcoming-cadence text-footnote">
-                        {describeSchedule(item.activity)}
-                        {/* A date the user typed, not one the rule produced.
-                            Marked, because the two are worth telling apart
-                            when the timeline disagrees with the cadence. */}
-                        {item.manual && " · renewal date you set"}
+                      {/* Prose, so it is not run through the uppercase the
+                          footnote class applies: "PAY EVERY 10 SESSIONS (≈
+                          EVERY 5 WEEKS)" is a sentence being shouted. */}
+                      <span className="upcoming-cadence text-caption">
+                        {/* A payment has its own cadence, which is not the
+                            cadence of the sessions: ten sessions at two a week
+                            is one payment every five weeks. Saying which is
+                            which here is the whole point of the model.
+
+                            No "renewal date you set" marker on a payment: for
+                            these models the date always descends from that
+                            baseline, so saying it every time states the rule
+                            rather than an exception. */}
+                        {item.kind === "payment"
+                          ? item.cycleNote
+                          : (
+                            <>
+                              {describeSchedule(item.activity)}
+                              {item.manual && " · renewal date you set"}
+                            </>
+                          )}
                       </span>
-                      <span className="upcoming-amount money">
+                      <span
+                        className="upcoming-amount money"
+                        // What the amount buys, where it is not one occurrence.
+                        title={
+                          item.sessions != null && amount != null
+                            ? `${money(amount)} covers ${item.sessions} sessions`
+                            : undefined
+                        }
+                      >
                         {/* An occurrence whose price is not stated shows a dash,
                             not a zero: the app does not know what it costs. */}
                         {amount == null ? "—" : money(amount)}
                       </span>
-                      {mutable && (
+                      {/* One-off exceptions act on the recurrence rule, and a
+                          payment cycle is not produced by one — skipping "the
+                          occurrence on that date" would write an override that
+                          changes nothing at all. A control that silently does
+                          nothing is worse than no control. */}
+                      {mutable && item.kind !== "payment" && (
                         <button
                           type="button"
                           className="btn btn-ghost btn-sm btn-icon upcoming-action"
@@ -126,8 +154,8 @@ export const UpcomingSchedule: React.FC<UpcomingScheduleProps> = ({ snapshot, mo
             </span>
           </summary>
           <p className="text-note upcoming-note">
-            These recur but have no weekday or day of the month, so they cannot be placed on a calendar.
-            Set one in the activity to see it above.
+            These recur but have no weekday, day of the month or renewal date, so they cannot be placed on a
+            calendar. Set one in the activity to see it above.
           </p>
           <ul className="upcoming-items">
             {undated.slice(0, 8).map(({ activity, monthlyBase }) => (

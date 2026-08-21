@@ -451,11 +451,13 @@ export class SnapshotRepository {
         (id, year_id, name, category_id, currency, recurrence_type, recurrence_interval,
          price_per_session, price_per_purchase, price_per_month, estimated_cost, yearly_estimate,
          active, visible, seasonal_tag, "order", notes,
-         icon, color, cost_model, sessions_per_month, weekdays, day_of_month, start_date,
+         icon, icon_url, icon_source_url, color, cost_model, sessions_per_month,
+         sessions_per_period, session_period, sessions_per_payment,
+         weekdays, day_of_month, start_date,
          next_renewal_date, schedule_overrides,
          created_at, updated_at)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17,
-                $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28)
+                $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33)
         ON CONFLICT (id) DO UPDATE SET
           name = EXCLUDED.name,
           category_id = EXCLUDED.category_id,
@@ -473,9 +475,14 @@ export class SnapshotRepository {
           "order" = EXCLUDED."order",
           notes = EXCLUDED.notes,
           icon = EXCLUDED.icon,
+          icon_url = EXCLUDED.icon_url,
+          icon_source_url = EXCLUDED.icon_source_url,
           color = EXCLUDED.color,
           cost_model = EXCLUDED.cost_model,
           sessions_per_month = EXCLUDED.sessions_per_month,
+          sessions_per_period = EXCLUDED.sessions_per_period,
+          session_period = EXCLUDED.session_period,
+          sessions_per_payment = EXCLUDED.sessions_per_payment,
           weekdays = EXCLUDED.weekdays,
           day_of_month = EXCLUDED.day_of_month,
           start_date = EXCLUDED.start_date,
@@ -503,9 +510,14 @@ export class SnapshotRepository {
           activity.order,
           activity.notes || "",
           activity.icon ?? null,
+          activity.iconUrl ?? null,
+          activity.iconSourceUrl ?? null,
           activity.color ?? null,
           activity.costModel ?? null,
           activity.sessionsPerMonth ?? null,
+          activity.sessionsPerPeriod ?? null,
+          activity.sessionPeriod ?? null,
+          activity.sessionsPerPayment ?? null,
           // Weekday sets are small and read as a unit, so JSON keeps the
           // schema simple without needing a join table.
           activity.weekdays && activity.weekdays.length > 0 ? JSON.stringify(activity.weekdays) : null,
@@ -594,8 +606,8 @@ export class SnapshotRepository {
         INSERT INTO wishlist_items
         (id, year_id, name, category_id, actual_price, effective_value, currency,
          bought, in_wishlist, priority, date_added, date_purchased, notes, active,
-         url, brand_url, icon, color, linked_spending_id, created_at, updated_at)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
+         url, brand_url, icon, icon_url, color, linked_spending_id, created_at, updated_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
         ON CONFLICT (id) DO UPDATE SET
           name = EXCLUDED.name,
           category_id = EXCLUDED.category_id,
@@ -612,6 +624,7 @@ export class SnapshotRepository {
           url = EXCLUDED.url,
           brand_url = EXCLUDED.brand_url,
           icon = EXCLUDED.icon,
+          icon_url = EXCLUDED.icon_url,
           color = EXCLUDED.color,
           linked_spending_id = EXCLUDED.linked_spending_id,
           updated_at = EXCLUDED.updated_at
@@ -635,6 +648,7 @@ export class SnapshotRepository {
           item.url ?? null,
           item.brandUrl ?? null,
           item.icon ?? null,
+          item.iconUrl ?? null,
           item.color ?? null,
           item.linkedSpendingId ?? null,
           now,
@@ -863,9 +877,17 @@ export class SnapshotRepository {
       order: Number(row.order),
       notes: row.notes || "",
       icon: row.icon ?? undefined,
+      iconUrl: row.icon_url ?? undefined,
+      iconSourceUrl: row.icon_source_url ?? undefined,
       color: row.color ?? undefined,
       costModel: row.cost_model ?? undefined,
       sessionsPerMonth: row.sessions_per_month != null ? Number(row.sessions_per_month) : undefined,
+      sessionsPerPeriod: row.sessions_per_period != null ? Number(row.sessions_per_period) : undefined,
+      // Anything other than the one alternative value means "week", which is
+      // also what an absent column means — so a row written before this
+      // existed keeps behaving exactly as it did.
+      sessionPeriod: row.session_period === "month" ? "month" : undefined,
+      sessionsPerPayment: row.sessions_per_payment != null ? Number(row.sessions_per_payment) : undefined,
       weekdays: parseWeekdays(row.weekdays),
       dayOfMonth: row.day_of_month != null ? Number(row.day_of_month) : undefined,
       startDate: row.start_date ?? undefined,
@@ -913,6 +935,7 @@ export class SnapshotRepository {
       url: row.url ?? undefined,
       brandUrl: row.brand_url ?? undefined,
       icon: row.icon ?? undefined,
+      iconUrl: row.icon_url ?? undefined,
       color: row.color ?? undefined,
       linkedSpendingId: row.linked_spending_id ?? undefined,
     };

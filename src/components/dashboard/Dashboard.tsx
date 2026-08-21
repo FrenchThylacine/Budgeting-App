@@ -56,11 +56,24 @@ import {
  * the Analytics page.
  */
 
+/*
+ * Status colours as **text** use the `-text` variants, always.
+ *
+ * `--success`, `--warning` and `--danger` are fill colours: they are chosen to
+ * carry a chart series, a progress bar or a border, where saturation is the
+ * point. As 13–17px type on the page they measure 3.2, 2.5 and 3.6 to one,
+ * which fails the 4.5 minimum. The `-text` variants are the same hues darkened
+ * until they pass, and in dark mode they are the same value, because there the
+ * saturated hue already passes against a dark ground.
+ *
+ * The rule is mechanical: `background`/`border` may take the fill; `color`
+ * must take `-text`.
+ */
 const GRADE_COLOR: Record<string, string> = {
-  Excellent: "var(--success)",
-  Good: "var(--success)",
-  Fair: "var(--warning)",
-  "At risk": "var(--danger)",
+  Excellent: "var(--success-text)",
+  Good: "var(--success-text)",
+  Fair: "var(--warning-text)",
+  "At risk": "var(--danger-text)",
 };
 
 /**
@@ -105,9 +118,9 @@ const Figure: React.FC<{
         letterSpacing: "var(--tracking-snug)",
         overflowWrap: "anywhere",
         color:
-          tone === "positive" ? "var(--success)"
-          : tone === "negative" ? "var(--danger)"
-          : tone === "warning" ? "var(--warning)"
+          tone === "positive" ? "var(--success-text)"
+          : tone === "negative" ? "var(--danger-text)"
+          : tone === "warning" ? "var(--warning-text)"
           : "var(--text-primary)",
       }}
     >
@@ -450,8 +463,8 @@ export const Dashboard: React.FC<{ onNavigate?: (tab: "spending" | "activities" 
                     style={{
                       color:
                         comparison.deltaAbs == null ? undefined
-                        : comparison.deltaAbs > 0 ? "var(--danger)"
-                        : "var(--success)",
+                        : comparison.deltaAbs > 0 ? "var(--danger-text)"
+                        : "var(--success-text)",
                     }}
                   >
                     {comparison.deltaAbs != null

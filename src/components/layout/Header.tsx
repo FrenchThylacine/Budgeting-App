@@ -1,24 +1,16 @@
-import React, { useEffect, useState } from "react";
+import React from "react";
 import { useBudgetStore } from "../../store/budgetStore";
 import { calculateYear } from "../../domain/calculations";
-import { getIsoWeek, monthName, weekYear } from "../../domain/dates";
 import {
-  currentPeriodPatch,
   isAtCurrentPeriod,
-  movePeriod,
   periodLabel,
-  periodPatchForMode,
   periodRangeLabel,
   selectedIsoWeekYear,
 } from "../../domain/periods";
 import { Badge } from "../ui/Badge";
 import { Button } from "../ui/Button";
-import { PeriodPopover } from "./PeriodPopover";
 import { SyncStatus } from "./SyncStatus";
-import {
-  ChevronLeft, ChevronRight, Sun, Moon, Undo2, Redo2, Wallet,
-  Clock, CalendarCheck
-} from "lucide-react";
+import { Sun, Moon, Undo2, Redo2, Wallet, Clock } from "lucide-react";
 type BudgetCalculation = ReturnType<typeof calculateYear>;
 
 export const Header: React.FC<{
@@ -27,7 +19,6 @@ export const Header: React.FC<{
 }> = ({ calculation, setRolloverOpen }) => {
   const snapshot = useBudgetStore((s) => s.snapshot);
   const updateSettings = useBudgetStore((s) => s.updateSettings);
-  const selectYear = useBudgetStore((s) => s.selectYear);
   const undo = useBudgetStore((s) => s.undo);
   const redo = useBudgetStore((s) => s.redo);
   const isCurrentPeriodMutable = useBudgetStore((s) => s.isCurrentPeriodMutable);
@@ -35,42 +26,11 @@ export const Header: React.FC<{
   const currentYear = snapshot.settings.selectedYear;
   const mode = snapshot.settings.selectedPeriodMode;
   const activeYear = mode === "week" ? selectedIsoWeekYear(snapshot.settings) : currentYear;
-  const yearOptions = Array.from(
-    new Set([activeYear - 1, activeYear, activeYear + 1, 2026, 2027, 2028, 2029, 2030, ...Object.keys(snapshot.years).map(Number)])
-  ).sort((a, b) => a - b);
 
   const latestAudit = snapshot.auditLog[0];
 
-  function selectMonth(month: number, year = currentYear) {
-    const date = new Date(Date.UTC(year, month - 1, 1));
-    updateSettings({ selectedYear: year, selectedMonth: month, selectedWeek: getIsoWeek(date), selectedWeekYear: weekYear(date) });
-  }
-
-  /**
-   * The wall clock, refreshed each minute.
-   *
-   * A period selector that can show any month needs to say, without ambiguity,
-   * where "now" actually is — otherwise a view of March looks exactly like
-   * today in March. Minute resolution rather than seconds: a ticking second
-   * hand is a re-render per second for a number nobody is reading.
-   *
-   * The timer is not merely hidden when the clock is off — it is never
-   * started, so the setting removes the re-render rather than the sight of it.
-   */
-  const liveClock = snapshot.settings.liveClockEnabled !== false;
-  const [now, setNow] = useState(() => new Date());
-  useEffect(() => {
-    if (!liveClock) return;
-    const timer = window.setInterval(() => setNow(new Date()), 60_000);
-    return () => window.clearInterval(timer);
-  }, [liveClock]);
-
   const periodTitle = periodLabel(snapshot.settings);
   const atCurrentPeriod = isAtCurrentPeriod(snapshot.settings);
-  const realPeriodTitle = periodLabel({ ...snapshot.settings, ...currentPeriodPatch(snapshot.settings) });
-  const todayLabel = new Intl.DateTimeFormat(undefined, { dateStyle: "long" }).format(now);
-  const clockLabel = new Intl.DateTimeFormat(undefined, { timeStyle: "short" }).format(now);
-  const goToCurrentPeriod = () => updateSettings(currentPeriodPatch(snapshot.settings));
 
   const status = calculation.selectedMonthSpend.status;
   const statusTone = status === "nan" ? "danger" : status === "pending" ? "warning" : "success";
@@ -98,18 +58,12 @@ export const Header: React.FC<{
           <SyncStatus />
         </div>
 
-        {/* The real period is stated separately so a historical view can never
-            be mistaken for today. */}
-        {!atCurrentPeriod && (
-          <div className="text-caption" style={{ marginTop: 6, display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-            <span style={{ color: "var(--text-tertiary)" }}>
-              Today is {todayLabel} · current {mode} is {realPeriodTitle}
-            </span>
-            <button className="btn btn-ghost btn-sm" onClick={goToCurrentPeriod}>
-              <CalendarCheck size={13} /> Go to current {mode}
-            </button>
-          </div>
-        )}
+        {/* Today's date, the real current period and the way back to it all
+            live in the period selector directly below this heading now. They
+            were stated here as well, which meant a historical view carried the
+            same sentence twice and a phone spent two rows saying it. The
+            eyebrow above still distinguishes "Viewing" from "Current period",
+            which is the part the heading itself cannot say. */}
 
         {/* Reference rather than answer, so it is the first thing a phone
             drops: on a 390px screen it was one more line between the user and
@@ -123,65 +77,6 @@ export const Header: React.FC<{
       </div>
 
       <div className="header-actions">
-        <PeriodPopover summary={periodTitle} historical={periodTitle !== realPeriodTitle}>
-        <div className="period-selector" aria-label="Period selector">
-          <div className="period-mode-toggle" role="group" aria-label="Period type">
-            {(["month", "week", "year"] as const).map((periodMode) => (
-              <button key={periodMode} className={`period-mode ${mode === periodMode ? "active" : ""}`} onClick={() => updateSettings(periodPatchForMode(snapshot.settings, periodMode))} type="button">{periodMode}</button>
-            ))}
-          </div>
-          <div className="period-nav">
-          <Button variant="ghost" icon onClick={() => updateSettings(movePeriod(snapshot.settings, -1))} aria-label={`Previous ${mode}`}>
-            <ChevronLeft size={18} />
-          </Button>
-          {mode === "month" && <select
-            className="select"
-            style={{ width: "auto", minWidth: 120 }}
-            value={snapshot.settings.selectedMonth}
-            onChange={(e) => selectMonth(Number(e.target.value))}
-          >
-            {Array.from({ length: 12 }, (_, i) => (
-              <option key={i + 1} value={i + 1}>{monthName(i + 1)}</option>
-            ))}
-          </select>}
-
-          {mode === "week" && <div className="period-current-label">W{snapshot.settings.selectedWeek}</div>}
-          <select
-            className="select"
-            style={{ width: "auto", minWidth: 80 }}
-            value={activeYear}
-            onChange={(e) => mode === "week" ? updateSettings({ selectedWeekYear: Number(e.target.value) }) : selectYear(Number(e.target.value))}
-          >
-            {yearOptions.map((y) => (
-              <option key={y} value={y}>{y}</option>
-            ))}
-          </select>
-
-          <Button variant="ghost" icon onClick={() => updateSettings(movePeriod(snapshot.settings, 1))} aria-label={`Next ${mode}`}>
-            <ChevronRight size={18} />
-          </Button>
-          </div>
-
-          {/* Where "now" is, stated inside the selector itself, and one button
-              back to it. Without this, a view of a past month is visually
-              identical to the same month lived through at the time. */}
-          <div className="period-now">
-            <span className="text-caption">
-              {todayLabel}
-              {liveClock ? ` · ${clockLabel}` : ""}
-            </span>
-            <button
-              className="btn btn-secondary btn-sm"
-              onClick={goToCurrentPeriod}
-              disabled={atCurrentPeriod}
-              title={atCurrentPeriod ? `Already on the current ${mode}` : undefined}
-            >
-              <CalendarCheck size={13} /> Go to current {mode}
-            </button>
-          </div>
-        </div>
-        </PeriodPopover>
-
         {/* There is no Save button. Every change is written locally and pushed
             on its own, and the sync badge above states which of those has
             happened. The button that used to sit here only stamped

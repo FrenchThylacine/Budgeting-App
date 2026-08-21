@@ -747,6 +747,108 @@ describeDb("PostgreSQL integration", () => {
     ).toBeUndefined();
   });
 
+  it("round-trips a session-pack payment cycle", async () => {
+    // The whole model is three fields that must survive together: how often it
+    // happens, in what unit, and how many sessions one payment covers. Losing
+    // any one of them silently turns €200 every five weeks into something else.
+    const snapshot = (await repo.loadSnapshot("active"))!;
+    const year = Object.values(snapshot.years)[0];
+    const id = year.activities[0].id;
+    Object.assign(year.activities[0], {
+      costModel: "sessionPack" as const,
+      pricePerSession: 20,
+      sessionsPerPeriod: 2,
+      sessionPeriod: "week" as const,
+      sessionsPerPayment: 10,
+      nextRenewalDate: "2026-09-01",
+    });
+    snapshot.revision = (snapshot.revision ?? 0) + 1;
+    await repo.saveSnapshot(snapshot, "active");
+
+    const reloaded = (await repo.loadSnapshot("active"))!;
+    const activity = Object.values(reloaded.years)[0].activities.find((a) => a.id === id)!;
+    expect(activity.costModel).toBe("sessionPack");
+    expect(activity.pricePerSession).toBe(20);
+    expect(activity.sessionsPerPeriod).toBe(2);
+    expect(activity.sessionsPerPayment).toBe(10);
+    // "week" is the default, so it is stored as absence rather than as a value
+    // — which is also what every row written before this column existed says.
+    expect(activity.sessionPeriod).toBeUndefined();
+
+    // The monthly unit is a real, distinguishable value.
+    activity.sessionPeriod = "month";
+    reloaded.revision = (reloaded.revision ?? 0) + 1;
+    await repo.saveSnapshot(reloaded, "active");
+    const monthly = (await repo.loadSnapshot("active"))!;
+    expect(
+      Object.values(monthly.years)[0].activities.find((a) => a.id === id)!.sessionPeriod,
+    ).toBe("month");
+  });
+
+  it("round-trips a fixed-yearly activity with its renewal baseline", async () => {
+    const snapshot = (await repo.loadSnapshot("active"))!;
+    const year = Object.values(snapshot.years)[0];
+    const id = year.activities[1].id;
+    Object.assign(year.activities[1], {
+      costModel: "fixedYearly" as const,
+      yearlyEstimate: 60,
+      nextRenewalDate: "2026-09-14",
+    });
+    snapshot.revision = (snapshot.revision ?? 0) + 1;
+    await repo.saveSnapshot(snapshot, "active");
+
+    const reloaded = (await repo.loadSnapshot("active"))!;
+    const activity = Object.values(reloaded.years)[0].activities.find((a) => a.id === id)!;
+    expect(activity.costModel).toBe("fixedYearly");
+    expect(activity.yearlyEstimate).toBe(60);
+    expect(activity.nextRenewalDate).toBe("2026-09-14");
+  });
+
+  it("round-trips a custom activity icon, image link and icon source", async () => {
+    const snapshot = (await repo.loadSnapshot("active"))!;
+    const year = Object.values(snapshot.years)[0];
+    const id = year.activities[2].id;
+    Object.assign(year.activities[2], {
+      icon: "Plane",
+      iconUrl: "https://cdn.example/marks/nebula.png",
+      iconSourceUrl: "https://navigraph.example/",
+    });
+    snapshot.revision = (snapshot.revision ?? 0) + 1;
+    await repo.saveSnapshot(snapshot, "active");
+
+    const reloaded = (await repo.loadSnapshot("active"))!;
+    const activity = Object.values(reloaded.years)[0].activities.find((a) => a.id === id)!;
+    expect(activity.icon).toBe("Plane");
+    expect(activity.iconUrl).toBe("https://cdn.example/marks/nebula.png");
+    expect(activity.iconSourceUrl).toBe("https://navigraph.example/");
+
+    // Clearing stores absence, not an empty string that would render as a
+    // broken image the next time the mark is resolved.
+    activity.iconUrl = undefined;
+    activity.iconSourceUrl = undefined;
+    reloaded.revision = (reloaded.revision ?? 0) + 1;
+    await repo.saveSnapshot(reloaded, "active");
+    const cleared = Object.values((await repo.loadSnapshot("active"))!.years)[0].activities.find(
+      (a) => a.id === id,
+    )!;
+    expect(cleared.iconUrl).toBeUndefined();
+    expect(cleared.iconSourceUrl).toBeUndefined();
+  });
+
+  it("round-trips a wishlist item's custom image link", async () => {
+    const snapshot = (await repo.loadSnapshot("active"))!;
+    const year = Object.values(snapshot.years)[0];
+    const target = year.wishlistItems[0];
+    target.iconUrl = "https://cdn.example/marks/a350.png";
+    snapshot.revision = (snapshot.revision ?? 0) + 1;
+    await repo.saveSnapshot(snapshot, "active");
+
+    const reloaded = (await repo.loadSnapshot("active"))!;
+    expect(
+      Object.values(reloaded.years)[0].wishlistItems.find((i) => i.id === target.id)!.iconUrl,
+    ).toBe("https://cdn.example/marks/a350.png");
+  });
+
   it("drops a malformed override instead of failing the whole load", async () => {
     // Target an activity that is actually part of the loaded snapshot: any row
     // in the table would do for the write, but the assertion reads it back
@@ -842,6 +944,38 @@ describeDb("upgrading an existing database", () => {
         note TEXT, created_at TEXT NOT NULL, decided_at TEXT NOT NULL
       );`);
 
+    // An `activities` table in its pre-013 shape, and a `wishlist_items` table
+    // in its pre-013 shape. `CREATE TABLE IF NOT EXISTS` in schema.ts is a
+    // no-op against these, so the new columns can only come from the migration
+    // — which is exactly the path a deployed database takes.
+    await client.query(`
+      CREATE TABLE years (
+        id TEXT PRIMARY KEY, snapshot_id TEXT NOT NULL, year INTEGER NOT NULL,
+        created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+        FOREIGN KEY(snapshot_id) REFERENCES snapshots(id) ON DELETE CASCADE,
+        UNIQUE(snapshot_id, year)
+      );`);
+    await client.query(`
+      CREATE TABLE activities (
+        id TEXT PRIMARY KEY, year_id TEXT NOT NULL, name TEXT NOT NULL,
+        category_id TEXT NOT NULL, currency TEXT NOT NULL, recurrence_type TEXT NOT NULL,
+        recurrence_interval INTEGER NOT NULL, price_per_session DOUBLE PRECISION,
+        price_per_purchase DOUBLE PRECISION, price_per_month DOUBLE PRECISION,
+        estimated_cost DOUBLE PRECISION, yearly_estimate DOUBLE PRECISION,
+        active BOOLEAN NOT NULL, visible BOOLEAN NOT NULL, seasonal_tag TEXT NOT NULL,
+        "order" INTEGER NOT NULL, notes TEXT, icon TEXT, color TEXT,
+        created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+      );`);
+    await client.query(`
+      CREATE TABLE wishlist_items (
+        id TEXT PRIMARY KEY, year_id TEXT NOT NULL, name TEXT NOT NULL,
+        category_id TEXT NOT NULL, actual_price DOUBLE PRECISION,
+        effective_value DOUBLE PRECISION, currency TEXT NOT NULL, bought BOOLEAN NOT NULL,
+        in_wishlist BOOLEAN NOT NULL, priority TEXT NOT NULL, date_added TEXT NOT NULL,
+        date_purchased TEXT, notes TEXT, active BOOLEAN NOT NULL,
+        created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+      );`);
+
     // Data written by the old code: a seeded category keyed by its literal id,
     // and an approval with no owner.
     await client.query(
@@ -890,6 +1024,33 @@ describeDb("upgrading an existing database", () => {
     // A category the user created. It shares the `cat-` prefix, which is why
     // the backfill lists the ten seeded ids instead of matching LIKE 'cat-%'.
     expect(bySeedKey["cat-abc123-user-made"]).toBeNull();
+  });
+
+  it("adds the payment-cycle and icon columns to an existing database", async () => {
+    // The failure mode this guards: a field exists in the client model, the
+    // repository writes a fixed column list including it, and the column was
+    // never added — every save then fails with 42703 rather than silently
+    // dropping the value.
+    const activityColumns = await client.query(
+      `SELECT column_name FROM information_schema.columns WHERE table_schema = $1 AND table_name = 'activities'`,
+      [LEGACY_SCHEMA],
+    );
+    const names = activityColumns.rows.map((r) => r.column_name);
+    expect(names).toEqual(
+      expect.arrayContaining([
+        "sessions_per_period",
+        "session_period",
+        "sessions_per_payment",
+        "icon_url",
+        "icon_source_url",
+      ]),
+    );
+
+    const wishlistColumns = await client.query(
+      `SELECT column_name FROM information_schema.columns WHERE table_schema = $1 AND table_name = 'wishlist_items'`,
+      [LEGACY_SCHEMA],
+    );
+    expect(wishlistColumns.rows.map((r) => r.column_name)).toContain("icon_url");
   });
 
   it("creates the index the migration owns", async () => {

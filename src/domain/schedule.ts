@@ -355,10 +355,18 @@ export function describeSchedule(activity: Activity): string {
   return "No schedule set";
 }
 
-function startOfDay(date: Date): Date {
+/**
+ * Midnight local time on the given date.
+ *
+ * Exported because the payment module counts in whole days from the same
+ * origin; two private copies of this would be two places for a timezone bug
+ * to hide.
+ */
+export function startOfDay(date: Date): Date {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate());
 }
 
-function addDays(date: Date, days: number): Date {
+/** `days` calendar days later, in local time, DST included. */
+export function addDays(date: Date, days: number): Date {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate() + days);
 }

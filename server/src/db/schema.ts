@@ -99,9 +99,21 @@ export async function initializeSchema(
       color TEXT,
       cost_model TEXT,
       sessions_per_month DOUBLE PRECISION,
+      -- The session-pack model: how often the activity happens
+      -- (sessions_per_period + session_period) and how often it is paid for
+      -- (sessions_per_payment). Two facts, two places. Migration 013 adds
+      -- them to databases created before these lines existed.
+      sessions_per_period DOUBLE PRECISION,
+      session_period TEXT,
+      sessions_per_payment DOUBLE PRECISION,
       weekdays TEXT,
       day_of_month INTEGER,
       start_date TEXT,
+      -- Visual identity, matching what a wishlist item has carried since
+      -- migrations 009 and 010: a direct image link, and a website to take an
+      -- icon from. Migration 013 adds them to existing databases.
+      icon_url TEXT,
+      icon_source_url TEXT,
       -- A renewal date the user knows and the rule cannot derive. Display
       -- only: it overrides the next date shown, never a cost. Migration 012
       -- adds it to databases created before this line existed.
@@ -204,6 +216,11 @@ export async function initializeSchema(
       brand_url TEXT,
       -- A library icon, chosen when no site supplies a usable one.
       icon TEXT,
+      -- A direct image link, which beats both the library icon and the
+      -- favicon. Declared here as well as in migration 013: nothing in this
+      -- file references it, so an existing database that lacks it is
+      -- unaffected.
+      icon_url TEXT,
       color TEXT,
       linked_spending_id TEXT,
       created_at TEXT NOT NULL,

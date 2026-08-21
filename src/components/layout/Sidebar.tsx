@@ -8,7 +8,7 @@ import {
   LogOut, UserRound, Upload, CalendarRange
 } from "lucide-react";
 import { exportCurrentYearToExcel, exportAllYearsToExcel, exportJson } from "../../domain/importExport";
-import { AircraftMark } from "../ui/AircraftMark";
+import { FinMark } from "../ui/FinMark";
 import { ImportControl } from "../data/ImportControl";
 import { buildPeriodReport, reportHtml, type CustomRange, type ReportScope } from "../../domain/report";
 import { EditorSheet } from "../ui/EditorSheet";
@@ -80,25 +80,40 @@ export const Sidebar: React.FC<{
 
   return (
     <aside className="sidebar" aria-label="Primary navigation">
-      <div className="nav-brand">
-        <div className="brand-icon">
-          <AircraftMark size={26} variant="solid" hull="#FFFFFF" />
-        </div>
+      {/* The mark *is* the control.
+
+          There were two things here: a decorative logo tile and, beside it, a
+          small chevron button that collapsed the sidebar. The logo is the
+          largest, most obvious target in the panel and it did nothing; the
+          control that did something was a 28px chevron at the far edge. They
+          are now one button — the whole brand block — with the chevron kept as
+          the affordance that says what pressing it will do. Collapsed, the
+          mark is all that remains, and it is still the way back.
+
+          The sidebar does not exist below 768px, where the bottom navigation
+          takes over, so this is a desktop control by construction rather than
+          by a media query that could drift. */}
+      <button
+        type="button"
+        className="nav-brand"
+        onClick={() => setCollapsed(!collapsed)}
+        aria-expanded={!collapsed}
+        aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+        title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+      >
+        <span className="brand-icon">
+          <FinMark size={30} />
+        </span>
         {!collapsed && (
-          <div className="brand-text">
+          <span className="brand-text">
             <strong>Budget OS</strong>
             <span>Personal Finance</span>
-          </div>
+          </span>
         )}
-        <button
-          className="btn btn-ghost btn-icon"
-          style={{ marginLeft: "auto" }}
-          onClick={() => setCollapsed(!collapsed)}
-          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-        >
+        <span className="brand-chevron" aria-hidden="true">
           {collapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
-        </button>
-      </div>
+        </span>
+      </button>
 
       <nav className="nav-section">
         {!collapsed && <div className="nav-section-title">Overview</div>}
