@@ -12,6 +12,15 @@ export type CurrencyCode =
 
 export type CurrencyDisplayMode = "symbol" | "code" | "both";
 export type RoundingRule = "none" | "nearest-1" | "nearest-5" | "nearest-10" | "ceil-10";
+/**
+ * How a period with no recorded entries is reported.
+ *
+ * There is exactly one policy and it is not configurable: a period that has
+ * already closed with nothing recorded is *missing* data ("nan"), and one that
+ * is still open is *pending*. Neither is zero. This was a stored setting with
+ * a single legal value, which made an invariant look like a preference —
+ * `isMonthClosed`/`isWeekClosed` decide it, and nothing reads a setting.
+ */
 export type NanPolicy = "closed-periods-only";
 export type PeriodMode = "month" | "week" | "year";
 export type RecurrenceType =
@@ -76,13 +85,40 @@ export interface Settings {
   selectedPeriodMode: PeriodMode;
   selectedSeason: string;
   baseCurrency: CurrencyCode;
+  /**
+   * The currencies offered in the app's dropdowns.
+   *
+   * Absent means "all of them", so an existing budget is unaffected. A budget
+   * that only ever deals in euros and dollars can narrow the list to two
+   * rather than picking from ten every time. See `trackedCurrencies` in
+   * `domain/currency.ts`: the base currency is always included whatever this
+   * says, and a record keeps its own currency even after it stops being
+   * tracked.
+   */
+  trackedCurrencies?: CurrencyCode[];
   currencyDisplayMode: CurrencyDisplayMode;
   roundingRule: RoundingRule;
-  autoWalletRollupEnabled: boolean;
   autoWishlistFlushEnabled: boolean;
   pilotIncludedInBudget: boolean;
-  promptBeforeMonthClose: boolean;
+  /**
+   * Whether the period widget shows today's date and a live wall clock.
+   *
+   * A live clock is the difference between "March" and "today, in March" when
+   * the period selector can show any month — but it is also a re-render every
+   * minute, and some people find a ticking figure in a financial tool
+   * distracting. Off, the widget states the date without the time and stops
+   * the timer entirely.
+   */
   liveClockEnabled: boolean;
+  /**
+   * Which dashboard sections appear, and in what order.
+   *
+   * Absent means the default arrangement, so an account that has never opened
+   * the customiser is unaffected — and a section added in a later version
+   * appears for everyone instead of being silently missing for anyone who has
+   * ever saved a list. See `dashboardWidgets` in `domain/dashboard.ts`.
+   */
+  dashboard?: { id: string; visible: boolean }[];
   /**
    * Swipe actions per list.
    *
@@ -91,13 +127,18 @@ export interface Settings {
    * freeze today's defaults into every account forever.
    */
   gestures?: GestureSettings;
-  nanPolicy: NanPolicy;
   saveTimestampEnabled: boolean;
   monthlyBudget: number;
   monthlyBudgetCurrency: CurrencyCode;
   exchangeRates: ExchangeRates;
   lastUpdated: string;
   darkMode: boolean;
+  /**
+   * @deprecated Externally funded spending is now always excluded from the
+   * personal budget — see `domain/funding.ts`. Nothing reads this. The field is
+   * still declared so snapshots written before the rule became unconditional
+   * round-trip unchanged rather than losing a key on every save.
+   */
   ignoreNonBudgetSpending?: boolean;
 }
 
@@ -196,6 +237,22 @@ export interface Activity {
   dayOfMonth?: number | null;
   /** First date the schedule applies from (YYYY-MM-DD). */
   startDate?: string;
+  /**
+   * A renewal date the user knows and the rule cannot derive (YYYY-MM-DD).
+   *
+   * An annual subscription renews on the day it was bought, which is a fact
+   * about the past that no recurrence rule contains — and a monthly charge
+   * with no day-of-month set has no derivable date at all. This states the
+   * next one, and it **overrides the calculated next occurrence** in the
+   * upcoming timeline.
+   *
+   * Deliberately display-only: it changes *when* the next charge is shown, not
+   * *how much* anything costs. Feeding it into the estimate would let a single
+   * typed date rewrite a year of budget figures. Once it is in the past it is
+   * simply ignored, because a renewal that has already happened is history and
+   * the rule takes over again.
+   */
+  nextRenewalDate?: string;
   /**
    * One-off exceptions to the recurring rule.
    *
@@ -419,13 +476,24 @@ export interface PeriodSummary {
   month?: number;
   week?: number;
   status: PeriodStatus;
+  /**
+   * Spend charged to the personal budget.
+   *
+   * Externally funded transactions are **never** part of this, whatever the
+   * settings say — see `domain/funding.ts`. `transactionTotal` is the figure
+   * that includes them.
+   */
   total: number | null;
   generalTotal: number | null;
   pilotingTotal: number | null;
-  /** Sum of personal-budget spend (excludes external/shared) */
+  /** The same figure as `total`, named for the personal/external/all display. */
   personalTotal?: number | null;
-  /** Sum of external/shared spend */
+  /** Spend somebody else paid for. Recorded in full, charged to nothing. */
   externalTotal?: number | null;
+  /** Every transaction in the period: `personalTotal + externalTotal`. */
+  transactionTotal?: number | null;
+  /** How many of `entryCount` were externally funded. */
+  externalCount?: number;
   entryCount: number;
   isClosed: boolean;
 }
@@ -471,15 +539,20 @@ export interface YearCalculation {
   includedBudget: number;
   selectedMonthSpend: PeriodSummary;
   selectedWeekSpend: PeriodSummary;
+  /** Personal-budget spend for the whole year. */
   totalSpend: number;
+  /** Externally funded spend for the whole year, kept out of `totalSpend`. */
+  externalSpend: number;
   delta: number | null;
   rolloverDelta: number | null;
   roundedMonthlyValue: number;
   wallet: WalletSummary;
   wishlist: WishlistSummary;
+  /** Personal-budget spend up to and including the selected month. */
   ytdTotal: number;
+  /** Externally funded spend over the same window. */
+  externalYtdTotal: number;
   activityEstimates: ActivityEstimate[];
-  categoryTotals: CategoryTotal[];
   monthlyTrend: PeriodSummary[];
   weeklyTrend: PeriodSummary[];
 }

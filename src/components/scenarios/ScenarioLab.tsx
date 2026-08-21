@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Check, Copy, FlaskConical, Pencil, Plus, Trash2 } from "lucide-react";
+import { Check, Copy, FlaskConical, Leaf, Pencil, Plus, Trash2 } from "lucide-react";
 import { useBudgetStore } from "../../store/budgetStore";
 import { isScenarioActive, scenarioDiff } from "../../domain/scenarios";
 import { formatMoney } from "../../domain/currency";
@@ -26,11 +26,19 @@ export const ScenarioLab: React.FC = () => {
   const duplicate = useBudgetStore((s) => s.duplicateScenarioPreset);
   const remove = useBudgetStore((s) => s.removeScenarioPreset);
   const capture = useBudgetStore((s) => s.captureScenarioPreset);
+  const seasons = snapshot.seasonalPresets;
+  const applySeason = useBudgetStore((s) => s.applySeasonalPreset);
+  const captureSeason = useBudgetStore((s) => s.captureSeasonalPreset);
+  const removeSeason = useBudgetStore((s) => s.removeSeasonalPreset);
   const mutable = useBudgetStore((s) => s.isCurrentPeriodMutable)();
 
   const [editing, setEditing] = useState<ScenarioPreset | "new" | null>(null);
   const [applying, setApplying] = useState<ScenarioPreset | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [confirmSeason, setConfirmSeason] = useState<string | null>(null);
+
+  const activities = snapshot.years[String(snapshot.settings.selectedYear)]?.activities ?? [];
+  const currentSeason = snapshot.settings.selectedSeason;
 
   const money = (value: number | null | undefined): string =>
     value == null ? "—" : formatMoney(value, snapshot.settings.baseCurrency, snapshot.settings.currencyDisplayMode);
@@ -172,6 +180,134 @@ export const ScenarioLab: React.FC = () => {
                         size="sm"
                         disabled={!mutable}
                         onClick={() => setConfirmDelete(preset.id)}
+                      >
+                        <Trash2 size={14} /> Delete
+                      </Button>
+                    )}
+                  </footer>
+                </article>
+              );
+            })}
+          </div>
+        )}
+      </Section>
+
+      {/* ── Seasons ────────────────────────────────────────────────────────
+          A season is the *activity* half of the same idea: which of your
+          recurring costs are running, and at what price. Lessons stop over
+          the summer; heating stops in June. This was implemented, seeded and
+          applicable from nowhere at all — and a real account is seeded with
+          none, so the feature could never be used. Capturing is the way in:
+          set the activities up, then name what you have. */}
+      <Section
+        title="Seasons"
+        action={
+          <Button
+            variant="secondary"
+            size="sm"
+            disabled={!mutable || activities.length === 0}
+            title={activities.length === 0 ? "Add some activities first" : undefined}
+            onClick={() => {
+              const name = window.prompt(
+                `Name this arrangement of your ${activities.length} activities:`,
+                "Summer",
+              );
+              if (!name?.trim()) return;
+              captureSeason(name.trim(), name.trim().toLowerCase());
+            }}
+          >
+            <Plus size={14} /> Save current as a season
+          </Button>
+        }
+      >
+        <p className="text-note" style={{ marginBottom: 20 }}>
+          A season remembers which activities are running and what they cost. Applying one switches
+          them all at once — it never touches names, categories or schedules, and it never changes a
+          recorded transaction.
+        </p>
+
+        {seasons.length === 0 ? (
+          <EmptyState
+            icon={<Leaf size={24} />}
+            title="No seasons saved"
+            description="Pause the activities that stop over the summer, then save that arrangement as a season. Switching back is one tap."
+          />
+        ) : (
+          <div className="scenario-list">
+            {seasons.map((season) => {
+              const covered = Object.keys(season.activityOverrides ?? {}).filter((id) =>
+                activities.some((activity) => activity.id === id),
+              ).length;
+              const active = currentSeason === season.season;
+              return (
+                <article key={season.id} className={`scenario-card${active ? " scenario-card-active" : ""}`}>
+                  <header className="scenario-head">
+                    <div style={{ minWidth: 0 }}>
+                      <h3 className="text-callout scenario-name">{season.name}</h3>
+                      {season.notes && <p className="text-note scenario-notes">{season.notes}</p>}
+                    </div>
+                    {active && (
+                      <span className="scenario-badge" title="This season is currently selected">
+                        <Check size={12} aria-hidden="true" /> Current
+                      </span>
+                    )}
+                  </header>
+
+                  <dl className="scenario-figures">
+                    <div>
+                      <dt className="text-footnote">Activities</dt>
+                      {/* Only the ones that still exist: an override naming a
+                          deleted activity does nothing, and counting it would
+                          promise a change that cannot happen. */}
+                      <dd>{covered}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-footnote">Season tag</dt>
+                      <dd>{season.season || "—"}</dd>
+                    </div>
+                  </dl>
+
+                  <footer className="scenario-actions">
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      disabled={!mutable || covered === 0}
+                      title={covered === 0 ? "None of this season's activities still exist" : undefined}
+                      onClick={() => {
+                        if (
+                          window.confirm(
+                            `Apply "${season.name}"?\n\nThis changes whether ${covered} activit${covered === 1 ? "y is" : "ies are"} running, and what they cost. Your transactions are untouched, and you can undo it.`,
+                          )
+                        ) {
+                          applySeason(season.id);
+                        }
+                      }}
+                    >
+                      Apply to {covered} activit{covered === 1 ? "y" : "ies"}
+                    </Button>
+                    {confirmSeason === season.id ? (
+                      <span className="scenario-confirm">
+                        <span className="text-note">Delete it?</span>
+                        <Button
+                          variant="danger"
+                          size="sm"
+                          onClick={() => {
+                            removeSeason(season.id);
+                            setConfirmSeason(null);
+                          }}
+                        >
+                          Delete
+                        </Button>
+                        <Button variant="ghost" size="sm" onClick={() => setConfirmSeason(null)}>
+                          Keep
+                        </Button>
+                      </span>
+                    ) : (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        disabled={!mutable}
+                        onClick={() => setConfirmSeason(season.id)}
                       >
                         <Trash2 size={14} /> Delete
                       </Button>

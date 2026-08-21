@@ -80,6 +80,19 @@ The architecture already exists.
 
 Future work should improve it rather than replacing it.
 
+## Where to look first (2026-08-21)
+
+If you are changing something in this project, these are the files whose comments will save you the most time — each documents a defect that was expensive to find:
+
+| File | What it protects |
+| --- | --- |
+| `src/domain/funding.ts` | Rule 7 above. One predicate, no setting |
+| `src/components/ui/EditorSheet.tsx` | Why its set-up effect depends on nothing. A dependency there was the "typing is unusable" bug, in every editor |
+| `server/src/repositories/SnapshotRepository.ts` | A fixed column list: a field added to the model but not to the schema, the upsert *and* the parser is silently dropped on the next round trip |
+| `server/src/db/schema.ts` | Why it may never reference a column a migration adds |
+| `src/domain/dashboard.ts` | How a stored arrangement from an older version is reconciled |
+| `src/components/ui/SwipeRow.tsx` | Why gesture state lives in refs and not in state |
+
 ## Implementation status (2026-08-15)
 
 The React client provides the core budgeting workflows: transactions, recurring activities, categories, wallet, wishlist, scenarios, settings, analytics, and historical summaries. Period state is shared — month/year selections use calendar years while week selections retain an explicit ISO week-year, so cross-year weeks are not lost. The shell derives historical state once and applies it across period-aware views; store guards block period-bound mutations in historical periods.
@@ -236,6 +249,23 @@ Rule 6
 Budget calculations are more important than visual appearance.
 
 Correctness always has priority.
+
+---
+
+Rule 7
+
+Money somebody else paid is not money this budget spent.
+
+A transaction whose source is `external` or `shared` — anything other than `personal` — keeps its full amount and stays visible in the ledger, and is excluded from **every** figure that answers "how am I doing against my budget": remaining, utilisation, burn rate, forecast, category totals and caps, health, period comparisons, the year and year-to-date totals, and the reports.
+
+Budget €1,000, personal €300, external €200 leaves **€700**.
+
+This is not configurable. It lives in `src/domain/funding.ts`, and every budget selector filters through `personalEntries(...)`. If you are writing a figure that sums spending, you must consciously choose one of:
+
+- `personalEntries(entries)` — a budget figure. Almost always this one.
+- the entries unfiltered — the full ledger, and the label must say so ("All transactions").
+
+There was a setting for this once (`ignoreNonBudgetSpending`, default *off*), which meant the app's default behaviour charged the user for money they had not spent. The field is still declared in `Settings` as deprecated so old snapshots round-trip, and nothing reads it. Do not read it.
 
 ---
 

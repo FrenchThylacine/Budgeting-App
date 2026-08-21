@@ -2,9 +2,41 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#111827" />
-    <title>Premium Budget OS</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+
+    <title>Budget OS — personal budgeting</title>
+    <meta
+      name="description"
+      content="Spending, recurring activities, wishlist, analytics and reports — synchronised across your devices."
+    />
+
+    <!--
+      Two theme colours, so the browser chrome matches the page rather than
+      fighting it. A single value left a navy bar above a white app in light
+      mode, which reads as a rendering fault rather than as a choice.
+    -->
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#F6F8FB" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0B1220" />
+
+    <!--
+      The tab mark is a simplified swept fin, not the A350 illustration scaled
+      down: at 16px the illustration is an unreadable smudge. The SVG is served
+      first for browsers that take one, with PNG and ICO behind it.
+    -->
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="alternate icon" href="/favicon.ico" sizes="16x16 32x32 48x48" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" sizes="180x180" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+
+    <meta name="apple-mobile-web-app-title" content="Budget OS" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="mobile-web-app-capable" content="yes" />
+
+    <!-- A private financial tool has no business being indexed or previewed. -->
+    <meta name="robots" content="noindex, nofollow" />
+    <meta name="referrer" content="strict-origin-when-cross-origin" />
+    <meta name="color-scheme" content="light dark" />
   </head>
   <body>
     <div id="root"></div>

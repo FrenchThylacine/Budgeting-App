@@ -17,6 +17,36 @@ export default defineConfig({
       },
     },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        /**
+         * Split the dependencies that never change from the code that changes
+         * every deploy.
+         *
+         * Without this everything lands in one 900 kB chunk, so a one-line fix
+         * invalidates React, the icon set and the store for every returning
+         * visitor. Separated, a deploy re-downloads only the application code
+         * and the rest is served from cache.
+         *
+         * `lucide-react` gets its own chunk because it is the largest single
+         * dependency and the one most likely to grow: the icon catalogue is a
+         * feature, and it should not sit in the same cache entry as the
+         * framework.
+         */
+        manualChunks(id) {
+          if (!id.includes("node_modules")) return undefined;
+          if (id.includes("lucide-react")) return "icons";
+          if (id.includes("react-dom") || id.includes("/react/") || id.includes("scheduler")) return "react";
+          if (id.includes("zustand")) return "state";
+          return undefined;
+        },
+      },
+    },
+    // The app chunk is the one worth watching; the vendor chunks are expected
+    // to be large and are cached across deploys.
+    chunkSizeWarningLimit: 700,
+  },
   preview: {
     host: true,
     port: 4173,

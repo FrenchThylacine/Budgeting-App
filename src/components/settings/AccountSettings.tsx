@@ -80,7 +80,7 @@ export const AccountSettings: React.FC = () => {
         </div>
 
         {done && (
-          <p className="text-caption" role="status" style={{ color: "var(--success)" }}>
+          <p className="text-caption" role="status" style={{ color: "var(--success-text)" }}>
             {done}
           </p>
         )}
@@ -148,7 +148,7 @@ export const AccountSettings: React.FC = () => {
                   />
                 </Field>
                 {mismatch && (
-                  <p className="text-caption" style={{ color: "var(--danger)", margin: 0 }}>
+                  <p className="text-caption" style={{ color: "var(--danger-text)", margin: 0 }}>
                     The two passwords do not match.
                   </p>
                 )}
@@ -159,7 +159,7 @@ export const AccountSettings: React.FC = () => {
             )}
 
             {error && (
-              <p className="text-caption" role="alert" style={{ color: "var(--danger)", margin: 0 }}>
+              <p className="text-caption" role="alert" style={{ color: "var(--danger-text)", margin: 0 }}>
                 {error}
               </p>
             )}

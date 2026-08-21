@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
-import { CURRENCY_OPTIONS, formatMoney, normalizeAmount } from "../../domain/currency";
+import { currencyOptionsFor, formatMoney, normalizeAmount } from "../../domain/currency";
 import { calculateYear } from "../../domain/calculations";
 import { monthName, formatDateTime } from "../../domain/dates";
 import { useBudgetStore } from "../../store/budgetStore";
@@ -139,7 +139,7 @@ export const WalletPanel: React.FC = () => {
               value={currency}
               onChange={(e) => setCurrency(e.target.value as CurrencyCode)}
             >
-              {CURRENCY_OPTIONS.map((item) => (
+              {currencyOptionsFor(snapshot.settings, currency).map((item) => (
                 <option key={item}>{item}</option>
               ))}
             </select>
@@ -244,12 +244,12 @@ export const WalletPanel: React.FC = () => {
                   <div className="text-footnote">
                     {monthName(entry.month)} {entry.year}
                     {entry.createdAt ? ` · ${formatDateTime(entry.createdAt)}` : ""}
-                    {entry.note ? ` · ${entry.note}` : ""}
+                    {entry.note ? <span className="user-text"> · {entry.note}</span> : ""}
                   </div>
                 </div>
                 <div style={{ display: "flex", gap: 8, alignItems: "center", flexShrink: 0 }}>
                   <div style={{ textAlign: "right" }}>
-                    <strong style={{ color: entry.amount < 0 ? "var(--danger)" : undefined }}>
+                    <strong style={{ color: entry.amount < 0 ? "var(--danger-text)" : undefined }}>
                       {formatMoney(entry.amount, entry.currency, snapshot.settings.currencyDisplayMode)}
                     </strong>
                     {entry.currency !== snapshot.settings.baseCurrency && (

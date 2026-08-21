@@ -7,7 +7,7 @@ import type { AuditLog, AuditType } from "../../domain/types";
 import { Badge } from "../ui/Badge";
 import { EmptyState } from "../ui/EmptyState";
 import { Section } from "../ui/Section";
-import { AlertTriangle, CheckCircle2, Lock, ShieldAlert } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Lock, ShieldAlert, StickyNote } from "lucide-react";
 
 type Tab = "periods" | "closures" | "approvals" | "audit";
 
@@ -26,8 +26,14 @@ const AUDIT_FILTERS: { value: AuditType | "all" | "historical"; label: string }[
 export const HistoryPanel: React.FC = () => {
   const snapshot = useBudgetStore((s) => s.snapshot);
   const calculation = useMemo(() => calculateYear(snapshot), [snapshot]);
+  const setMonthlyNote = useBudgetStore((s) => s.setMonthlyNote);
   const [tab, setTab] = useState<Tab>("periods");
   const [auditFilter, setAuditFilter] = useState<AuditType | "all" | "historical">("all");
+  /** Which month's note is being edited, and the text as it is being typed. */
+  const [noteMonth, setNoteMonth] = useState<number | null>(null);
+  const [noteDraft, setNoteDraft] = useState("");
+
+  const monthlyNotes = snapshot.years[String(snapshot.settings.selectedYear)]?.monthlyNotes ?? {};
 
   const closedMonths = useMemo(
     () =>
@@ -81,7 +87,7 @@ export const HistoryPanel: React.FC = () => {
               fontSize: 13,
             }}
           >
-            <ShieldAlert size={16} style={{ color: "var(--warning)", flexShrink: 0 }} />
+            <ShieldAlert size={16} style={{ color: "var(--warning-text)", flexShrink: 0 }} />
             <span>
               {historicalEditCount} change{historicalEditCount !== 1 ? "s" : ""} rewrote a closed period.
             </span>
@@ -117,19 +123,72 @@ export const HistoryPanel: React.FC = () => {
       {/* ── Monthly period summary ── */}
       {tab === "periods" && (
         <div className="item-list">
-          {calculation.monthlyTrend.map((period) => (
-            <div className="item-row" key={period.month}>
-              <div style={{ minWidth: 0 }}>
-                <div className="text-callout" style={{ fontWeight: 600 }}>
-                  {period.label} {period.year}
+          {calculation.monthlyTrend.map((period) => {
+            const month = period.month ?? 0;
+            const stored = monthlyNotes[month];
+            const isEditing = noteMonth === month;
+            return (
+              <div className="item-row" key={month} style={{ alignItems: "flex-start", flexWrap: "wrap" }}>
+                <div style={{ minWidth: 0, flex: "1 1 200px" }}>
+                  <div className="text-callout" style={{ fontWeight: 600 }}>
+                    {period.label} {period.year}
+                  </div>
+                  <div className="text-footnote">
+                    {statusLabel(period.status)} · {period.entryCount} transaction{period.entryCount !== 1 ? "s" : ""}
+                    {period.externalCount ? ` · ${period.externalCount} paid by others` : ""}
+                  </div>
+                  {/* The note lives with the month it describes: "the boiler
+                      broke" is why March cost what it did, and a year later
+                      that is the only thing that explains the figure. */}
+                  {stored && !isEditing && (
+                    <div className="text-caption" style={{ marginTop: 6, overflowWrap: "anywhere" }}>
+                      <StickyNote size={12} aria-hidden="true" style={{ verticalAlign: "-2px", marginRight: 4 }} />
+                      {stored.note}
+                    </div>
+                  )}
+                  {isEditing && (
+                    <form
+                      style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}
+                      onSubmit={(event) => {
+                        event.preventDefault();
+                        setMonthlyNote(period.year, month, noteDraft);
+                        setNoteMonth(null);
+                      }}
+                    >
+                      <input
+                        className="input"
+                        autoFocus
+                        aria-label={`Note for ${period.label} ${period.year}`}
+                        placeholder="Why this month looked the way it did"
+                        value={noteDraft}
+                        onChange={(event) => setNoteDraft(event.target.value)}
+                        style={{ flex: "1 1 220px", minWidth: 0 }}
+                      />
+                      <button className="btn btn-primary btn-sm" type="submit">Save</button>
+                      <button className="btn btn-ghost btn-sm" type="button" onClick={() => setNoteMonth(null)}>
+                        Cancel
+                      </button>
+                    </form>
+                  )}
                 </div>
-                <div className="text-footnote">
-                  {statusLabel(period.status)} · {period.entryCount} transaction{period.entryCount !== 1 ? "s" : ""}
+                <div className="row-trailing" style={{ alignItems: "flex-start" }}>
+                  <strong>{formatDualMoney(period.total, snapshot.settings)}</strong>
+                  {!isEditing && (
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm"
+                      onClick={() => {
+                        setNoteMonth(month);
+                        setNoteDraft(stored?.note ?? "");
+                      }}
+                    >
+                      <StickyNote size={13} /> {stored ? "Edit note" : "Add note"}
+                    </button>
+                  )}
                 </div>
               </div>
-              <strong>{formatDualMoney(period.total, snapshot.settings)}</strong>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
@@ -159,7 +218,7 @@ export const HistoryPanel: React.FC = () => {
                     </div>
                     <div className="text-footnote">
                       {formatDateTime(record.confirmedAt)}
-                      {record.note ? ` · ${record.note}` : ""}
+                      {record.note ? <span className="user-text"> · {record.note}</span> : ""}
                     </div>
                   </div>
                   <div style={{ textAlign: "right", flexShrink: 0 }}>
@@ -203,7 +262,7 @@ export const HistoryPanel: React.FC = () => {
                       style={{ fontWeight: 600, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}
                     >
                       {isApproved ? (
-                        <CheckCircle2 size={15} style={{ color: "var(--success)" }} />
+                        <CheckCircle2 size={15} style={{ color: "var(--success-text)" }} />
                       ) : (
                         <AlertTriangle size={15} style={{ color: "var(--text-tertiary)" }} />
                       )}
@@ -274,7 +333,7 @@ export const HistoryPanel: React.FC = () => {
           )}
 
           {auditEntries.length > 200 && (
-            <div className="text-footnote" style={{ textAlign: "center" }}>
+            <div className="text-note" style={{ textAlign: "center" }}>
               Showing the 200 most recent of {auditEntries.length} entries.
             </div>
           )}
@@ -297,7 +356,7 @@ const AuditRow: React.FC<{ entry: AuditLog }> = ({ entry }) => (
         className="text-callout"
         style={{ fontWeight: 600, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}
       >
-        {entry.historicalEdit && <ShieldAlert size={14} style={{ color: "var(--warning)", flexShrink: 0 }} />}
+        {entry.historicalEdit && <ShieldAlert size={14} style={{ color: "var(--warning-text)", flexShrink: 0 }} />}
         <span style={{ overflowWrap: "anywhere" }}>{entry.summary}</span>
       </div>
       <div className="text-footnote">

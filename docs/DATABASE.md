@@ -40,7 +40,9 @@ SQLite should no longer be considered the reference implementation.
 
 ## Current verification status — 2026-08-15
 
-The persistence layer has been verified against a **live PostgreSQL server**, not only against mocks. 21 integration tests cover schema DDL, migrations, repository SQL, and the full HTTP API path; a browser session was additionally driven end to end (UI → API → PostgreSQL → UI) including a two-device read/write cycle.
+The persistence layer has been verified against a **live PostgreSQL server**, not only against mocks. 71 integration tests cover schema DDL, migrations, repository SQL, and the full HTTP API path; a browser session was additionally driven end to end (UI → API → PostgreSQL → UI) including a two-device read/write cycle.
+
+Migrations 011 and 012 were additionally run against a database that **already held data** — the upgrade path that once answered every request with 503 — and confirmed to add their columns without touching a row.
 
 The snapshot save flow performs targeted `ON CONFLICT (id) DO UPDATE SET ...` upserts for all top-level and nested child records (`activities`, `spending_entries`, `wishlist_items`, `wallet_entries`, `closed_months`, `categories`, `seasonal_presets`, `scenario_presets`). Only records removed from memory are deleted using targeted `NOT IN` queries. Whole-table deletions for year records have been eliminated.
 
@@ -65,6 +67,11 @@ These could not be observed with a mocked driver and were all failing in real Po
 | `005-add-activity-schedule-and-wishlist-links` | `activities.icon/color/cost_model/sessions_per_month/weekdays/day_of_month/start_date`, `wishlist_items.url/color/linked_spending_id`, `spending_entries.wishlist_item_id` |
 | `006-tenant-isolation` | `budget_approvals.snapshot_id` (+ backfill to `active`), `categories.seed_key` (backfilled for the ten seeded ids only) |
 | `007-authentication` | `users`, `sessions`, `password_reset_tokens`, `auth_attempts` |
+| `008-schedule-overrides` | `activities.schedule_overrides` — one-off exceptions as a JSON array |
+| `009-wishlist-brand-url` | `wishlist_items.brand_url` — where the icon comes from, separate from where the item is bought |
+| `010-wishlist-icon` | `wishlist_items.icon` — an explicit library icon, which beats any favicon |
+| `011-monthly-notes` | `years.monthly_notes` (JSONB, `DEFAULT '{}'`) — see below |
+| `012-activity-next-renewal` | `activities.next_renewal_date` — a renewal date the recurrence rule cannot derive |
 
 ### `schema.ts` runs before the migrations, and that constrains what may go in it
 
@@ -97,6 +104,20 @@ Removed categories are deleted **after** the year writes, not before. `activitie
 Migration 005 exists because the repository writes a **fixed column list**: a field added to the TypeScript model but not to the schema, the upsert and the parser is silently dropped on the next server round-trip. Adding a persisted field means touching all four places, and the integration suite has a round-trip test per field group to catch the omission.
 
 `activities.weekdays` stores a JSON array of ISO weekday numbers. A malformed value is read as "no schedule" rather than throwing, so one bad row cannot make the whole snapshot unloadable.
+
+### Why 011 exists: a field that existed in the model and nowhere else
+
+`YearRecord.monthlyNotes` was declared in `src/domain/types.ts` from the beginning, written by nothing, and — crucially — **read back as a hardcoded `{}`** by `loadYearRecord`. The type checked, the round trip appeared to work, and anything written survived exactly until the next read from the server.
+
+This is the same class of defect migration 005 exists for, in its most deceptive form: not a field missing from the schema, but a field the loader *pretended* to load. A round-trip test catches both, which is why there is now one per persisted field group and three for this one alone — write and read back, clear and read back, and a deliberately malformed stored value.
+
+`monthly_notes` is JSONB on the year row rather than a table of its own: there are at most twelve per year, they are always read with the year, and they are never queried across years. A table would add a join and a delete pass for nothing. `DEFAULT '{}'::jsonb` means every existing row is immediately valid with no backfill.
+
+The parser accepts both an object (what the Neon driver returns for JSONB) and a string (what the local node-postgres adapter and older rows can present), and drops any entry whose month is outside 1–12 or whose text is empty — one bad row must not make a whole year unloadable.
+
+### Why 012 is a plain column and not part of the schedule
+
+`activities.next_renewal_date` is display-only: it overrides which date the upcoming timeline shows and **never** feeds an estimate. That is deliberate. Every other schedule field is an input to `monthlyEstimateNative`, so letting a typed date join them would mean one keystroke could rewrite a year of budget figures. Keeping it out of the schedule is what makes it safe to type a date you are unsure about.
 
 ### Concurrency and multi-device safety
 

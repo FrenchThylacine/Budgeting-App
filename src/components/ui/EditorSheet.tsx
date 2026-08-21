@@ -35,6 +35,26 @@ export const EditorSheet: React.FC<EditorSheetProps> = ({
 }) => {
   const sheetRef = useRef<HTMLDivElement>(null);
 
+  /**
+   * `onClose` through a ref, so the set-up effect below can depend on nothing.
+   *
+   * Every caller passes a fresh closure — an inline arrow, or a handler
+   * redefined on each render of the panel. With `onClose` in the dependency
+   * array the effect tore down and re-ran on **every keystroke**, and its first
+   * act is to focus the sheet's first field: typing the second character of a
+   * name moved the caret back to the start, and typing into any later field
+   * threw focus to the first one. That is the whole of the "editing is
+   * unusable" bug, and it applied to every editor in the app, not just the
+   * wishlist.
+   *
+   * The effect is now genuinely a mount/unmount effect — open once, initialise
+   * once — and the latest `onClose` is read at call time. No timers, no
+   * repeated `focus()`, no selection restoration: the caret is never moved in
+   * the first place.
+   */
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
+
   useEffect(() => {
     const previouslyFocused = document.activeElement as HTMLElement | null;
 
@@ -55,7 +75,7 @@ export const EditorSheet: React.FC<EditorSheetProps> = ({
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         event.preventDefault();
-        onClose();
+        closeRef.current();
         return;
       }
       if (event.key !== "Tab" || !sheetRef.current) return;
@@ -82,10 +102,13 @@ export const EditorSheet: React.FC<EditorSheetProps> = ({
       document.body.style.overflow = previousOverflow;
       previouslyFocused?.focus?.();
     };
-  }, [onClose, initialFocusRef]);
+    // Deliberately empty: this is open/close set-up, not per-render work. See
+    // `closeRef` above for why a dependency here was the focus bug.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
-    <div className="sheet-backdrop" role="presentation" onMouseDown={onClose}>
+    <div className="sheet-backdrop" role="presentation" onMouseDown={() => closeRef.current()}>
       <div
         ref={sheetRef}
         className="sheet"
@@ -102,7 +125,12 @@ export const EditorSheet: React.FC<EditorSheetProps> = ({
             </h2>
             {subtitle && <p className="text-note" style={{ margin: "2px 0 0" }}>{subtitle}</p>}
           </div>
-          <button type="button" className="btn btn-ghost btn-sm btn-icon" onClick={onClose} aria-label="Close editor">
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm btn-icon"
+            onClick={() => closeRef.current()}
+            aria-label="Close editor"
+          >
             <X size={18} />
           </button>
         </header>

@@ -1,9 +1,12 @@
 import React, { useMemo, useState } from "react";
 import { Pencil, Plus, ShoppingBag, Trash2, X } from "lucide-react";
-import { CURRENCY_OPTIONS, formatMoney } from "../../domain/currency";
+import { currencyOptionsFor, formatMoney } from "../../domain/currency";
 import { monthFromDateInput, todayDateInput, weekFromDateInput, weekYear } from "../../domain/dates";
 import { selectedIsoWeekYear } from "../../domain/periods";
+import { FUNDING_SOURCES, fundingLabel, isExternallyFunded } from "../../domain/funding";
+import { fundingSplit } from "../../domain/analytics";
 import { isActiveWishlistItem, sortWishlistItems } from "../../domain/wishlist";
+import { formatDualMoney } from "../../utils/formatters";
 import type { WishlistLinkResult } from "../../domain/wishlist";
 import type { CurrencyCode, RecurrenceType, SpendingEntry, WishlistItem } from "../../domain/types";
 import { useBudgetStore } from "../../store/budgetStore";
@@ -29,11 +32,6 @@ const RECURRENCE_OPTIONS: { value: RecurrenceType; label: string }[] = [
   { value: "custom", label: "Custom" },
 ];
 
-const SOURCE_OPTIONS = [
-  { value: "personal", label: "Budget" },
-  { value: "external", label: "Outside budget" },
-  { value: "shared", label: "Someone else paid" },
-];
 
 interface Draft {
   amount: string;
@@ -95,7 +93,8 @@ export const SpendingPanel: React.FC = () => {
     return sortWishlistItems(selectable);
   }, [wishlistItems, wishlistById, draft.wishlistItemId]);
 
-  const entries = useMemo(
+  /** Everything in the selected period, before the search box narrows it. */
+  const periodEntries = useMemo(
     () =>
       Object.values(snapshot.years)
         .flatMap((record) => record.spendingEntries)
@@ -106,11 +105,23 @@ export const SpendingPanel: React.FC = () => {
             : mode === "year"
             ? entry.year === snapshot.settings.selectedYear
             : entry.year === snapshot.settings.selectedYear && entry.month === snapshot.settings.selectedMonth,
-        )
+        ),
+    [mode, snapshot],
+  );
+
+  const entries = useMemo(
+    () =>
+      periodEntries
         .filter((entry) => matchesEntryFilters(entry, { search }))
         .sort((a, b) => b.date.localeCompare(a.date)),
-    [mode, snapshot, search],
+    [periodEntries, search],
   );
+
+  /**
+   * Who paid for the period — the whole period, not the search results. A
+   * total that changes as you type in a filter box is not a total.
+   */
+  const split = useMemo(() => fundingSplit(periodEntries, snapshot), [periodEntries, snapshot]);
 
   const reset = () => {
     setEditing(null);
@@ -297,7 +308,7 @@ export const SpendingPanel: React.FC = () => {
               marginBottom: 12,
               borderRadius: "var(--radius-md)",
               background: "var(--warning-soft)",
-              color: "var(--warning)",
+              color: "var(--warning-text)",
             }}
           >
             <span style={{ flex: 1, minWidth: 0 }}>{notice}</span>
@@ -352,7 +363,7 @@ export const SpendingPanel: React.FC = () => {
                 value={draft.currency}
                 onChange={(e) => setDraft({ ...draft, currency: e.target.value as CurrencyCode })}
               >
-                {CURRENCY_OPTIONS.map((currency) => (
+                {currencyOptionsFor(snapshot.settings, draft.currency).map((currency) => (
                   <option key={currency}>{currency}</option>
                 ))}
               </select>
@@ -391,13 +402,19 @@ export const SpendingPanel: React.FC = () => {
                 ))}
               </select>
             </Field>
-            <Field label="Paid from">
+            <Field
+              label="Paid by"
+              // The consequence of the choice, said where the choice is made.
+              // Marking a transaction as someone else's changes the remaining
+              // budget the moment it is saved, and that has to be predictable.
+              hint={FUNDING_SOURCES.find((option) => option.value === draft.source)?.hint}
+            >
               <select
                 className="select"
                 value={draft.source}
                 onChange={(e) => setDraft({ ...draft, source: e.target.value })}
               >
-                {SOURCE_OPTIONS.map((option) => (
+                {FUNDING_SOURCES.map((option) => (
                   <option key={option.value} value={option.value}>
                     {option.label}
                   </option>
@@ -464,6 +481,38 @@ export const SpendingPanel: React.FC = () => {
         />
       </Section>
 
+      {/* What the period cost, and who paid for it.
+          Shown only when somebody else paid for something: otherwise the
+          personal figure is the only figure and a three-way split of one
+          number is noise. */}
+      {split.externalCount > 0 && (
+        <div className="funding-split">
+          <div>
+            <div className="text-footnote">Your budget</div>
+            <div className="money funding-split-value">{formatDualMoney(split.personal, snapshot.settings)}</div>
+            <div className="text-caption">
+              {split.personalCount} transaction{split.personalCount === 1 ? "" : "s"}
+            </div>
+          </div>
+          <div>
+            <div className="text-footnote">Paid by others</div>
+            <div className="money funding-split-value" style={{ color: "var(--warning-text)" }}>
+              {formatDualMoney(split.external, snapshot.settings)}
+            </div>
+            <div className="text-caption">
+              {split.externalCount} transaction{split.externalCount === 1 ? "" : "s"} · not charged to you
+            </div>
+          </div>
+          <div>
+            <div className="text-footnote">All transactions</div>
+            <div className="money funding-split-value" style={{ color: "var(--text-secondary)" }}>
+              {formatDualMoney(split.transactions, snapshot.settings)}
+            </div>
+            <div className="text-caption">Everything recorded this {mode}</div>
+          </div>
+        </div>
+      )}
+
       {entries.length === 0 ? (
         <EmptyState
           title={`No transactions for this ${mode}`}
@@ -522,9 +571,9 @@ export const SpendingPanel: React.FC = () => {
                       </span>
                     )}
                     {entry.isPiloting && <span className="badge badge-neutral">Piloting</span>}
-                    {(entry.source ?? "personal") !== "personal" && (
-                      <span className="badge badge-warning">
-                        {SOURCE_OPTIONS.find((o) => o.value === entry.source)?.label ?? entry.source}
+                    {isExternallyFunded(entry) && (
+                      <span className="badge badge-warning" title="Recorded in full, excluded from your budget">
+                        {fundingLabel(entry.source)}
                       </span>
                     )}
                     {entry.wishlistItemId && (
@@ -540,7 +589,7 @@ export const SpendingPanel: React.FC = () => {
                   </div>
                   <div className="text-footnote">
                     {entry.date}
-                    {entry.note ? ` · ${entry.note}` : ""}
+                    {entry.note ? <span className="user-text"> · {entry.note}</span> : ""}
                   </div>
                 </div>
                 {/* The amount sits outside `.row-actions`: that container is

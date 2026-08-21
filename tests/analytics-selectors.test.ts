@@ -254,14 +254,25 @@ describe("trend bar windows", () => {
 });
 
 describe("budgetRelevantEntries", () => {
-  it("filters external spend only when ignoreNonBudgetSpending is on", () => {
+  it("excludes externally funded spend unconditionally", () => {
     const snap = snapshotWith([
       entry({ amount: 100, source: "personal" }),
       entry({ amount: 50, source: "external" }),
+      entry({ amount: 25, source: "shared" }),
     ]);
     const all = entriesForSelectedPeriod(snap, snap.settings);
-    expect(budgetRelevantEntries(all, snap.settings)).toHaveLength(2);
-    snap.settings.ignoreNonBudgetSpending = true;
+    expect(budgetRelevantEntries(all, snap.settings)).toHaveLength(1);
+
+    // The old opt-in setting must not be able to bring it back: this is a rule
+    // about what the numbers mean, not a preference.
+    snap.settings.ignoreNonBudgetSpending = false;
+    expect(budgetRelevantEntries(all, snap.settings)).toHaveLength(1);
+  });
+
+  it("treats a missing source as personal", () => {
+    const snap = snapshotWith([entry({ amount: 100 })]);
+    const all = entriesForSelectedPeriod(snap, snap.settings);
+    expect(all[0].source).toBeUndefined();
     expect(budgetRelevantEntries(all, snap.settings)).toHaveLength(1);
   });
 });

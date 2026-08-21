@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowDown, ArrowUp, Copy, Eye, EyeOff, GripVertical, Pencil, Plus, Trash2 } from "lucide-react";
-import { CURRENCY_OPTIONS, formatMoney } from "../../domain/currency";
+import { currencyOptionsFor, formatMoney } from "../../domain/currency";
 import { SwipeRow } from "../ui/SwipeRow";
 import { gesturesFor } from "../../domain/gestures";
 import { AdvancedFields, EditorSheet } from "../ui/EditorSheet";
@@ -13,6 +13,7 @@ import {
   hasSchedule,
   nextOccurrences,
   occurrencesInMonth,
+  parseLocalDate,
 } from "../../domain/schedule";
 import type { Activity, CostModel, IsoWeekday, RecurrenceType, SwipeActionId } from "../../domain/types";
 import { useBudgetStore } from "../../store/budgetStore";
@@ -27,6 +28,7 @@ import type { ActivityDraft } from "../../utils/formatters";
 import { ActivityIcon, ColorPicker, IconPicker, readableAccent, tint } from "../ui/IconPicker";
 import { Button } from "../ui/Button";
 import { EmptyState } from "../ui/EmptyState";
+import { Field, FieldGroup } from "../ui/Field";
 import { Section } from "../ui/Section";
 
 const RECURRENCE_TYPES: RecurrenceType[] = ["weekly", "monthly", "yearly", "session", "purchase", "custom", "none"];
@@ -134,13 +136,22 @@ export const ActivityPanel: React.FC = () => {
       case "delete":
         return [{
           label: "Delete", icon: <Trash2 size={18} />, destructive: true,
-          onAction: () => {
-            if (window.confirm(`Delete "${activity.name}"? Linked spending is kept.`)) remove(activity.id);
-          },
+          onAction: () => confirmDelete(activity),
         }];
       default:
         return [];
     }
+  };
+
+  /**
+   * One delete, two ways in.
+   *
+   * The swipe and the card's Delete button had the same confirmation text
+   * written out twice. Two copies of a warning drift, and the one that drifts
+   * is usually the one nobody is looking at.
+   */
+  const confirmDelete = (activity: Activity) => {
+    if (window.confirm(`Delete "${activity.name}"? Linked spending is kept.`)) remove(activity.id);
   };
 
   const move = (activity: Activity, direction: -1 | 1) => {
@@ -151,6 +162,23 @@ export const ActivityPanel: React.FC = () => {
   };
 
   const preview = useMemo(() => buildPreview(form, editing, year, month), [form, editing, year, month]);
+
+  /**
+   * What the renewal date is currently doing, said where it is entered.
+   *
+   * Three states worth distinguishing: none set (the rule decides), set and
+   * ahead (it wins), and set but already past (it is ignored, and saying so is
+   * the difference between a stale field and a broken feature).
+   */
+  const renewalHint = (() => {
+    const parsed = parseLocalDate(form.nextRenewalDate);
+    if (!parsed) return "Optional. Leave empty to let the schedule decide the next date.";
+    const today = new Date();
+    if (parsed < new Date(today.getFullYear(), today.getMonth(), today.getDate())) {
+      return "This date has passed, so it is ignored and the schedule decides again. Set the next one, or clear it.";
+    }
+    return "Overrides the next date in the upcoming timeline. It never changes what the activity costs.";
+  })();
 
   const draftAccent = form.color || "";
 
@@ -264,7 +292,7 @@ export const ActivityPanel: React.FC = () => {
                   value={form.currency}
                   onChange={(event) => patch({ currency: event.target.value as ActivityDraft["currency"] })}
                 >
-                  {CURRENCY_OPTIONS.map((currency) => (
+                  {currencyOptionsFor(snapshot.settings, form.currency as ActivityDraft["currency"]).map((currency) => (
                     <option key={currency}>{currency}</option>
                   ))}
                 </select>
@@ -456,6 +484,32 @@ export const ActivityPanel: React.FC = () => {
               )}
             </div>
 
+            {/* Not inside the schedule group: it applies whether or not there
+                is a schedule, and it is most useful precisely where there is
+                not one — an annual subscription that renews on the day it was
+                bought, which no recurrence rule can know. */}
+            <FieldGroup title="Next renewal">
+              <Field
+                label="Renews on"
+                span
+                hint={renewalHint}
+              >
+                <input
+                  className="input"
+                  type="date"
+                  value={form.nextRenewalDate}
+                  onChange={(event) => patch({ nextRenewalDate: event.target.value })}
+                />
+              </Field>
+              {form.nextRenewalDate && (
+                <Field label="Clear it" group>
+                  <Button type="button" variant="ghost" size="sm" onClick={() => patch({ nextRenewalDate: "" })}>
+                    Use the schedule instead
+                  </Button>
+                </Field>
+              )}
+            </FieldGroup>
+
             <AdvancedFields label="Season, notes and visibility">
             <FieldGroup title="Details">
               <Field label="Seasonal tag" hint="e.g. summer, winter, normal">
@@ -609,7 +663,15 @@ export const ActivityPanel: React.FC = () => {
                   <div style={{ textAlign: "right", minWidth: 0 }}>
                     <strong style={{ whiteSpace: "nowrap" }}>
                       {formatMoney(estimate?.monthlyNative ?? 0, activity.currency, snapshot.settings.currencyDisplayMode)}
-                      <span className="text-caption"> /month</span>
+                      {/* An annual charge divided by twelve is an average, not
+                          a payment. Labelling it "/month" like a subscription
+                          invites someone to look for a charge that never
+                          arrives. */}
+                      <span className="text-caption">
+                        {activity.recurrenceType === "yearly" && (activity.costModel ?? "auto") === "auto"
+                          ? " /month avg."
+                          : " /month"}
+                      </span>
                     </strong>
                     <div className="text-caption" style={{ whiteSpace: "nowrap" }}>
                       {formatMoney(estimate?.yearlyNative ?? 0, activity.currency, snapshot.settings.currencyDisplayMode)} /year
@@ -666,9 +728,7 @@ export const ActivityPanel: React.FC = () => {
                         variant="ghost"
                         size="sm"
                         icon
-                        onClick={() => {
-                          if (window.confirm(`Delete "${activity.name}"? Linked spending is kept.`)) remove(activity.id);
-                        }}
+                        onClick={() => confirmDelete(activity)}
                         aria-label={`Delete ${activity.name}`}
                       >
                         <Trash2 size={15} />
@@ -683,46 +743,6 @@ export const ActivityPanel: React.FC = () => {
         </div>
       )}
     </div>
-  );
-};
-
-const FieldGroup: React.FC<{ title: string; children: React.ReactNode }> = ({ title, children }) => (
-  <fieldset style={{ border: "none", margin: 0, padding: 0, minWidth: 0 }}>
-    <legend className="text-footnote" style={{ padding: 0, marginBottom: 8 }}>
-      {title}
-    </legend>
-    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 170px), 1fr))", gap: 10 }}>
-      {children}
-    </div>
-  </fieldset>
-);
-
-/**
- * A labelled form field. `group` renders a div instead of a label: a label may
- * only own one control, so sets of chips, swatches, or checkboxes get a plain
- * heading and carry their own `aria-label` on the group.
- */
-const Field: React.FC<{
-  label: string;
-  hint?: string;
-  span?: boolean;
-  emphasised?: boolean;
-  group?: boolean;
-  children: React.ReactNode;
-}> = ({ label, hint, span, emphasised, group, children }) => {
-  const Wrapper = group ? "div" : "label";
-  return (
-    <Wrapper style={{ display: "grid", gap: 4, minWidth: 0, gridColumn: span ? "1 / -1" : undefined }}>
-      <span className="text-caption" style={{ fontWeight: emphasised ? 700 : 500, color: emphasised ? "var(--accent)" : undefined }}>
-        {label}
-      </span>
-      {children}
-      {hint && (
-        <span className="text-caption" style={{ color: "var(--text-tertiary)" }}>
-          {hint}
-        </span>
-      )}
-    </Wrapper>
   );
 };
 
@@ -792,11 +812,23 @@ function buildPreview(draft: ActivityDraft, editing: Activity | null, year: numb
       if (activity.pricePerMonth == null) return { headline: "Add a monthly cost to see the estimate.", detail: "" };
       return { headline: `${money(activity.pricePerMonth)}/month ${totals}`, detail: "A flat amount, whatever the calendar does." };
     }
-    default:
+    default: {
+      /*
+       * A yearly charge is not a monthly payment.
+       *
+       * The monthly figure for an annual subscription is the year divided by
+       * twelve — useful for comparing commitments, and wrong as a description
+       * of when money leaves the account. Saying so is the difference between
+       * a budgeting average and a bill the user starts looking for.
+       */
+      const yearly = activity.recurrenceType === "yearly";
       return {
         headline: `Automatic from “${activity.recurrenceType}” ${totals}`,
-        detail: "Switch cost model for per-session, real-schedule, or fixed pricing.",
+        detail: yearly
+          ? "The monthly figure is the year averaged over twelve — you are billed once. Give it a renewal date below to put the real charge on the timeline."
+          : "Switch cost model for per-session, real-schedule, or fixed pricing.",
       };
+    }
   }
 }
 

@@ -41,6 +41,20 @@ Semantic first: colour states a meaning, it does not decorate.
 
 Each has a `-soft` companion for fills and tints. Dark mode redefines both: a light tint disappears against a dark surface, so dark values are lighter in hue and stronger in alpha to keep the same perceived emphasis.
 
+### One colour cannot do two jobs
+
+`--success`, `--warning`, `--danger` and `--purple` are **fill** values. They are right for a chart series, a progress bar or a badge tint, where contrast is judged against the shape beside them. As 13px text on a card they read at 2.4–4.2:1 — below the WCAG AA minimum of 4.5.
+
+So each also has a `-text` variant: the same hue darkened until it clears 4.5 both on a card *and* on its own soft badge background. **Wherever the colour is the text, use the `-text` token**; wherever it is a fill, use the plain one. Priority badges, bucket labels, analytics figures, the pacing sentence and wallet debits all take the `-text` variant while their backgrounds keep the fill hue. In dark mode the two are the same value: a saturated hue on a dark ground already reads at 8:1 and above.
+
+### The grey ramp is measured
+
+`--text-primary` : `--text-secondary` : `--text-tertiary` read **15.6 : 6.7 : 4.9** against the page and **12.4 : 6.2 : 4.6** against `--bg-inset`, the darkest surface the app puts body text on. Every step clears AA on every ground.
+
+This was not always true: tertiary was `#8D99AC`, which is 2.6:1 — the token behind every caption, footnote, hint and empty-state line in the application. The ramp is widened at the top rather than compressed at the bottom, so the three greys stay visibly distinct while all three remain legible.
+
+**How to check a change.** Do not eyeball it. A script that walks every text node, composites the translucent backgrounds behind it, and computes the real ratio takes minutes to write and is the only way to know; the last sweep covered ten tabs in both themes and reports zero failures. Nudging a grey "a bit lighter" is exactly how the previous value got there.
+
 **Charts** use `--series-1` … `--series-8`, ordered so neighbouring series stay distinguishable, including for the most common colour-vision deficiencies — blue and orange lead, and red and green are never adjacent.
 
 **Category and activity colours** are user data. A category's own colour drives its bar in every chart, and an activity's colour themes its whole card (tinted background, coloured icon chip, accent border), not just a dot.
@@ -350,6 +364,14 @@ Heroicons
 Phosphor
 
 Avoid mixing icon libraries.
+
+### The icon picker
+
+`src/components/ui/IconPicker.tsx` offers **244 icons across sixteen groups**, every one a real `lucide-react` export imported statically. That is deliberate rather than a name-to-namespace lookup: the bundler ships only the icons the picker offers, and an unknown or renamed name can never crash a render — `resolveIcon` falls back to a neutral mark. Stored records keep the icon *name*, not the component, so data survives a library upgrade.
+
+An icon may appear in more than one group. A joystick is an arcade stick and it is a sidestick, and the groups are a way of browsing rather than a partition. The name index keeps the **first** occurrence, so what a stored name resolves to does not depend on declaration order, and grid keys are scoped per group.
+
+**Brand marks are not drawn.** Product and company names are trademarks, and a hand-drawn approximation of someone's logo is both worse than their own and misleading about who made it. The picker covers *kinds* of thing, with product names in the search keywords, and a wishlist item that needs a real brand mark gets one from the maker's own site through the separate brand link.
 
 Icons should remain simple.
 

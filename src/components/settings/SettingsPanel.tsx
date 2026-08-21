@@ -1,6 +1,6 @@
 import React, { useState } from "react";
-import { RefreshCw } from "lucide-react";
-import { CURRENCY_OPTIONS } from "../../domain/currency";
+import { AlertTriangle, Lock, RefreshCw } from "lucide-react";
+import { CURRENCY_OPTIONS, CURRENCY_SYMBOLS, canConvert, currenciesInUse, trackedCurrencies } from "../../domain/currency";
 import { formatDateTime } from "../../domain/dates";
 import { applyRatesToSettings, fetchExchangeRates } from "../../domain/exchangeRates";
 import { useBudgetStore } from "../../store/budgetStore";
@@ -26,7 +26,8 @@ const ROUNDING_RULES: { value: RoundingRule; label: string }[] = [
 ];
 
 export const SettingsPanel: React.FC = () => {
-  const settings = useBudgetStore((s) => s.snapshot.settings);
+  const snapshot = useBudgetStore((s) => s.snapshot);
+  const settings = snapshot.settings;
   const update = useBudgetStore((s) => s.updateSettings);
   const lastSyncedAt = useBudgetStore((s) => s.lastSyncedAt);
   const syncError = useBudgetStore((s) => s.syncError);
@@ -61,6 +62,10 @@ export const SettingsPanel: React.FC = () => {
     }
   };
 
+  /** The offered set, and what is actually in the data behind it. */
+  const tracked = trackedCurrencies(settings);
+  const used = currenciesInUse(snapshot);
+
   const fieldStyle: React.CSSProperties = { display: "grid", gap: 6 };
   const checkboxStyle: React.CSSProperties = { display: "flex", alignItems: "flex-start", gap: 10, cursor: "pointer" };
 
@@ -70,6 +75,65 @@ export const SettingsPanel: React.FC = () => {
 
       <Section title="Currency">
         <div className="card card-body" style={{ display: "grid", gap: 16, maxWidth: 620 }}>
+          {/* Which currencies exist, before which one everything is shown in.
+              Ten currencies in every dropdown is nine wrong answers for
+              somebody who deals in two. */}
+          <div>
+            <div className="text-callout" style={{ marginBottom: 4 }}>Currencies you use</div>
+            <p className="text-note" style={{ marginBottom: 10 }}>
+              Only these appear in the amount fields across the app. A record always keeps the
+              currency it was entered in, even if you stop tracking it.
+            </p>
+            <div className="currency-chips" role="group" aria-label="Tracked currencies">
+              {CURRENCY_OPTIONS.map((currency) => {
+                const on = tracked.includes(currency);
+                const isBase = currency === settings.baseCurrency;
+                const inUse = used.has(currency);
+                // Removing the display currency, or one that real records are
+                // denominated in, would leave figures nothing can express.
+                const locked = on && (isBase || inUse);
+                const reason = isBase
+                  ? "This is your display currency."
+                  : inUse
+                    ? "Records are stored in this currency."
+                    : undefined;
+                const noRate = on && !canConvert(currency, settings.baseCurrency, settings.exchangeRates);
+                return (
+                  <button
+                    key={currency}
+                    type="button"
+                    className={`currency-chip${on ? " active" : ""}${locked ? " locked" : ""}`}
+                    aria-pressed={on}
+                    disabled={locked}
+                    title={reason ?? (on ? `Stop tracking ${currency}` : `Track ${currency}`)}
+                    onClick={() =>
+                      update({
+                        trackedCurrencies: on
+                          ? tracked.filter((code) => code !== currency)
+                          : [...tracked, currency],
+                      })
+                    }
+                  >
+                    <span aria-hidden="true" className="currency-chip-symbol">{CURRENCY_SYMBOLS[currency]}</span>
+                    {currency}
+                    {locked && <Lock size={11} aria-hidden="true" />}
+                    {/* A currency with no usable rate would be converted 1:1,
+                        which is a number rather than an answer. Saying so is
+                        the difference between a stale figure and a wrong one. */}
+                    {noRate && !locked && <AlertTriangle size={11} aria-hidden="true" style={{ color: "var(--warning-text)" }} />}
+                  </button>
+                );
+              })}
+            </div>
+            {tracked.some((c) => !canConvert(c, settings.baseCurrency, settings.exchangeRates)) && (
+              <p className="text-caption" style={{ color: "var(--warning-text)", marginTop: 8 }}>
+                Some tracked currencies have no rate against {settings.baseCurrency}. Update the rates
+                below, or set one by hand, before recording amounts in them — without a rate they would
+                be converted one-for-one.
+              </p>
+            )}
+          </div>
+
           <label className="text-callout" style={fieldStyle}>
             Display currency
             <select
@@ -77,11 +141,11 @@ export const SettingsPanel: React.FC = () => {
               value={settings.baseCurrency}
               onChange={(e) => update({ baseCurrency: e.target.value as CurrencyCode })}
             >
-              {CURRENCY_OPTIONS.map((currency) => (
+              {tracked.map((currency) => (
                 <option key={currency}>{currency}</option>
               ))}
             </select>
-            <span className="text-footnote">Everything is converted to this currency for display only.</span>
+            <span className="text-note">Everything is converted to this currency for display only.</span>
           </label>
 
           <label className="text-callout" style={fieldStyle}>
@@ -144,7 +208,7 @@ export const SettingsPanel: React.FC = () => {
                 value={settings.monthlyBudgetCurrency}
                 onChange={(e) => update({ monthlyBudgetCurrency: e.target.value as CurrencyCode })}
               >
-                {CURRENCY_OPTIONS.map((currency) => (
+                {tracked.map((currency) => (
                   <option key={currency}>{currency}</option>
                 ))}
               </select>
@@ -160,14 +224,16 @@ export const SettingsPanel: React.FC = () => {
             <span>Include Piloting in the monthly budget total</span>
           </label>
 
-          <label className="text-caption" style={checkboxStyle}>
-            <input
-              type="checkbox"
-              checked={settings.ignoreNonBudgetSpending ?? false}
-              onChange={(e) => update({ ignoreNonBudgetSpending: e.target.checked })}
-            />
-            <span>Exclude non-budget payment sources from analytics</span>
-          </label>
+          {/* This used to be a checkbox reading "Exclude non-budget payment
+              sources from analytics", off by default — which meant the app's
+              default behaviour charged the user for money somebody else spent.
+              It is a rule about what the figures mean, not a preference, so it
+              is now unconditional and stated rather than offered. */}
+          <p className="text-note" style={{ margin: 0 }}>
+            Transactions marked <strong>Someone else paid</strong> or <strong>Outside my budget</strong> are
+            kept at full value and stay visible in your spending, but never count against your budget,
+            categories, forecast or health score.
+          </p>
         </div>
       </Section>
 
@@ -181,7 +247,7 @@ export const SettingsPanel: React.FC = () => {
             />
             <span>
               Carry only unbought wishlist items into a new year
-              <span className="text-footnote" style={{ display: "block" }}>
+              <span className="text-note" style={{ display: "block" }}>
                 When off, the whole wishlist is copied forward.
               </span>
             </span>
@@ -208,6 +274,21 @@ export const SettingsPanel: React.FC = () => {
             />
             <span>Dark mode</span>
           </label>
+
+          <label className="text-caption" style={checkboxStyle}>
+            <input
+              type="checkbox"
+              checked={settings.liveClockEnabled !== false}
+              onChange={(e) => update({ liveClockEnabled: e.target.checked })}
+            />
+            <span>
+              Show a live clock in the period selector
+              <span className="text-note" style={{ display: "block" }}>
+                The date is always shown. Off, the time is omitted and the minute timer
+                behind it stops.
+              </span>
+            </span>
+          </label>
         </div>
       </Section>
 
@@ -220,9 +301,9 @@ export const SettingsPanel: React.FC = () => {
             </span>
           </div>
           {syncError && (
-            <div className="text-caption" style={{ color: "var(--warning)" }}>{syncError}</div>
+            <div className="text-caption" style={{ color: "var(--warning-text)" }}>{syncError}</div>
           )}
-          <div className="text-footnote">
+          <div className="text-note">
             The server is the source of truth. This device keeps a local copy so the app works offline, but a
             change only reaches your other devices once it has been sent.
           </div>
@@ -308,7 +389,7 @@ export const SettingsPanel: React.FC = () => {
           {rateMessage && (
             <div
               className="text-caption"
-              style={{ color: rateMessage.ok ? "var(--success)" : "var(--warning)" }}
+              style={{ color: rateMessage.ok ? "var(--success-text)" : "var(--warning-text)" }}
               role="status"
             >
               {rateMessage.text}
@@ -351,7 +432,7 @@ export const SettingsPanel: React.FC = () => {
             </label>
           </div>
 
-          <div className="text-footnote">
+          <div className="text-note">
             A rate must stay above zero: a zero or negative rate would make every converted figure meaningless.
           </div>
         </div>

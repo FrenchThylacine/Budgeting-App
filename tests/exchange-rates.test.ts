@@ -12,6 +12,14 @@ import {
   RATE_MAX_AGE_MS,
   type RateSnapshot,
 } from "../src/domain/exchangeRates";
+import {
+  CURRENCY_OPTIONS,
+  currenciesInUse,
+  currencyOptionsFor,
+  trackedCurrencies,
+} from "../src/domain/currency";
+import { createSeedBudgetSnapshot } from "../src/data/seedBudget";
+import type { Settings } from "../src/domain/types";
 import { canConvert, convertAmount, rateToBase } from "../src/domain/currency";
 import type { ExchangeRates } from "../src/domain/types";
 
@@ -190,5 +198,52 @@ describe("rateToBase with provider rates", () => {
     const rates = baseRates();
     expect(convertAmount(0, "USD", "EUR", rates)).toBe(0);
     expect(convertAmount(null, "USD", "EUR", rates)).toBeNull();
+  });
+});
+
+describe("tracked currencies", () => {
+  const settingsWith = (overrides: Partial<Settings>): Settings =>
+    ({ ...createSeedBudgetSnapshot().settings, ...overrides }) as Settings;
+
+  it("offers every currency when nothing has been chosen", () => {
+    expect(trackedCurrencies(settingsWith({}))).toEqual(CURRENCY_OPTIONS);
+  });
+
+  it("narrows the list to the chosen set", () => {
+    expect(trackedCurrencies(settingsWith({ baseCurrency: "EUR", trackedCurrencies: ["EUR", "USD"] })))
+      .toEqual(["EUR", "USD"]);
+  });
+
+  it("always includes the display currency, whatever the stored list says", () => {
+    // Otherwise the budget cannot state its own totals in its own currency.
+    expect(trackedCurrencies(settingsWith({ baseCurrency: "GBP", trackedCurrencies: ["EUR", "USD"] })))
+      .toContain("GBP");
+  });
+
+  it("keeps the canonical order rather than the order they were added", () => {
+    expect(trackedCurrencies(settingsWith({ baseCurrency: "EUR", trackedCurrencies: ["JPY", "USD", "EUR"] })))
+      .toEqual(["EUR", "USD", "JPY"]);
+  });
+
+  it("ignores an unknown code instead of offering it", () => {
+    expect(trackedCurrencies(settingsWith({ baseCurrency: "EUR", trackedCurrencies: ["EUR", "XYZ" as never] })))
+      .toEqual(["EUR"]);
+  });
+
+  it("still offers a record's own currency while it is being edited", () => {
+    // The money was spent in it; rewriting the field would falsify the record.
+    const settings = settingsWith({ baseCurrency: "EUR", trackedCurrencies: ["EUR"] });
+    expect(currencyOptionsFor(settings, "JPY")).toEqual(["EUR", "JPY"]);
+    expect(currencyOptionsFor(settings, "EUR")).toEqual(["EUR"]);
+    expect(currencyOptionsFor(settings)).toEqual(["EUR"]);
+  });
+
+  it("finds every currency the budget has actually recorded something in", () => {
+    const snapshot = createSeedBudgetSnapshot();
+    const used = currenciesInUse(snapshot);
+    // The seed records activities in both euros and dollars.
+    expect(used.has("EUR")).toBe(true);
+    expect(used.has("USD")).toBe(true);
+    expect(used.has("JPY")).toBe(false);
   });
 });

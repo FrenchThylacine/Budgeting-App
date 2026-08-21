@@ -217,6 +217,40 @@ export async function runMigrations(
         await sql`ALTER TABLE wishlist_items ADD COLUMN IF NOT EXISTS icon TEXT;`;
       },
     },
+    {
+      /*
+       * Notes against a month.
+       *
+       * `YearRecord.monthlyNotes` has been in the type since the beginning and
+       * the loader returned a hardcoded `{}` for it, so anything written was
+       * lost on the next read from the server. A note explaining why a month
+       * cost what it did is the one thing that still makes sense of the figure
+       * a year later, so it is stored rather than the type being deleted.
+       *
+       * JSONB on the year row rather than a table of its own: there are at
+       * most twelve per year, they are always read with the year and never
+       * queried across years, and a table would add a join and a delete pass
+       * for no gain. `DEFAULT '{}'` so every existing row is immediately
+       * valid without a backfill.
+       */
+      name: "011-monthly-notes",
+      run: async (sql: NeonQueryFunction<any, any>) => {
+        await sql`ALTER TABLE years ADD COLUMN IF NOT EXISTS monthly_notes JSONB NOT NULL DEFAULT '{}'::jsonb;`;
+      },
+    },
+    {
+      /*
+       * A renewal date the user knows and the recurrence rule cannot derive —
+       * an annual subscription renews on the day it was bought. Display-only:
+       * it overrides the next date in the upcoming timeline and never touches
+       * a cost, which is why it is a plain date column and not part of the
+       * schedule.
+       */
+      name: "012-activity-next-renewal",
+      run: async (sql: NeonQueryFunction<any, any>) => {
+        await sql`ALTER TABLE activities ADD COLUMN IF NOT EXISTS next_renewal_date TEXT;`;
+      },
+    },
   ];
 
 

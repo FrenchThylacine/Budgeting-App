@@ -7,6 +7,7 @@ import type {
 } from "./types";
 import { normalizeAmount } from "./currency";
 import { normalizeEntry } from "./calculations";
+import { externalEntries, personalEntries } from "./funding";
 import { movePeriod, periodLabel, selectedIsoWeekYear } from "./periods";
 import { dateInputValue, weekYear, weeksInIsoYear, startOfIsoWeek } from "./dates";
 
@@ -41,10 +42,46 @@ export function entriesForSelectedPeriod(snapshot: BudgetSnapshot, settings: Set
   );
 }
 
-/** Entries counted against the personal budget (honours ignoreNonBudgetSpending). */
-export function budgetRelevantEntries(entries: SpendingEntry[], settings: Settings): SpendingEntry[] {
-  if (!settings.ignoreNonBudgetSpending) return entries;
-  return entries.filter((e) => (e.source ?? "personal") === "personal");
+/**
+ * Entries counted against the personal budget.
+ *
+ * Externally funded spending is excluded unconditionally — see
+ * `domain/funding.ts` for why this is a rule rather than a preference. The
+ * `settings` argument is kept so every call site reads the same and so the
+ * signature does not churn; it is deliberately unused.
+ */
+export function budgetRelevantEntries(entries: SpendingEntry[], _settings?: Settings): SpendingEntry[] {
+  return personalEntries(entries);
+}
+
+export interface FundingSplit {
+  /** Spend charged to this budget. `null` when the period holds no entries at all. */
+  personal: number | null;
+  /** Spend somebody else paid for. `null` when there are none. */
+  external: number | null;
+  /** Every transaction in the period, personal and external together. */
+  transactions: number | null;
+  personalCount: number;
+  externalCount: number;
+}
+
+/**
+ * Personal / external / all-transactions for a set of entries.
+ *
+ * The three figures the user needs to see side by side to trust that a €200
+ * dinner someone else paid for is both recorded and not charged to them.
+ */
+export function fundingSplit(entries: SpendingEntry[], snapshot: BudgetSnapshot): FundingSplit {
+  const personal = personalEntries(entries);
+  const external = externalEntries(entries);
+  const total = (list: SpendingEntry[]) => list.reduce((sum, entry) => sum + normalizeEntry(entry, snapshot), 0);
+  return {
+    personal: personal.length > 0 ? total(personal) : null,
+    external: external.length > 0 ? total(external) : null,
+    transactions: entries.length > 0 ? total(entries) : null,
+    personalCount: personal.length,
+    externalCount: external.length,
+  };
 }
 
 // ─── Period geometry (for pacing / projections) ──────────────────────────────
@@ -389,11 +426,6 @@ export function weeklyTrendBars(
       highlight: week === selectedWeek,
     };
   });
-}
-
-/** Number of ISO weeks in the selected week-year (needed by weekly windows). */
-export function weeksInSelectedWeekYear(settings: Settings): number {
-  return weeksInIsoYear(selectedIsoWeekYear(settings));
 }
 
 /**

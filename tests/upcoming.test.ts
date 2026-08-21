@@ -10,6 +10,7 @@
 import { describe, expect, it } from "vitest";
 import { createSeedBudgetSnapshot } from "../src/data/seedBudget";
 import { dayLabel, groupByDay, upcomingSchedule } from "../src/domain/upcoming";
+import { estimateActivity } from "../src/domain/calculations";
 import type { Activity, BudgetSnapshot } from "../src/domain/types";
 
 // A Thursday, so weekday maths is not accidentally aligned to a Monday.
@@ -171,5 +172,139 @@ describe("grouping and labelling", () => {
       { activity: { id: "b", name: "B" } as Activity, date: morning, amountNative: null },
     ]);
     expect(days).toHaveLength(1);
+  });
+});
+
+describe("a manual renewal date", () => {
+  const NOW = new Date(2026, 7, 21, 12, 0, 0);
+
+  function withActivity(overrides: Partial<Activity>): BudgetSnapshot {
+    const snap = createSeedBudgetSnapshot(NOW);
+    snap.settings.selectedYear = 2026;
+    const record = snap.years["2026"];
+    record.activities = [
+      {
+        id: "act-sub",
+        name: "Navigraph",
+        categoryId: snap.categories[0].id,
+        currency: "EUR",
+        recurrenceType: "yearly",
+        recurrenceInterval: 1,
+        pricePerSession: null,
+        pricePerPurchase: null,
+        pricePerMonth: null,
+        estimatedCost: 81.64,
+        yearlyEstimate: 81.64,
+        active: true,
+        visible: true,
+        seasonalTag: "normal",
+        order: 0,
+        notes: "",
+        ...overrides,
+      } as Activity,
+    ];
+    record.spendingEntries = [];
+    return snap;
+  }
+
+  it("gives a date to an activity whose rule cannot produce one", () => {
+    // A yearly subscription with no day set has no derivable date at all.
+    const withoutDate = upcomingSchedule(withActivity({}), NOW);
+    expect(withoutDate.occurrences).toHaveLength(0);
+    expect(withoutDate.undated.map((u) => u.activity.name)).toEqual(["Navigraph"]);
+
+    const withDate = upcomingSchedule(withActivity({ nextRenewalDate: "2026-08-25" }), NOW);
+    expect(withDate.occurrences).toHaveLength(1);
+    expect(withDate.occurrences[0].date.getDate()).toBe(25);
+    expect(withDate.occurrences[0].manual).toBe(true);
+    expect(withDate.undated).toHaveLength(0);
+  });
+
+  it("overrides the date the schedule would have produced", () => {
+    const scheduled = withActivity({ costModel: "schedule", dayOfMonth: 28, recurrenceType: "monthly" });
+    expect(upcomingSchedule(scheduled, NOW).occurrences[0].date.getDate()).toBe(28);
+
+    const overridden = withActivity({
+      costModel: "schedule",
+      dayOfMonth: 28,
+      recurrenceType: "monthly",
+      nextRenewalDate: "2026-08-24",
+    });
+    const result = upcomingSchedule(overridden, NOW);
+    expect(result.occurrences[0].date.getDate()).toBe(24);
+    expect(result.occurrences[0].manual).toBe(true);
+  });
+
+  it("counts a renewal dated today as still upcoming", () => {
+    // Otherwise it disappears depending on the time of day the page was opened.
+    const result = upcomingSchedule(withActivity({ nextRenewalDate: "2026-08-21" }), NOW);
+    expect(result.occurrences).toHaveLength(1);
+    expect(result.occurrences[0].date.getDate()).toBe(21);
+  });
+
+  it("ignores a renewal date that has already passed", () => {
+    // The renewal happened; the rule is right again from here.
+    const result = upcomingSchedule(withActivity({ nextRenewalDate: "2026-08-01" }), NOW);
+    expect(result.occurrences).toHaveLength(0);
+    expect(result.undated.map((u) => u.activity.name)).toEqual(["Navigraph"]);
+  });
+
+  it("never changes what the activity costs", () => {
+    const plain = withActivity({});
+    const dated = withActivity({ nextRenewalDate: "2026-08-25" });
+    expect(estimateActivity(dated.years["2026"].activities[0], dated).monthlyBase).toBe(
+      estimateActivity(plain.years["2026"].activities[0], plain).monthlyBase,
+    );
+  });
+});
+
+describe("the amount shown against an occurrence", () => {
+  const NOW = new Date(2026, 7, 21, 12, 0, 0);
+
+  function yearlyActivity(overrides: Partial<Activity>): BudgetSnapshot {
+    const snap = createSeedBudgetSnapshot(NOW);
+    snap.settings.selectedYear = 2026;
+    snap.years["2026"].activities = [
+      {
+        id: "act-sub",
+        name: "Navigraph",
+        categoryId: snap.categories[0].id,
+        currency: "EUR",
+        recurrenceType: "yearly",
+        recurrenceInterval: 1,
+        pricePerSession: null,
+        pricePerPurchase: null,
+        pricePerMonth: null,
+        estimatedCost: null,
+        yearlyEstimate: 81.64,
+        active: true,
+        visible: true,
+        seasonalTag: "normal",
+        order: 0,
+        notes: "",
+        nextRenewalDate: "2026-08-28",
+        ...overrides,
+      } as Activity,
+    ];
+    snap.years["2026"].spendingEntries = [];
+    return snap;
+  }
+
+  it("states the whole year on the day an annual charge lands", () => {
+    // The timeline used to show "—" here: the app declining to state a figure
+    // it holds. The yearly estimate *is* the charge; the renewal date is when.
+    const result = upcomingSchedule(yearlyActivity({}), NOW);
+    expect(result.occurrences[0].amountNative).toBe(81.64);
+  });
+
+  it("still says nothing when the yearly amount is genuinely unknown", () => {
+    // Missing stays missing — it must not become 0.
+    const result = upcomingSchedule(yearlyActivity({ yearlyEstimate: null }), NOW);
+    expect(result.occurrences[0].amountNative).toBeNull();
+  });
+
+  it("keeps a yearly estimate of 0 as a real zero", () => {
+    const result = upcomingSchedule(yearlyActivity({ yearlyEstimate: 0 }), NOW);
+    expect(result.occurrences[0].amountNative).toBe(0);
   });
 });

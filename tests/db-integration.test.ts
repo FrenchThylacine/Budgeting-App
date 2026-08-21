@@ -677,6 +677,76 @@ describeDb("PostgreSQL integration", () => {
     expect(byId["ovr-extra"].amount).toBe(45);
   });
 
+  it("round-trips notes against months", async () => {
+    // `monthlyNotes` was in the model from the start and the loader returned a
+    // hardcoded `{}` for it, so a note written against a month survived until
+    // the next read from the server and then vanished. Migration 011 gives it
+    // a column; this is the test that says it is actually wired end to end.
+    const snapshot = (await repo.loadSnapshot("active"))!;
+    const year = Object.values(snapshot.years)[0];
+    year.monthlyNotes = {
+      1: { month: 1, note: "The boiler broke.", updatedAt: "2026-01-31T10:00:00Z" },
+      7: { month: 7, note: "Two weeks away, so July is low.", updatedAt: "2026-07-31T10:00:00Z" },
+    };
+    snapshot.revision = (snapshot.revision ?? 0) + 1;
+    await repo.saveSnapshot(snapshot, "active");
+
+    const reloaded = (await repo.loadSnapshot("active"))!;
+    const notes = Object.values(reloaded.years)[0].monthlyNotes;
+    expect(notes[1].note).toBe("The boiler broke.");
+    expect(notes[7].note).toBe("Two weeks away, so July is low.");
+    expect(notes[1].updatedAt).toBe("2026-01-31T10:00:00Z");
+  });
+
+  it("clears a note rather than storing an empty one", async () => {
+    const snapshot = (await repo.loadSnapshot("active"))!;
+    Object.values(snapshot.years)[0].monthlyNotes = {};
+    snapshot.revision = (snapshot.revision ?? 0) + 1;
+    await repo.saveSnapshot(snapshot, "active");
+
+    const reloaded = (await repo.loadSnapshot("active"))!;
+    expect(Object.values(reloaded.years)[0].monthlyNotes).toEqual({});
+  });
+
+  it("survives a malformed monthly_notes value instead of failing the load", async () => {
+    const loaded = (await repo.loadSnapshot("active"))!;
+    // Every row for that year: the test schema can hold more than one snapshot,
+    // and targeting the wrong one would leave the assertion reading an
+    // untouched row and passing for the wrong reason.
+    await client.query(`UPDATE years SET monthly_notes = $1::jsonb WHERE year = $2`, [
+      // A month outside 1..12, an entry with no text, and a valid one.
+      '{"0":{"note":"nope"},"3":{"note":""},"5":{"note":"kept"},"99":{"note":"nope"}}',
+      Object.values(loaded.years)[0].year,
+    ]);
+
+    const reloaded = (await repo.loadSnapshot("active"))!;
+    const notes = Object.values(reloaded.years)[0].monthlyNotes;
+    expect(Object.keys(notes)).toEqual(["5"]);
+    expect(notes[5].note).toBe("kept");
+  });
+
+  it("round-trips a manual next-renewal date", async () => {
+    const snapshot = (await repo.loadSnapshot("active"))!;
+    const year = Object.values(snapshot.years)[0];
+    const id = year.activities[0].id;
+    year.activities[0].nextRenewalDate = "2027-03-04";
+    snapshot.revision = (snapshot.revision ?? 0) + 1;
+    await repo.saveSnapshot(snapshot, "active");
+
+    const reloaded = (await repo.loadSnapshot("active"))!;
+    const activity = Object.values(reloaded.years)[0].activities.find((a) => a.id === id)!;
+    expect(activity.nextRenewalDate).toBe("2027-03-04");
+
+    // And clearing it stores absence, not an empty string.
+    activity.nextRenewalDate = undefined;
+    reloaded.revision = (reloaded.revision ?? 0) + 1;
+    await repo.saveSnapshot(reloaded, "active");
+    const cleared = (await repo.loadSnapshot("active"))!;
+    expect(
+      Object.values(cleared.years)[0].activities.find((a) => a.id === id)!.nextRenewalDate,
+    ).toBeUndefined();
+  });
+
   it("drops a malformed override instead of failing the whole load", async () => {
     // Target an activity that is actually part of the loaded snapshot: any row
     // in the table would do for the write, but the assertion reads it back

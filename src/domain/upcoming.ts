@@ -1,5 +1,5 @@
 import { estimateActivity } from "./calculations";
-import { describeSchedule, nextOccurrences } from "./schedule";
+import { nextOccurrences, parseLocalDate } from "./schedule";
 import type { Activity, BudgetSnapshot } from "./types";
 
 /**
@@ -22,6 +22,11 @@ export interface UpcomingOccurrence {
   date: Date;
   /** Cost of this single occurrence in the activity's own currency, when known. */
   amountNative: number | null;
+  /**
+   * True when the date came from the activity's manual renewal date rather
+   * than from its recurrence rule, so the timeline can say which it is.
+   */
+  manual?: boolean;
 }
 
 export interface UpcomingSchedule {
@@ -53,6 +58,16 @@ function occurrenceAmount(activity: Activity): number | null {
   if (activity.recurrenceType === "monthly" && activity.dayOfMonth != null && activity.pricePerMonth != null) {
     return activity.pricePerMonth;
   }
+
+  // An annual charge on a known date costs the whole year on that date. The
+  // timeline showed "—" for it, which is the app declining to state a figure it
+  // has: the yearly estimate *is* the charge, and the renewal date is when it
+  // lands. The month card still shows the twelfth, labelled as an average,
+  // because that is the right figure for comparing commitments — this is the
+  // right figure for the day the money leaves.
+  if (activity.recurrenceType === "yearly" && activity.yearlyEstimate != null) {
+    return activity.yearlyEstimate;
+  }
   return null;
 }
 
@@ -70,11 +85,28 @@ export function upcomingSchedule(
   const occurrences: UpcomingOccurrence[] = [];
   const undated: { activity: Activity; monthlyBase: number }[] = [];
 
+  // Midnight today, so a renewal dated today is still upcoming rather than
+  // being cut off by the time of day the page happened to be opened.
+  const startOfToday = new Date(from.getFullYear(), from.getMonth(), from.getDate());
+
   for (const activity of activities) {
     // Ask for a generous count and then cut by date: a daily schedule produces
     // far more hits in the window than a monthly one, and a fixed count would
     // silently truncate the frequent ones.
-    const dates = nextOccurrences(activity, from, 40).filter((date) => date <= horizon);
+    let dates = nextOccurrences(activity, from, 40).filter((date) => date <= horizon);
+
+    /*
+     * A manual renewal date replaces the calculated next one.
+     *
+     * It is the only date some activities can have — an annual subscription
+     * renews on the day it was bought, which no recurrence rule knows — and
+     * where a rule does produce a date, the one the user typed is the better
+     * answer. A date already in the past is ignored rather than shown: the
+     * renewal has happened, and the rule is right again from here.
+     */
+    const manualDate = parseLocalDate(activity.nextRenewalDate);
+    const manualUpcoming = manualDate != null && manualDate >= startOfToday && manualDate <= horizon;
+    if (manualUpcoming) dates = [manualDate as Date, ...dates.slice(1)];
 
     if (dates.length === 0) {
       if (activity.recurrenceType === "none") continue;
@@ -83,7 +115,9 @@ export function upcomingSchedule(
     }
 
     const amountNative = occurrenceAmount(activity);
-    for (const date of dates) occurrences.push({ activity, date, amountNative });
+    dates.forEach((date, index) => {
+      occurrences.push({ activity, date, amountNative, manual: manualUpcoming && index === 0 });
+    });
   }
 
   occurrences.sort((a, b) => {
@@ -94,11 +128,6 @@ export function upcomingSchedule(
   undated.sort((a, b) => b.monthlyBase - a.monthlyBase || a.activity.name.localeCompare(b.activity.name));
 
   return { occurrences, undated, horizonDays };
-}
-
-/** "Every Monday", "The 15th", … — for activities that do carry a schedule. */
-export function scheduleSummary(activity: Activity): string {
-  return describeSchedule(activity);
 }
 
 /**

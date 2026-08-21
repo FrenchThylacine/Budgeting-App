@@ -188,7 +188,7 @@ export const ImportPreviewDialog: React.FC<ImportPreviewDialogProps> = ({
           )}
 
           {approvals > 0 && (
-            <p className="text-footnote" style={{ marginTop: 10 }}>
+            <p className="text-note" style={{ marginTop: 10 }}>
               {approvals} approved {approvals === 1 ? "budget" : "budgets"} will be cleared. An approval
               records a decision you made, and a spreadsheet contains none to replace it with.
             </p>

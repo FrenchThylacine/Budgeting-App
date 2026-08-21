@@ -10,9 +10,13 @@ Each account holds its own budget, and one account can be used from as many devi
 
 **Budgeting.** A monthly budget in a currency you choose, plus a suggested budget derived from your active recurring expenses (rounded up to the nearest hundred). Suggestions are proposed, never applied: you approve or reject, and an approval becomes a permanent record.
 
-**Spending.** Transactions with amount, currency, date, category, funding source (own budget / outside budget / someone else paid), recurrence, notes, and an optional link to a wishlist item.
+**Spending.** Transactions with amount, currency, date, category, recurrence, notes, an optional link to a wishlist item, and **who paid**. A transaction somebody else paid for is recorded at full value and stays visible, but never counts against your budget — see the funding rule below.
 
-**Recurring activities.** Commitments with flexible cost models — a fixed monthly amount, a price per session times sessions per month, or a real weekday/day-of-month schedule that counts actual occurrences in each calendar month (some months genuinely have five Mondays).
+**Recurring activities.** Commitments with flexible cost models — a fixed monthly amount, a price per session times sessions per month, or a real weekday/day-of-month schedule that counts actual occurrences in each calendar month (some months genuinely have five Mondays). One-off exceptions (skip, move, add, reprice) override a single occurrence without touching the rule. A manual next-renewal date states what no rule can derive — the day an annual subscription was bought — and overrides the calculated next date without changing any cost.
+
+**Wishlist.** Product, price, currency, priority (`Dream` is the *lowest*), category, notes, colour, an icon, and two separate links: where it is **bought** and whose **brand** the icon should come from. They are different facts — an add-on sold on one store and built by another — so using one field for both forced a choice between an item that looks right and an item that buys right. Marking an item bought can create the matching transaction, and creating a transaction can mark the item bought; neither can produce a duplicate.
+
+**Scenarios and seasons.** A scenario stores a budget, the piloting rule and category caps, and applies behind a preview of every value that will change. A season stores which activities are running and what they cost — lessons stop over the summer, heating stops in June — and is created by capturing the arrangement you are already looking at.
 
 **Categories.** Colour, icon, parent, notes, and an optional monthly cap that is tracked and reported when exceeded. Archiving hides a category from new entries while preserving every existing transaction.
 
@@ -20,11 +24,13 @@ Each account holds its own budget, and one account can be used from as many devi
 
 **Analytics.** Chart-led: spending trend, budget vs actual with a labelled budget line, cumulative forecast against the budget ceiling, category bars with cap markers, category evolution, a recurring/one-off split, a daily spending heatmap, and period comparisons.
 
-**Reports.** Printable monthly and annual reports, generated from the same calculations as the screen.
+**Reports.** Printable monthly, annual and **custom-range** reports, generated from the same calculations as the screen. A custom range deliberately carries no budget or remaining figure: the budget is set per month, and prorating one across six weeks would be a number nobody chose.
 
-**Currencies.** Display currency plus live exchange rates with a manual override and offline fallback. Conversion is presentation-only: stored amounts are never rewritten.
+**Currencies.** Display currency plus live exchange rates with a manual override and offline fallback. Conversion is presentation-only: stored amounts are never rewritten. You choose which currencies the app offers, so a budget in two currencies is not asked to pick from ten — but the display currency, and any currency real records are denominated in, can never be untracked.
 
 **Accounts.** Email and password sign-in with revocable sessions. Every account starts with an empty budget of its own — no demo data, and no adoption of anyone else's. Passwords are hashed with scrypt; sessions are opaque tokens stored hashed, so a database read cannot impersonate anyone. Signing in, changing your address and changing your password are all rate-limited or password-checked.
+
+**A dashboard you arrange.** Seven sections, each shown or hidden and moved up or down, stored with your budget so the arrangement follows you between devices. The health score and headline figures cannot be hidden: a dashboard with no figures on it is a blank page, not a simpler one.
 
 **Import.** An existing spreadsheet or a JSON backup can be loaded from Settings. The import states exactly what it found and what will be replaced before anything is written.
 
@@ -40,6 +46,7 @@ These are enforced in code and covered by tests. They are the reason the app can
 4. **Approved budgets are decision records.** They stay immutable even while a period is unlocked for editing.
 5. **Currency conversion is display-only.** Stored values are never converted in place.
 6. **Piloting stays visible but is excluded** from category share percentages, so it cannot distort ordinary spending distribution.
+7. **Money somebody else spent is not yours to have spent.** A transaction marked *Someone else paid* or *Outside my budget* keeps its full amount and stays in the ledger, and is excluded from every figure that answers "how am I doing against my budget" — remaining, utilisation, burn rate, forecast, category totals and caps, health, period comparisons, the year and year-to-date totals, and the reports. Budget €1,000, personal €300, external €200 leaves **€700**, not €500. This is not a setting; it lives in `src/domain/funding.ts` and every budget selector filters through it.
 
 ---
 
@@ -62,7 +69,11 @@ React (Vite, TypeScript)
 
 The whole document is one `BudgetSnapshot`. Reads and writes go through `GET`/`PUT /api/snapshot`; the per-entity REST routes exist and are validated but are not on the client's write path today.
 
-**All financial figures come from `src/domain/analytics.ts`.** The Dashboard and Analytics page are presentation over those shared selectors — no component computes its own totals. Charts live in `src/components/charts/` and are dependency-free SVG.
+**All financial figures come from `src/domain/analytics.ts`.** The Dashboard and Analytics page are presentation over those shared selectors — no component computes its own totals. Charts live in `src/components/charts/` and are dependency-free SVG, with 1/2/5 × 10ⁿ tick spacing and a labelled budget reference line.
+
+**Rules that must not be expressible twice** get a leaf module of their own, imported by everything that needs them and depending on nothing: `src/domain/funding.ts` (who paid), `src/domain/schedule.ts` (occurrences and overrides), `src/domain/dashboard.ts` (which sections appear). When a rule lives in one place, no view can honour a version of it that another view ignores.
+
+**One editor shell.** `src/components/ui/EditorSheet.tsx` is a centred dialog on a desktop and a full-screen sheet on a phone, and it is what Activities, Spending, Wishlist, Categories, Scenarios and the dashboard customiser all use. Its set-up effect deliberately depends on nothing: an earlier version listed `onClose`, which every caller passes fresh, so it re-ran on every keystroke and moved focus back to the first field. `tests/editor-typing.test.tsx` types a long name one character at a time and asserts focus and caret after each one.
 
 ### Synchronization
 
@@ -121,7 +132,9 @@ Every route, service, and repository runs exactly as in production; only the dri
 **Backend (runtime)**
 - `DATABASE_URL` — PostgreSQL/Neon connection string
 - `NODE_ENV`, `HOST` (default `0.0.0.0`), `PORT` (default `3001`)
-- `CORS_ORIGIN` — allowed origins for browser requests. Cookies require an explicit origin; `*` is rejected by browsers when credentials are sent
+- `CORS_ORIGIN` — comma-separated allowed origins for browser requests. Cookies require an explicit origin; `*` is rejected by browsers when credentials are sent
+- `CORS_ALLOW_VERCEL_PREVIEWS` — when `"true"`, any `*.vercel.app` origin may call the API. Off by default
+- `PUBLIC_APP_URL` — the base a password-reset link is built from. Never the `Host` header, which an attacker controls
 - `RESEND_API_KEY`, `MAIL_FROM` — sending password-reset email. Without them a reset link is logged by the server rather than sent, which is usable in development and useless in production
 - `SIGNUP_INVITE_CODE` — when set, signup additionally requires this code
 
@@ -172,10 +185,40 @@ The integration suites run the real schema, migrations, repository SQL, and the 
 
 ---
 
+## Interface
+
+**Air France-inspired, not Air France.** Deep navy chrome, refined blue, the signature red used as a mark rather than a colour, French-editorial type and a lot of whitespace. A small centred tricolour signs the top of the app. On a phone — where there is no sidebar to carry the identity — the header becomes a full-bleed navy band, because otherwise the identity was in practice desktop-only.
+
+**Your colours are yours.** The identity applies to the application's own chrome. A green activity stays green, a purple category stays purple, a custom wishlist colour stays custom; nothing recolours user-chosen entities.
+
+**Motion.** Changing tab moves the whole application: a navy plane covers the viewport, a route draws between two waypoints with an airliner along it, and the incoming page enters from the direction the navigation moved. Period changes slide in the direction time moved. Everything is transform and opacity, and **all of it is skipped under `prefers-reduced-motion`** — the page still changes, it simply appears.
+
+**Tap to edit, swipe for an action.** Tapping a wishlist item, activity, transaction, category or scenario opens its editor. Swiping a row *reveals* its actions rather than performing them: the row tracks the finger to the panel edge, rubber-bands past it, and arms at 150px of travel, at which point releasing acts. The revealed controls are real buttons in the DOM at all times, so nothing is available only to a finger, and which action sits on each side is configurable.
+
+**Accessibility.** Every interactive control on every tab has an accessible name; no target is under 24px; status is never carried by colour alone; modals trap focus and restore it; and the text palette is measured rather than eyeballed — a scripted sweep composites the real background behind every text node on all ten tabs in both themes and asserts WCAG AA. It currently reports zero failures.
+
+---
+
+## Performance
+
+First load is four cached chunks rather than one:
+
+| Chunk | Raw | Gzipped | Changes when |
+| --- | --- | --- | --- |
+| `index` (application) | 442 kB | 96 kB | every deploy |
+| `react` | 330 kB | 101 kB | React is upgraded |
+| `icons` | 142 kB | 29 kB | the icon library changes |
+| `xlsx` | 430 kB | 143 kB | **loaded only when a spreadsheet is imported** |
+
+Analytics, Scenarios, History, Categories and Settings are separate chunks, fetched when the browser is idle so a tab switch is instant rather than paying the cost at the moment the transition plays.
+
+---
+
 ## Current limitations
 
 - **The Neon HTTP transport itself is not exercised by tests** — the SQL is verified against real PostgreSQL through an equivalent driver interface, but Neon's own wire protocol, notably `sql.transaction([...])`, is assumed.
-- **No automated browser tests.** UI behaviour is verified by hand in a real browser at phone and desktop widths; a Playwright suite is the obvious next step.
+- **Almost no automated browser tests.** `tests/editor-typing.test.tsx` covers the editor's focus behaviour under jsdom; everything else is verified by hand in a real browser at 320px, 390px and 1440px. A Playwright suite is the obvious next step.
+- **`xlsx@0.18.5` carries two high-severity advisories** with no fix published to the npm registry. It is loaded on demand, only for a file the user chose themselves, and never runs on the server.
 - **Password-reset email needs a verified sender.** Without `RESEND_API_KEY` and a verified domain, the reset link is written to the server log instead of being sent.
 - Further open items are tracked in `implementation_plan.md` and `docs/KNOWN_ISSUES.md`.
 

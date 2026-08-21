@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { validateFiniteNumber, validateDateInput, validateEnum, validateRequired, AppError } from "../server/src/middleware/errorHandler";
+import { validateSettingsPatch } from "../server/src/routes/snapshot";
 
 describe("API validation middleware helpers", () => {
   it("validates required fields and throws AppError if missing", () => {
@@ -32,5 +33,51 @@ describe("API validation middleware helpers", () => {
     const currencies = ["EUR", "USD", "LBP"] as const;
     expect(validateEnum("EUR", "currency", currencies)).toBe("EUR");
     expect(() => validateEnum("INVALID", "currency", currencies)).toThrow(AppError);
+  });
+});
+
+describe("PATCH /api/snapshot/settings payload validation", () => {
+  it("accepts a well-formed patch and returns only the recognised fields", () => {
+    expect(validateSettingsPatch({ monthlyBudget: 1200, baseCurrency: "USD", darkMode: true })).toEqual({
+      monthlyBudget: 1200,
+      baseCurrency: "USD",
+      darkMode: true,
+    });
+  });
+
+  it("keeps 0 as a real budget", () => {
+    // Rule 1: 0 is a value, not a missing field.
+    expect(validateSettingsPatch({ monthlyBudget: 0 })).toEqual({ monthlyBudget: 0 });
+  });
+
+  it("refuses a value of the wrong type rather than storing it", () => {
+    // Each of these was previously written straight into the stored settings.
+    expect(() => validateSettingsPatch({ baseCurrency: {} })).toThrow(AppError);
+    expect(() => validateSettingsPatch({ baseCurrency: "XYZ" })).toThrow(AppError);
+    expect(() => validateSettingsPatch({ monthlyBudget: "lots" })).toThrow(AppError);
+    expect(() => validateSettingsPatch({ monthlyBudget: Number.NaN })).toThrow(AppError);
+    expect(() => validateSettingsPatch({ darkMode: "yes" })).toThrow(AppError);
+    expect(() => validateSettingsPatch({ selectedMonth: 13 })).toThrow(AppError);
+    expect(() => validateSettingsPatch({ selectedMonth: 1.5 })).toThrow(AppError);
+    expect(() => validateSettingsPatch({ selectedPeriodMode: "decade" })).toThrow(AppError);
+    expect(() => validateSettingsPatch({ exchangeRates: "1.19" })).toThrow(AppError);
+  });
+
+  it("refuses a field it does not recognise instead of storing it forever", () => {
+    expect(() => validateSettingsPatch({ somethingNobodyDefined: 1 })).toThrow(AppError);
+  });
+
+  it("ignores a client-supplied lastUpdated, which the server stamps", () => {
+    expect(validateSettingsPatch({ darkMode: false, lastUpdated: "1999-01-01T00:00:00Z" })).toEqual({
+      darkMode: false,
+    });
+  });
+
+  it("refuses an empty or non-object payload", () => {
+    expect(() => validateSettingsPatch({})).toThrow(AppError);
+    expect(() => validateSettingsPatch({ lastUpdated: "2026-01-01T00:00:00Z" })).toThrow(AppError);
+    expect(() => validateSettingsPatch(null)).toThrow(AppError);
+    expect(() => validateSettingsPatch([1, 2])).toThrow(AppError);
+    expect(() => validateSettingsPatch("darkMode=true")).toThrow(AppError);
   });
 });
