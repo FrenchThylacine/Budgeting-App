@@ -114,6 +114,7 @@ Presentation is layered on top:
 src/domain/analytics.ts     selectors — totals, pacing, breakdowns, forecast, health
 src/domain/funding.ts       who paid — the one place the budget/external rule exists
 src/domain/schedule.ts      recurrence maths — real occurrences per calendar month
+src/domain/payments.ts      when money leaves — payment cycles, separate from events
 src/domain/dashboard.ts     which dashboard sections appear, and in what order
 src/domain/report.ts        report model + printable HTML, from the same selectors
 src/components/charts/      dependency-free SVG chart library
@@ -121,7 +122,22 @@ src/components/charts/      dependency-free SVG chart library
 
 ### Leaf modules for rules that must not be expressible twice
 
-`funding.ts`, `schedule.ts` and `dashboard.ts` import nothing from the rest of the domain. That is the point: a rule with one definition cannot be honoured by one view and ignored by another.
+`funding.ts`, `schedule.ts`, `payments.ts` and `dashboard.ts` import nothing from the rest of the domain. That is the point: a rule with one definition cannot be honoured by one view and ignored by another.
+
+### Accrual and payment are two different questions
+
+`payments.ts` exists because the application had been answering one question where there are two.
+
+- **What does this cost per month?** An accrual. It is what a budget compares commitments with, and it is what `calculations.ts` produces. A €60 annual subscription accrues €5 a month; a gym paid ten sessions at a time accrues whatever the month's sessions come to.
+- **When does money actually leave?** A dated series. It is what a bank statement shows, and it is what `payments.ts` produces. The same subscription is one €60 charge on one day a year; the same gym is one €200 payment about every five weeks.
+
+Conflating them is how "two sessions a week" becomes "two payments a week" and how "€60 a year" becomes "€60 a month". The two modules therefore never derive one figure from the other: `paymentsBetween()` returns `null` for every model it does not own, and the timeline falls back to the recurrence rule for those.
+
+Consequences that follow from the split, and are load-bearing:
+
+- Anything printing a monthly figure asks `isAveragedMonthly()` first, so an average is labelled as one.
+- Neither model invents a date. With no renewal or start date to count from, the activity is reported as undated with its monthly average — never placed on a calendar at a guessed position.
+- One-off schedule overrides act on the recurrence rule, so they do not apply to a payment cycle, and the UI hides the control rather than offering one that does nothing.
 
 `funding.ts` is the clearest case. "Money somebody else paid does not count against your budget" used to be a *setting*, checked independently in `calculations.ts` and in `analytics.ts` — and `calculateYear` did not check it at all for `totalSpend` or `ytdTotal`, so those two figures disagreed with every other figure in the app. It is now one predicate that every budget selector filters through, and the setting is gone. A figure is either derived from `personalEntries(...)` or it is explicitly the full ledger and says so.
 

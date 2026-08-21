@@ -80,18 +80,27 @@ The architecture already exists.
 
 Future work should improve it rather than replacing it.
 
-## Where to look first (2026-08-21)
+## Where to look first (2026-08-22)
 
 If you are changing something in this project, these are the files whose comments will save you the most time — each documents a defect that was expensive to find:
 
 | File | What it protects |
 | --- | --- |
 | `src/domain/funding.ts` | Rule 7 above. One predicate, no setting |
+| `src/domain/payments.ts` | That when money leaves is not what something costs per month. Two sessions a week is not two payments a week; €60 a year is not €60 a month |
 | `src/components/ui/EditorSheet.tsx` | Why its set-up effect depends on nothing. A dependency there was the "typing is unusable" bug, in every editor |
+| `src/components/ui/EntityMark.tsx` | One mark resolver for wishlist items *and* activities, with a fallback at every network-fetched layer — and why it reports the layer it rendered rather than the one requested |
 | `server/src/repositories/SnapshotRepository.ts` | A fixed column list: a field added to the model but not to the schema, the upsert *and* the parser is silently dropped on the next round trip |
 | `server/src/db/schema.ts` | Why it may never reference a column a migration adds |
 | `src/domain/dashboard.ts` | How a stored arrangement from an older version is reconciled |
 | `src/components/ui/SwipeRow.tsx` | Why gesture state lives in refs and not in state |
+| `src/styles.css`, the historical-period block | Why the fix for "the banner eats clicks" was *removing* a `z-index`, not adding one |
+
+### Three rules this project keeps learning the hard way
+
+1. **A date nobody entered is not a date.** Where a schedule cannot be derived, the app says so and shows the figure it does know. It never invents 1 January, or today plus 365 days, to have something to put on a calendar.
+2. **A rule with one definition cannot be honoured by one view and ignored by another.** `funding.ts`, `schedule.ts`, `payments.ts` and `dashboard.ts` import nothing from the rest of the domain, and that is the point. A second implementation for a second surface is how every drift in this codebase started.
+3. **Measure it; do not look at it.** The grey ramp, the icon sizes, the click priority and the animation direction were all verified by script — and the two contrast defects found this pass had survived a previous sweep that *looked* thorough but read `background-color` and could not see a gradient. When a check reports success, ask what it would have to be blind to for that to be wrong.
 
 ## Implementation status (2026-08-15)
 

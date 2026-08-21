@@ -12,7 +12,20 @@ Each account holds its own budget, and one account can be used from as many devi
 
 **Spending.** Transactions with amount, currency, date, category, recurrence, notes, an optional link to a wishlist item, and **who paid**. A transaction somebody else paid for is recorded at full value and stays visible, but never counts against your budget — see the funding rule below.
 
-**Recurring activities.** Commitments with flexible cost models — a fixed monthly amount, a price per session times sessions per month, or a real weekday/day-of-month schedule that counts actual occurrences in each calendar month (some months genuinely have five Mondays). One-off exceptions (skip, move, add, reprice) override a single occurrence without touching the rule. A manual next-renewal date states what no rule can derive — the day an annual subscription was bought — and overrides the calculated next date without changing any cost.
+**Recurring activities.** Commitments with six cost models:
+
+| Model | For |
+| --- | --- |
+| Fixed monthly | A flat amount, whatever the calendar does |
+| Per session | A session price times the sessions you expect each month |
+| Per session, paid in blocks | Sessions at one rate, paid at another — twice a week, settled every ten sessions |
+| Real schedule | A session price times the occurrences that truly fall in each month (some months genuinely have five Mondays) |
+| Fixed yearly | A real annual payment on a real date |
+| Automatic | Inferred from the recurrence type, for records that predate cost models |
+
+The last two exist because **when money leaves is a different question from what something costs per month**. Two sessions a week is not two payments a week, and €60 a year is not €60 a month. Monthly figures for those models are accruals and are labelled `avg.`; the payments are a separate dated series, and the app never manufactures a monthly charge for an annual one.
+
+A next-renewal date states what no rule can derive — the day an annual subscription was bought, or when the next block of sessions falls due. For the two payment-cycle models it is the schedule baseline: give it 14 September 2026 and the charges are 14 September 2026, 2027, 2028. Without one, the activity is reported as undated rather than placed on a guessed date. One-off exceptions (skip, move, add, reprice) override a single occurrence without touching the rule.
 
 **Wishlist.** Product, price, currency, priority (`Dream` is the *lowest*), category, notes, colour, an icon, and two separate links: where it is **bought** and whose **brand** the icon should come from. They are different facts — an add-on sold on one store and built by another — so using one field for both forced a choice between an item that looks right and an item that buys right. Marking an item bought can create the matching transaction, and creating a transaction can mark the item bought; neither can produce a duplicate.
 
@@ -169,6 +182,7 @@ After a deploy, `GET /api/health` answers `{"status":"ok","database":"connected"
 | `npm run server:prod` | Run the compiled backend |
 | `npm test` | Test suite |
 | `npm run test:db` | PostgreSQL integration suites (needs `TEST_DATABASE_URL`) |
+| `node scripts/build-icons.mjs` | Regenerate every icon from `assets/brand/air-france-fin.jpg` (needs ImageMagick; the outputs are committed) |
 
 ---
 
@@ -187,15 +201,19 @@ The integration suites run the real schema, migrations, repository SQL, and the 
 
 ## Interface
 
-**Air France-inspired, not Air France.** Deep navy chrome, refined blue, the signature red used as a mark rather than a colour, French-editorial type and a lot of whitespace. A small centred tricolour signs the top of the app. On a phone — where there is no sidebar to carry the identity — the header becomes a full-bleed navy band, because otherwise the identity was in practice desktop-only.
+**Air France-inspired, not Air France.** Deep navy chrome, refined blue, the signature red used as a mark rather than a colour, French-editorial type and a lot of whitespace. A small centred tricolour signs the top of the app, in three fixed colours that do not follow the theme — a flag whose middle band disappears in dark mode is a broken rule, not a flag. On a phone — where there is no sidebar to carry the identity — the header becomes a full-bleed navy band, because otherwise the identity was in practice desktop-only.
+
+**The mark is the supplied A350 fin artwork**, mastered once at `assets/brand/air-france-fin.jpg` and derived into every size by `scripts/build-icons.mjs`. Home-screen icons keep the artwork's own margin; tab icons are cropped to the fin, because at 16px that margin is width the shape cannot spare. Clicking the mark beside "Budget OS" collapses and expands the sidebar.
 
 **Your colours are yours.** The identity applies to the application's own chrome. A green activity stays green, a purple category stays purple, a custom wishlist colour stays custom; nothing recolours user-chosen entities.
 
-**Motion.** Changing tab moves the whole application: a navy plane covers the viewport, a route draws between two waypoints with an airliner along it, and the incoming page enters from the direction the navigation moved. Period changes slide in the direction time moved. Everything is transform and opacity, and **all of it is skipped under `prefers-reduced-motion`** — the page still changes, it simply appears.
+**Motion, in one direction.** Changing tab moves the whole application: a navy plane covers the viewport, a route draws between two waypoints with an airliner along it, and the incoming page arrives behind it. Period changes slide the same way. Both used to mirror the direction of travel; they no longer do, because a motion whose direction changes is a second thing to read on every navigation — and because the sweep and the page derived their directions separately, so half the time the aircraft flew one way and the page the other. Everything is transform and opacity, and **all of it is skipped under `prefers-reduced-motion`** — the page still changes, it simply appears.
+
+**The period selector** is a bar under the header: Week / Month / Year, one step either way, the period and its range, today's date, and one button back to the current period. Jumping to an arbitrary period opens a month grid and a year stepper. In a historical period the app adds a dashed contour and an opaque navy banner, both of which sit *below* the selector and neither of which can take a press aimed at it.
 
 **Tap to edit, swipe for an action.** Tapping a wishlist item, activity, transaction, category or scenario opens its editor. Swiping a row *reveals* its actions rather than performing them: the row tracks the finger to the panel edge, rubber-bands past it, and arms at 150px of travel, at which point releasing acts. The revealed controls are real buttons in the DOM at all times, so nothing is available only to a finger, and which action sits on each side is configurable.
 
-**Accessibility.** Every interactive control on every tab has an accessible name; no target is under 24px; status is never carried by colour alone; modals trap focus and restore it; and the text palette is measured rather than eyeballed — a scripted sweep composites the real background behind every text node on all ten tabs in both themes and asserts WCAG AA. It currently reports zero failures.
+**Accessibility.** Every interactive control on every tab has an accessible name; no target is under 24px; status is never carried by colour alone; modals trap focus and restore it; and the text palette is measured rather than eyeballed — a scripted sweep composites the real background behind every text node on all ten tabs in both themes and asserts WCAG AA. It currently reports zero failures. The sweep composites **gradients** as well as background colours: an earlier version read the colour alone, scored every tinted card against the page behind it, and reported zero while six real failures were on screen.
 
 ---
 

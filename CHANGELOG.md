@@ -1,5 +1,109 @@
 # Changelog
 
+## 2026-08-22 — Two sessions a week is not two payments a week
+
+### The gym problem
+
+You go to the gym twice a week. It costs €20 a session. You pay for ten sessions at a time.
+
+The application could describe the first two facts and had no way to express the third, so it did what software does when a field is missing: it assumed. Twice a week at €20 became €40 a week leaving your account, which is not what happens. What happens is €200, once, about every five weeks.
+
+There are two different questions here and the app had been answering one of them twice. *What does this cost per month?* is an accrual — the figure you compare commitments with. *When does money actually leave?* is a dated series — the figure your bank statement shows. For a monthly subscription they coincide, which is why nothing noticed; for anything else they do not.
+
+So there is a new cost model, **Per session, paid in blocks**, and a new leaf module — `src/domain/payments.ts` — that answers only the second question. The editor asks for the three facts separately: price per session, sessions per week or month, and how many sessions one payment covers. It shows you the result before you save:
+
+> **€200,00 every 10 sessions ≈ €177,14/month avg., €2 086/year**
+> About 8.86 sessions in August. That is one payment about every 5 weeks. The monthly figure spreads the pack across the month; the payment lands in one go.
+
+The monthly figure is an accrual and is labelled `avg.` so it cannot be mistaken for a charge. The timeline shows the payment: one entry, €200, "2 / week · pay every 10 sessions (≈ every 5 weeks)". Not eight sessions at €20.
+
+The payment amount is derived rather than stored. Ten sessions at €20 is €200 by arithmetic; a stored copy is a second answer that can drift from the first, and money that disagrees with itself is the worst thing this codebase can carry.
+
+### A year is not twelve months
+
+The same confusion, in its more common form. Nebula costs €60 a year. Navigraph costs €140 a year. Neither is a monthly subscription, and neither should ever produce a monthly charge.
+
+**Fixed yearly** is now its own cost model. €60/year shows €60/year. It also shows "≈ €5,00/month avg.", because that is genuinely useful for comparing commitments — but the field is labelled *Monthly equivalent* and says, in the editor, "shown for comparison only. You are billed once a year — the app never creates a monthly charge for this."
+
+The renewal date is the schedule, not a hint. Give it 14 September 2026 and the editor answers with the next three charges: **14 septembre 2026 · 14 septembre 2027 · 14 septembre 2028**. Change the date and every future charge follows it. Not 1 January. Not today plus 365 days.
+
+Two details that took thought. A renewal date already in the past is rolled forward whole years rather than ignored — an annual charge that happened last year still happens this year, on the same date. And 29 February clamps to the 28th in a common year rather than rolling into March, which is what every subscription service does with it.
+
+Where there is no date at all, the app says so instead of inventing one. An annual charge with no renewal date is listed as undated with its monthly average, and the editor explains that without a date the charge cannot be placed on a calendar. That has been this project's rule since the timeline was built and it still holds: **a date nobody entered is not a date.**
+
+### The period selector, third time
+
+It began as a permanent strip across the top of every page — a mode toggle, two dropdowns and two arrows, a third of the first viewport on a phone, for an action most sessions perform once. Then it became a collapsed widget in the header, which fixed the space and quietly cost the two things people need continuously: seeing which period you are on, and stepping through periods without opening anything.
+
+It is now a bar under the header. Week / Month / Year as segments, an arrow either side, the period and its date range in the middle, today's date and one button back to the current period. Every frequent action is one press. The only thing behind a disclosure is jumping to an arbitrary period, and that disclosure is a month grid with a year stepper — a dropdown cannot show you where you are in a year at a glance.
+
+On a phone it stacks, with the arrows at the outer edges where a thumb reaches them and the label between them on its own ground. Below 380px the date disappears: it is reference, and the button back to it is the action.
+
+### Why the historical banner was eating clicks
+
+Reported symptom: in historical mode, clicking near the period selector sometimes hit the banner instead.
+
+The instinct is to raise a z-index. That would have worked, in the sense that the symptom would have stopped, and it would have left the real fault in place.
+
+`.historical-period > *` gave **every** child of the main area `z-index: 1`. Each of them therefore became a stacking context — and the selector's popover, carefully set to `z-index: 40`, was sealed inside the header's layer where 40 means nothing relative to the header's siblings. The banner is a later sibling at the same z-index, so it painted over the entire header and took the presses.
+
+The blanket `z-index` is gone. The children stay positioned, so they still clear the dashed contour, but a positioned element with `z-index: auto` paints in tree order in the same layer — which puts them above the contour and leaves the selector free to raise its own popover. The bar declares `isolation: isolate`. No number was increased.
+
+Verified by hit-testing every popover control that physically overlaps the banner with `elementFromPoint`, and then by putting the old rule back and watching two of them get captured again.
+
+### The banner itself
+
+It was a translucent wash of amber, so the page showed through it — which reads as a rendering fault rather than a state, and made its own sentence the hardest text in the application to read. It is now an opaque deep-navy band in the app's own palette with the signature red as a hairline down its leading edge.
+
+It is informational apart from one button, so the band takes `pointer-events: none` and only its button takes `auto`. It can neither steal a press aimed at something else nor block one aimed at itself. On a phone it stacks, instead of squeezing its sentence into a seven-line column beside a button that had all the width.
+
+### Everything moves the same way now
+
+The period change and the tab transition both used to mirror the direction of travel: forward from the right, back from the left. It is a defensible idea and it was making two things worse. A motion whose direction changes is a second thing to read on every navigation, when the period is already stated in three places — and because the aircraft sweep and the arriving page derived their directions separately, on half of all navigations the plane flew one way while the page slid the other.
+
+Left to right, every time. The data still moves whichever way the arrow said; only the motion is standardised. The tab ordering that fed the old logic is deleted rather than left unread.
+
+### The identity is now the artwork
+
+The A350 fin you supplied is in, as the master at `assets/brand/air-france-fin.jpg`, with `scripts/build-icons.mjs` deriving every size from it — favicon, ICO, Apple touch icon, 192, 512, maskable, and the mark in the sidebar.
+
+Two framings, deliberately. The home-screen icons keep the artwork's own margin, which a launcher needs. The tab icons are cropped to the fin's measured bounding box, because at 16px that margin spends a quarter of the tile on empty navy and leaves the fin too small to recognise. Each small size is rendered from the 1024px original rather than downsampled twice — downsampling twice is exactly what turns a fin into a smudge.
+
+The large icons are quantised to 64 colours: 48 kB against 181 kB truecolour, indistinguishable side by side at 512. Dithering was tried and made the files *larger*, because it adds precisely the noise PNG compresses worst.
+
+The mark next to "Budget OS" is now the sidebar's collapse control. There were two things there before — a decorative logo that did nothing, and a 28px chevron at the far edge that did the work. They are one button now, with the chevron kept as the affordance. Collapsed to a 72px rail the mark is all that is left, and it is still the way back.
+
+The tricolour is bigger — 108×5, up from 76×3, which was small enough to be taken for a rendering artefact. More importantly its three colours are now fixed literals, identical in both themes. Every band used to be a theme token and the middle one was swapped for a translucent white in dark mode, so it took the colour of whatever was behind it: the mark read as a navy rule with a red end and a hole in the middle.
+
+### Activities can have real icons
+
+Wishlist items could take an icon from the library, or from the maker's website, or fall back to the shop's. Activities had the library and nothing else. That was not a missing feature so much as a missing *module*: the resolution logic lived inside the wishlist panel as a private component, so there was nothing for an activity to reuse.
+
+It is now `ui/EntityMark`, shared, with one order everywhere: a direct image link, then a library icon, then the source site's icon, then a neutral mark. Every network-fetched layer steps down to the next on error, so a dead link cannot render as a broken image.
+
+The seller/brand distinction is preserved and extended. An activity's icon source is a field of its own, apart from any other link, exactly as a wishlist item's `brandUrl` is apart from its `url`. Where a thing is bought and who makes it are two different facts; one field for both forces a choice between an item that looks right and an item that buys right.
+
+One thing this exposed. Because the chain falls through so gracefully, a link that 404s produced a perfectly reasonable-looking mark — while the editor cheerfully said "using the image you linked". The failure was invisible from the interface. The preview now reports the layer it actually rendered: *"That image did not load, so the site icon of navigraph.com is being used instead. Check the link."*
+
+### The contrast sweep was measuring the wrong thing
+
+The previous pass added a script that walks every text node and computes its real contrast ratio, and reported zero failures across ten tabs in both themes. It was reading `background-color` and nothing else — so every element sitting on a `linear-gradient` was scored against the page *behind* the card rather than the card. Every tinted metric card, every tone card, the historical banner.
+
+With gradients composited, six real failures appeared.
+
+Four were status colours used as text. `--success`, `--warning` and `--danger` are fill values, chosen to carry a chart series or a progress bar; as 13–17px type they read at 3.2, 2.5 and 3.6 to one. The grade colours, the metric tones, the month comparison and the history deltas had all taken the fill. They take the `-text` variants now.
+
+The other two were greys on tinted cards in dark mode. A status tint over a *dark* surface lightens it — `--success-soft` at 18% over `#121A28` lands about three times brighter — and the grey ramp was measured against the untinted surfaces. The two lower greys fall to 3.7–4.2 : 1 there. Lifting the whole ramp would wash out every ordinary caption and weakening the tints would cost the tone cue, so the lift is scoped to tinted cards in dark mode, with the gap between the greys widened slightly so the hierarchy survives it. Worst case now, over five hues on two surfaces: 4.52 : 1.
+
+Zero failures again — this time from a checker that can see the grounds it is measuring against.
+
+### Smaller
+
+- The live estimate in the activity editor formatted money with a hardcoded symbol mode while the card it previews used your setting, so the same number appeared two ways in one screen.
+- The timeline's cadence line ran through a class that uppercases, so "pay every 10 sessions (≈ every 5 weeks)" was a sentence being shouted.
+- The historical banner's button carried an inline `margin-left: auto`, which beats every stylesheet rule short of `!important` — so the phone layout could not stack it until the alignment moved into CSS where it belonged.
+- `PeriodPopover` had no importer left. Deleted rather than kept beside its replacement.
+
 ## 2026-08-21 — Money someone else spent, and a caret that would not stay still
 
 ### The budget was charging you for other people's spending

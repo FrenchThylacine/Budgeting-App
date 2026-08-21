@@ -22,13 +22,36 @@ Testing is part of development.
 
 Run this checklist before every release.
 
-## Last recorded automated run — 2026-08-21
+## Last recorded automated run — 2026-08-22
 
-- `npm test`: passed — **433 tests**.
-- `npm run test:db` against local PostgreSQL 17: passed — **71 integration tests**.
+- `npm test` with `TEST_DATABASE_URL` set: passed — **542 tests across 30 files** (467 unit, 75 integration against local PostgreSQL 17).
 - `npm run build` and `npm run server:build`: passed.
 
-New suites this pass:
+New this pass:
+
+| Suite | Covers |
+| --- | --- |
+| `tests/payment-cycles.test.ts` | The two new cost models, on the specification's own examples. That €20 × 2/week paid every 10 sessions is **one €200 payment every 35 days**; that €60/year anchored to 14 September produces 2026, 2027, 2028; that a full year of the timeline yields **exactly one** occurrence for an annual charge; that neither model invents a date when there is no baseline; leap-day clamping; and that `paymentsBetween` returns `null` for every model it does not own |
+| additions to `tests/db-integration.test.ts` | Round trips for the session-pack triple, the fixed-yearly baseline, activity `icon_url` / `icon_source_url`, and wishlist `icon_url` — plus an upgrade test that creates `activities` and `wishlist_items` in their pre-013 shape and asserts migration 013 adds the columns |
+
+### Falsify, then confirm
+
+Three claims this pass were checked by breaking them first. A test that has never failed has not been shown to test anything.
+
+- **Migration 013.** One `ALTER` removed from the migration; the upgrade test fails with the column missing. Restored; it passes. Without this the test would have passed trivially — `initializeSchema` also declares the columns, so on a *fresh* database they exist either way. The test exists to cover the *upgrade* path, and only the pre-013 fixture makes it do that.
+- **The historical layering fix.** The old `.historical-period > * { z-index: 1 }` rule reinstated in the live page; two period-popover controls are captured by the banner again. Removed; every overlapping control hit-tests as reachable.
+- **The editor focus bug.** `tests/editor-typing.test.tsx` still fails against the pre-fix component, as it did when written.
+
+### Verifying a rendered result, not a computed one
+
+Some of this pass could not be asserted in Node, because the defect is in what the browser composites rather than in what a function returns. Those were driven through Chrome DevTools against the running app:
+
+- **Contrast** — a sweep over every text node on ten tabs in both themes. It must composite **gradients**, not just `background-color`: the previous sweep read the colour alone, measured every tinted card and the historical banner against the page behind them, and reported zero failures while six real ones were on screen.
+- **Hit-testing** — `elementFromPoint` at the centre of every popover control that physically overlaps the historical banner. "It looks like it is on top" is not the same claim as "it receives the pointer".
+- **Animation direction** — the computed `animation-name` and the keyframes' actual transforms, read in both directions. A screenshot cannot tell you which way something moved.
+- **Typed input** — the renewal date entered key by key. The automation tool's `fill` sets the DOM value without reaching React's `onChange`, so it reported success while the component's state stayed empty. Anything that must prove a *user* can do something has to go through real key events.
+
+Earlier suites:
 
 | Suite | Covers |
 | --- | --- |

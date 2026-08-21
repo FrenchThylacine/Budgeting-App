@@ -2,15 +2,16 @@
 
 This is the active engineering tracker. A checkbox is ticked only after implementation **and** the relevant verification have both succeeded. "The code exists" is never sufficient.
 
-**Last updated:** 2026-08-21 — the externally-funded-spending rule, the editor focus bug, a full-screen tab transition, a browser identity, an accessibility pass, and six previously open plan items closed.
+**Last updated:** 2026-08-22 — two new activity cost models (session packs and fixed yearly), a rebuilt period selector, the historical-mode layering bug fixed at its root, a shared icon system for activities, the supplied A350 artwork as the application's identity, and a contrast sweep that found what the previous one could not measure.
 
-**Verification state.** 433 unit tests and 71 integration tests against a real PostgreSQL 17 database, all passing. Every claim below marked *browser-verified* was driven through Chrome DevTools against the running app backed by a throwaway local PostgreSQL database (`budget_verify_2026`), never against production data. **Production was last verified live on 2026-08-16**: `/api/health` returned `{"status":"ok","database":"connected"}`, `/api/auth/me` answered 200, and every budget route returned 401 without a session. **Nothing since 2026-08-16 has been deployed**, so none of it is verified in production.
+**Verification state.** 542 tests across 30 files, all passing: 467 unit and 75 integration against a real PostgreSQL 17 database. Every claim below marked *browser-verified* was driven through Chrome DevTools against the running app backed by a throwaway local PostgreSQL database (`budget_browser_2026`), never against production data. **Production was last verified live on 2026-08-16**: `/api/health` returned `{"status":"ok","database":"connected"}`, `/api/auth/me` answered 200, and every budget route returned 401 without a session. **Nothing since 2026-08-16 has been deployed**, so none of it is verified in production.
 
 ## How this session verified things
 
 - **Real PostgreSQL.** A local PostgreSQL 17 instance. The Neon driver speaks HTTP to Neon only, so `setDatabase()` injects a node-postgres adapter with the same interface; the SQL under test is byte-for-byte what production sends.
-- **Real browser.** Chrome DevTools drove the running app: typing character by character with focus and caret asserted after each keystroke, viewport emulation at 320px, 390px and 1440px, both themes, and a scripted WCAG contrast sweep over every text node on all ten tabs.
-- **Real upgrade path.** Migrations 011 and 012 were run against a database that already held data — the failure mode that once took the API down with a 503 on every request.
+- **Real browser.** Chrome DevTools drove the running app at 320px, 390px and 1440px in both themes: activities created through the editor by hand, a renewal date typed key by key, the mark's resolution chain observed through a dead link, and hit-testing with `elementFromPoint` over every control that overlaps the historical banner.
+- **Real upgrade path.** Migration 013 was run against a schema holding `activities` and `wishlist_items` in their pre-013 shape, so the new columns can only have come from the `ALTER`s — `CREATE TABLE IF NOT EXISTS` is a no-op there.
+- **Falsification, not just confirmation.** Three claims were checked by breaking them first: removing one `ALTER` from migration 013 (the upgrade test fails), restoring the old `z-index: 1` rule (two popover controls are captured by the banner again), and the editor-typing suite, which still fails against the pre-fix focus code.
 
 Anything that could not be verified this way is under *Not verified* and stays unticked.
 
@@ -19,6 +20,57 @@ Anything that could not be verified this way is under *Not verified* and stays u
 - [ ] Exercise the Neon HTTP driver's `sql.transaction([...])` specifically. Production runs on it; the integration suite drives an adapter with the same interface, not the driver itself.
 - [ ] Automate the browser checks (Playwright). Everything marked "browser-verified" was driven by hand or by an ad-hoc script in the DevTools session.
 - [ ] Deploy, and re-verify in production. Everything from 2026-08-17 onward is unverified there.
+
+## Completed — 2026-08-22
+
+### Activity cost models
+
+- [x] **A payment cycle that is not the event cycle.** `sessionPack`: a price per session, a rate the sessions happen at, and a number of sessions one payment covers. The brief's gym — €20 a session, twice a week, settled every ten sessions — is **one €200 payment every five weeks**, and the timeline shows exactly that rather than eight €20 sessions in a fortnight. The monthly figure stays an accrual (€177.14 in a 31-day August, because a budget compares monthly commitments), and it is labelled `/month avg.` so it is never read as a charge. New leaf module `src/domain/payments.ts`; no other model's arithmetic changed (2026-08-22; 26 tests built on the specification's own example, plus browser-verified end to end and read back out of PostgreSQL).
+- [x] **`fixedYearly`: a real annual payment on a real date.** €60/year shows €60/year and "≈ €5/month avg."; the editor states the monthly figure is "shown for comparison only. You are billed once a year". No monthly payment event is generated anywhere — asserted by asking the timeline for a full year and getting exactly one occurrence (2026-08-22).
+- [x] **The renewal date is the schedule baseline, not a hint.** A renewal on 14 September 2026 produces 14 September 2026, 2027 and 2028 — never 1 January, never today plus 365 days. Change the date and every future charge follows. A baseline already in the past is rolled forward whole years rather than ignored, because an annual charge that happened last year still happens this year; 29 February clamps to the 28th rather than rolling into March (2026-08-22; typed key by key in the browser, and the next three dates read back from the editor).
+- [x] **No baseline, no dates.** Both models refuse to invent one: with no renewal or start date the activity is listed as undated with its monthly average, and the editor says why. A payment-cycle activity that simply is not due inside the window is *not* listed as undated either — it has a date, and it is not yet (2026-08-22).
+- [x] The dashboard timeline distinguishes a **payment** from an **occurrence**, and says what a payment covers. The one-off override control is hidden on payment rows: overrides act on the recurrence rule, which a payment cycle is not produced by, so the control would have written something that changed nothing (2026-08-22; browser-verified).
+- [x] Migration `013` adds `sessions_per_period`, `session_period`, `sessions_per_payment`, `icon_url` and `icon_source_url` to `activities`, and `icon_url` to `wishlist_items`. All additive and nullable (2026-08-22; five repository round-trip tests, plus an upgrade test against tables in their pre-013 shape that fails if any one `ALTER` is removed).
+
+### The period selector
+
+- [x] **Rebuilt as a control bar.** Mode segments, one step either way, the period and its date range, today's date, and one button back to the current period — every frequent action one press, with only "jump to an arbitrary period" behind a disclosure. That disclosure is a month grid and a year stepper rather than two native dropdowns, which could never show where you are in a year at a glance (2026-08-22; browser-verified at 320px, 390px and 1440px, both themes).
+- [x] **The layering bug, at its root.** `.historical-period > *` gave every child of the main area `z-index: 1`. That made each of them a stacking context, trapped the selector's popover inside the header's layer, and let the banner — a later sibling at the same z-index — paint over the whole header and swallow the clicks. The children are still positioned but no longer create contexts; the bar raises itself with `isolation: isolate`. No large z-index is involved anywhere (2026-08-22; every popover control that physically overlaps the banner hit-tested as reachable, and the old rule reinstated to watch two of them fail again).
+- [x] **The historical banner is opaque.** It was a translucent wash of `--warning-soft`, so the page showed through it — which reads as a rendering fault rather than a state. Now a deep-navy band in the application's own palette with the signature red as a hairline, `pointer-events: none` on the band and `auto` on its own controls, so it can neither steal a press nor block one. It stacks on a phone instead of reducing its sentence to a seven-line column beside a button (2026-08-22; browser-verified at 320px).
+- [x] The old `PeriodPopover` component and its stylesheet block are **deleted**, not left beside the new one (2026-08-22).
+
+### Motion
+
+- [x] **One direction, everywhere: left to right.** The period change and the tab transition both mirrored the direction of travel, which made the motion a second thing to read on every navigation — and meant the aircraft flew one way while the arriving page slid the other on half of them. Verified by reading the computed `animation-name` and keyframes in both directions: `periodShift` (−22px → 0) either way, `appSweepCover` growing from the left edge, `appSweepClear` leaving by the right, `pageArrive` from −26px (2026-08-22).
+- [x] The tab ordering that fed the old direction logic is removed rather than left unread (2026-08-22).
+
+### Identity
+
+- [x] **The supplied A350 artwork is the identity.** `assets/brand/air-france-fin.jpg` is the master, unmodified; `scripts/build-icons.mjs` derives every size from it. Two framings, deliberately: the home-screen icons keep the artwork's own margin, and the tab icons are cropped to the fin's measured bounding box so the shape fills a 16px tile instead of floating in a quarter-width band of empty navy. Each small size is rendered from the 1024px original rather than downsampled twice (2026-08-22; every size rendered and inspected in Chrome, all nine assets served 200).
+- [x] Large icons are quantised to a 64-colour palette, undithered: 48 kB against 181 kB truecolour, visually identical side by side at 512, and dithering made the file *larger* because it adds exactly the noise PNG compresses worst (2026-08-22; measured).
+- [x] A dedicated maskable icon, because the artwork's own margin puts the fin at 12–86% of the width and a circular mask would shave its trailing edge (2026-08-22).
+- [x] **The Budget OS mark is the sidebar control.** There were two things: a decorative logo that did nothing and a 28px chevron that collapsed the panel. They are now one button, with the chevron kept as the affordance. Collapsed to a 72px rail the mark is all that remains, and it is still the way back (2026-08-22; browser-verified that the preference survives a reload, and that the mobile navigation is untouched — the sidebar does not exist below 768px).
+- [x] **The tricolour is bigger and theme-independent.** 76×3 → 108×5, and all three bands are now fixed opaque literals. Every band used to be a theme token and the middle one was swapped for a translucent white in dark mode, so it took the colour of whatever was behind it and the mark read as a navy rule with a red end and a gap in the middle (2026-08-22; measured byte-identical in both themes).
+
+### Icons for activities
+
+- [x] **Activities have the wishlist's icon capabilities, from the same module.** `ui/EntityMark` resolves one order everywhere: image link, then library icon, then the source site's icon, then a neutral mark — each network-fetched layer stepping down to the next on error, so a dead link can never render as a broken image. The wishlist's private favicon component is gone; activities had a library icon and nothing else (2026-08-22).
+- [x] The **seller/brand distinction is preserved and generalised**: an activity's icon source is a separate field from any other link, exactly as the wishlist's `brandUrl` is separate from `url`. The rule that picks between them lives in one function (2026-08-22).
+- [x] **The preview says what is actually rendered, not what was asked for.** A link that 404s used to leave the caption claiming "using the image you linked" while the mark quietly fell through to the site icon — so a dead link stayed invisible. It now reads "That image did not load, so the site icon of navigraph.com is being used instead. Check the link." (2026-08-22; observed against a link that genuinely fails to load).
+- [x] A custom image link survives save, the database and a full reload, and renders on the card (2026-08-22; browser-verified, and read back out of PostgreSQL).
+
+### Contrast
+
+- [x] **Four status colours were being used as text.** `--success`, `--warning` and `--danger` are fill colours for chart series and progress bars; as 13–17px type they measure 3.2, 2.5 and 3.6 to one. The grade colours, the metric tones, the month comparison and the history deltas all took the fill. They take the `-text` variants now; `background` and `border` still take the fill (2026-08-22).
+- [x] **Grey text on a tinted card in dark mode.** A status tint over a dark surface *lightens* it — `--success-soft` at 18% over `#121A28` lands three times brighter — and the grey ramp was tuned against the untinted surfaces, so the two lower greys dropped to 3.7–4.2 : 1. Lifted inside tinted cards only, rather than washing out every ordinary caption or weakening the tint that carries the tone cue (2026-08-22; worst case measured at 4.52 : 1 over five hues on two surfaces).
+- [x] The sweep itself was the reason these survived the previous pass: it read `background-color` only, so any element on a gradient was measured against the page behind it. It composites gradient stops now, and reports **zero failures across ten tabs in both themes** (2026-08-22).
+
+### Smaller things found on the way
+
+- [x] The live estimate in the activity editor formatted money with a hardcoded `symbol` mode while the card it previews used the user's setting — the same figure shown two ways, which reads as two figures (2026-08-22).
+- [x] The timeline's cadence line ran through `.text-footnote`, which uppercases: "PAY EVERY 10 SESSIONS (≈ EVERY 5 WEEKS)" was a sentence being shouted (2026-08-22).
+- [x] The historical banner's button carried an inline `margin-left: auto`, which beats every stylesheet rule that is not `!important` — so the phone layout could not stack it. Moved into the stylesheet (2026-08-22).
+- [x] `EntityMark` clears its failure flags when the URL changes, so editing a broken link into a working one recovers instead of staying broken until the component unmounts (2026-08-22).
 
 ## Completed — 2026-08-21
 
@@ -171,7 +223,28 @@ Verified in a real browser at 390px and 1440px against a throwaway local Postgre
 - [x] The boot route line drew a bright streak off across the whole screen — its travelling highlight is animated a full width past each end and the track was `overflow: visible` (2026-08-17; measured: track 260px, `scrollWidth` 260).
 - [x] **Account settings.** Change email and change password, both behind the current password. The change-password endpoint, its client and its store action existed and were reachable from nowhere in the interface (2026-08-17; five integration tests against real PostgreSQL).
 
-## Verified this session, in a browser, against real PostgreSQL
+## Verified in a browser, against real PostgreSQL — 2026-08-22
+
+| Check | Result |
+| --- | --- |
+| €20/session, 2×/week, pay every 10 sessions | **One €200 payment every 35 days**; €177.14/month avg. in a 31-day August; €2,086/year |
+| The same gym over a fortnight | **One** payment on the timeline, not eight sessions |
+| Nebula €60/year, renewal typed as 14/09/2026 | Next charges **14 Sept 2026 · 2027 · 2028**; €5.00/month avg.; €60.00/year |
+| The same subscription over a full year | **Exactly one** occurrence — no monthly event anywhere |
+| A payment-cycle activity with no renewal date | Undated, with its monthly average. No date invented |
+| Popover controls overlapping the historical banner | Every one hit-tests as reachable; the old rule reinstated captures two |
+| The banner's own "Edit this period" button | Reachable; the band itself captures nothing |
+| Period animation, forward and back | `periodShift` both ways, −22px → 0 |
+| Tab sweep, down the sidebar and up | `appSweepCover` / `appSweepClear` / `pageArrive` identical either way |
+| Tricolour, both themes | 108×5, three opaque literals, byte-identical |
+| Sidebar toggle | 72px rail, label flips, preference survives a reload, mobile nav untouched |
+| A custom image link on an activity | Saved, in PostgreSQL, and rendering on the card after a full reload |
+| A custom image link that fails to load | Falls through to the site icon; the caption says so |
+| Nine icon assets and the manifest | All 200; the artwork renders at 16, 32, 48, 96, 180, 192 and 512 |
+| Contrast, ten tabs, both themes, gradients composited | **Zero failures** |
+| 320px and 390px | No horizontal overflow; no target under 24px; banner stacks |
+
+## Verified in a browser, against real PostgreSQL — 2026-08-21
 
 Each of these is one of the specification's own examples, checked rather than assumed:
 
@@ -199,13 +272,15 @@ Each of these is one of the specification's own examples, checked rather than as
 
 ## Actions needed from the repository owner
 
-- [ ] **Deploy.** Everything from 2026-08-17 onward is committed and unverified in production. Migrations `011` and `012` will run on first boot; both are additive `ADD COLUMN IF NOT EXISTS` and were tested against a database that already had data.
+- [ ] **Deploy.** Everything from 2026-08-17 onward is committed and unverified in production. Migrations `011`, `012` and `013` will run on first boot; all are additive `ADD COLUMN IF NOT EXISTS` and were tested against a database that already had data in the pre-migration shape.
 - [ ] `RESEND_API_KEY` and a verified sender domain, for password-reset email. Everything else works without it, and `forgot-password` deliberately answers the same either way.
 - [ ] Decide whether preview deployments should be allowed to call the API (`CORS_ALLOW_VERCEL_PREVIEWS`).
 - [ ] Optionally set `SIGNUP_INVITE_CODE` — without it, anyone who finds the URL can create an account.
 
 ## Discovered issues — open
 
+- [ ] **The granular REST routes do not know the new cost models.** `POST`/`PATCH /api/activities` handle a subset of fields and never handled `costModel` either; they are documented API surface with no live caller, and the client persists only through `GET`/`PUT /api/snapshot`. Adding the new fields there would widen an unused surface rather than fix anything, so it is recorded instead.
+- [ ] **`sessionsPerMonth` and `sessionsPerPeriod` both describe a frequency.** The first belongs to `perSession`, the second to `sessionPack`, and `sessionsPerWeek()` reads either. Two fields for one idea is a seam; merging them would migrate every existing `perSession` activity, which is not worth doing for tidiness alone.
 - [ ] **Back-dating from the current period** is still permissive by design: a transaction can be dated into a past month while viewing the current one. Late receipt entry is legitimate, and a dedicated audited path exists for rewriting a closed period.
 - [ ] **The granular REST routes are not on the live write path.** The client persists only through `GET`/`PUT /api/snapshot`; the per-entity routes are implemented and validated but unused. Their validation now constrains the settings route, which is the one a client could reasonably reach for; the rest remain documented API surface with no live caller.
 - [ ] `xlsx@0.18.5` carries two high-severity advisories (prototype pollution, ReDoS) with no fix on the npm registry — SheetJS publishes fixed versions only from its own CDN. It is loaded on demand, only when the user chooses a file they supplied themselves, and never runs on the server. Moving to the CDN tarball would put a non-registry URL in the lockfile, which is its own deployment risk. Documented rather than silently accepted.
@@ -213,7 +288,18 @@ Each of these is one of the specification's own examples, checked rather than as
 - [ ] The first paint still costs ~234 kB gzipped across four chunks. The split means a *repeat* visit after a deploy costs 94 kB, but a cold first load is unchanged. The wishlist and activity panels are not code-split, because they are primary tabs.
 - [ ] `HorizontalBarChart` reserves a fixed minimum height, so a category breakdown with one row leaves a tall empty card.
 
-## Discovered issues — closed this session
+## Discovered issues — closed 2026-08-22
+
+- ~~Status colours used as text at 2.5–3.6 : 1~~ → the `-text` variants, in all six places.
+- ~~Grey captions on tinted cards in dark mode at 3.7–4.2 : 1~~ → lifted inside tinted cards only.
+- ~~The contrast sweep could not measure text on a gradient~~ → it composites gradient stops now, which is how the two above were found at all.
+- ~~The historical banner was translucent and stole clicks~~ → opaque, and inert apart from its own control.
+- ~~The period selector's popover could not paint over the banner~~ → the blanket `z-index: 1` removed.
+- ~~Activities had a library icon and nothing else~~ → the shared resolver, with an image link and a source site.
+- ~~A dead image link claimed to be in use~~ → the caption reports the layer actually rendered.
+- ~~`PeriodPopover` was left in the tree with no importer~~ → deleted.
+
+## Discovered issues — closed 2026-08-21
 
 Everything below was on the open list and is now done; the entries above carry the detail.
 

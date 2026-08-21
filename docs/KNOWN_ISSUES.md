@@ -25,6 +25,34 @@ Do not solve the same problem twice.
 
 ---
 
+# Resolved 2026-08-22
+
+## The historical banner captured clicks aimed at the period selector
+
+Reported symptom: in historical mode, clicking around the period selector sometimes hit the banner behind it.
+
+The cause was not a missing z-index. `.historical-period > *` gave **every** child of the main area `z-index: 1`. That makes each of them a stacking context, which trapped the selector's popover — `z-index: 40` — inside the header's layer, where 40 means nothing relative to the header's siblings. The banner, a later sibling at the same z-index, therefore painted over the entire header and took the presses.
+
+Fixed by removing the blanket `z-index` (the children stay positioned, so they still clear the dashed contour, but a positioned element with `z-index: auto` paints in tree order in the same layer), giving the bar `isolation: isolate`, and making the banner `pointer-events: none` with `auto` on its own button.
+
+**The rule to preserve:** when something is underneath and should not be, find the stacking context trapping it. Do not raise a number. A large z-index that appears to fix this is hiding the same bug one layer up.
+
+## Status colours and grey captions failed AA in six places
+
+`--success`, `--warning` and `--danger` are fill values and were being assigned to `color:` — 2.5 to 3.6 : 1 as text. Separately, a status tint over a *dark* card lightens it about threefold, and the grey ramp was measured against the untinted surfaces, so the two lower greys fell to 3.7–4.2 : 1 on tinted cards in dark mode.
+
+Both fixed: the `-text` variants everywhere the colour is text, and a scoped grey lift inside tinted cards in dark mode only.
+
+**Why the previous sweep missed them:** it read `background-color` and nothing else, so every element on a `linear-gradient` was scored against the page behind it. It reported zero failures with six real ones on screen. A contrast checker that does not composite gradients is not a contrast checker — see `docs/TESTING.md`.
+
+## A dead image link was invisible
+
+The mark resolver falls through an image link to a library icon to a site icon, so a link that 404s still produced a perfectly reasonable-looking mark — while the editor's caption said "using the image you linked". The failure was undetectable from the interface. `EntityMark` now reports the layer it actually rendered, and the caption names the fallback and says to check the link.
+
+**The general rule:** a fallback chain needs to surface *that* it fell back, at the point where the user can act on it. Silent recovery is how a broken input stays broken.
+
+---
+
 # Critical Issues
 
 These issues have the highest priority.
