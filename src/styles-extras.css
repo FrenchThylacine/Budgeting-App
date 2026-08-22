@@ -307,6 +307,10 @@
   white-space: nowrap;
 }
 
+/* The cadence is a sentence, not a label. `.text-caption` rather than
+   `.text-footnote` because the latter uppercases its content, and a payment
+   cycle spelled out — "pay every 10 sessions (≈ every 5 weeks)" — read as
+   shouting. */
 .upcoming-cadence {
   color: var(--text-tertiary);
   grid-column: 2;
@@ -859,57 +863,303 @@
    than while its loading placeholder is on screen. */
 .tab-panel-frame { min-width: 0; }
 
-/* ─── Period selector, collapsed ──────────────────────────────────────────── */
+/* ─── Period selector ─────────────────────────────────────────────────────────
+   One line, four jobs: which kind of period, which one, one step either way,
+   and the way back to now. See `layout/PeriodSelector.tsx` for why it is a bar
+   rather than the collapsed widget it used to be.
 
-.period-popover { position: relative; }
+   `isolation: isolate` is the load-bearing declaration. It gives the bar its
+   own stacking context so the popover below sits above everything the bar is
+   painted over, and — with the blanket `z-index: 1` removed from the main
+   area's children — the bar itself now paints above the historical banner that
+   follows it in the DOM. That pair is the whole layering fix; no giant
+   z-index is involved anywhere. */
 
-.period-trigger {
+.period-bar {
+  position: relative;
+  isolation: isolate;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: var(--space-5);
+  padding: 8px 10px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border);
+  /* Opaque. A translucent control over a scrolling page is unreadable at
+     exactly the moment it matters. */
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-xs);
+}
+
+/* The signature, as a hairline down the leading edge: navy into red, fixed
+   values so it reads identically in both themes. */
+.period-bar::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 10px;
+  bottom: 10px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: linear-gradient(180deg, #002157 0%, #002157 55%, #E4002B 100%);
+}
+
+.period-modes {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  margin-left: 6px;
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+}
+
+.period-mode {
+  border: 0;
+  border-radius: var(--radius-full);
+  padding: 6px 12px;
+  min-height: 30px;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  transition: background var(--duration-fast) var(--ease-out), color var(--duration-fast) var(--ease-out);
+}
+
+.period-mode:hover { color: var(--text-primary); }
+.period-mode:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.period-mode.active {
+  background: var(--brand-mark-from);
+  color: #FFFFFF;
+  box-shadow: var(--shadow-xs);
+}
+
+:root.dark .period-mode.active {
+  background: #FFFFFF;
+  color: var(--brand-mark-from);
+}
+
+.period-nav {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.period-step {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  border-radius: var(--radius-md);
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background var(--duration-fast) var(--ease-out), color var(--duration-fast) var(--ease-out);
+}
+
+.period-step:hover { background: var(--bg-inset); color: var(--text-primary); }
+.period-step:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.period-step:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* The period itself: the largest thing in the bar, because it is the one piece
+   of information the bar exists to state. The range under it is what tells a
+   selected week apart from the one being lived through. */
+.period-current {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+  padding: 4px 10px;
+  border-radius: var(--radius-md);
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-primary);
+  text-align: left;
+  cursor: pointer;
+  grid-template-areas:
+    "label chevron"
+    "range range";
+  /* The chevron hugs the label rather than being pushed to the far edge of a
+     stretched button: detached, it reads as an unrelated control. */
+  grid-template-columns: minmax(0, max-content) auto;
+  justify-content: start;
+  align-items: center;
+}
+
+.period-current:hover { background: var(--bg-inset); }
+.period-current:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.period-current-label {
+  grid-area: label;
+  font-size: 0.9375rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.period-current-range {
+  grid-area: range;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.period-current-chevron {
+  grid-area: chevron;
+  margin-left: 8px;
+  color: var(--text-tertiary);
+  transition: transform var(--duration-fast) var(--ease-out);
+}
+
+.period-current[aria-expanded="true"] .period-current-chevron { transform: rotate(180deg); }
+
+/* The historical marker on the control. Deliberately small: the banner below
+   carries the explanation, and two loud statements of one fact is one too
+   many. */
+.period-flag {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  height: 36px;
+  gap: 5px;
+  padding: 4px 9px;
+  border-radius: var(--radius-full);
+  background: var(--warning-soft);
+  border: 1px solid color-mix(in srgb, var(--warning) 40%, transparent);
+  color: var(--warning-text);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  text-transform: capitalize;
+  white-space: nowrap;
+}
+
+.period-now {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: auto;
+  min-width: 0;
+}
+
+.period-today {
+  color: var(--text-tertiary);
+  text-transform: none;
+  letter-spacing: 0;
+  white-space: nowrap;
+}
+
+.period-jump {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
   padding: 0 12px;
   border-radius: var(--radius-full);
   border: 1px solid var(--border-strong);
   background: var(--bg-elevated);
   color: var(--text-primary);
-  font-size: var(--text-caption);
-  font-weight: var(--weight-semibold);
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: capitalize;
   cursor: pointer;
-  max-width: 100%;
-}
-
-.period-trigger:hover { border-color: var(--accent); }
-.period-trigger:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-
-/* A selection that is not the real current period must be visible without
-   opening anything, or the app quietly pretends the date changed. */
-.period-trigger-historical {
-  border-color: var(--warning);
-  color: var(--warning-text);
-  background: var(--warning-soft);
-}
-
-.period-trigger-label {
-  overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.period-trigger[aria-expanded="true"] .period-trigger-chevron { transform: rotate(180deg); }
-.period-trigger-chevron { transition: transform var(--duration-fast) var(--ease-out); }
+.period-jump:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.period-jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.period-jump:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* ─── Choosing an arbitrary period ────────────────────────────────────────── */
 
 .period-panel {
   position: absolute;
-  z-index: 40;
-  top: calc(100% + 8px);
-  right: 0;
-  padding: var(--space-3);
+  z-index: 5;
+  top: calc(100% + 6px);
+  left: 0;
+  width: min(320px, calc(100vw - 32px));
+  display: grid;
+  gap: 10px;
+  padding: 12px;
   border-radius: var(--radius-lg);
   border: 1px solid var(--border);
+  /* Opaque, for the same reason the bar is: a grid of dates over a page of
+     figures is unreadable if both are visible at once. */
   background: var(--bg-elevated);
   box-shadow: var(--shadow-lg);
   animation: periodPanelIn var(--duration-fast) var(--ease-out);
+}
+
+.period-panel-years {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.period-panel-year {
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.period-grid {
+  display: grid;
+  gap: 4px;
+}
+
+.period-grid-months { grid-template-columns: repeat(4, 1fr); }
+.period-grid-years { grid-template-columns: repeat(3, 1fr); }
+
+.period-grid-weeks {
+  grid-template-columns: repeat(7, 1fr);
+  max-height: 42vh;
+  overflow-y: auto;
+}
+
+.period-cell {
+  min-height: 34px;
+  padding: 6px 4px;
+  border-radius: var(--radius-md);
+  border: 1px solid transparent;
+  background: var(--bg-subtle);
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background var(--duration-fast) var(--ease-out), color var(--duration-fast) var(--ease-out);
+}
+
+.period-cell:hover { background: var(--bg-inset); color: var(--text-primary); }
+.period-cell:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.period-cell.active {
+  background: var(--brand-mark-from);
+  border-color: var(--brand-mark-from);
+  color: #FFFFFF;
+}
+
+:root.dark .period-cell.active {
+  background: #FFFFFF;
+  border-color: #FFFFFF;
+  color: var(--brand-mark-from);
+}
+
+.period-panel-note {
+  margin: 0;
+  color: var(--text-tertiary);
 }
 
 @keyframes periodPanelIn {
@@ -919,19 +1169,28 @@
 
 @media (prefers-reduced-motion: reduce) {
   .period-panel { animation: none; }
-  .period-trigger-chevron { transition: none; }
+  .period-current-chevron { transition: none; }
 }
 
-/* On a phone the panel spans the width rather than hanging off one edge,
-   where part of it would sit outside the viewport. */
-@media (max-width: 640px) {
-  .period-panel {
-    left: 0;
-    right: 0;
-    /* Its own scroll, so a tall panel cannot push the page sideways. */
-    max-height: 60dvh;
-    overflow-y: auto;
-  }
+/* On a narrow screen the bar stacks and the panel spans it, rather than
+   hanging off one edge where part of it would sit outside the viewport. */
+@media (max-width: 720px) {
+  .period-bar { gap: 8px; }
+  /* The arrows go to the edges, where a thumb reaches them; the label sits
+     between, on its own inset ground so its extent is legible without a
+     border competing with the bar's. */
+  .period-nav { flex: 1 1 100%; justify-content: space-between; }
+  .period-current { flex: 1 1 auto; background: var(--bg-subtle); }
+  .period-now { width: 100%; margin-left: 0; justify-content: space-between; }
+  .period-modes { margin-left: 4px; }
+  .period-mode { padding: 6px 10px; }
+  .period-panel { left: 0; right: 0; width: auto; }
+}
+
+@media (max-width: 380px) {
+  /* The date is reference; the way back to it is the action. On the narrowest
+     screens the reference is what goes, not the control. */
+  .period-today { display: none; }
 }
 
 /* ─── Tab transition ──────────────────────────────────────────────────────
@@ -965,29 +1224,27 @@
   clip-path: inset(0 100% 0 0);
 }
 
-.app-sweep-back { --sweep-from: 0 0 0 100%; }
-.app-sweep-forward { --sweep-from: 0 100% 0 0; }
+/* One direction, always: left to right.
+
+   The cover grows from the left edge rightwards, and the reveal continues in
+   the same direction, so the plane crosses the screen rather than retreating
+   the way it came. It used to mirror the navigation — which meant the aircraft
+   flew one way and the arriving page slid the other on half of all
+   navigations. */
 
 .app-sweep-covering { animation: appSweepCover 260ms cubic-bezier(0.4, 0, 0.2, 1) forwards; }
 .app-sweep-clearing { animation: appSweepClear 300ms cubic-bezier(0.22, 0.61, 0.36, 1) forwards; }
 
 @keyframes appSweepCover {
-  from { clip-path: inset(var(--sweep-from, 0 100% 0 0)); }
+  /* Inset 100% from the right: nothing visible, anchored at the left edge. */
+  from { clip-path: inset(0 100% 0 0); }
   to   { clip-path: inset(0 0 0 0); }
 }
 
-/* Clears towards the opposite edge, so the plane continues across rather than
-   retreating the way it came — the app has moved on, not changed its mind. */
 @keyframes appSweepClear {
   from { clip-path: inset(0 0 0 0); }
+  /* Inset 100% from the left: the leading edge leaves by the right. */
   to   { clip-path: inset(0 0 0 100%); }
-}
-
-.app-sweep-back.app-sweep-clearing { animation-name: appSweepClearBack; }
-
-@keyframes appSweepClearBack {
-  from { clip-path: inset(0 0 0 0); }
-  to   { clip-path: inset(0 100% 0 0); }
 }
 
 /* The route sits on the optical centre line, at a width that reads as a
@@ -1057,17 +1314,11 @@
   to   { transform: translate3d(min(460px, 64vw), 0, 0); }
 }
 
-/* The page arrives from the side the navigation moved, so the direction of
-   travel is legible without reading the heading. */
-.tab-panel-arriving { animation: pageArriveForward 300ms cubic-bezier(0.22, 0.61, 0.36, 1); }
-.tab-panel-arriving.tab-panel-back { animation-name: pageArriveBack; }
+/* The page arrives travelling the same way the sweep did: it starts left of
+   where it belongs and moves right into place. */
+.tab-panel-arriving { animation: pageArrive 300ms cubic-bezier(0.22, 0.61, 0.36, 1); }
 
-@keyframes pageArriveForward {
-  from { opacity: 0; transform: translate3d(26px, 0, 0); }
-  to   { opacity: 1; transform: none; }
-}
-
-@keyframes pageArriveBack {
+@keyframes pageArrive {
   from { opacity: 0; transform: translate3d(-26px, 0, 0); }
   to   { opacity: 1; transform: none; }
 }
@@ -1243,24 +1494,30 @@
 
 /* ─── The tricolour rule ──────────────────────────────────────────────────── */
 
+/*
+ * Three fixed colours. The flag is not a theme.
+ *
+ * Every band used to be a theme token: the blue and the red came from
+ * `--brand-mark-*`, and the middle band was swapped for a translucent white in
+ * dark mode. A translucent band takes the colour of whatever is behind it, so
+ * in dark mode the middle segment sank towards the page and the mark read as a
+ * navy rule with a red end and a gap in it — which is precisely the failure the
+ * pale band was chosen to avoid in the first place.
+ *
+ * All three are now literal values and identical in both themes. The middle one
+ * is a pale blue-grey rather than pure white, because on a white card pure
+ * white is a gap; it is opaque, so nothing behind it can change what it is.
+ */
 .tricolour {
   display: flex;
-  height: 2px;
+  height: 3px;
   width: 100%;
   overflow: hidden;
 }
 
-.tricolour-blue  { flex: 1; background: var(--brand-mark-from); }
-.tricolour-red   { flex: 1; background: var(--brand-mark-to); }
-
-/* Not pure white: on a white card that is a gap, and a rule broken in the
-   middle reads as a rendering fault rather than as a flag. A pale blue-grey
-   still reads as the light band between navy and red, and it reads as a band. */
+.tricolour-blue  { flex: 1; background: #002157; }
 .tricolour-white { flex: 1; background: #DCE5F2; }
-
-/* On a dark ground the pale band is the only one that carries, so it is dimmed
-   to keep the three in balance rather than leaving one glowing. */
-:root.dark .tricolour-white { background: rgba(255, 255, 255, 0.5); }
+.tricolour-red   { flex: 1; background: #E4002B; }
 
 /* Pinned above everything, including sheets: it is the masthead of the whole
    application, not of one screen. */
@@ -1276,18 +1533,22 @@
   top: 0;
   left: 50%;
   transform: translateX(-50%);
-  width: 76px;
-  height: 3px;
-  border-radius: 0 0 2px 2px;
+  /* Bigger than it was — 76×3 was small enough to be mistaken for a rendering
+     artefact rather than read as a mark. 108×5 is unmistakably deliberate and
+     still nowhere near the full-width band that would read as a status bar. */
+  width: 108px;
+  height: 5px;
+  border-radius: 0 0 3px 3px;
   overflow: hidden;
   z-index: 100;
   pointer-events: none;
-  box-shadow: 0 1px 3px rgba(0, 33, 87, 0.18);
+  box-shadow: 0 1px 4px rgba(0, 33, 87, 0.22);
 }
 
-/* Narrower still on a phone, where 76px is a larger share of the width. */
+/* Narrower on a phone, where 108px is a larger share of the width — but still
+   larger than the desktop mark used to be. */
 @media (max-width: 480px) {
-  .tricolour-app { width: 56px; }
+  .tricolour-app { width: 84px; height: 4px; }
 }
 
 /* Inside the sign-in card it sits flush with the rounded top edge. */
@@ -1567,19 +1828,6 @@
   background: linear-gradient(145deg, var(--brand-mark-from), #0B3B7A);
 }
 
-/* Today's date and the way back to it, inside the period widget. */
-.period-now {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  flex-wrap: wrap;
-  margin-top: 12px;
-  padding-top: 12px;
-  border-top: 1px solid var(--border);
-  color: var(--text-tertiary);
-}
-
 /* ─── Disabled controls ───────────────────────────────────────────────────── */
 
 /* There was no disabled styling for `.btn` anywhere in the app: Close Month on
@@ -1606,7 +1854,7 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  margin: 8px 0 12px;
+  margin: 0;
   padding: 10px;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
@@ -1615,25 +1863,20 @@
 
 /* ─── Period change ───────────────────────────────────────────────────────── */
 
-/* The page enters from the side the period came from: forwards in time slides
-   in from the right, backwards from the left. Short, and opacity-led, because
-   this fires on every press of an arrow. */
-.tab-panel-frame.period-forward { animation: periodForward 300ms var(--ease-out); }
-.tab-panel-frame.period-back { animation: periodBack 300ms var(--ease-out); }
+/* One direction, matching the tab transition: the page starts left of where it
+   belongs and travels right into place. It used to mirror the direction of
+   travel in time, which made the motion a second thing to read on every press
+   of an arrow — and the period is already stated in three places. Short, and
+   opacity-led, because this fires on every press. */
+.tab-panel-frame.period-shift { animation: periodShift 300ms var(--ease-out); }
 
-@keyframes periodForward {
-  from { opacity: 0; transform: translate3d(22px, 0, 0); }
-  to { opacity: 1; transform: none; }
-}
-
-@keyframes periodBack {
+@keyframes periodShift {
   from { opacity: 0; transform: translate3d(-22px, 0, 0); }
   to { opacity: 1; transform: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .tab-panel-frame.period-forward,
-  .tab-panel-frame.period-back { animation: none; }
+  .tab-panel-frame.period-shift { animation: none; }
 }
 
 /* ─── The header, and the identity on a phone ─────────────────────────────────
@@ -1725,8 +1968,6 @@
   }
 
   .header-actions > *:first-child { flex: 1 1 150px; min-width: 150px; }
-  .top-header .period-trigger { width: 100%; }
-  .top-header .period-trigger-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .header-buttons { flex: 1 1 auto; flex-wrap: nowrap; justify-content: flex-end; }
 }
 

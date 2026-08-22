@@ -251,6 +251,36 @@ export async function runMigrations(
         await sql`ALTER TABLE activities ADD COLUMN IF NOT EXISTS next_renewal_date TEXT;`;
       },
     },
+    {
+      /*
+       * Payment cycles, and a shared visual identity.
+       *
+       * `sessions_per_period` / `session_period` / `sessions_per_payment` carry
+       * the session-pack model: how often the activity happens, and how often
+       * it is paid for. Those are two different facts and the schema now has
+       * two different places for them — treating "twice a week" as "twice a
+       * week's worth of payments" is the error the model exists to prevent.
+       *
+       * `icon_url` and `icon_source_url` give an activity the same identity
+       * options a wishlist item has had since migrations 009 and 010: a direct
+       * image, or a website to take the icon from, kept separate from any link
+       * that means "where this is bought".
+       *
+       * Every column is additive and nullable, so an existing row is valid the
+       * moment it is added and no backfill is required. Nothing in `schema.ts`
+       * references them, per the rule migration 006 established the hard way.
+       */
+      name: "013-payment-cycles-and-icons",
+      run: async (sql: NeonQueryFunction<any, any>) => {
+        await sql`ALTER TABLE activities ADD COLUMN IF NOT EXISTS sessions_per_period DOUBLE PRECISION;`;
+        await sql`ALTER TABLE activities ADD COLUMN IF NOT EXISTS session_period TEXT;`;
+        await sql`ALTER TABLE activities ADD COLUMN IF NOT EXISTS sessions_per_payment DOUBLE PRECISION;`;
+        await sql`ALTER TABLE activities ADD COLUMN IF NOT EXISTS icon_url TEXT;`;
+        await sql`ALTER TABLE activities ADD COLUMN IF NOT EXISTS icon_source_url TEXT;`;
+
+        await sql`ALTER TABLE wishlist_items ADD COLUMN IF NOT EXISTS icon_url TEXT;`;
+      },
+    },
   ];
 
 

@@ -4,11 +4,6 @@ import { AircraftMark } from "./AircraftMark";
 interface TabTransitionProps {
   /** Changing this plays the transition. */
   tabKey: string;
-  /**
-   * Position of the tab in the navigation, so the new scene enters from the
-   * side it came from. Equal or missing values enter from the right.
-   */
-  ordinal?: number;
   children: React.ReactNode;
 }
 
@@ -34,8 +29,15 @@ type Phase = "idle" | "covering" | "clearing";
  * A navy plane sweeps across the whole application — over the sidebar, the
  * header and the content, not merely over the panel — carrying a route line and
  * a small aircraft along it. The outgoing page is still underneath while it
- * covers; the incoming page is revealed as it clears, entering from the
- * direction the navigation moved.
+ * covers; the incoming page is revealed as it clears.
+ *
+ * **The direction is fixed: left to right, every time.** It used to mirror the
+ * navigation — down the sidebar entered from the right, up from the left — and
+ * a motion that changes direction is a second thing to read on every single
+ * navigation. One direction reads as the application's own movement rather than
+ * as an assertion about where you were, and it means the cover, the aircraft
+ * and the arriving page all travel the same way instead of the plane flying one
+ * way and the page the other.
  *
  * Two things this must get right, both of which earlier versions got wrong:
  *
@@ -56,10 +58,9 @@ type Phase = "idle" | "covering" | "clearing";
  * across the screen on every navigation is precisely what that setting exists
  * for, and the page still changes — it simply appears.
  */
-export const TabTransition: React.FC<TabTransitionProps> = ({ tabKey, ordinal, children }) => {
+export const TabTransition: React.FC<TabTransitionProps> = ({ tabKey, children }) => {
   const [phase, setPhase] = useState<Phase>("idle");
   const [shownKey, setShownKey] = useState(tabKey);
-  const [direction, setDirection] = useState<"forward" | "back">("forward");
 
   /**
    * The tree currently on screen, and the newest one the parent has produced.
@@ -73,7 +74,6 @@ export const TabTransition: React.FC<TabTransitionProps> = ({ tabKey, ordinal, c
   latestChildren.current = children;
   if (tabKey === shownKey) heldChildren.current = children;
 
-  const previousOrdinal = useRef(ordinal ?? 0);
   const firstRender = useRef(true);
 
   useEffect(() => {
@@ -81,13 +81,8 @@ export const TabTransition: React.FC<TabTransitionProps> = ({ tabKey, ordinal, c
     // someone with an animation before they have seen the app is noise.
     if (firstRender.current) {
       firstRender.current = false;
-      previousOrdinal.current = ordinal ?? 0;
       return;
     }
-
-    const nextOrdinal = ordinal ?? 0;
-    setDirection(nextOrdinal >= previousOrdinal.current ? "forward" : "back");
-    previousOrdinal.current = nextOrdinal;
 
     if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) {
       heldChildren.current = latestChildren.current;
@@ -113,7 +108,7 @@ export const TabTransition: React.FC<TabTransitionProps> = ({ tabKey, ordinal, c
       heldChildren.current = latestChildren.current;
       setShownKey(tabKey);
     };
-  }, [tabKey, ordinal]);
+  }, [tabKey]);
 
   const covering = phase === "covering";
   const clearing = phase === "clearing";
@@ -122,9 +117,7 @@ export const TabTransition: React.FC<TabTransitionProps> = ({ tabKey, ordinal, c
     <div className="tab-transition">
       {phase !== "idle" && (
         <div
-          className={`app-sweep app-sweep-${direction}${covering ? " app-sweep-covering" : ""}${
-            clearing ? " app-sweep-clearing" : ""
-          }`}
+          className={`app-sweep${covering ? " app-sweep-covering" : ""}${clearing ? " app-sweep-clearing" : ""}`}
           aria-hidden="true"
         >
           {/* Route, waypoints and aircraft. A flight between two points is the
@@ -140,10 +133,7 @@ export const TabTransition: React.FC<TabTransitionProps> = ({ tabKey, ordinal, c
         </div>
       )}
 
-      <div
-        key={shownKey}
-        className={`tab-panel${clearing ? ` tab-panel-arriving tab-panel-${direction}` : ""}`}
-      >
+      <div key={shownKey} className={`tab-panel${clearing ? " tab-panel-arriving" : ""}`}>
         {heldChildren.current}
       </div>
     </div>

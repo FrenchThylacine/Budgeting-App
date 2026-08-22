@@ -136,7 +136,22 @@ export function faviconUrl(domain: string, size = 64): string {
  * item that looks right and an item that buys right.
  */
 export function itemIconDomain(item: { url?: string; brandUrl?: string }): string | null {
-  return itemDomain(item.brandUrl) ?? itemDomain(item.url);
+  return itemDomain(itemIconSourceUrl(item));
+}
+
+/**
+ * The link an item's icon is fetched from: the brand's when usable, the shop's
+ * otherwise.
+ *
+ * Stated as a URL rather than a domain because the shared mark resolver takes
+ * links, not hostnames — and because the fallback rule belongs in exactly one
+ * place. Two callers each writing `brandUrl ?? url` is two places for it to
+ * drift.
+ */
+export function itemIconSourceUrl(item: { url?: string; brandUrl?: string }): string | undefined {
+  // Parsed rather than trimmed: an unusable brand link must fall through to
+  // the shop rather than blanking the icon.
+  return normalizeItemUrl(item.brandUrl) ?? normalizeItemUrl(item.url);
 }
 
 // ─── Colour identity ─────────────────────────────────────────────────────────

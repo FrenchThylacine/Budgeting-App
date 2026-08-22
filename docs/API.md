@@ -93,6 +93,8 @@ There is deliberately **no** `POST /snapshot/reset`. One existed and answered `{
 
 > **Which routes the client actually uses.** `src/store/budgetStore.ts` persists exclusively through `GET`/`PUT /snapshot`. The per-entity routes are implemented and validated but are not on the live write path today, so their validation does not constrain the app. Treat `PUT /snapshot` as the endpoint that must be correct.
 
+> **`POST`/`PATCH /activities` handle a subset of the model.** They have never accepted `costModel`, and they do not accept the fields migration 013 added (`sessionsPerPeriod`, `sessionPeriod`, `sessionsPerPayment`, `iconUrl`, `iconSourceUrl`) either. That is recorded rather than fixed: widening a surface with no caller adds code to keep correct without making anything work. If these routes are ever put on the live path, this is the first thing to complete — and the snapshot round trip in `tests/db-integration.test.ts` is the model of what "complete" means.
+
 ### `GET /api/health`
 
 Answers even when the database is unreachable, so a misconfigured database is distinguishable from a dead server.

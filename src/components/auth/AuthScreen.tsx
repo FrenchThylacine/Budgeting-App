@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { AlertCircle, ArrowLeft, CheckCircle2, Eye, EyeOff } from "lucide-react";
 import { useAuthStore } from "../../store/authStore";
-import { AircraftMark } from "../ui/AircraftMark";
+import { FinMark } from "../ui/FinMark";
 import { Tricolour } from "../ui/Tricolour";
 
 type Mode = "signin" | "signup" | "forgot" | "reset";
@@ -136,7 +136,7 @@ export const AuthScreen: React.FC = () => {
         <Tricolour />
         <div className="auth-brand">
           <div className="auth-mark" aria-hidden="true">
-            <AircraftMark size={34} variant="solid" hull="var(--accent)" />
+            <FinMark size={34} />
           </div>
           <div>
             <div className="text-title">Budget OS</div>

@@ -1,6 +1,7 @@
 import { monthName, weeksInIsoYear, isMonthClosed, isWeekClosed } from "./dates";
 import { normalizeAmount, roundAmount } from "./currency";
 import { monthlyEstimateFromSchedule, yearlyEstimateFromSchedule } from "./schedule";
+import { fixedYearlyAmount, sessionsInMonth, sessionsInYear } from "./payments";
 import { findSeedCategory } from "./seedCategories";
 import { externalEntries, personalEntries } from "./funding";
 import type {
@@ -130,6 +131,15 @@ export function estimateActivity(
  *  - `schedule`  : price per session × the occurrences that really fall in the
  *                  given month.
  *  - `fixed`     : the explicit monthly amount.
+ *  - `sessionPack`: price per session × the sessions that fall in the month.
+ *                  **The payment cycle is deliberately absent from this
+ *                  figure.** Paying for ten sessions at a time changes when
+ *                  money leaves, not what the commitment costs per month, and
+ *                  a budget compares monthly costs. The payments themselves are
+ *                  a separate dated series — see `domain/payments.ts`.
+ *  - `fixedYearly`: the annual amount divided by twelve. An **average**, never
+ *                  a monthly charge; every caller that displays it says so, and
+ *                  no monthly payment event is generated anywhere.
  *  - `auto`      : the historical inference, kept byte-for-byte. Activities
  *                  saved before cost models existed have no `costModel` and so
  *                  land here, unchanged.
@@ -143,6 +153,13 @@ export function monthlyEstimateNative(activity: Activity, period: EstimatePeriod
       return monthlyEstimateFromSchedule(activity, period.year, period.month) ?? 0;
     case "fixed":
       return activity.pricePerMonth ?? 0;
+    case "sessionPack": {
+      const sessions = sessionsInMonth(activity, period.year, period.month);
+      if (sessions == null || activity.pricePerSession == null) return 0;
+      return activity.pricePerSession * sessions;
+    }
+    case "fixedYearly":
+      return (fixedYearlyAmount(activity) ?? 0) / 12;
     case "auto":
     default:
       return autoMonthlyEstimate(activity);
@@ -160,6 +177,19 @@ export function yearlyEstimateNative(
       // Twelve real months. A weekday schedule does not repeat evenly, so
       // multiplying one month by twelve would be wrong by up to a month's cost.
       return yearlyEstimateFromSchedule(activity, period.year) ?? 0;
+    case "sessionPack": {
+      // The year's real sessions, not one month multiplied by twelve: with
+      // weekdays set those differ by up to a month's worth, and the whole point
+      // of counting sessions is that they are counted.
+      const sessions = sessionsInYear(activity, period.year);
+      if (sessions == null || activity.pricePerSession == null) return 0;
+      return activity.pricePerSession * sessions;
+    }
+    case "fixedYearly":
+      // The stated annual amount, unchanged. Deriving it from the monthly
+      // average would round a real payment through a division and a
+      // multiplication for no reason.
+      return fixedYearlyAmount(activity) ?? 0;
     case "perSession":
     case "fixed":
       return monthlyNative * 12;

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowDown, ArrowUp, Copy, Eye, EyeOff, GripVertical, Pencil, Plus, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, Circle, Copy, Eye, EyeOff, GripVertical, Pencil, Plus, Trash2 } from "lucide-react";
 import { currencyOptionsFor, formatMoney } from "../../domain/currency";
 import { SwipeRow } from "../ui/SwipeRow";
 import { gesturesFor } from "../../domain/gestures";
@@ -15,7 +15,27 @@ import {
   occurrencesInMonth,
   parseLocalDate,
 } from "../../domain/schedule";
-import type { Activity, CostModel, IsoWeekday, RecurrenceType, SwipeActionId } from "../../domain/types";
+import {
+  describeDays,
+  describePaymentCycle,
+  fixedYearlyAmount,
+  isAveragedMonthly,
+  normalizeSessionsPerPayment,
+  sessionPackIntervalDays,
+  sessionPackPaymentAmount,
+  sessionsInMonth,
+  sessionsPerWeek,
+  yearlyPaymentDates,
+  sessionPackPaymentDates,
+} from "../../domain/payments";
+import type {
+  Activity,
+  CostModel,
+  CurrencyDisplayMode,
+  IsoWeekday,
+  RecurrenceType,
+  SwipeActionId,
+} from "../../domain/types";
 import { useBudgetStore } from "../../store/budgetStore";
 import {
   activityToDraft,
@@ -25,7 +45,8 @@ import {
   sortActivities,
 } from "../../utils/formatters";
 import type { ActivityDraft } from "../../utils/formatters";
-import { ActivityIcon, ColorPicker, IconPicker, readableAccent, tint } from "../ui/IconPicker";
+import { ColorPicker, readableAccent, tint } from "../ui/IconPicker";
+import { EntityMark, MarkFields } from "../ui/EntityMark";
 import { Button } from "../ui/Button";
 import { EmptyState } from "../ui/EmptyState";
 import { Field, FieldGroup } from "../ui/Field";
@@ -36,8 +57,18 @@ const RECURRENCE_TYPES: RecurrenceType[] = ["weekly", "monthly", "yearly", "sess
 const COST_MODELS: { value: CostModel; label: string; hint: string }[] = [
   { value: "auto", label: "Automatic", hint: "Derived from the recurrence type and whichever price is filled in." },
   { value: "perSession", label: "Per session", hint: "Session price multiplied by the sessions you expect each month." },
+  {
+    value: "sessionPack",
+    label: "Per session, paid in blocks",
+    hint: "Sessions happen at one rate and you pay at another — twice a week, settled every ten sessions. Two sessions a week is not two payments a week.",
+  },
   { value: "schedule", label: "Real schedule", hint: "Session price multiplied by the occurrences that truly fall in each month." },
   { value: "fixed", label: "Fixed monthly", hint: "One explicit monthly amount, whatever the calendar does." },
+  {
+    value: "fixedYearly",
+    label: "Fixed yearly",
+    hint: "A real annual payment on a real date. The monthly figure shown is the year averaged over twelve, and is labelled as such — no monthly charge is ever generated.",
+  },
 ];
 
 type SortMode = "order" | "name" | "cost";
@@ -161,7 +192,10 @@ export const ActivityPanel: React.FC = () => {
     reorder(activity.id, target.id);
   };
 
-  const preview = useMemo(() => buildPreview(form, editing, year, month), [form, editing, year, month]);
+  const preview = useMemo(
+    () => buildPreview(form, editing, year, month, snapshot.settings.currencyDisplayMode),
+    [form, editing, year, month, snapshot.settings.currencyDisplayMode],
+  );
 
   /**
    * What the renewal date is currently doing, said where it is entered.
@@ -172,6 +206,20 @@ export const ActivityPanel: React.FC = () => {
    */
   const renewalHint = (() => {
     const parsed = parseLocalDate(form.nextRenewalDate);
+    // For the two payment-cycle models the date is not an override at all — it
+    // is the baseline the whole series counts from, and a past one is rolled
+    // forward rather than ignored. Saying the opposite would be worse than
+    // saying nothing.
+    if (form.costModel === "fixedYearly") {
+      return parsed
+        ? "The charge repeats on this day every year. Change it and every future date follows."
+        : "Set the day this renews. Without it, the yearly charge cannot be placed on a calendar at all — and the app will not invent a date for it.";
+    }
+    if (form.costModel === "sessionPack") {
+      return parsed
+        ? "The payment cycle counts from this date. Change it and every future payment follows."
+        : "Set the date of the next payment. Without it, the payments cannot be placed on a calendar and the app will not invent dates for them.";
+    }
     if (!parsed) return "Optional. Leave empty to let the schedule decide the next date.";
     const today = new Date();
     if (parsed < new Date(today.getFullYear(), today.getMonth(), today.getDate())) {
@@ -179,6 +227,62 @@ export const ActivityPanel: React.FC = () => {
     }
     return "Overrides the next date in the upcoming timeline. It never changes what the activity costs.";
   })();
+
+  /**
+   * The derived halves of the two payment-cycle models, priced through the very
+   * same functions that price a saved activity — so the editor can never show a
+   * figure the stored record disagrees with.
+   */
+  const draftActivity = useMemo(() => draftToActivity(form, editing), [form, editing]);
+  const money = (value: number | null | undefined) =>
+    value == null ? "—" : formatMoney(value, form.currency, snapshot.settings.currencyDisplayMode);
+
+  const packSummary = useMemo(() => {
+    const amount = sessionPackPaymentAmount(draftActivity);
+    const perPayment = normalizeSessionsPerPayment(draftActivity.sessionsPerPayment);
+    const interval = sessionPackIntervalDays(draftActivity);
+    const perWeek = sessionsPerWeek(draftActivity);
+    if (amount == null || perPayment == null) {
+      return { amount: "—", hint: "Fill in a session price and how many sessions one payment covers." };
+    }
+    const rate =
+      perWeek == null
+        ? ""
+        : ` ${trimNumber(perWeek)} session${perWeek === 1 ? "" : "s"} a week is not ${trimNumber(perWeek)} payment${perWeek === 1 ? "" : "s"} a week —`;
+    return {
+      amount: `${money(amount)} · ${perPayment} × ${money(draftActivity.pricePerSession)}`,
+      hint: `${interval != null ? `About one payment every ${describeDays(interval)}.` : ""}${rate} the sessions and the payments are counted separately.`,
+    };
+  }, [draftActivity, form.currency, snapshot.settings.currencyDisplayMode]);
+
+  const yearlySummary = useMemo(() => {
+    const amount = fixedYearlyAmount(draftActivity);
+    const monthly = amount == null ? "—" : `${money(amount / 12)} /month avg.`;
+    const dates = yearlyPaymentDates(draftActivity, new Date(), 3);
+    if (dates.length === 0) {
+      return {
+        monthly,
+        dates: "No date set",
+        hint: "Set the renewal date below and the next three charges appear here.",
+      };
+    }
+    return {
+      monthly,
+      dates: dates.map((date) => date.toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" })).join(" · "),
+      hint: "One charge a year, on the renewal date below — never a monthly one.",
+    };
+  }, [draftActivity, form.currency, snapshot.settings.currencyDisplayMode]);
+
+  /** The next payments of a session pack, for the renewal group's preview. */
+  const packDates = useMemo(
+    () =>
+      form.costModel === "sessionPack"
+        ? sessionPackPaymentDates(draftActivity, new Date(), 3)
+            .map((date) => date.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" }))
+            .join(" · ")
+        : "",
+    [draftActivity, form.costModel],
+  );
 
   const draftAccent = form.color || "";
 
@@ -297,13 +401,30 @@ export const ActivityPanel: React.FC = () => {
                   ))}
                 </select>
               </Field>
-              <Field label="Icon" group>
-                <IconPicker value={form.icon || undefined} accent={draftAccent || undefined} onChange={(icon) => patch({ icon: icon ?? "" })} />
-              </Field>
               <Field label="Colour" span group>
                 <ColorPicker value={form.color || undefined} onChange={(color) => patch({ color: color ?? "" })} />
               </Field>
             </FieldGroup>
+
+            {/* The same icon controls the wishlist uses, from the same module:
+                a library icon and a live preview in view, an image link and a
+                site to take the icon from one tap behind. Activities used to
+                have the library and nothing else. */}
+            <MarkFields
+              source={{ icon: form.icon, iconUrl: form.iconUrl, sourceUrl: form.iconSourceUrl }}
+              accent={draftAccent || "var(--accent)"}
+              fallback={<Circle size={20} color={draftAccent || "var(--accent)"} />}
+              sourceLabel="Icon from a website"
+              sourcePlaceholder="navigraph.com"
+              sourceHint="The developer, publisher or club whose icon identifies this — not necessarily where it is paid for. Nothing here changes any other link."
+              onChange={(next) =>
+                patch({
+                  ...(next.icon !== undefined ? { icon: next.icon } : {}),
+                  ...(next.iconUrl !== undefined ? { iconUrl: next.iconUrl } : {}),
+                  ...(next.sourceUrl !== undefined ? { iconSourceUrl: next.sourceUrl } : {}),
+                })
+              }
+            />
 
             <FieldGroup title="Recurrence">
               <Field label="Recurrence type">
@@ -357,6 +478,97 @@ export const ActivityPanel: React.FC = () => {
                     value={form.sessionsPerMonth}
                     onChange={(event) => patch({ sessionsPerMonth: event.target.value })}
                   />
+                </Field>
+              </FieldGroup>
+            )}
+
+            {/* The whole point of this model, laid out so the distinction
+                cannot be missed: how often it happens, then how often it is
+                paid for, then what one payment is. */}
+            {form.costModel === "sessionPack" && (
+              <FieldGroup title="Sessions and payments">
+                <Field label="Price per session">
+                  <input
+                    className="input"
+                    type="number"
+                    step="any"
+                    min="0"
+                    placeholder="20"
+                    value={form.pricePerSession}
+                    onChange={(event) => patch({ pricePerSession: event.target.value })}
+                  />
+                </Field>
+                <Field label="Sessions" group hint="How often the activity happens.">
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+                    <input
+                      className="input"
+                      type="number"
+                      step="any"
+                      min="0"
+                      placeholder="2"
+                      aria-label="Sessions per period"
+                      value={form.sessionsPerPeriod}
+                      onChange={(event) => patch({ sessionsPerPeriod: event.target.value })}
+                      style={{ minWidth: 0 }}
+                    />
+                    <span className="text-caption" aria-hidden="true">
+                      per
+                    </span>
+                    <select
+                      className="select"
+                      aria-label="Session frequency unit"
+                      value={form.sessionPeriod}
+                      onChange={(event) => patch({ sessionPeriod: event.target.value as "week" | "month" })}
+                      style={{ width: "auto" }}
+                    >
+                      <option value="week">week</option>
+                      <option value="month">month</option>
+                    </select>
+                  </div>
+                </Field>
+                <Field label="Pay after" hint="Sessions bought at once.">
+                  <input
+                    className="input"
+                    type="number"
+                    min="1"
+                    step="1"
+                    placeholder="10"
+                    value={form.sessionsPerPayment}
+                    onChange={(event) => patch({ sessionsPerPayment: event.target.value })}
+                  />
+                </Field>
+                <Field label="One payment" span group hint={packSummary.hint}>
+                  <output className="text-callout" style={{ fontWeight: 600 }}>
+                    {packSummary.amount}
+                  </output>
+                </Field>
+              </FieldGroup>
+            )}
+
+            {form.costModel === "fixedYearly" && (
+              <FieldGroup title="Yearly charge">
+                <Field label="Amount per year" emphasised>
+                  <input
+                    className="input"
+                    type="number"
+                    step="any"
+                    min="0"
+                    placeholder="60"
+                    value={form.yearlyEstimate}
+                    onChange={(event) => patch({ yearlyEstimate: event.target.value })}
+                  />
+                </Field>
+                <Field
+                  label="Monthly equivalent"
+                  group
+                  hint="Shown for comparison only. You are billed once a year — the app never creates a monthly charge for this."
+                >
+                  <output className="text-callout" style={{ fontWeight: 600 }}>
+                    {yearlySummary.monthly}
+                  </output>
+                </Field>
+                <Field label="Next charges" span group hint={yearlySummary.hint}>
+                  <output className="text-callout">{yearlySummary.dates}</output>
                 </Field>
               </FieldGroup>
             )}
@@ -420,7 +632,10 @@ export const ActivityPanel: React.FC = () => {
                   onChange={(event) => patch({ pricePerMonth: event.target.value })}
                 />
               </Field>
-              <Field label="Session cost" emphasised={form.costModel === "perSession" || form.costModel === "schedule"}>
+              <Field
+                label="Session cost"
+                emphasised={form.costModel === "perSession" || form.costModel === "schedule" || form.costModel === "sessionPack"}
+              >
                 <input
                   className="input"
                   type="number"
@@ -440,7 +655,11 @@ export const ActivityPanel: React.FC = () => {
                   onChange={(event) => patch({ pricePerPurchase: event.target.value })}
                 />
               </Field>
-              <Field label="Yearly estimate" emphasised={form.recurrenceType === "yearly"}>
+              <Field
+                label="Yearly estimate"
+                emphasised={form.recurrenceType === "yearly" || form.costModel === "fixedYearly"}
+                hint={form.costModel === "fixedYearly" ? "The same field as the yearly charge above." : undefined}
+              >
                 <input
                   className="input"
                   type="number"
@@ -488,9 +707,17 @@ export const ActivityPanel: React.FC = () => {
                 is a schedule, and it is most useful precisely where there is
                 not one — an annual subscription that renews on the day it was
                 bought, which no recurrence rule can know. */}
-            <FieldGroup title="Next renewal">
+            <FieldGroup
+              title={
+                form.costModel === "sessionPack"
+                  ? "Next payment"
+                  : form.costModel === "fixedYearly"
+                    ? "Renewal date"
+                    : "Next renewal"
+              }
+            >
               <Field
-                label="Renews on"
+                label={form.costModel === "sessionPack" ? "Next payment falls on" : "Renews on"}
                 span
                 hint={renewalHint}
               >
@@ -501,7 +728,12 @@ export const ActivityPanel: React.FC = () => {
                   onChange={(event) => patch({ nextRenewalDate: event.target.value })}
                 />
               </Field>
-              {form.nextRenewalDate && (
+              {packDates && (
+                <Field label="Then" span group hint="Every payment after that, from the date above.">
+                  <output className="text-callout">{packDates}</output>
+                </Field>
+              )}
+              {form.nextRenewalDate && form.costModel !== "sessionPack" && form.costModel !== "fixedYearly" && (
                 <Field label="Clear it" group>
                   <Button type="button" variant="ghost" size="sm" onClick={() => patch({ nextRenewalDate: "" })}>
                     Use the schedule instead
@@ -626,22 +858,11 @@ export const ActivityPanel: React.FC = () => {
                       style={{ flex: "0 0 auto", color: "var(--text-tertiary)", cursor: "grab" }}
                     />
                   )}
-                  <span
-                    aria-hidden="true"
-                    style={{
-                      display: "grid",
-                      placeItems: "center",
-                      flex: "0 0 auto",
-                      width: 34,
-                      height: 34,
-                      borderRadius: "var(--radius-md)",
-                      background: accent ? tint(accent, 0.18) : "var(--bg-inset)",
-                      border: `1px solid ${accent ? tint(accent, 0.32) : "var(--border)"}`,
-                      color: accent ? readableAccent(accent) : "var(--text-secondary)",
-                    }}
-                  >
-                    <ActivityIcon name={activity.icon} size={17} color="currentColor" />
-                  </span>
+                  <EntityMark
+                    source={{ icon: activity.icon, iconUrl: activity.iconUrl, sourceUrl: activity.iconSourceUrl }}
+                    accent={accent ?? "var(--text-secondary)"}
+                    fallback={<Circle size={16} color={accent ? readableAccent(accent) : "var(--text-secondary)"} />}
+                  />
                   <div style={{ minWidth: 0 }}>
                     <div className="text-callout" style={{ fontWeight: 600, wordBreak: "break-word" }}>
                       {activity.name}
@@ -668,9 +889,7 @@ export const ActivityPanel: React.FC = () => {
                           invites someone to look for a charge that never
                           arrives. */}
                       <span className="text-caption">
-                        {activity.recurrenceType === "yearly" && (activity.costModel ?? "auto") === "auto"
-                          ? " /month avg."
-                          : " /month"}
+                        {isAveragedMonthly(activity) ? " /month avg." : " /month"}
                       </span>
                     </strong>
                     <div className="text-caption" style={{ whiteSpace: "nowrap" }}>
@@ -757,10 +976,27 @@ function describeActivity(activity: Activity, year: number, month: number): stri
   if (model === "perSession") {
     return `${activity.sessionsPerMonth ?? 0} sessions/month · ${state}`;
   }
+  if (model === "sessionPack") {
+    // Both facts, in that order: what happens, and what is paid. The card is
+    // the one place someone glances at rather than reads, so it must not leave
+    // the impression that a €200 charge lands twice a week.
+    const sessions = sessionsInMonth(activity, year, month);
+    const cycle = describePaymentCycle(activity);
+    const monthly = sessions == null ? "" : `≈ ${trimNumber(sessions)} in ${monthName(month)} · `;
+    return `${monthly}${cycle ?? "session pack"} · ${state}`;
+  }
+  if (model === "fixedYearly") {
+    return `billed once a year · ${state}`;
+  }
   if (model === "fixed") {
     return `fixed monthly · ${state}`;
   }
   return `${activity.recurrenceType} · every ${activity.recurrenceInterval} · ${state}`;
+}
+
+/** A number with at most two decimals and no trailing zeroes. */
+function trimNumber(value: number): string {
+  return Number.isInteger(value) ? String(value) : String(Math.round(value * 100) / 100);
 }
 
 interface Preview {
@@ -772,12 +1008,21 @@ interface Preview {
  * Prices the in-progress form through the very same functions that price a
  * saved activity, so the preview can never drift from the stored maths.
  */
-function buildPreview(draft: ActivityDraft, editing: Activity | null, year: number, month: number): Preview {
+function buildPreview(
+  draft: ActivityDraft,
+  editing: Activity | null,
+  year: number,
+  month: number,
+  // The user's own display mode, not a hardcoded one. The preview and the card
+  // it previews were formatting the same figure two different ways — "€ 200,00"
+  // in the estimate and "€ EUR 200,00" on the row — which reads as two numbers.
+  displayMode: CurrencyDisplayMode,
+): Preview {
   const activity = draftToActivity(draft, editing);
   const period = { year, month };
   const monthly = monthlyEstimateNative(activity, period);
   const yearly = yearlyEstimateNative(activity, monthly, period);
-  const money = (value: number | null | undefined) => formatMoney(value ?? 0, activity.currency, "symbol");
+  const money = (value: number | null | undefined) => formatMoney(value ?? 0, activity.currency, displayMode);
   const totals = `≈ ${money(monthly)}/month, ${money(yearly)}/year`;
 
   if (!activity.active) {
@@ -811,6 +1056,36 @@ function buildPreview(draft: ActivityDraft, editing: Activity | null, year: numb
     case "fixed": {
       if (activity.pricePerMonth == null) return { headline: "Add a monthly cost to see the estimate.", detail: "" };
       return { headline: `${money(activity.pricePerMonth)}/month ${totals}`, detail: "A flat amount, whatever the calendar does." };
+    }
+    case "sessionPack": {
+      const payment = sessionPackPaymentAmount(activity);
+      const perPayment = normalizeSessionsPerPayment(activity.sessionsPerPayment);
+      if (activity.pricePerSession == null) return { headline: "Add a session cost to see the estimate.", detail: "" };
+      if (perPayment == null) {
+        return { headline: "Say how many sessions one payment covers.", detail: "Until then this is priced per session." };
+      }
+      const interval = sessionPackIntervalDays(activity);
+      const sessions = sessionsInMonth(activity, year, month);
+      return {
+        headline: `${money(payment)} every ${perPayment} sessions ${totals.replace("/month", "/month avg.")}`,
+        detail: `${sessions == null ? "" : `About ${formatCount(Math.round(sessions * 100) / 100, "session")} in ${monthName(month)}. `}${
+          interval == null ? "" : `That is one payment about every ${describeDays(interval)}. `
+        }The monthly figure spreads the pack across the month; the payment lands in one go.`,
+      };
+    }
+    case "fixedYearly": {
+      const amount = fixedYearlyAmount(activity);
+      if (amount == null) return { headline: "Add the yearly amount to see the estimate.", detail: "" };
+      const dates = yearlyPaymentDates(activity, new Date(), 2);
+      return {
+        headline: `${money(amount)}/year ≈ ${money(amount / 12)}/month avg.`,
+        detail:
+          dates.length > 0
+            ? `Billed once a year on ${dates
+                .map((date) => date.toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" }))
+                .join(", then ")}. The monthly figure is an average, not a charge.`
+            : "Billed once a year. Set a renewal date below so the charge can be placed on the timeline — the app will not invent one.",
+      };
     }
     default: {
       /*

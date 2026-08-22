@@ -42,7 +42,7 @@ SQLite should no longer be considered the reference implementation.
 
 The persistence layer has been verified against a **live PostgreSQL server**, not only against mocks. 71 integration tests cover schema DDL, migrations, repository SQL, and the full HTTP API path; a browser session was additionally driven end to end (UI → API → PostgreSQL → UI) including a two-device read/write cycle.
 
-Migrations 011 and 012 were additionally run against a database that **already held data** — the upgrade path that once answered every request with 503 — and confirmed to add their columns without touching a row.
+Migrations 011, 012 and 013 were additionally run against a database that **already held data** — the upgrade path that once answered every request with 503 — and confirmed to add their columns without touching a row. For 013 the test goes further: it creates `activities` and `wishlist_items` in their *pre-013* shape, so `CREATE TABLE IF NOT EXISTS` in `schema.ts` is a no-op against them and the new columns can only have come from the `ALTER`s. Removing any one of them makes the test fail, which is how it was checked.
 
 The snapshot save flow performs targeted `ON CONFLICT (id) DO UPDATE SET ...` upserts for all top-level and nested child records (`activities`, `spending_entries`, `wishlist_items`, `wallet_entries`, `closed_months`, `categories`, `seasonal_presets`, `scenario_presets`). Only records removed from memory are deleted using targeted `NOT IN` queries. Whole-table deletions for year records have been eliminated.
 
@@ -72,6 +72,7 @@ These could not be observed with a mocked driver and were all failing in real Po
 | `010-wishlist-icon` | `wishlist_items.icon` — an explicit library icon, which beats any favicon |
 | `011-monthly-notes` | `years.monthly_notes` (JSONB, `DEFAULT '{}'`) — see below |
 | `012-activity-next-renewal` | `activities.next_renewal_date` — a renewal date the recurrence rule cannot derive |
+| `013-payment-cycles-and-icons` | `activities.sessions_per_period`, `session_period`, `sessions_per_payment`, `icon_url`, `icon_source_url`; `wishlist_items.icon_url` |
 
 ### `schema.ts` runs before the migrations, and that constrains what may go in it
 
@@ -118,6 +119,17 @@ The parser accepts both an object (what the Neon driver returns for JSONB) and a
 ### Why 012 is a plain column and not part of the schedule
 
 `activities.next_renewal_date` is display-only: it overrides which date the upcoming timeline shows and **never** feeds an estimate. That is deliberate. Every other schedule field is an input to `monthlyEstimateNative`, so letting a typed date join them would mean one keystroke could rewrite a year of budget figures. Keeping it out of the schedule is what makes it safe to type a date you are unsure about.
+
+### Why 013 splits a frequency from a payment cycle
+
+`sessions_per_period` + `session_period` say how often the activity *happens*; `sessions_per_payment` says how many of those one payment covers. They are three columns because they are three facts, and collapsing them is precisely the error the `sessionPack` model exists to prevent — twice a week is not twice a week's worth of payments.
+
+Two consequences worth knowing:
+
+- **The payment amount is not stored.** It is `price_per_session × sessions_per_payment`, derived on read. A stored copy is a second answer that can disagree with the first, and money that disagrees with itself is the worst kind of bug this schema can carry.
+- **`session_period` stores `'month'` or nothing.** `week` is the default and is written as absence, which is also what every row created before this column existed says — so old rows and new ones mean the same thing without a backfill.
+
+`icon_url` and `icon_source_url` give an activity the identity options a wishlist item has had since migrations 009 and 010. `icon_source_url` is kept apart from any purchase or booking link for the same reason `wishlist_items.brand_url` is kept apart from `url`: where a thing is bought and who makes it are two different facts, and one column cannot carry both.
 
 ### Concurrency and multi-device safety
 

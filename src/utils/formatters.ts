@@ -23,10 +23,20 @@ export interface ActivityDraft {
   notes: string;
   /** Lucide icon name, empty when the activity uses the default mark. */
   icon: string;
+  /** A direct image link, empty when none is set. */
+  iconUrl: string;
+  /** A site whose favicon identifies the activity, empty when none is set. */
+  iconSourceUrl: string;
   /** Accent colour, empty when the card stays neutral. */
   color: string;
   costModel: CostModel;
   sessionsPerMonth: string;
+  /** Frequency for the session-pack model, e.g. "2". */
+  sessionsPerPeriod: string;
+  /** Unit for the frequency above. */
+  sessionPeriod: "week" | "month";
+  /** Sessions bought at once, for the session-pack model. */
+  sessionsPerPayment: string;
   weekdays: IsoWeekday[];
   dayOfMonth: string;
   startDate: string;
@@ -48,6 +58,8 @@ export interface WishlistDraft {
   brandUrl: string;
   /** A library icon, which overrides anything derived from a URL. */
   icon: string;
+  /** A direct image link, which beats both the library icon and the favicon. */
+  iconUrl: string;
   /** Accent colour, empty when the card falls back to its hashed colour. */
   color: string;
 }
@@ -110,9 +122,14 @@ export function activityToDraft(activity: Activity | null, snapshot: BudgetSnaps
     seasonalTag: activity?.seasonalTag ?? "",
     notes: activity?.notes ?? "",
     icon: activity?.icon ?? "",
+    iconUrl: activity?.iconUrl ?? "",
+    iconSourceUrl: activity?.iconSourceUrl ?? "",
     color: activity?.color ?? "",
     costModel: activity?.costModel ?? "auto",
     sessionsPerMonth: valueToInput(activity?.sessionsPerMonth),
+    sessionsPerPeriod: valueToInput(activity?.sessionsPerPeriod),
+    sessionPeriod: activity?.sessionPeriod === "month" ? "month" : "week",
+    sessionsPerPayment: valueToInput(activity?.sessionsPerPayment),
     weekdays: normalizeWeekdays(activity?.weekdays),
     dayOfMonth: valueToInput(activity?.dayOfMonth),
     startDate: activity?.startDate ?? "",
@@ -138,11 +155,21 @@ export function activityPayloadFromDraft(draft: ActivityDraft): Omit<Activity, "
     seasonalTag: draft.seasonalTag,
     notes: draft.notes,
     icon: draft.icon.trim() || undefined,
+    // Validated here rather than at render time, so an unusable or unsafe link
+    // is never stored — the same rule the wishlist links follow.
+    iconUrl: normalizeItemUrl(draft.iconUrl),
+    iconSourceUrl: normalizeItemUrl(draft.iconSourceUrl),
     color: draft.color.trim() || undefined,
     // `auto` is the absence of a cost model: storing it would only add noise to
     // records that already behave that way.
     costModel: draft.costModel === "auto" ? undefined : draft.costModel,
     sessionsPerMonth: parseAmount(draft.sessionsPerMonth),
+    sessionsPerPeriod: parseAmount(draft.sessionsPerPeriod),
+    // Only meaningful alongside a frequency, and `week` is the default, so it
+    // is stored only when it differs — an absent value must keep meaning
+    // "week" for every activity written before this field existed.
+    sessionPeriod: draft.sessionPeriod === "month" ? "month" : undefined,
+    sessionsPerPayment: parseAmount(draft.sessionsPerPayment),
     weekdays: weekdays.length > 0 ? weekdays : undefined,
     dayOfMonth: clampDayOfMonth(parseAmount(draft.dayOfMonth)),
     startDate: draft.startDate.trim() || undefined,
@@ -183,6 +210,7 @@ export function wishlistToDraft(item: WishlistItem | null): WishlistDraft {
     url: item?.url ?? "",
     brandUrl: item?.brandUrl ?? "",
     icon: item?.icon ?? "",
+    iconUrl: item?.iconUrl ?? "",
     color: item?.color ?? "",
   };
 }
@@ -193,7 +221,7 @@ export function wishlistToDraft(item: WishlistItem | null): WishlistDraft {
  */
 export function wishlistPayloadFromDraft(
   draft: WishlistDraft,
-): Pick<WishlistItem, "name" | "actualPrice" | "effectiveValue" | "currency" | "priority" | "notes" | "inWishlist" | "url" | "brandUrl" | "icon" | "color"> {
+): Pick<WishlistItem, "name" | "actualPrice" | "effectiveValue" | "currency" | "priority" | "notes" | "inWishlist" | "url" | "brandUrl" | "icon" | "iconUrl" | "color"> {
   const price = parseAmount(draft.actualPrice);
   return {
     name: draft.name.trim(),
@@ -206,6 +234,7 @@ export function wishlistPayloadFromDraft(
     url: normalizeItemUrl(draft.url),
     brandUrl: normalizeItemUrl(draft.brandUrl),
     icon: draft.icon.trim() || undefined,
+    iconUrl: normalizeItemUrl(draft.iconUrl),
     color: draft.color.trim() || undefined,
   };
 }

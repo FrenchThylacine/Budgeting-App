@@ -230,8 +230,8 @@ export const HistoryPanel: React.FC = () => {
                           record.delta == null
                             ? undefined
                             : record.delta < 0
-                            ? "var(--danger)"
-                            : "var(--success)",
+                            ? "var(--danger-text)"
+                            : "var(--success-text)",
                       }}
                     >
                       {record.delta == null

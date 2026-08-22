@@ -4,6 +4,7 @@ import { calculateYear } from "./domain/calculations";
 import { Sidebar } from "./components/layout/Sidebar";
 import { MobileNav } from "./components/layout/MobileNav";
 import { Header } from "./components/layout/Header";
+import { PeriodSelector } from "./components/layout/PeriodSelector";
 import { Dashboard } from "./components/dashboard/Dashboard";
 import { ActivityPanel } from "./components/activity/ActivityPanel";
 import { SpendingPanel } from "./components/spending/SpendingPanel";
@@ -77,25 +78,14 @@ import { Tricolour } from "./components/ui/Tricolour";
 
 type TabKey = "dashboard" | "activities" | "spending" | "wishlist" | "wallet" | "analytics" | "scenarios" | "history" | "settings" | "categories";
 
-/**
- * Navigation order, so the transition knows which way the app moved.
+/*
+ * The tab transition no longer takes a direction.
  *
- * The same order the sidebar lists them in: moving down the list enters from
- * the right, moving up enters from the left, matching the direction the eye
- * travelled to make the choice.
+ * It used to receive each tab's position in the navigation so the sweep could
+ * run the way the eye had travelled. The direction is now fixed — left to
+ * right, every time — so the ordering that fed it was information nothing
+ * read, and a list that had to be kept in step with the sidebar for no gain.
  */
-const TAB_ORDER: TabKey[] = [
-  "dashboard",
-  "spending",
-  "activities",
-  "wishlist",
-  "wallet",
-  "analytics",
-  "scenarios",
-  "history",
-  "categories",
-  "settings",
-];
 
 const SIDEBAR_PREF_KEY = "sidebar-collapsed";
 
@@ -156,30 +146,35 @@ export default function App() {
   }, [snapshot.settings.darkMode]);
 
   /**
-   * Move the page in the direction time moved.
+   * Move the page when the period changes — always the same way.
    *
-   * Going back a month and going forward a month produced exactly the same
-   * fade, so the only confirmation that the arrow did what was asked was to
-   * read the heading. The animation is applied to the frame rather than by
-   * remounting the panel, so a typed search or a scroll position survives the
-   * period change — remounting to get an animation costs the user their place.
+   * This used to mirror the direction of travel: forward slid in from the
+   * right, back from the left. That is defensible and it is not what this
+   * application wants. A motion whose direction changes is a second thing to
+   * read, and the period is already stated in three places; a single,
+   * predictable left-to-right sweep reads as "the view refreshed" rather than
+   * as an assertion about time the user has to decode. The *data* still moves
+   * whichever way the arrow said.
+   *
+   * The animation is applied to the frame rather than by remounting the panel,
+   * so a typed search or a scroll position survives the period change —
+   * remounting to get an animation costs the user their place.
    */
   const periodOrder = periodOrdinal(snapshot.settings);
   const previousOrder = useRef(periodOrder);
   useEffect(() => {
     const frame = panelFrameRef.current;
-    const delta = periodOrder - previousOrder.current;
+    const changed = periodOrder !== previousOrder.current;
     previousOrder.current = periodOrder;
-    if (!frame || delta === 0) return;
+    if (!frame || !changed) return;
     if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
 
-    const className = delta > 0 ? "period-forward" : "period-back";
     // Removed first, so a rapid second press restarts the animation rather
     // than being swallowed because the class is already present.
-    frame.classList.remove("period-forward", "period-back");
+    frame.classList.remove("period-shift");
     void frame.offsetWidth;
-    frame.classList.add(className);
-    const timer = window.setTimeout(() => frame.classList.remove(className), 320);
+    frame.classList.add("period-shift");
+    const timer = window.setTimeout(() => frame.classList.remove("period-shift"), 320);
     return () => window.clearTimeout(timer);
   }, [periodOrder]);
 
@@ -297,6 +292,13 @@ export default function App() {
 
           <Header calculation={calculation} setRolloverOpen={setRolloverOpen} />
 
+          {/* Above the historical indicator in the DOM *and* in the paint
+              order, which is what makes its popover reach the pointer. See
+              `.period-bar` in the stylesheet: the fix was removing the blanket
+              `z-index: 1` from every child of the main area, not adding a
+              larger number here. */}
+          <PeriodSelector />
+
           {isHistorical && (
             historicalEditUnlocked ? (
               <div className="historical-banner historical-banner-unlocked" role="alert">
@@ -305,11 +307,10 @@ export default function App() {
                   Editing <strong>{periodLabel(snapshot.settings)}</strong> — a closed period. Changes are
                   recorded in the audit trail.
                 </span>
-                <button
-                  className="btn btn-secondary btn-sm"
-                  onClick={lockHistoricalEditing}
-                  style={{ marginLeft: "auto" }}
-                >
+                {/* Pushed to the trailing edge by the stylesheet, not by an
+                    inline style: inline wins over every rule, so the phone
+                    layout could not stack it without `!important`. */}
+                <button className="btn btn-secondary btn-sm" onClick={lockHistoricalEditing}>
                   <Lock size={14} /> Relock
                 </button>
               </div>
@@ -317,11 +318,7 @@ export default function App() {
               <div className="historical-banner" role="status">
                 <Lock size={16} aria-hidden="true" />
                 <span>Historical period · period-bound financial data is read-only.</span>
-                <button
-                  className="btn btn-ghost btn-sm"
-                  onClick={() => setHistoricalDialogOpen(true)}
-                  style={{ marginLeft: "auto" }}
-                >
+                <button className="btn btn-ghost btn-sm" onClick={() => setHistoricalDialogOpen(true)}>
                   <Unlock size={14} /> Edit this period
                 </button>
               </div>
@@ -342,7 +339,7 @@ export default function App() {
                 </div>
               }
             >
-              <TabTransition tabKey={activeTab} ordinal={TAB_ORDER.indexOf(activeTab)}>
+              <TabTransition tabKey={activeTab}>
                 {tabs[activeTab]}
               </TabTransition>
             </Suspense>

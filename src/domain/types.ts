@@ -195,13 +195,21 @@ export interface BudgetCategory {
 
 /**
  * How an activity's monthly cost is derived.
- *  - `auto`      : legacy behaviour, inferred from recurrenceType and prices.
- *  - `perSession`: price per session × sessions per month.
- *  - `schedule`  : price per session × real occurrences in the actual month,
- *                  counted from weekdays or a day-of-month rule.
- *  - `fixed`     : an explicit monthly amount.
+ *  - `auto`       : legacy behaviour, inferred from recurrenceType and prices.
+ *  - `perSession` : price per session × sessions per month.
+ *  - `schedule`   : price per session × real occurrences in the actual month,
+ *                   counted from weekdays or a day-of-month rule.
+ *  - `fixed`      : an explicit monthly amount.
+ *  - `sessionPack`: price per session, at a stated frequency, **paid for in
+ *                   blocks of N sessions**. Two sessions a week is not two
+ *                   payments a week, and this is the only model that says so:
+ *                   the monthly figure is an accrual, and the payments are a
+ *                   separate dated series. See `domain/payments.ts`.
+ *  - `fixedYearly`: a real annual payment on a real date. The monthly figure
+ *                   is an average and is labelled as one; no monthly payment
+ *                   event is ever produced.
  */
-export type CostModel = "auto" | "perSession" | "schedule" | "fixed";
+export type CostModel = "auto" | "perSession" | "schedule" | "fixed" | "sessionPack" | "fixedYearly";
 
 /** 1 = Monday … 7 = Sunday, matching ISO weekday numbering. */
 export type IsoWeekday = 1 | 2 | 3 | 4 | 5 | 6 | 7;
@@ -225,12 +233,49 @@ export interface Activity {
   notes: string;
   /** Lucide icon name shown on the activity card. */
   icon?: string;
+  /**
+   * A direct link to an image used as the activity's mark.
+   *
+   * Beats both the library icon and the site icon below, because it is the
+   * most specific thing the user can state. Rendered with a fallback: a URL
+   * that fails to load shows the default mark rather than a broken image.
+   */
+  iconUrl?: string;
+  /**
+   * A website whose icon identifies the activity — the developer, the
+   * publisher, the club.
+   *
+   * Kept apart from any purchase or booking link for the same reason the
+   * wishlist keeps `brandUrl` apart from `url`: where a thing is bought and
+   * who makes it are two different facts, and one field cannot carry both.
+   */
+  iconSourceUrl?: string;
   /** Accent colour that themes the whole activity widget. */
   color?: string;
   /** Which model drives the monthly estimate. Defaults to `auto`. */
   costModel?: CostModel;
   /** Sessions per month for the `perSession` model. */
   sessionsPerMonth?: number | null;
+  /**
+   * How often the sessions happen, for the `sessionPack` model: the number,
+   * with `sessionPeriod` supplying the unit. "2" and "week" is twice a week.
+   *
+   * Deliberately separate from `sessionsPerMonth`, which is a monthly figure
+   * feeding a different model. Storing "2 per week" as "8.67 per month" would
+   * make the editor show a number the user never typed, and would round-trip
+   * badly for anyone who later changed the frequency.
+   */
+  sessionsPerPeriod?: number | null;
+  /** Unit for `sessionsPerPeriod`. Defaults to `week`, which is how people speak. */
+  sessionPeriod?: "week" | "month";
+  /**
+   * Sessions bought at once, for the `sessionPack` model.
+   *
+   * The payment falls once per this many sessions — ten sessions at €20 is one
+   * €200 payment, not ten €20 ones and certainly not two a week. The amount is
+   * derived rather than stored, so it can never disagree with the price.
+   */
+  sessionsPerPayment?: number | null;
   /** ISO weekdays the activity occurs on, for the `schedule` model. */
   weekdays?: IsoWeekday[];
   /** Day of month (1-31) for monthly schedules, e.g. a subscription renewal. */
@@ -358,6 +403,14 @@ export interface WishlistItem {
    * win over anything derived from a URL.
    */
   icon?: string;
+  /**
+   * A direct link to an image used as the item's mark.
+   *
+   * The most specific answer available, so it beats the library icon and the
+   * site favicon alike. Rendered with a fallback, so a dead link shows the
+   * default mark rather than a broken image.
+   */
+  iconUrl?: string;
   /** Accent colour for the item card. */
   color?: string;
   /** Spending entry created when this item was bought, when linked. */

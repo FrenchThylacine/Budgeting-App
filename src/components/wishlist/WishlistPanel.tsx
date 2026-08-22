@@ -5,9 +5,8 @@ import { todayDateInput } from "../../domain/dates";
 import {
   PRIORITY_META,
   PRIORITY_ORDER,
-  faviconUrl,
   itemDomain,
-  itemIconDomain,
+  itemIconSourceUrl,
   normalizeItemUrl,
   parseItemUrl,
   purchaseDefaults,
@@ -18,7 +17,7 @@ import {
   withAlpha,
 } from "../../domain/wishlist";
 import type { WishlistLinkResult } from "../../domain/wishlist";
-import { ActivityIcon, IconPicker } from "../ui/IconPicker";
+import { EntityMark, MarkFields } from "../ui/EntityMark";
 import { AdvancedFields, EditorSheet } from "../ui/EditorSheet";
 import { seedCategoryIdOrFallback } from "../../domain/seedCategories";
 import { SwipeRow } from "../ui/SwipeRow";
@@ -59,61 +58,13 @@ function emptyDraft(baseCurrency: string, wishlistCategoryId: string): WishlistD
   return { ...wishlistToDraft(null), currency: baseCurrency, categoryId: wishlistCategoryId };
 }
 
-// ─── Favicon with a fallback that can never break the layout ─────────────────
-
-/**
- * Site icon for a wishlist item.
- *
- * The favicon service answers for any domain, including ones with no icon, so
- * a failed load falls back to a neutral mark rather than leaving a broken
- * image box in the card. The image is never given a referrer: the wishlist
- * should not tell a third party which page the user is looking at.
+/*
+ * The item's mark comes from the shared resolver in `ui/EntityMark`, which the
+ * activity editor uses too: image link, then library icon, then site icon,
+ * then a neutral fallback, with each network-fetched layer stepping down to the
+ * next when it fails. It used to live here as a private component, which is why
+ * activities had no equivalent at all.
  */
-const ItemMark: React.FC<{ domain: string | null; accent: string; size?: number; icon?: string }> = ({
-  domain,
-  accent,
-  size = 34,
-  icon,
-}) => {
-  const [failed, setFailed] = useState(false);
-  const showFavicon = domain != null && !failed;
-  return (
-    <span
-      aria-hidden="true"
-      style={{
-        display: "grid",
-        placeItems: "center",
-        width: size,
-        height: size,
-        flex: "0 0 auto",
-        borderRadius: 10,
-        background: withAlpha(accent, 0.18),
-        border: `1px solid ${withAlpha(accent, 0.28)}`,
-        overflow: "hidden",
-      }}
-    >
-      {icon ? (
-        // An explicit choice wins: many sites have no usable favicon, and some
-        // return a placeholder that renders as something indistinguishable
-        // from a broken image.
-        <ActivityIcon name={icon} size={size - 16} color={accent} />
-      ) : showFavicon ? (
-        <img
-          src={faviconUrl(domain, 64)}
-          alt=""
-          width={size - 14}
-          height={size - 14}
-          loading="lazy"
-          referrerPolicy="no-referrer"
-          onError={() => setFailed(true)}
-          style={{ display: "block", width: size - 14, height: size - 14, objectFit: "contain" }}
-        />
-      ) : (
-        <ShoppingBag size={size - 18} color={accent} />
-      )}
-    </span>
-  );
-};
 
 // ─── Shared edit form ────────────────────────────────────────────────────────
 
@@ -268,66 +219,33 @@ const EditForm: React.FC<EditFormProps> = ({ title, categories, currencies, draf
         </Field>
       </FieldGroup>
 
-      {/* Behind a disclosure: most items are bought and branded by the same
-          site, so asking everyone for a second link would tax the common case
-          to serve the uncommon one. */}
-      <AdvancedFields label="Icon, brand and colour">
-        {/* What the item will actually look like, resolved live from whatever
-            is filled in above. The chain has four steps and any of them can
-            quietly fail — a site with no icon, a favicon service answering with
-            a placeholder. Seeing the result before saving is the difference
-            between choosing an icon and hoping for one. */}
-        <div className="wishlist-mark-preview">
-          <ItemMark
-            domain={itemDomain(draft.brandUrl) ?? itemDomain(draft.url)}
-            accent={draft.color || "var(--accent)"}
-            icon={draft.icon || undefined}
-            size={40}
-          />
-          <span className="text-caption">
-            {draft.icon
-              ? "Using the icon you picked."
-              : itemDomain(draft.brandUrl)
-                ? `Using the site icon of ${itemDomain(draft.brandUrl)}.`
-                : itemDomain(draft.url)
-                  ? `Using the site icon of ${itemDomain(draft.url)}.`
-                  : "No link and no icon yet — a neutral mark is used."}
-          </span>
-        </div>
+      {/* The shared mark controls: a library icon and a preview in view, with
+          the image link and the maker's site one tap behind them. The seller
+          link above is never touched by any of it, which is the whole reason
+          the brand link exists as a second field. */}
+      <MarkFields
+        source={{ icon: draft.icon, iconUrl: draft.iconUrl, sourceUrl: draft.brandUrl }}
+        // The shop, when the brand field is empty. Preview only: filling this
+        // into the field would silently make the seller the brand.
+        sourceFallbackUrl={draft.url}
+        accent={draft.color || accent}
+        fallback={<ShoppingBag size={22} color={draft.color || accent} />}
+        sourceLabel="Maker's site"
+        sourcePlaceholder="azurpoly.com"
+        sourceHint="Use this when the maker is not the shop — a model kit from a marketplace, an add-on sold on one store and built by another. The seller link above is never changed. Leave it empty to use the shop's own icon."
+        onChange={(patch) =>
+          onChange({
+            ...(patch.icon !== undefined ? { icon: patch.icon } : {}),
+            ...(patch.iconUrl !== undefined ? { iconUrl: patch.iconUrl } : {}),
+            // "Reset the icon" clears the brand link too, which is what the
+            // control says; the seller link is a different fact and stays.
+            ...(patch.sourceUrl !== undefined ? { brandUrl: patch.sourceUrl } : {}),
+          })
+        }
+      />
 
-        <FieldGroup title="Brand">
-          <Field
-            label="Maker's site"
-            span
-            hint={
-              brandUrlError ? (
-                <span style={{ color: "var(--danger-text)" }}>Enter a valid web address (http or https only).</span>
-              ) : (
-                "Use this when the maker is not the shop — a model kit from a marketplace, an add-on sold on one store and built by another. The seller link above is never changed."
-              )
-            }
-          >
-            <input
-              className="input"
-              type="text"
-              inputMode="url"
-              placeholder="azurpoly.com"
-              value={draft.brandUrl}
-              onChange={(e) => onChange({ brandUrl: e.target.value })}
-              style={{ borderColor: brandUrlError ? "var(--danger)" : undefined }}
-            />
-          </Field>
-        </FieldGroup>
-
+      <AdvancedFields label="Colour">
         <FieldGroup title="Appearance">
-          <Field label="Icon" span group hint="Overrides the site icon. Use it when the site has none, or when the one it returns is not recognisable.">
-            <IconPicker
-              value={draft.icon || undefined}
-              accent={draft.color || undefined}
-              label=""
-              onChange={(name) => onChange({ icon: name ?? "" })}
-            />
-          </Field>
           <Field label="Colour" group>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
               <input
@@ -834,9 +752,9 @@ export const WishlistPanel: React.FC = () => {
           {filteredItems.map((item) => {
             const accent = wishlistItemAccent(item);
             // Two different facts: what the item looks like, and where it is
-            // bought. The icon follows the brand when there is one; the link
-            // always opens the shop.
-            const iconDomain = itemIconDomain(item);
+            // bought. The mark follows the brand when there is one (and the
+            // item's own icon or image link before that); the link always
+            // opens the shop.
             // The link's *label* must name where the link goes. It used to be
             // labelled with the icon's domain, so an item branded "azurpoly.com"
             // and sold on Contrail showed a link reading "azurpoly.com" that
@@ -896,7 +814,11 @@ export const WishlistPanel: React.FC = () => {
               >
                 {/* Header: mark, name, price */}
                 <div style={{ display: "flex", gap: 10, alignItems: "flex-start", minWidth: 0 }}>
-                  <ItemMark domain={iconDomain} accent={accent} icon={item.icon} />
+                  <EntityMark
+                    source={{ icon: item.icon, iconUrl: item.iconUrl, sourceUrl: itemIconSourceUrl(item) }}
+                    accent={accent}
+                    fallback={<ShoppingBag size={16} color={accent} />}
+                  />
                   <div style={{ minWidth: 0, flex: 1 }}>
                     <div
                       className="text-callout"
