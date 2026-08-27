@@ -1,8 +1,9 @@
 /**
  * Scenario diffs.
  *
- * Applying a scenario rewrites the monthly budget, the piloting rule and every
- * category cap it names. That used to happen on one click with nothing shown,
+ * Applying a scenario rewrites the monthly budget, every category cap it names,
+ * and — since the Piloting-specific control was removed — which activities are
+ * running and who pays for them. That used to happen on one click with nothing shown,
  * so the only way to learn what a scenario contained was to apply it and
  * compare. These tests pin what the preview must report.
  */
@@ -42,7 +43,7 @@ describe("scenarioDiff", () => {
 
   it("says nothing when the scenario restates what is already true", () => {
     const snapshot = base();
-    const changes = scenarioDiff(snapshot, preset({ monthlyBudget: 500, pilotIncludedInBudget: true }));
+    const changes = scenarioDiff(snapshot, preset({ monthlyBudget: 500 }));
     expect(changes).toEqual([]);
     expect(isScenarioActive(snapshot, preset({ monthlyBudget: 500 }))).toBe(true);
   });
@@ -56,11 +57,20 @@ describe("scenarioDiff", () => {
     expect(changes).toEqual([]);
   });
 
-  it("reports the piloting rule as counted or excluded", () => {
+  it("no longer reports a Piloting rule, whatever a legacy scenario stores", () => {
+    /*
+     * The control that produced this change is gone.
+     *
+     * It assumed every budget has an activity called "Piloting", which almost
+     * none do, and it could ask exactly one question about exactly one
+     * hardcoded thing. A scenario saved before the change still carries the
+     * field — the data round-trips — but it produces no change, is not shown
+     * in the preview, and is not applied. Per-activity enable/disable and
+     * funding replace it, generically.
+     */
     const changes = scenarioDiff(base(), preset({ pilotIncludedInBudget: false }));
-    expect(changes).toEqual([
-      { kind: "piloting", label: "Piloting counted in the budget", before: true, after: false },
-    ]);
+    expect(changes).toEqual([]);
+    expect(changes.some((change) => /piloting/i.test(change.label))).toBe(false);
   });
 
   it("reports each cap against its category, with its colour", () => {
@@ -101,21 +111,25 @@ describe("scenarioDiff", () => {
   it("collects every change a scenario makes", () => {
     const snapshot = base();
     const [first, second] = snapshot.categories;
+    const activity = snapshot.years["2026"].activities[0];
     const changes = scenarioDiff(
       snapshot,
       preset({
         monthlyBudget: 300,
-        pilotIncludedInBudget: false,
         categoryCaps: { [first.id]: 50, [second.id]: 75 },
+        activityStates: { [activity.id]: { enabled: false, funding: "other" } },
       }),
     );
-    expect(changes).toHaveLength(4);
+    // Budget, two caps, one activity disabled, one funding override.
+    expect(changes).toHaveLength(5);
     expect(changes.filter((c) => c.kind === "cap")).toHaveLength(2);
+    expect(changes.filter((c) => c.kind === "activity-enabled")).toHaveLength(1);
+    expect(changes.filter((c) => c.kind === "activity-funding")).toHaveLength(1);
   });
 });
 
 describe("scenarioFromCurrentState", () => {
-  it("captures the budget, the piloting rule and every cap that is set", () => {
+  it("captures the budget, every cap that is set, and every activity's state", () => {
     const snapshot = base();
     snapshot.categories[0].monthlyCap = 80;
     snapshot.categories[1].monthlyCap = 0;
@@ -123,7 +137,11 @@ describe("scenarioFromCurrentState", () => {
     const captured = scenarioFromCurrentState(snapshot, "Right now", "sc-new");
 
     expect(captured.monthlyBudget).toBe(500);
-    expect(captured.pilotIncludedInBudget).toBe(true);
+    // No Piloting field is written at all: capturing one would reintroduce the
+    // assumption the generic model exists to remove.
+    expect(captured.pilotIncludedInBudget).toBeUndefined();
+    const activityIds = snapshot.years["2026"].activities.map((activity) => activity.id);
+    expect(Object.keys(captured.activityStates ?? {}).sort()).toEqual([...activityIds].sort());
     // Zero is captured; unset categories are simply absent.
     expect(captured.categoryCaps).toEqual({
       [snapshot.categories[0].id]: 80,

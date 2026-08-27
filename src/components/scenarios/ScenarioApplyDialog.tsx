@@ -14,8 +14,8 @@ interface ScenarioApplyDialogProps {
 /**
  * What applying a scenario will change, before it changes.
  *
- * Applying one rewrites the monthly budget, the piloting rule and every
- * category cap the scenario names. That used to happen on a single click with
+ * Applying one rewrites the monthly budget, every category cap the scenario
+ * names, and which activities are running and who pays for them. That used to happen on a single click with
  * nothing shown, which meant the only way to find out what a scenario contained
  * was to apply it and compare — and the only way back was undo, if you noticed
  * in time.
@@ -63,9 +63,18 @@ export const ScenarioApplyDialog: React.FC<ScenarioApplyDialogProps> = ({
     };
   }, [onCancel]);
 
-  const format = (value: number | boolean | null): string => {
+  /**
+   * One value, whatever kind it is.
+   *
+   * A scenario change is a number (a budget or a cap), a boolean (an activity
+   * switched on or off) or a string (a funding classification). A formatter
+   * that only knew about money is what made the piloting boolean read as a
+   * currency amount before.
+   */
+  const format = (value: number | boolean | string | null): string => {
     if (value == null) return "not set";
-    if (typeof value === "boolean") return value ? "counted" : "excluded";
+    if (typeof value === "boolean") return value ? "enabled" : "disabled";
+    if (typeof value === "string") return value;
     return formatMoney(value, snapshot.settings.baseCurrency, snapshot.settings.currencyDisplayMode);
   };
 
@@ -103,7 +112,10 @@ export const ScenarioApplyDialog: React.FC<ScenarioApplyDialogProps> = ({
 
             <ul className="scenario-diff">
               {changes.map((change) => (
-                <li key={`${change.kind}-${change.categoryId ?? change.label}`} className="scenario-diff-row">
+                <li
+                  key={`${change.kind}-${change.categoryId ?? change.activityId ?? change.label}`}
+                  className="scenario-diff-row"
+                >
                   <span className="scenario-diff-label">
                     {change.categoryColor && (
                       <span

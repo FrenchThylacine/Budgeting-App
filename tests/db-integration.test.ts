@@ -25,6 +25,7 @@ import { runMigrations } from "../server/src/migrations";
 import { SnapshotRepository } from "../server/src/repositories/SnapshotRepository";
 import { createSeedBudgetSnapshot } from "../src/data/seedBudget";
 import type { BudgetSnapshot } from "../src/domain/types";
+import { activityFundingKind } from "../src/domain/funding";
 
 const connectionString = process.env.TEST_DATABASE_URL;
 const describeDb = connectionString ? describe : describe.skip;
@@ -976,6 +977,15 @@ describeDb("upgrading an existing database", () => {
         created_at TEXT NOT NULL, updated_at TEXT NOT NULL
       );`);
 
+    // A `scenario_presets` table in its pre-014 shape, so `activity_states`
+    // can only have come from migration 014.
+    await client.query(`
+      CREATE TABLE scenario_presets (
+        id TEXT PRIMARY KEY, snapshot_id TEXT NOT NULL, name TEXT NOT NULL,
+        monthly_budget DOUBLE PRECISION, pilot_included_in_budget BOOLEAN,
+        category_caps TEXT, notes TEXT
+      );`);
+
     // Data written by the old code: a seeded category keyed by its literal id,
     // and an approval with no owner.
     await client.query(
@@ -989,6 +999,20 @@ describeDb("upgrading an existing database", () => {
       `INSERT INTO budget_approvals
          (id, year, month, suggested_amount, approved_amount, currency, status, recurring_total, created_at, decided_at)
        VALUES ('legacy-approval', 2026, 2, 500, 500, 'EUR', 'approved', 400, 'then', 'then');`);
+    // An activity and a scenario written before funding existed. Both must
+    // still load, and both must read as the defaults.
+    await client.query(
+      `INSERT INTO years (id, snapshot_id, year, created_at, updated_at)
+       VALUES ('year-active-2026', 'active', 2026, 'then', 'then');`);
+    await client.query(
+      `INSERT INTO activities
+         (id, year_id, name, category_id, currency, recurrence_type, recurrence_interval,
+          active, visible, seasonal_tag, "order", notes, created_at, updated_at)
+       VALUES ('act-legacy', 'year-active-2026', 'Legacy', 'cat-health', 'EUR', 'monthly', 1,
+               true, true, 'normal', 0, '', 'then', 'then');`);
+    await client.query(
+      `INSERT INTO scenario_presets (id, snapshot_id, name, monthly_budget, pilot_included_in_budget, notes)
+       VALUES ('sc-legacy', 'active', 'Legacy scenario', 500, true, '');`);
 
     sql = pgTagAdapter(client);
   }, 30000);
@@ -1051,6 +1075,51 @@ describeDb("upgrading an existing database", () => {
       [LEGACY_SCHEMA],
     );
     expect(wishlistColumns.rows.map((r) => r.column_name)).toContain("icon_url");
+  });
+
+  it("adds the funding columns and the scenario activity states", async () => {
+    /*
+     * Migration 014, against a database that already had data.
+     *
+     * The failure mode this guards is the one migration 005 exists for: a
+     * field exists in the client model, the repository writes a fixed column
+     * list including it, and the column was never added — so every save fails
+     * with 42703 rather than silently dropping the value.
+     */
+    const activityColumns = await client.query(
+      `SELECT column_name FROM information_schema.columns WHERE table_schema = $1 AND table_name = 'activities'`,
+      [LEGACY_SCHEMA],
+    );
+    expect(activityColumns.rows.map((r) => r.column_name)).toEqual(
+      expect.arrayContaining(["funding_source", "funded_by"]),
+    );
+
+    const scenarioColumns = await client.query(
+      `SELECT column_name FROM information_schema.columns WHERE table_schema = $1 AND table_name = 'scenario_presets'`,
+      [LEGACY_SCHEMA],
+    );
+    expect(scenarioColumns.rows.map((r) => r.column_name)).toContain("activity_states");
+  });
+
+  it("leaves existing rows valid, and reading as the documented defaults", async () => {
+    // Additive and nullable, so no backfill was needed — and NULL already
+    // means "paid by me" and "every activity enabled" everywhere it is read.
+    const activity = await client.query(`SELECT funding_source, funded_by FROM activities WHERE id = 'act-legacy'`);
+    expect(activity.rows[0]).toEqual({ funding_source: null, funded_by: null });
+
+    const scenario = await client.query(`SELECT activity_states FROM scenario_presets WHERE id = 'sc-legacy'`);
+    expect(scenario.rows[0].activity_states).toBeNull();
+
+    const repository = new SnapshotRepository(sql);
+    const loaded = await repository.loadSnapshot("active");
+    const loadedActivity = loaded?.years["2026"]?.activities.find((item) => item.id === "act-legacy");
+    expect(loadedActivity?.fundingSource).toBeUndefined();
+    expect(activityFundingKind(loadedActivity ?? {})).toBe("personal");
+    const loadedScenario = loaded?.scenarioPresets.find((item) => item.id === "sc-legacy");
+    expect(loadedScenario).toBeTruthy();
+    expect(loadedScenario?.activityStates).toBeUndefined();
+    // And it still loads, which is the whole promise of an additive migration.
+    expect(loadedScenario?.monthlyBudget).toBe(500);
   });
 
   it("creates the index the migration owns", async () => {

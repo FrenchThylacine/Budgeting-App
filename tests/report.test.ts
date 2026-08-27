@@ -236,7 +236,7 @@ describe("reports for a custom range", () => {
     const report = buildPeriodReport(snap, { from: "2026-04-01", to: "2026-04-30" }, NOW);
     const line = (label: string) => report.summary.find((item) => item.label === label)?.value;
     expect(line("Total spending")).toContain("300");
-    expect(line("Paid by others")).toContain("200");
+    expect(line("Paid by other")).toContain("200");
   });
 
   it("reports an empty range as unavailable rather than as zero", () => {

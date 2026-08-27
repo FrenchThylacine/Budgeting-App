@@ -1,7 +1,8 @@
 import React, { useState } from "react";
 import { Check, Copy, FlaskConical, Leaf, Pencil, Plus, Trash2 } from "lucide-react";
 import { useBudgetStore } from "../../store/budgetStore";
-import { isScenarioActive, scenarioDiff } from "../../domain/scenarios";
+import { isScenarioActive, scenarioActivityCount, scenarioDiff, scenarioProjection } from "../../domain/scenarios";
+import { useTranslation } from "../../i18n/useTranslation";
 import { formatMoney } from "../../domain/currency";
 import { Button } from "../ui/Button";
 import { EmptyState } from "../ui/EmptyState";
@@ -20,6 +21,7 @@ import type { ScenarioPreset } from "../../domain/types";
  * all anyone could ever have.
  */
 export const ScenarioLab: React.FC = () => {
+  const { t } = useTranslation();
   const snapshot = useBudgetStore((s) => s.snapshot);
   const presets = snapshot.scenarioPresets;
   const apply = useBudgetStore((s) => s.applyScenarioPreset);
@@ -67,22 +69,24 @@ export const ScenarioLab: React.FC = () => {
         }
       >
         <p className="text-note" style={{ marginBottom: 20 }}>
-          A scenario stores a monthly budget, whether piloting counts toward it, and category caps.
-          Applying one changes those settings — you will see exactly what changes before it happens.
-          Closed periods stay protected.
+          {t("scenarios.intro")}
         </p>
 
         {presets.length === 0 ? (
           <EmptyState
             icon={<FlaskConical size={24} />}
-            title="No scenarios yet"
-            description="Save your current budget as a scenario, or build one from scratch, to compare setups without losing the one you have."
+            title={t("scenarios.empty")}
+            description={t("scenarios.emptyBody")}
           />
         ) : (
           <div className="scenario-list">
             {presets.map((preset) => {
               const changes = scenarioDiff(snapshot, preset);
               const active = isScenarioActive(snapshot, preset);
+              // Generic, and counted against the activities that exist rather
+              // than against the ids the scenario happens to name.
+              const count = scenarioActivityCount(snapshot, preset);
+              const projection = scenarioProjection(snapshot, preset);
               return (
                 <article
                   key={preset.id}
@@ -114,7 +118,7 @@ export const ScenarioLab: React.FC = () => {
                     </div>
                     {active && (
                       <span className="scenario-badge" title="These settings are already in effect">
-                        <Check size={12} aria-hidden="true" /> In effect
+                        <Check size={12} aria-hidden="true" /> {t("scenarios.inEffect")}
                       </span>
                     )}
                   </header>
@@ -124,21 +128,35 @@ export const ScenarioLab: React.FC = () => {
                       <dt className="text-footnote">Budget</dt>
                       <dd className="money">{money(preset.monthlyBudget)}</dd>
                     </div>
+                    {/* "X of Y activities enabled" — the generic replacement
+                        for "piloting included / excluded", and it stays
+                        current because it is recomputed against the live
+                        activity list rather than stored on the scenario. */}
                     <div>
-                      <dt className="text-footnote">Piloting</dt>
-                      <dd>
-                        {preset.pilotIncludedInBudget == null
-                          ? "—"
-                          : preset.pilotIncludedInBudget
-                            ? "Counted"
-                            : "Excluded"}
-                      </dd>
+                      <dt className="text-footnote">{t("scenarios.activitiesSection")}</dt>
+                      <dd>{t("scenarios.activityCount", { enabled: count.enabled, total: count.total })}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-footnote">{t("scenarios.personalMonthly")}</dt>
+                      <dd className="money">{money(projection.personalMonthly)}</dd>
                     </div>
                     <div>
                       <dt className="text-footnote">Caps</dt>
                       <dd>{Object.keys(preset.categoryCaps ?? {}).length || "—"}</dd>
                     </div>
                   </dl>
+
+                  {/* The gross and the two exclusions, so a scenario that
+                      moves an activity onto somebody else's tab shows both
+                      that the cost still exists and that it no longer lands
+                      on this budget. */}
+                  {(projection.otherFundedMonthly > 0 || projection.outsideBudgetMonthly > 0) && (
+                    <p className="text-caption scenario-funding-note">
+                      {t("scenarios.grossMonthly")} {money(projection.grossMonthly)} ·{" "}
+                      {t("funding.other.short")} {money(projection.otherFundedMonthly)} ·{" "}
+                      {t("funding.outside.short")} {money(projection.outsideBudgetMonthly)}
+                    </p>
+                  )}
 
                   <footer className="scenario-actions">
                     <Button
@@ -149,7 +167,7 @@ export const ScenarioLab: React.FC = () => {
                       disabled={!mutable || active}
                       onClick={() => setApplying(preset)}
                     >
-                      {active ? "Already applied" : `Apply (${changes.length} change${changes.length === 1 ? "" : "s"})`}
+                      {active ? t("scenarios.alreadyApplied") : t("scenarios.applyChanges", { count: changes.length })}
                     </Button>
                     <Button variant="ghost" size="sm" disabled={!mutable} onClick={() => setEditing(preset)}>
                       <Pencil size={14} /> Edit
@@ -159,7 +177,7 @@ export const ScenarioLab: React.FC = () => {
                     </Button>
                     {confirmDelete === preset.id ? (
                       <span className="scenario-confirm">
-                        <span className="text-note">Delete it?</span>
+                        <span className="text-note">{t("scenarios.confirmDelete")}</span>
                         <Button
                           variant="danger"
                           size="sm"
@@ -287,7 +305,7 @@ export const ScenarioLab: React.FC = () => {
                     </Button>
                     {confirmSeason === season.id ? (
                       <span className="scenario-confirm">
-                        <span className="text-note">Delete it?</span>
+                        <span className="text-note">{t("scenarios.confirmDelete")}</span>
                         <Button
                           variant="danger"
                           size="sm"

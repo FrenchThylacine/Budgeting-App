@@ -5,7 +5,7 @@ import {
   LayoutDashboard, ListTodo, Receipt, Gift, Wallet, BarChart3,
   FlaskConical, History, Settings, Tags, ChevronLeft, ChevronRight,
   FileSpreadsheet, Download, FileJson, RefreshCw, FileText,
-  LogOut, UserRound, Upload, CalendarRange
+  LogOut, UserRound, Upload, CalendarRange, Coins
 } from "lucide-react";
 import { exportCurrentYearToExcel, exportAllYearsToExcel, exportJson } from "../../domain/importExport";
 import { FinMark } from "../ui/FinMark";
@@ -17,6 +17,7 @@ import { Field, FieldGroup } from "../ui/Field";
 import { todayDateInput } from "../../domain/dates";
 import { formatMoney } from "../../domain/currency";
 import type { BudgetSnapshot } from "../../domain/types";
+import { useTranslation } from "../../i18n/useTranslation";
 
 /**
  * Render the report into a new window and let the browser produce the PDF.
@@ -47,19 +48,38 @@ function openPeriodReport(snapshot: BudgetSnapshot, scope: ReportScope): void {
   win.document.close();
 }
 
-type TabKey = "dashboard" | "activities" | "spending" | "wishlist" | "wallet" | "analytics" | "scenarios" | "history" | "settings" | "categories";
+type TabKey =
+  | "dashboard"
+  | "activities"
+  | "spending"
+  | "wishlist"
+  | "wallet"
+  | "analytics"
+  | "scenarios"
+  | "history"
+  | "settings"
+  | "categories"
+  | "currencies";
 
-const navItems: { key: TabKey; label: string; icon: React.ElementType }[] = [
-  { key: "dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { key: "activities", label: "Activities", icon: ListTodo },
-  { key: "spending", label: "Spending", icon: Receipt },
-  { key: "wishlist", label: "Wishlist", icon: Gift },
-  { key: "wallet", label: "Wallet", icon: Wallet },
-  { key: "analytics", label: "Analytics", icon: BarChart3 },
-  { key: "scenarios", label: "Scenarios", icon: FlaskConical },
-  { key: "history", label: "History", icon: History },
-  { key: "categories", label: "Categories", icon: Tags },
-  { key: "settings", label: "Settings", icon: Settings },
+/**
+ * Navigation carries translation *keys*, not words.
+ *
+ * The label is resolved at render time from the active language, which is the
+ * whole point of the i18n layer: a component that stores "Dashboard" cannot be
+ * translated without editing the component.
+ */
+const navItems: { key: TabKey; labelKey: string; icon: React.ElementType }[] = [
+  { key: "dashboard", labelKey: "nav.dashboard", icon: LayoutDashboard },
+  { key: "activities", labelKey: "nav.activities", icon: ListTodo },
+  { key: "spending", labelKey: "nav.spending", icon: Receipt },
+  { key: "wishlist", labelKey: "nav.wishlist", icon: Gift },
+  { key: "wallet", labelKey: "nav.wallet", icon: Wallet },
+  { key: "analytics", labelKey: "nav.analytics", icon: BarChart3 },
+  { key: "scenarios", labelKey: "nav.scenarios", icon: FlaskConical },
+  { key: "history", labelKey: "nav.history", icon: History },
+  { key: "categories", labelKey: "nav.categories", icon: Tags },
+  { key: "currencies", labelKey: "nav.currencies", icon: Coins },
+  { key: "settings", labelKey: "nav.settings", icon: Settings },
 ];
 
 export const Sidebar: React.FC<{
@@ -68,6 +88,7 @@ export const Sidebar: React.FC<{
   collapsed: boolean;
   setCollapsed: (v: boolean) => void;
 }> = ({ activeTab, setActiveTab, collapsed, setCollapsed }) => {
+  const { t } = useTranslation();
   const snapshot = useBudgetStore((s) => s.snapshot);
   const resetToSeed = useBudgetStore((s) => s.resetToSeed);
   const importSnapshot = useBudgetStore((s) => s.importSnapshot);
@@ -98,8 +119,8 @@ export const Sidebar: React.FC<{
         className="nav-brand"
         onClick={() => setCollapsed(!collapsed)}
         aria-expanded={!collapsed}
-        aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-        title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+        aria-label={collapsed ? t("nav.expandSidebar") : t("nav.collapseSidebar")}
+        title={collapsed ? t("nav.expandSidebar") : t("nav.collapseSidebar")}
       >
         <span className="brand-icon">
           <FinMark size={30} />
@@ -116,33 +137,33 @@ export const Sidebar: React.FC<{
       </button>
 
       <nav className="nav-section">
-        {!collapsed && <div className="nav-section-title">Overview</div>}
+        {!collapsed && <div className="nav-section-title">{t("nav.overview")}</div>}
         {overviewItems.map((item) => (
           <button
             key={item.key}
             className={`nav-item ${activeTab === item.key ? "active" : ""}`}
             onClick={() => setActiveTab(item.key)}
-            title={collapsed ? item.label : undefined}
+            title={collapsed ? t(item.labelKey) : undefined}
             aria-current={activeTab === item.key ? "page" : undefined}
           >
             <item.icon size={18} className="nav-icon" />
-            {!collapsed && item.label}
+            {!collapsed && t(item.labelKey)}
           </button>
         ))}
       </nav>
 
       <nav className="nav-section">
-        {!collapsed && <div className="nav-section-title">System</div>}
+        {!collapsed && <div className="nav-section-title">{t("nav.system")}</div>}
         {systemItems.map((item) => (
           <button
             key={item.key}
             className={`nav-item ${activeTab === item.key ? "active" : ""}`}
             onClick={() => setActiveTab(item.key)}
-            title={collapsed ? item.label : undefined}
+            title={collapsed ? t(item.labelKey) : undefined}
             aria-current={activeTab === item.key ? "page" : undefined}
           >
             <item.icon size={18} className="nav-icon" />
-            {!collapsed && item.label}
+            {!collapsed && t(item.labelKey)}
           </button>
         ))}
       </nav>
@@ -160,22 +181,22 @@ export const Sidebar: React.FC<{
 
       {!collapsed && (
         <div className="nav-section" style={{ marginTop: "auto" }}>
-          <div className="nav-section-title">Reports</div>
+          <div className="nav-section-title">{t("nav.reports")}</div>
           <div style={{ display: "grid", gap: 8, marginBottom: 16 }}>
             <button className="btn btn-secondary btn-sm" onClick={() => openPeriodReport(snapshot, "month")}>
-              <FileText size={14} /> Monthly report
+              <FileText size={14} /> {t("reports.monthly")}
             </button>
             <button className="btn btn-secondary btn-sm" onClick={() => openPeriodReport(snapshot, "year")}>
-              <FileText size={14} /> Annual report
+              <FileText size={14} /> {t("reports.annual")}
             </button>
             {/* Any window, not only the ones the period selector offers: a
                 quarter, a trip, the six weeks a renovation took. */}
             <button className="btn btn-secondary btn-sm" onClick={() => setRangeOpen(true)}>
-              <CalendarRange size={14} /> Custom range
+              <CalendarRange size={14} /> {t("reports.custom")}
             </button>
           </div>
 
-          <div className="nav-section-title">Data</div>
+          <div className="nav-section-title">{t("nav.data")}</div>
           <div style={{ display: "grid", gap: 8 }}>
             <button className="btn btn-secondary btn-sm" onClick={() => exportCurrentYearToExcel(snapshot)}>
               <FileSpreadsheet size={14} /> Export Year
@@ -197,7 +218,7 @@ export const Sidebar: React.FC<{
             </button>
           </div>
 
-          <div className="nav-section-title" style={{ marginTop: 16 }}>Account</div>
+          <div className="nav-section-title" style={{ marginTop: 16 }}>{t("nav.account")}</div>
           <div style={{ display: "grid", gap: 8 }}>
             {/* The address is shown, not just "signed in": on a shared device
                 it is the only way to tell whose budget is on screen. */}
@@ -206,7 +227,7 @@ export const Sidebar: React.FC<{
               <span className="auth-account-email">{user?.email ?? "Signed in"}</span>
             </div>
             <button className="btn btn-secondary btn-sm" onClick={() => void signOut()}>
-              <LogOut size={14} /> Sign out
+              <LogOut size={14} /> {t("nav.signOut")}
             </button>
           </div>
         </div>

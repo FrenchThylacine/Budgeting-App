@@ -441,12 +441,21 @@ export const Dashboard: React.FC<{ onNavigate?: (tab: "spending" | "activities" 
                     {stats.count} transaction{stats.count !== 1 ? "s" : ""}
                     {stats.average != null ? ` · ${money(stats.average)} average` : ""}
                   </div>
-                  {/* Money somebody else spent is recorded but not charged here, so
-                      the card says so rather than leaving a gap between this figure
-                      and the transaction list. */}
-                  {funding.externalCount > 0 && (
+                  {/* Money this budget did not pay for is recorded but not
+                      charged here, so the card says so rather than leaving a
+                      gap between this figure and the transaction list.
+
+                      Two lines rather than one: "somebody else paid" and "my
+                      money, kept off this budget" are different facts, and a
+                      single merged line answers neither question. */}
+                  {funding.otherFundedCount > 0 && (
                     <div className="text-caption" style={{ marginTop: 6, color: "var(--warning-text)" }}>
-                      Plus {money(funding.external)} paid by others — recorded, not charged to your budget.
+                      Plus {money(funding.otherFunded)} paid by others — recorded, not charged to your budget.
+                    </div>
+                  )}
+                  {funding.outsideBudgetCount > 0 && (
+                    <div className="text-caption" style={{ marginTop: 4, color: "var(--warning-text)" }}>
+                      Plus {money(funding.outsideBudget)} you keep outside this budget — recorded, not charged to it.
                     </div>
                   )}
                 </CardBody>
@@ -582,9 +591,14 @@ export const Dashboard: React.FC<{ onNavigate?: (tab: "spending" | "activities" 
                   value={money(stats.recurringTotal)}
                   detail={stats.recurringShare != null ? `${stats.recurringShare.toFixed(0)}% of spend` : undefined}
                 />
+                {/* The commitment this budget has to carry, not the gross.
+                    An activity somebody else pays for costs real money and
+                    costs *this* budget nothing — `includedBudget` is the
+                    personal figure, and it is what the remaining budget is
+                    measured against. */}
                 <Figure
                   label="Committed monthly"
-                  value={money(calculation.generalBudget)}
+                  value={money(calculation.includedBudget)}
                   detail={`${calculation.activityEstimates.length} ${calculation.activityEstimates.length === 1 ? "activity" : "activities"}`}
                 />
               </div>
@@ -670,15 +684,24 @@ export const Dashboard: React.FC<{ onNavigate?: (tab: "spending" | "activities" 
               <div style={{ display: "grid", gap: 14 }}>
                 <div>
                   <div className="text-footnote" style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
-                    <CreditCard size={14} /> Personal wallet
+                    <CreditCard size={14} /> Wallet balance
                   </div>
-                  <div className="text-headline money">{money(calculation.wallet.personalWalletTotal)}</div>
+                  {/* The real cash figure, from the ledger — not the planning
+                      budget, and not a per-year slice of it. The Wallet tab
+                      breaks it into budget and personal money. */}
+                  <div className="text-headline money">{money(calculation.wallet.walletTotal)}</div>
                 </div>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: 12 }}>
                   <Figure
-                    label="Rollover"
-                    value={formatDualMoney(calculation.wallet.rolloverTotal, settings, { showSign: true })}
-                    tone={calculation.wallet.rolloverTotal >= 0 ? "positive" : "negative"}
+                    label="Remaining budget"
+                    value={money(calculation.wallet.budgetRemaining)}
+                    detail="Budget money still available"
+                    tone={calculation.wallet.budgetRemaining >= 0 ? "positive" : "negative"}
+                  />
+                  <Figure
+                    label="Personal balance"
+                    value={money(calculation.wallet.personalBalance)}
+                    detail="Money outside your budget"
                   />
                   <Figure
                     label="Wishlist"
@@ -689,8 +712,17 @@ export const Dashboard: React.FC<{ onNavigate?: (tab: "spending" | "activities" 
                     label="YTD spend"
                     value={money(calculation.ytdTotal)}
                     detail={
-                      calculation.externalYtdTotal > 0
-                        ? `${money(calculation.externalYtdTotal)} paid by others`
+                      calculation.otherFundedYtdTotal > 0 || calculation.outsideBudgetYtdTotal > 0
+                        ? [
+                            calculation.otherFundedYtdTotal > 0
+                              ? `${money(calculation.otherFundedYtdTotal)} by others`
+                              : null,
+                            calculation.outsideBudgetYtdTotal > 0
+                              ? `${money(calculation.outsideBudgetYtdTotal)} outside`
+                              : null,
+                          ]
+                            .filter(Boolean)
+                            .join(" · ")
                         : undefined
                     }
                   />

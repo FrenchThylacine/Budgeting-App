@@ -1,5 +1,19 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowDown, ArrowUp, Circle, Copy, Eye, EyeOff, GripVertical, Pencil, Plus, Trash2 } from "lucide-react";
+import {
+  ArrowDown,
+  ArrowUp,
+  CalendarClock,
+  Circle,
+  Eye,
+  Copy,
+  EyeOff,
+  GripVertical,
+  HelpCircle,
+  Pencil,
+  Plus,
+  Power,
+  Trash2,
+} from "lucide-react";
 import { currencyOptionsFor, formatMoney } from "../../domain/currency";
 import { SwipeRow } from "../ui/SwipeRow";
 import { gesturesFor } from "../../domain/gestures";
@@ -41,6 +55,7 @@ import {
   activityToDraft,
   activityPayloadFromDraft,
   draftToActivity,
+  formatDualMoney,
   matchesActivityFilters,
   sortActivities,
 } from "../../utils/formatters";
@@ -51,6 +66,9 @@ import { Button } from "../ui/Button";
 import { EmptyState } from "../ui/EmptyState";
 import { Field, FieldGroup } from "../ui/Field";
 import { Section } from "../ui/Section";
+import { activityBudgetSummary, fundingShares, type ActivityMonthCost } from "../../domain/activityBudget";
+import { FUNDING_KINDS, FUNDING_META, FUNDING_SOURCES, activityFundingKind, fundedByName, type FundingKind } from "../../domain/funding";
+import { useTranslation } from "../../i18n/useTranslation";
 
 const RECURRENCE_TYPES: RecurrenceType[] = ["weekly", "monthly", "yearly", "session", "purchase", "custom", "none"];
 
@@ -74,6 +92,7 @@ const COST_MODELS: { value: CostModel; label: string; hint: string }[] = [
 type SortMode = "order" | "name" | "cost";
 
 export const ActivityPanel: React.FC = () => {
+  const { t, formatDate, monthNames } = useTranslation();
   const snapshot = useBudgetStore((s) => s.snapshot);
   const add = useBudgetStore((s) => s.addActivity);
   const update = useBudgetStore((s) => s.updateActivity);
@@ -137,6 +156,32 @@ export const ActivityPanel: React.FC = () => {
     return map;
   }, [activities, snapshot, year, month]);
 
+  /**
+   * The financial overview, from the one module that knows the difference
+   * between a monthly accrual and money actually due this month.
+   *
+   * The panel does no arithmetic of its own: every figure below — the totals,
+   * the funding split, "required this month", the per-row due state — comes
+   * out of `activityBudgetSummary`, which the reports and the statistics page
+   * read too. Two screens cannot disagree about a budget they compute once.
+   */
+  const summary = useMemo(() => activityBudgetSummary(snapshot, year, month), [snapshot, year, month]);
+  const dueByActivity = useMemo(
+    () => new Map<string, ActivityMonthCost>(summary.items.map((item) => [item.activity.id, item])),
+    [summary],
+  );
+  /*
+   * The month, in the language the rest of the sentence is in.
+   *
+   * `monthName()` from `domain/dates.ts` is English-only, so "Required in
+   * {month}" rendered as "Nécessaire en August" — an English word inside a
+   * French sentence, which is exactly the failure the translation layer
+   * exists to prevent. `monthNames()` goes through `Intl`.
+   */
+  const monthLabel = monthNames()[month - 1] ?? monthName(month);
+  /** Totals are in the display currency; the editor's `money` is native. */
+  const baseMoney = (value: number | null | undefined) => formatDualMoney(value, snapshot.settings);
+
   const orderedAll = useMemo(() => activities.slice().sort((a, b) => a.order - b.order), [activities]);
 
   const visibleActivities = useMemo(
@@ -154,9 +199,17 @@ export const ActivityPanel: React.FC = () => {
   const activitySwipe = (action: SwipeActionId, activity: Activity) => {
     if (!mutable || action === "none") return [];
     switch (action) {
+      case "deactivate":
+        // Deliberately distinct from Hide below. This one changes what the
+        // budget adds up to; Hide changes only what is on screen.
+        return [{
+          label: activity.active ? t("activities.deactivate") : t("activities.reactivate"),
+          icon: <Power size={18} />,
+          onAction: () => toggleActive(activity),
+        }];
       case "archive":
         return [{
-          label: activity.visible ? "Hide" : "Show",
+          label: activity.visible ? t("activities.hide") : t("activities.show"),
           icon: activity.visible ? <EyeOff size={18} /> : <Eye size={18} />,
           onAction: () => update(activity.id, { visible: !activity.visible }),
         }];
@@ -182,7 +235,26 @@ export const ActivityPanel: React.FC = () => {
    * is usually the one nobody is looking at.
    */
   const confirmDelete = (activity: Activity) => {
-    if (window.confirm(`Delete "${activity.name}"? Linked spending is kept.`)) remove(activity.id);
+    if (window.confirm(t("activities.confirmDelete", { name: activity.name }))) remove(activity.id);
+  };
+
+  /**
+   * Switch an activity off, or back on.
+   *
+   * Switching **off** asks first, because it silently changes every total on
+   * the page — it is not destructive, but a budget that quietly drops by €60
+   * with no explanation is worse than one that asks. Switching back on does
+   * not ask: restoring something is not a decision that needs guarding, and a
+   * confirmation on the recovery path is what makes people stop using it.
+   */
+  const toggleActive = (activity: Activity) => {
+    if (!activity.active) {
+      update(activity.id, { active: true });
+      return;
+    }
+    if (window.confirm(t("activities.confirmDeactivate", { name: activity.name }))) {
+      update(activity.id, { active: false });
+    }
   };
 
   const move = (activity: Activity, direction: -1 | 1) => {
@@ -289,14 +361,14 @@ export const ActivityPanel: React.FC = () => {
   return (
     <div className="page-enter" style={{ display: "grid", gap: 20 }}>
       <Section
-        title="Recurring activities"
+        title={t("activities.title")}
         action={
           <Button variant="primary" disabled={!mutable} onClick={() => begin(null)}>
-            <Plus size={16} /> Add activity
+            <Plus size={16} /> {t("activities.add")}
           </Button>
         }
       >
-        {!mutable && <div className="historical-banner">Historical periods are read-only.</div>}
+        {!mutable && <div className="historical-banner">{t("common.readOnly")}</div>}
 
         <div
           style={{
@@ -309,8 +381,8 @@ export const ActivityPanel: React.FC = () => {
           <input
             className="input"
             type="search"
-            placeholder="Search activities"
-            aria-label="Search activities"
+            placeholder={t("activities.searchPlaceholder")}
+            aria-label={t("activities.searchPlaceholder")}
             value={search}
             onChange={(event) => setSearch(event.target.value)}
           />
@@ -320,7 +392,7 @@ export const ActivityPanel: React.FC = () => {
             value={categoryFilter}
             onChange={(event) => setCategoryFilter(event.target.value)}
           >
-            <option value="">All categories</option>
+            <option value="">{t("activities.allCategories")}</option>
             {categories.map((category) => (
               <option key={category.id} value={category.id}>
                 {category.name}
@@ -333,15 +405,15 @@ export const ActivityPanel: React.FC = () => {
             value={sortBy}
             onChange={(event) => setSortBy(event.target.value as SortMode)}
           >
-            <option value="order">Manual order</option>
-            <option value="name">Name A–Z</option>
-            <option value="cost">Highest monthly cost</option>
+            <option value="order">{t("activities.sortManual")}</option>
+            <option value="name">{t("activities.sortName")}</option>
+            <option value="cost">{t("activities.sortCost")}</option>
           </select>
         </div>
 
         {open && (
           <EditorSheet
-            title={editing ? editing.name || "Edit activity" : "New activity"}
+            title={editing ? editing.name || t("activities.edit") : t("activities.new")}
             subtitle={editing ? "Changes apply from the selected period onward." : undefined}
             onClose={() => {
               setOpen(false);
@@ -357,10 +429,10 @@ export const ActivityPanel: React.FC = () => {
                     setEditing(null);
                   }}
                 >
-                  Cancel
+                  {t("common.cancel")}
                 </Button>
                 <Button type="submit" form="activity-editor-form" variant="primary">
-                  {editing ? "Save changes" : "Add activity"}
+                  {editing ? t("common.save") : t("activities.add")}
                 </Button>
               </>
             }
@@ -371,8 +443,8 @@ export const ActivityPanel: React.FC = () => {
             onSubmit={save}
             style={{ display: "grid", gap: 20 }}
           >
-            <FieldGroup title="Identity">
-              <Field label="Name" span>
+            <FieldGroup title={t("activities.groupIdentity")}>
+              <Field label={t("activities.fieldName")} span>
                 <input
                   className="input"
                   required
@@ -381,7 +453,7 @@ export const ActivityPanel: React.FC = () => {
                   onChange={(event) => patch({ name: event.target.value })}
                 />
               </Field>
-              <Field label="Category">
+              <Field label={t("spending.category")}>
                 <select className="select" value={form.categoryId} onChange={(event) => patch({ categoryId: event.target.value })}>
                   {categories.map((category) => (
                     <option key={category.id} value={category.id}>
@@ -390,7 +462,7 @@ export const ActivityPanel: React.FC = () => {
                   ))}
                 </select>
               </Field>
-              <Field label="Currency">
+              <Field label={t("spending.currency")}>
                 <select
                   className="select"
                   value={form.currency}
@@ -404,6 +476,46 @@ export const ActivityPanel: React.FC = () => {
               <Field label="Colour" span group>
                 <ColorPicker value={form.color || undefined} onChange={(color) => patch({ color: color ?? "" })} />
               </Field>
+            </FieldGroup>
+
+            {/* Who pays.
+
+                Placed with the identity rather than with the prices, because
+                it is a fact *about* the activity — my lessons, my father's
+                lessons — not a way of pricing it. It is also the default for
+                every transaction linked to this activity, which the spending
+                editor states out loud and can still override. */}
+            <FieldGroup title={t("funding.label")}>
+              <Field
+                label={t("funding.label")}
+                span={form.fundingSource !== "other"}
+                hint={t(`funding.${form.fundingSource}.hint`)}
+              >
+                <select
+                  className="select"
+                  value={form.fundingSource}
+                  onChange={(event) => patch({ fundingSource: event.target.value as FundingKind })}
+                >
+                  {FUNDING_SOURCES.map((option) => (
+                    <option key={option.kind} value={option.kind}>
+                      {t(`funding.${option.kind}`)}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              {/* Shown only where it means something. A "who pays" box beside
+                  "paid by me" is a control that is irrelevant the moment it
+                  appears, and this editor already has enough of those. */}
+              {form.fundingSource === "other" && (
+                <Field label={t("funding.fundedBy")} hint={t("funding.fundedBy.hint")}>
+                  <input
+                    className="input"
+                    placeholder="Dad"
+                    value={form.fundedBy}
+                    onChange={(event) => patch({ fundedBy: event.target.value })}
+                  />
+                </Field>
+              )}
             </FieldGroup>
 
             {/* The same icon controls the wishlist uses, from the same module:
@@ -426,7 +538,7 @@ export const ActivityPanel: React.FC = () => {
               }
             />
 
-            <FieldGroup title="Recurrence">
+            <FieldGroup title={t("activities.groupRecurrence")}>
               <Field label="Recurrence type">
                 <select
                   className="select"
@@ -467,7 +579,7 @@ export const ActivityPanel: React.FC = () => {
             </FieldGroup>
 
             {form.costModel === "perSession" && (
-              <FieldGroup title="Sessions">
+              <FieldGroup title={t("activities.groupSessions")}>
                 <Field label="Sessions per month">
                   <input
                     className="input"
@@ -621,7 +733,7 @@ export const ActivityPanel: React.FC = () => {
               </FieldGroup>
             )}
 
-            <FieldGroup title="Prices">
+            <FieldGroup title={t("activities.groupPrices")}>
               <Field label="Monthly cost" emphasised={form.costModel === "fixed"}>
                 <input
                   className="input"
@@ -743,7 +855,7 @@ export const ActivityPanel: React.FC = () => {
             </FieldGroup>
 
             <AdvancedFields label="Season, notes and visibility">
-            <FieldGroup title="Details">
+            <FieldGroup title={t("activities.groupDetails")}>
               <Field label="Seasonal tag" hint="e.g. summer, winter, normal">
                 <input
                   className="input"
@@ -780,15 +892,27 @@ export const ActivityPanel: React.FC = () => {
         )}
       </Section>
 
+      {/* The financial overview.
+
+          Five figures that answer five different questions, and the point of
+          the whole section is that the last one is *not* the first divided by
+          twelve: "required in September" is the payments that genuinely fall
+          in September, and an activity whose payment month is unknown is
+          excluded from it and named underneath instead. */}
+      {summary.items.length > 0 && (
+        <ActivitySummary summary={summary} monthLabel={monthLabel} money={baseMoney} t={t} />
+      )}
+
       {activities.length === 0 ? (
-        <EmptyState title="No activities" description="Track recurring costs such as subscriptions, lessons, and bills." />
+        <EmptyState title={t("activities.empty")} description={t("activities.emptyBody")} />
       ) : visibleActivities.length === 0 ? (
-        <EmptyState title="No matches" description="No activity matches the current search or category filter." />
+        <EmptyState title={t("activities.noMatches")} description={t("activities.noMatchesBody")} />
       ) : (
         <div className="item-list">
           {visibleActivities.map((activity) => {
             const accent = activity.color;
             const estimate = estimateMap.get(activity.id);
+            const due = dueByActivity.get(activity.id);
             const orderIndex = orderedAll.findIndex((item) => item.id === activity.id);
             return (
               <SwipeRow
@@ -807,7 +931,7 @@ export const ActivityPanel: React.FC = () => {
                 // phone and easy to miss entirely.
                 role={mutable ? "button" : undefined}
                 tabIndex={mutable ? 0 : undefined}
-                aria-label={mutable ? `Edit ${activity.name}` : undefined}
+                aria-label={mutable ? t("a11y.editActivity", { name: activity.name }) : undefined}
                 onClick={(event) => {
                   // A click that landed on one of the card's own controls, or
                   // that finished a text selection, is not a request to edit.
@@ -864,10 +988,31 @@ export const ActivityPanel: React.FC = () => {
                     fallback={<Circle size={16} color={accent ? readableAccent(accent) : "var(--text-secondary)"} />}
                   />
                   <div style={{ minWidth: 0 }}>
-                    <div className="text-callout" style={{ fontWeight: 600, wordBreak: "break-word" }}>
+                    <div
+                      className="text-callout"
+                      style={{ fontWeight: 600, wordBreak: "break-word", display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}
+                    >
                       {activity.name}
                       {!activity.visible && (
-                        <EyeOff size={13} aria-label="Hidden from summaries" style={{ marginLeft: 6, verticalAlign: "-2px" }} />
+                        <EyeOff size={13} aria-label={t("activities.hide")} style={{ verticalAlign: "-2px" }} />
+                      )}
+                      {/* Deactivated is a financial state, so it is a word on
+                          the card rather than a faded row somebody has to
+                          infer. */}
+                      {!activity.active && <span className="badge badge-neutral">{t("activities.deactivated")}</span>}
+                      {/* The funding classification, whenever it is not the
+                          default. "Paid by me" on every card would be noise;
+                          the other two change what the totals mean. */}
+                      {activityFundingKind(activity) !== "personal" && (
+                        <span
+                          className="funding-badge"
+                          data-funding={activityFundingKind(activity)}
+                          title={t(`funding.${activityFundingKind(activity)}.hint`)}
+                        >
+                          <span aria-hidden="true">{FUNDING_META[activityFundingKind(activity)].glyph}</span>
+                          {t(`funding.${activityFundingKind(activity)}.short`)}
+                          {fundedByName(activity) ? ` · ${fundedByName(activity)}` : ""}
+                        </span>
                       )}
                     </div>
                     <div className="text-footnote" style={{ letterSpacing: "0.02em", textTransform: "none" }}>
@@ -877,6 +1022,32 @@ export const ActivityPanel: React.FC = () => {
                       {categoryName(activity.categoryId)}
                       {activity.seasonalTag ? ` · ${activity.seasonalTag}` : ""}
                     </div>
+                    {/* What this month actually requires from this activity —
+                        which for eleven months of a yearly subscription is
+                        nothing, and for an activity with no known date is
+                        neither nothing nor a guess. */}
+                    {due && (
+                      <div className="activity-due" data-status={due.status}>
+                        <CalendarClock size={12} aria-hidden="true" />
+                        <span>
+                          {due.status === "unknown"
+                            ? t("activities.dateUnknown")
+                            : due.status === "not-due"
+                              ? t("activities.notDueThisMonth")
+                              : due.datesKnown && due.dueDates.length > 0
+                                ? `${baseMoney(due.dueBase)} · ${t("activities.dueOn", {
+                                    date: formatDate(due.dueDates[0], { day: "numeric", month: "short" }),
+                                  })}`
+                                : `${baseMoney(due.dueBase)} · ${t("activities.dueThisMonth")}`}
+                        </span>
+                        {due.status === "unknown" && due.unknownReason && (
+                          <span title={t(due.unknownReason)} className="activity-due-why">
+                            <HelpCircle size={12} aria-hidden="true" />
+                            <span className="sr-only">{t(due.unknownReason)}</span>
+                          </span>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -906,7 +1077,7 @@ export const ActivityPanel: React.FC = () => {
                             icon
                             disabled={orderIndex <= 0}
                             onClick={() => move(activity, -1)}
-                            aria-label={`Move ${activity.name} up`}
+                            aria-label={t("a11y.moveUp", { name: activity.name })}
                           >
                             <ArrowUp size={15} />
                           </Button>
@@ -916,31 +1087,48 @@ export const ActivityPanel: React.FC = () => {
                             icon
                             disabled={orderIndex < 0 || orderIndex >= orderedAll.length - 1}
                             onClick={() => move(activity, 1)}
-                            aria-label={`Move ${activity.name} down`}
+                            aria-label={t("a11y.moveDown", { name: activity.name })}
                           >
                             <ArrowDown size={15} />
                           </Button>
                         </>
                       )}
+                      {/* Deactivate, not Hide.
+
+                          The desktop equivalent of the mobile swipe used to be
+                          an eye icon that only changed whether the activity
+                          appeared in summaries — a presentation toggle sitting
+                          where people reach for "stop paying for this". It is
+                          now the real action: a power control, labelled, that
+                          switches the activity off and takes it out of every
+                          total. Hiding is still available, in the editor's
+                          visibility checkbox and as a configurable swipe. */}
                       <Button
                         variant="ghost"
                         size="sm"
-                        icon
-                        onClick={() => update(activity.id, { visible: !activity.visible })}
-                        aria-label={activity.visible ? `Hide ${activity.name}` : `Show ${activity.name}`}
+                        onClick={() => toggleActive(activity)}
+                        aria-label={
+                          activity.active
+                            ? t("a11y.deactivateActivity", { name: activity.name })
+                            : t("a11y.reactivateActivity", { name: activity.name })
+                        }
+                        title={t("activities.deactivateHint")}
                       >
-                        {activity.visible ? <Eye size={15} /> : <EyeOff size={15} />}
+                        <Power size={15} />
+                        <span className="row-action-label">
+                          {activity.active ? t("activities.deactivate") : t("activities.reactivate")}
+                        </span>
                       </Button>
                       <Button
                         variant="ghost"
                         size="sm"
                         icon
                         onClick={() => duplicate(activity.id)}
-                        aria-label={`Duplicate ${activity.name}`}
+                        aria-label={t("a11y.duplicateActivity", { name: activity.name })}
                       >
                         <Copy size={15} />
                       </Button>
-                      <Button variant="ghost" size="sm" icon onClick={() => begin(activity)} aria-label={`Edit ${activity.name}`}>
+                      <Button variant="ghost" size="sm" icon onClick={() => begin(activity)} aria-label={t("a11y.editActivity", { name: activity.name })}>
                         <Pencil size={15} />
                       </Button>
                       <Button
@@ -948,7 +1136,7 @@ export const ActivityPanel: React.FC = () => {
                         size="sm"
                         icon
                         onClick={() => confirmDelete(activity)}
-                        aria-label={`Delete ${activity.name}`}
+                        aria-label={t("a11y.deleteActivity", { name: activity.name })}
                       >
                         <Trash2 size={15} />
                       </Button>
@@ -962,6 +1150,109 @@ export const ActivityPanel: React.FC = () => {
         </div>
       )}
     </div>
+  );
+};
+
+/**
+ * The Activities tab's financial overview.
+ *
+ * Five figures, deliberately in this order:
+ *
+ *  1. **Total activity cost** — gross, whoever pays. The honest headline: what
+ *     your commitments cost the world.
+ *  2. **Your budget** — only "paid by me". The figure that actually competes
+ *     with your monthly budget.
+ *  3. **Paid by other** and 4. **Outside budget** — the two exclusions, kept
+ *     apart because they answer different questions.
+ *  5. **Required in <month>** — the payments that genuinely fall due in the
+ *     month being viewed, from real dates. An annual subscription appears here
+ *     once a year, not every month, and one whose renewal date is unknown does
+ *     not appear at all; it is named underneath instead.
+ *
+ * Each figure carries both a monthly and a yearly reading, and every one of
+ * them comes from `activityBudgetSummary` — this component does no arithmetic.
+ */
+const ActivitySummary: React.FC<{
+  summary: ReturnType<typeof activityBudgetSummary>;
+  monthLabel: string;
+  money: (value: number | null | undefined) => string;
+  t: (key: string, params?: Record<string, string | number | null | undefined>) => string;
+}> = ({ summary, monthLabel, money, t }) => {
+  const shares = fundingShares(summary.yearly);
+  const required = summary.requiredThisMonth;
+
+  return (
+    <section className="activity-summary" aria-label={t("activities.summaryTitle")}>
+      <h2 className="text-title activity-summary-title">{t("activities.summaryTitle")}</h2>
+
+      <div className="activity-summary-grid">
+        <div className="activity-summary-figure activity-summary-gross">
+          <div className="text-footnote">{t("activities.totalCost")}</div>
+          <div className="money activity-summary-value">{money(summary.monthly.gross)}</div>
+          <div className="text-caption">
+            {money(summary.yearly.gross)} {t("common.perYear")} · {t("activities.totalCostHint")}
+          </div>
+        </div>
+
+        {FUNDING_KINDS.map((kind) => (
+          <div key={kind} className="activity-summary-figure" data-funding={kind}>
+            <div className="text-footnote">
+              <span aria-hidden="true" className="funding-glyph">
+                {FUNDING_META[kind].glyph}
+              </span>{" "}
+              {t(`funding.${kind}.short`)}
+            </div>
+            <div className="money activity-summary-value">{money(summary.monthly[kind])}</div>
+            <div className="text-caption">
+              {money(summary.yearly[kind])} {t("common.perYear")}
+              {shares[kind] != null ? ` · ${t("stats.shareOfTotal", { percent: `${shares[kind]!.toFixed(1)}%` })}` : ""}
+            </div>
+          </div>
+        ))}
+
+        {/* The figure this whole module exists for. Its caption names the
+            month so it can never be mistaken for a monthly average. */}
+        <div className="activity-summary-figure activity-summary-required">
+          <div className="text-footnote">{t("activities.requiredThisMonth", { month: monthLabel })}</div>
+          <div className="money activity-summary-value">{money(required.personal)}</div>
+          <div className="text-caption">
+            {t("activities.requiredThisMonthHint")}
+            {required.gross !== required.personal
+              ? ` · ${money(required.gross)} ${t("funding.gross").toLowerCase()}`
+              : ""}
+          </div>
+        </div>
+      </div>
+
+      {/* Activities the app cannot place in a month, named rather than
+          silently folded into the figure above. This is the difference
+          between a budget requirement and a guess. */}
+      {summary.unscheduled.length > 0 && (
+        <div className="activity-summary-note" role="note">
+          <HelpCircle size={14} aria-hidden="true" />
+          <div>
+            <strong>{t("activities.unscheduled", { count: summary.unscheduled.length })}</strong>
+            <div className="text-caption">{t("activities.unscheduledBody", { month: monthLabel })}</div>
+            <ul className="activity-unscheduled-list">
+              {summary.unscheduled.map((item) => (
+                <li key={item.activity.id}>
+                  <span className="activity-unscheduled-name">{item.activity.name}</span>
+                  <span className="text-caption">
+                    {money(item.monthlyBase)} {t("common.perMonthAverage")} · {t(item.unknownReason ?? "")}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      )}
+
+      {summary.inactiveCount > 0 && (
+        <p className="text-caption activity-summary-inactive">
+          {t("activities.inactive", { count: summary.inactiveCount })}
+        </p>
+      )}
+    </section>
   );
 };
 

@@ -1,30 +1,58 @@
+import {
+  ALL_CURRENCY_CODES,
+  CURRENCY_DEFINITIONS,
+  currencyDecimals,
+  currencyDefinition,
+  isCurrencyCode,
+} from "./currencies";
 import type { BudgetSnapshot, CurrencyCode, CurrencyDisplayMode, ExchangeRates, RoundingRule, Settings } from "./types";
 
-/** Every currency the application knows how to name, symbolise and convert. */
-export const CURRENCY_OPTIONS: CurrencyCode[] = ["EUR", "USD", "LBP", "GBP", "CAD", "AUD", "JPY", "TRY", "SAR", "AED"];
+export { ALL_CURRENCY_CODES, currencyDecimals, currencyName, isCurrencyCode, searchCurrencies } from "./currencies";
+export type { CurrencyDefinition } from "./currencies";
 
-export const CURRENCY_SYMBOLS: Record<CurrencyCode, string> = {
-  EUR: "€",
-  USD: "$",
-  LBP: "L.L.",
-  GBP: "£",
-  CAD: "C$",
-  AUD: "A$",
-  JPY: "¥",
-  TRY: "₺",
-  SAR: "SAR",
-  AED: "AED",
-};
+/**
+ * The currencies a budget is pinned to when it has never said otherwise.
+ *
+ * These are the ten the application shipped with, in the order it shipped
+ * them. `settings.trackedCurrencies` is absent for every budget written before
+ * currency pinning existed, and this is what "absent" has always meant — so
+ * widening the dataset to the whole of ISO 4217 changes nothing for them. The
+ * full list is `ALL_CURRENCY_CODES`, and it is reachable from the searchable
+ * picker; it is deliberately *not* what a dropdown offers.
+ */
+export const CURRENCY_OPTIONS: CurrencyCode[] = [
+  "EUR",
+  "USD",
+  "LBP",
+  "GBP",
+  "CAD",
+  "AUD",
+  "JPY",
+  "TRY",
+  "SAR",
+  "AED",
+];
+
+/**
+ * Symbols for every currency the app knows.
+ *
+ * Derived from the dataset rather than maintained beside it: two lists of the
+ * same facts drift, and the one that drifts is the one nobody is looking at.
+ */
+export const CURRENCY_SYMBOLS: Record<CurrencyCode, string> = Object.fromEntries(
+  CURRENCY_DEFINITIONS.map((entry) => [entry.code, entry.symbol]),
+) as Record<CurrencyCode, string>;
 
 // ─── Which currencies this budget actually deals in ─────────────────────────
 
 /**
- * The currencies offered in the app's dropdowns.
+ * The currencies offered in the app's dropdowns — the pinned set.
  *
  * Every editor used to list all ten, which is nine wrong answers for someone
- * who only ever spends in two. `settings.trackedCurrencies` narrows that to a
- * chosen set; absent, the full list applies, so nothing changes for a budget
- * that has never touched the setting.
+ * who only ever spends in two; offering all one hundred and sixty would be a
+ * hundred and fifty-eight. `settings.trackedCurrencies` is the pinned list;
+ * absent, the default set above applies, so nothing changes for a budget that
+ * has never touched the setting.
  *
  * The base currency is always included whatever the stored list says: a budget
  * whose display currency is not selectable is a budget that cannot state its
@@ -32,14 +60,16 @@ export const CURRENCY_SYMBOLS: Record<CurrencyCode, string> = {
  */
 export function trackedCurrencies(settings: Pick<Settings, "trackedCurrencies" | "baseCurrency">): CurrencyCode[] {
   const stored = settings.trackedCurrencies;
-  const chosen = Array.isArray(stored) && stored.length > 0
-    ? stored.filter((code) => CURRENCY_OPTIONS.includes(code))
-    : CURRENCY_OPTIONS;
+  const chosen =
+    Array.isArray(stored) && stored.length > 0 ? stored.filter((code) => isCurrencyCode(code)) : CURRENCY_OPTIONS;
   const withBase = chosen.includes(settings.baseCurrency) ? chosen : [settings.baseCurrency, ...chosen];
   // Presented in the canonical order rather than the order they were added, so
   // the dropdown does not reshuffle itself when the set changes.
-  return CURRENCY_OPTIONS.filter((code) => withBase.includes(code));
+  return ALL_CURRENCY_CODES.filter((code) => withBase.includes(code));
 }
+
+/** Alias that says what it is at the call site: these are the pinned ones. */
+export const pinnedCurrencies = trackedCurrencies;
 
 /**
  * The tracked list, plus whatever `current` is.
@@ -62,7 +92,7 @@ export function currencyOptionsFor(
 /**
  * Currencies this budget has actually recorded something in.
  *
- * Used to refuse an untracking that would orphan real data, and to say which
+ * Used to refuse an unpinning that would orphan real data, and to say which
  * records are in the way. Covers every store of money in a snapshot:
  * activities, transactions, wishlist items and wallet entries, plus the two
  * currencies the settings themselves name.
@@ -76,6 +106,21 @@ export function currenciesInUse(snapshot: BudgetSnapshot): Set<CurrencyCode> {
     for (const entry of record.walletEntries) used.add(entry.currency);
   }
   return used;
+}
+
+/**
+ * Why a currency cannot be unpinned, or null when it can.
+ *
+ * One function so the chip, the picker and the confirmation dialog can never
+ * disagree about whether a removal is allowed.
+ */
+export function unpinBlockedReason(
+  snapshot: BudgetSnapshot,
+  code: CurrencyCode,
+): "display-currency" | "budget-currency" | "in-use" | null {
+  if (code === snapshot.settings.baseCurrency) return "display-currency";
+  if (code === snapshot.settings.monthlyBudgetCurrency) return "budget-currency";
+  return currenciesInUse(snapshot).has(code) ? "in-use" : null;
 }
 
 export function parseAmount(value: unknown): number | null {
@@ -93,27 +138,51 @@ function positive(value: unknown): number | null {
 }
 
 /**
- * True when a real rate exists for this pair. Callers that must not present a
- * fabricated figure (settings, currency management) check this first, because
- * `rateToBase` falls back to 1:1 to keep the UI rendering.
+ * Units of `currency` per one euro, from whichever source knows.
+ *
+ * The euro is the canonical pivot: every rate the provider publishes is quoted
+ * against it, so one number per currency describes every pair. The two legacy
+ * manual fields (`eurUsd`, `usdLbp`) are folded in here rather than being a
+ * pair table of their own — a budget that only ever set those two by hand
+ * keeps working, and every *other* pair those two imply (LBP→GBP, say) now
+ * follows from the same arithmetic instead of falling off a cliff.
+ */
+export function unitsPerEur(currency: CurrencyCode, rates: ExchangeRates): number | null {
+  if (currency === "EUR") return 1;
+
+  const provider = positive(rates.perEur?.[currency]);
+  if (provider != null) return provider;
+
+  const eurUsd = positive(rates.eurUsd);
+  if (currency === "USD" && eurUsd != null) return eurUsd;
+  if (currency === "LBP") {
+    const usdLbp = positive(rates.usdLbp);
+    if (eurUsd != null && usdLbp != null) return eurUsd * usdLbp;
+  }
+  return null;
+}
+
+/**
+ * True when a real rate exists for this pair.
+ *
+ * Callers that must not present a fabricated figure (the currency panel, the
+ * exchange popup) check this first, because `rateToBase` falls back to 1:1 to
+ * keep the interface rendering rather than filling the page with NaN.
  */
 export function canConvert(currency: CurrencyCode, baseCurrency: CurrencyCode, rates: ExchangeRates): boolean {
   if (currency === baseCurrency) return true;
-  const pair = new Set([currency, baseCurrency]);
-  if (pair.size === 2 && [...pair].every((c) => c === "EUR" || c === "USD" || c === "LBP")) return true;
   if (positive(rates.customToBase[currency]) != null) return true;
-  const perEur = rates.perEur;
-  return perEur != null && positive(perEur[currency]) != null && positive(perEur[baseCurrency]) != null;
+  return unitsPerEur(currency, rates) != null && unitsPerEur(baseCurrency, rates) != null;
 }
 
 /**
  * Multiplier that converts an amount in `currency` into `baseCurrency`.
  *
  * Resolution order, most to least specific:
- *  1. the manually maintained EUR/USD/LBP pairs;
- *  2. an explicit `customToBase` override;
- *  3. provider rates pivoted through EUR;
- *  4. 1 as a last resort.
+ *  1. an explicit `customToBase` override the user typed;
+ *  2. the euro pivot — provider rates, with the two legacy manual pairs folded
+ *     in by `unitsPerEur`;
+ *  3. 1 as a last resort.
  *
  * That final fallback silently treats an unknown currency as equal to the
  * base, which is wrong but keeps the app rendering. `canConvert` exists so
@@ -122,34 +191,32 @@ export function canConvert(currency: CurrencyCode, baseCurrency: CurrencyCode, r
 export function rateToBase(currency: CurrencyCode, baseCurrency: CurrencyCode, rates: ExchangeRates): number {
   if (currency === baseCurrency) return 1;
 
-  const eurUsd = positive(rates.eurUsd);
-  const usdLbp = positive(rates.usdLbp);
-  if (eurUsd != null) {
-    if (currency === "EUR" && baseCurrency === "USD") return eurUsd;
-    if (currency === "USD" && baseCurrency === "EUR") return 1 / eurUsd;
-    if (usdLbp != null) {
-      if (currency === "LBP" && baseCurrency === "EUR") return 1 / usdLbp / eurUsd;
-      if (currency === "EUR" && baseCurrency === "LBP") return eurUsd * usdLbp;
-    }
-  }
-  if (usdLbp != null) {
-    if (currency === "LBP" && baseCurrency === "USD") return 1 / usdLbp;
-    if (currency === "USD" && baseCurrency === "LBP") return usdLbp;
-  }
-
   const override = positive(rates.customToBase[currency]);
-  if (override != null) return override;
+  if (override != null && baseCurrency === "EUR") return override;
 
   // 1 unit of `currency` is 1/perEur[currency] EUR, which is
   // perEur[base]/perEur[currency] units of the base.
-  const perEur = rates.perEur;
-  if (perEur) {
-    const from = positive(perEur[currency]);
-    const to = positive(perEur[baseCurrency]);
-    if (from != null && to != null) return to / from;
-  }
+  const from = unitsPerEur(currency, rates);
+  const to = unitsPerEur(baseCurrency, rates);
+  if (from != null && to != null) return to / from;
 
+  if (override != null) return override;
   return 1;
+}
+
+/**
+ * The rate from one currency to another, or null when it is not known.
+ *
+ * The direction matters and is stated by the argument order: `crossRate("EUR",
+ * "USD")` answers "how many dollars is one euro". Null rather than 1 when the
+ * pair cannot be resolved — the exchange popup must say it does not know
+ * rather than print a rate of one.
+ */
+export function crossRate(from: CurrencyCode, to: CurrencyCode, rates: ExchangeRates): number | null {
+  if (from === to) return 1;
+  if (!canConvert(from, to, rates)) return null;
+  const rate = rateToBase(from, to, rates);
+  return Number.isFinite(rate) && rate > 0 ? rate : null;
 }
 
 export function normalizeAmount(amount: number | null | undefined, currency: CurrencyCode, settings: Settings): number {
@@ -157,7 +224,12 @@ export function normalizeAmount(amount: number | null | undefined, currency: Cur
   return amount * rateToBase(currency, settings.baseCurrency, settings.exchangeRates);
 }
 
-export function convertAmount(amount: number | null | undefined, fromCurrency: CurrencyCode, toCurrency: CurrencyCode, rates: ExchangeRates): number | null {
+export function convertAmount(
+  amount: number | null | undefined,
+  fromCurrency: CurrencyCode,
+  toCurrency: CurrencyCode,
+  rates: ExchangeRates,
+): number | null {
   if (amount == null || Number.isNaN(amount)) return null;
   if (fromCurrency === toCurrency) return amount;
   const eurValue = amount * rateToBase(fromCurrency, "EUR", rates);
@@ -181,9 +253,28 @@ export function roundAmount(amount: number, rule: RoundingRule): number {
 }
 
 export function currencyLabel(currency: CurrencyCode, mode: CurrencyDisplayMode): string {
-  if (mode === "symbol") return CURRENCY_SYMBOLS[currency];
-  if (mode === "both") return `${CURRENCY_SYMBOLS[currency]} ${currency}`;
+  const symbol = currencyDefinition(currency)?.symbol ?? currency;
+  if (mode === "symbol") return symbol;
+  if (mode === "both") return `${symbol} ${currency}`;
   return currency;
+}
+
+/**
+ * The locale numbers are grouped and punctuated in.
+ *
+ * Set by the language selector (see `domain/i18n.ts`), which writes it here so
+ * every `toLocaleString` in the app answers to one place rather than to the
+ * browser's own locale on one screen and the chosen language on another.
+ * `undefined` means "the browser's", which is what it always was.
+ */
+let activeNumberLocale: string | undefined;
+
+export function setNumberLocale(locale: string | undefined): void {
+  activeNumberLocale = locale || undefined;
+}
+
+export function numberLocale(): string | undefined {
+  return activeNumberLocale;
 }
 
 export function formatMoney(
@@ -194,9 +285,29 @@ export function formatMoney(
 ): string {
   if (amount == null || Number.isNaN(amount)) return "NaN";
   const sign = options.showSign && amount > 0 ? "+" : "";
-  const rounded = Math.abs(amount) >= 1000 || options.compact ? 0 : 2;
-  return `${sign}${currencyLabel(currency, mode)} ${amount.toLocaleString(undefined, {
-    minimumFractionDigits: rounded,
-    maximumFractionDigits: rounded,
+  // The currency's own minor units, capped at two above a thousand and dropped
+  // entirely when compact: a four-figure total does not need centimes, and the
+  // yen has none at any size.
+  const natural = currencyDecimals(currency);
+  const digits = options.compact || Math.abs(amount) >= 1000 ? 0 : natural;
+  return `${sign}${currencyLabel(currency, mode)} ${amount.toLocaleString(activeNumberLocale, {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
   })}`;
+}
+
+/**
+ * A rate, printed with enough precision to be useful in both directions.
+ *
+ * 1 EUR = 1.17 USD needs two decimals; 1 EUR = 0.0000093 BTC-sized rates need
+ * rather more, and 1 EUR = 108,000 LBP needs none at all. Significant figures
+ * rather than a fixed count, so no rate is ever shown as "0.00".
+ */
+export function formatRate(rate: number): string {
+  if (!Number.isFinite(rate) || rate <= 0) return "—";
+  const digits = rate >= 1000 ? 0 : rate >= 100 ? 1 : rate >= 1 ? 4 : rate >= 0.01 ? 5 : 8;
+  return rate
+    .toLocaleString(activeNumberLocale, { minimumFractionDigits: 0, maximumFractionDigits: digits })
+    .replace(/([.,]\d*?)0+$/, "$1")
+    .replace(/[.,]$/, "");
 }

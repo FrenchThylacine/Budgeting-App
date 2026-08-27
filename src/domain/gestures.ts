@@ -1,4 +1,4 @@
-import type { Settings } from "./types";
+import type { Settings, SwipeActionId } from "./types";
 
 /**
  * What a swipe does, per direction, per list.
@@ -10,7 +10,14 @@ import type { Settings } from "./types";
  * clever about the default.
  */
 
-export type SwipeActionId = "none" | "delete" | "archive" | "buy" | "edit" | "duplicate";
+/**
+ * Re-exported rather than declared here.
+ *
+ * There were two definitions of this union — one in `domain/types.ts` and one
+ * here — and adding an action to either left the other silently short. One
+ * declaration, in the module the persisted `Settings` shape lives in.
+ */
+export type { SwipeActionId } from "./types";
 
 export interface GesturePreferences {
   /** Right-to-left, the side a thumb reaches most easily. */
@@ -27,24 +34,43 @@ export const DEFAULT_GESTURES: Record<GestureSurface, GesturePreferences> = {
   // deliberate drag against rising resistance, and destructive actions still
   // ask before they act.
   wishlist: { trailing: "delete", leading: "buy" },
-  activities: { trailing: "archive", leading: "none" },
+  // Deactivating is the action people actually reach for on a phone — a
+  // season ends, a subscription is paused — and it is recoverable. Hiding
+  // remains available as a configured alternative.
+  activities: { trailing: "deactivate", leading: "none" },
   spending: { trailing: "delete", leading: "none" },
 };
 
 /** Which actions each list can actually perform. Offering more would be a lie. */
 export const AVAILABLE_ACTIONS: Record<GestureSurface, SwipeActionId[]> = {
   wishlist: ["none", "buy", "edit", "delete"],
-  activities: ["none", "archive", "edit", "duplicate", "delete"],
+  // `deactivate` and `archive` are deliberately both offered: switching an
+  // activity off is a financial act — it stops counting toward the budget —
+  // and hiding it is a presentation one. See ACTION_LABELS below.
+  activities: ["none", "deactivate", "archive", "edit", "duplicate", "delete"],
   spending: ["none", "edit", "delete"],
 };
 
 export const ACTION_LABELS: Record<SwipeActionId, string> = {
   none: "Nothing",
   delete: "Delete",
-  archive: "Hide / show",
+  archive: "Hide from lists",
+  deactivate: "Deactivate / reactivate",
   buy: "Buy",
   edit: "Edit",
   duplicate: "Duplicate",
+};
+
+/**
+ * The distinction the two activity actions exist to keep apart.
+ *
+ * Printed in the gesture settings and used as the swipe button's tooltip,
+ * because "Hide" and "Deactivate" are one keystroke apart in a list and
+ * worlds apart in what they do to the budget.
+ */
+export const ACTION_DESCRIPTIONS: Partial<Record<SwipeActionId, string>> = {
+  archive: "Takes the activity out of summaries. It still costs what it costs.",
+  deactivate: "Switches the activity off: it stops counting toward your budget. Nothing is deleted.",
 };
 
 /** Destructive actions render in the danger tone and confirm before they act. */

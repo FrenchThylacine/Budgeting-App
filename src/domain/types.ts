@@ -1,14 +1,14 @@
-export type CurrencyCode =
-  | "EUR"
-  | "USD"
-  | "LBP"
-  | "GBP"
-  | "CAD"
-  | "AUD"
-  | "JPY"
-  | "TRY"
-  | "SAR"
-  | "AED";
+/**
+ * Every ISO 4217 code the application knows.
+ *
+ * This used to be a hand-written union of ten, which is what made the app
+ * unable to record an amount in any other currency. It is now derived from the
+ * dataset in `domain/currencies.ts`, so the type and the table can never
+ * disagree — and adding a currency is a row rather than an edit in two places.
+ */
+export type { CurrencyCode } from "./currencies";
+import type { CurrencyCode } from "./currencies";
+import type { FundingKind } from "./funding";
 
 export type CurrencyDisplayMode = "symbol" | "code" | "both";
 export type RoundingRule = "none" | "nearest-1" | "nearest-5" | "nearest-10" | "ceil-10";
@@ -32,7 +32,24 @@ export type RecurrenceType =
   | "purchase"
   | "custom";
 export type BudgetBucket = "general" | "piloting" | "personal" | "wallet";
-export type WalletEntryType = "opening" | "personal" | "budget" | "rollover" | "adjustment";
+/**
+ * What a wallet ledger entry is.
+ *
+ *  - `opening`    : where the ledger starts. The one entry that asserts a
+ *                   balance rather than a movement.
+ *  - `budget`     : a **budget allocation** — money received for the month's
+ *                   budget. Increases both the cash held and the budget still
+ *                   available.
+ *  - `personal`   : the user's own money in or out, outside the budget.
+ *  - `transfer`   : leftover budget money reclassified as personal. Changes
+ *                   how much is *spoken for*, not how much exists, so its
+ *                   effect on the wallet balance is deliberately zero.
+ *  - `rollover`   : a month-close adjustment from the older rollover feature.
+ *  - `adjustment` : a correction, including the one "Reset wallet" writes.
+ *
+ * See `domain/wallet.ts` for what each does to the three balances.
+ */
+export type WalletEntryType = "opening" | "personal" | "budget" | "rollover" | "adjustment" | "transfer";
 export type PeriodStatus = "value" | "zero" | "pending" | "nan";
 export type AuditType =
   | "import"
@@ -65,6 +82,17 @@ export interface ExchangeRates {
   ratesUpdatedAt?: string;
   /** Where `perEur` came from, e.g. the provider host. */
   ratesSource?: string;
+  /**
+   * When the last refresh *attempt* was made, successful or not.
+   *
+   * Kept apart from `ratesUpdatedAt`, which only moves when new rates actually
+   * arrived. Without the distinction a provider outage would either look like
+   * fresh data (if the timestamp were stamped anyway) or make the app retry on
+   * every render. See `domain/exchangeRates.ts`.
+   */
+  ratesCheckedAt?: string;
+  /** Why the last attempt failed, when it did. Cleared by a success. */
+  ratesLastError?: string;
 }
 
 /** Swipe preferences, keyed by list. Absent means "use the defaults". */
@@ -74,7 +102,42 @@ export interface GestureSettings {
   spending?: { trailing?: SwipeActionId; leading?: SwipeActionId };
 }
 
-export type SwipeActionId = "none" | "delete" | "archive" | "buy" | "edit" | "duplicate";
+export type SwipeActionId = "none" | "delete" | "archive" | "buy" | "edit" | "duplicate" | "deactivate";
+
+/**
+ * Whether the browser has been asked for permission to show notifications, and
+ * what the answer was.
+ *
+ * Stored so the app can tell three states apart that the browser cannot: never
+ * asked, asked and allowed, asked and refused. `Notification.permission` alone
+ * reports "default" for both "never asked" and "asked and dismissed", which is
+ * exactly the distinction that decides whether asking again is reasonable or
+ * is nagging. See `domain/notifications.ts`.
+ */
+export interface NotificationSettings {
+  /** What the user chose the last time we asked. */
+  choice: "unasked" | "enabled" | "declined" | "unsupported";
+  /** When they chose it, so "declined last year" and "declined today" differ. */
+  decidedAt?: string;
+  /** The browser's own permission value at that moment, for diagnosis. */
+  browserPermission?: "default" | "granted" | "denied";
+}
+
+/**
+ * First-run tutorial state.
+ *
+ * `version` so a materially changed tutorial can be offered again later
+ * without re-showing today's to everybody who has already finished it.
+ * Completed and skipped are stored separately: they are different answers, and
+ * only one of them means "I have seen this".
+ */
+export interface OnboardingSettings {
+  version: number;
+  completedAt?: string;
+  skippedAt?: string;
+  /** The step reached, so a reopened tutorial resumes rather than restarts. */
+  lastStep?: number;
+}
 
 export interface Settings {
   selectedYear: number;
@@ -97,7 +160,20 @@ export interface Settings {
    */
   trackedCurrencies?: CurrencyCode[];
   currencyDisplayMode: CurrencyDisplayMode;
+  /**
+   * The interface language, as a BCP 47 tag ("en", "fr", "pt-BR").
+   *
+   * Absent means "follow the browser", which is what every budget written
+   * before the language selector existed did. It drives the translated strings
+   * *and* the locale every date, number and plural is formatted with — see
+   * `domain/i18n.ts`.
+   */
+  language?: string;
   roundingRule: RoundingRule;
+  /** Notification permission state. Absent means never asked. */
+  notifications?: NotificationSettings;
+  /** First-run tutorial state. Absent means never started. */
+  onboarding?: OnboardingSettings;
   autoWishlistFlushEnabled: boolean;
   pilotIncludedInBudget: boolean;
   /**
@@ -252,6 +328,28 @@ export interface Activity {
   iconSourceUrl?: string;
   /** Accent colour that themes the whole activity widget. */
   color?: string;
+  /**
+   * Who funds this activity, and therefore whether it consumes the personal
+   * budget at all.
+   *
+   * Absent means `personal`, which is exactly how every activity created
+   * before this field existed behaved: it counted toward the budget in full.
+   * The value is the *default* for transactions linked to the activity — an
+   * individual transaction can still override it, because a lesson somebody
+   * else usually pays for is occasionally paid for by you.
+   *
+   * See `domain/funding.ts` for what each kind does to the figures.
+   */
+  fundingSource?: FundingKind;
+  /**
+   * Who pays, in the user's own words: "Dad", "the club", "work".
+   *
+   * Free text on purpose. A predefined people database would be a second thing
+   * to maintain before the first activity could be recorded, and the answer is
+   * usually one word. Only meaningful for `fundingSource: "other"`, always
+   * optional, and never required by any code path.
+   */
+  fundedBy?: string;
   /** Which model drives the monthly estimate. Defaults to `auto`. */
   costModel?: CostModel;
   /** Sessions per month for the `perSession` model. */
@@ -421,6 +519,22 @@ export interface WalletEntry {
   id: string;
   year: number;
   month: number;
+  /**
+   * The day the money moved (YYYY-MM-DD).
+   *
+   * Absent for every entry written before this field existed, which is why
+   * `walletEntryDate` falls back to the first of `year`/`month`. Never
+   * `createdAt`: when a movement was typed in is not when it happened, and a
+   * treasury that confuses the two reports the wrong month.
+   */
+  date?: string;
+  /**
+   * Signed: positive is money in, negative is money out.
+   *
+   * The direction is the sign rather than a second stored field, so the two
+   * can never disagree. The editor offers an in/out control and writes the
+   * sign from it.
+   */
   amount: number;
   currency: CurrencyCode;
   source: string;
@@ -429,12 +543,45 @@ export interface WalletEntry {
   createdAt: string;
 }
 
+/**
+ * What a scenario does to one activity.
+ *
+ * `enabled: false` takes the activity out of the scenario entirely — it
+ * contributes nothing. `funding` overrides how an enabled activity is counted,
+ * so "what if my father stopped paying for the lessons" is a scenario rather
+ * than an edit to the activity itself.
+ *
+ * Both fields are optional at the edges: an activity a scenario has never been
+ * told about is enabled and keeps its own funding, which is what a scenario
+ * created before this existed meant.
+ */
+export interface ScenarioActivityState {
+  enabled: boolean;
+  /** Overrides the activity's own funding for this scenario only. */
+  funding?: FundingKind;
+}
+
 export interface ScenarioPreset {
   id: string;
   name: string;
   monthlyBudget?: number;
+  /**
+   * @deprecated The scenario system no longer has a Piloting-specific control:
+   * it assumed every user has a "Piloting" activity, which most do not.
+   * Per-activity enable/disable and funding (`activityStates`) replace it. The
+   * field is still declared so scenarios saved before that change round-trip
+   * unchanged instead of losing a key on every save.
+   */
   pilotIncludedInBudget?: boolean;
   categoryCaps?: Record<string, number>;
+  /**
+   * Per-activity state, keyed by activity id.
+   *
+   * Absent, or absent for a given activity, means "enabled, own funding" — so
+   * every scenario saved before this field existed continues to describe
+   * exactly what it always described.
+   */
+  activityStates?: Record<string, ScenarioActivityState>;
   notes: string;
 }
 
@@ -539,14 +686,25 @@ export interface PeriodSummary {
   total: number | null;
   generalTotal: number | null;
   pilotingTotal: number | null;
-  /** The same figure as `total`, named for the personal/external/all display. */
+  /** The same figure as `total`, named for the three-way funding display. */
   personalTotal?: number | null;
-  /** Spend somebody else paid for. Recorded in full, charged to nothing. */
+  /**
+   * Everything this budget did not pay for: paid-by-other **and**
+   * outside-budget together. Kept for the callers that only need the
+   * exclusion; the two are reported separately below because they are
+   * different facts.
+   */
   externalTotal?: number | null;
-  /** Every transaction in the period: `personalTotal + externalTotal`. */
+  /** Spend somebody else paid for. Recorded in full, charged to nothing. */
+  otherFundedTotal?: number | null;
+  /** The user's own spend, deliberately kept outside this budget. */
+  outsideBudgetTotal?: number | null;
+  /** Every transaction in the period: personal + other + outside. */
   transactionTotal?: number | null;
-  /** How many of `entryCount` were externally funded. */
+  /** How many of `entryCount` were not personally funded. */
   externalCount?: number;
+  otherFundedCount?: number;
+  outsideBudgetCount?: number;
   entryCount: number;
   isClosed: boolean;
 }
@@ -564,6 +722,8 @@ export interface ActivityEstimate {
   monthlyBase: number;
   yearlyBase: number;
   bucket: BudgetBucket;
+  /** How this activity is funded, and so whether it consumes the budget. */
+  funding: FundingKind;
 }
 
 export interface WishlistSummary {
@@ -575,10 +735,21 @@ export interface WishlistSummary {
 }
 
 export interface WalletSummary {
+  /**
+   * Actual money held: every ledger movement, minus budget spending since the
+   * ledger began. Derived, never stored — see `domain/wallet.ts`.
+   */
   walletTotal: number;
-  personalWalletTotal: number;
+  /** Allocated budget money still available. Carries across months. */
+  budgetRemaining: number;
+  /** Money outside the current budget: `walletTotal − budgetRemaining`. */
+  personalBalance: number;
   rolloverTotal: number;
   openingBalance: number;
+  /** Everything ever allocated to the budget, since the ledger began. */
+  allocatedTotal: number;
+  /** Budget spending charged against those allocations. */
+  budgetSpent: number;
 }
 
 export interface YearCalculation {
@@ -594,8 +765,12 @@ export interface YearCalculation {
   selectedWeekSpend: PeriodSummary;
   /** Personal-budget spend for the whole year. */
   totalSpend: number;
-  /** Externally funded spend for the whole year, kept out of `totalSpend`. */
+  /** Everything not personally funded, kept out of `totalSpend`. */
   externalSpend: number;
+  /** Spend somebody else paid for, over the whole year. */
+  otherFundedSpend: number;
+  /** The user's own out-of-budget spend, over the whole year. */
+  outsideBudgetSpend: number;
   delta: number | null;
   rolloverDelta: number | null;
   roundedMonthlyValue: number;
@@ -603,8 +778,12 @@ export interface YearCalculation {
   wishlist: WishlistSummary;
   /** Personal-budget spend up to and including the selected month. */
   ytdTotal: number;
-  /** Externally funded spend over the same window. */
+  /** Everything not personally funded, over the same window. */
   externalYtdTotal: number;
+  /** Paid-by-other spend, over the same window. */
+  otherFundedYtdTotal: number;
+  /** Outside-budget spend, over the same window. */
+  outsideBudgetYtdTotal: number;
   activityEstimates: ActivityEstimate[];
   monthlyTrend: PeriodSummary[];
   weeklyTrend: PeriodSummary[];
