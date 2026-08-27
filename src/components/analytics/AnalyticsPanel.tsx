@@ -20,6 +20,9 @@ import {
   weeklyTrendBars,
 } from "../../domain/analytics";
 import { useBudgetStore } from "../../store/budgetStore";
+import { activityBudgetSummary, fundingShares } from "../../domain/activityBudget";
+import { FUNDING_KINDS, FUNDING_META } from "../../domain/funding";
+import { useTranslation } from "../../i18n/useTranslation";
 import { formatDualMoney } from "../../utils/formatters";
 import { EmptyState } from "../ui/EmptyState";
 import { Section } from "../ui/Section";
@@ -132,6 +135,7 @@ const GRADE_COLOR: Record<string, string> = {
 // ─── Main Panel ───────────────────────────────────────────────────────────────
 
 export const AnalyticsPanel: React.FC = () => {
+  const { t } = useTranslation();
   const snapshot = useBudgetStore((state) => state.snapshot);
   const { settings } = snapshot;
   const mode = settings.selectedPeriodMode ?? "month";
@@ -167,6 +171,15 @@ export const AnalyticsPanel: React.FC = () => {
   );
   const categoryEvolution = useMemo(() => categoryMonthlySeries(snapshot, settings, 4), [snapshot, settings]);
   const recurringSplit = useMemo(() => recurringMonthlySplit(snapshot, settings), [snapshot, settings]);
+  /**
+   * Activity costs, from the same module the Activities tab and the reports
+   * read. The statistics page does no costing of its own.
+   */
+  const activityCosts = useMemo(
+    () => activityBudgetSummary(snapshot, settings.selectedYear, settings.selectedMonth),
+    [snapshot, settings.selectedYear, settings.selectedMonth],
+  );
+
   const recentBars = useMemo(
     () => recentPeriodTotals(snapshot, settings, mode === "year" ? 5 : 8),
     [snapshot, settings, mode],
@@ -681,6 +694,119 @@ export const AnalyticsPanel: React.FC = () => {
               />
             )}
           </ChartCard>
+        </div>
+      </Section>
+
+      {/* ── Activities ─────────────────────────────────────────────────────── */}
+      <Section title={t("stats.activityCost")}>
+        <div style={{ display: "grid", gap: 16, minWidth: 0 }}>
+          {activityCosts.items.length === 0 ? (
+            <EmptyState title={t("stats.noActivities")} description={t("stats.noActivitiesBody")} />
+          ) : (
+            <>
+              <ChartCard
+                title={t("stats.activityShare")}
+                subtitle={`${money(activityCosts.yearly.gross)} ${t("common.perYear")} · ${t("stats.grossCostHint")}`}
+              >
+                {/* Each activity against the *gross* yearly total, so the
+                    percentages describe one whole and add up to it. Sharing a
+                    denominator with the funding split below is what keeps the
+                    two readings consistent. */}
+                <HorizontalBarChart
+                  title={t("stats.activityShare")}
+                  rows={activityCosts.shares.slice(0, 12).map((share) => ({
+                    id: share.activity.id,
+                    label: share.activity.name,
+                    value: share.yearlyBase,
+                    color: share.activity.color ?? FUNDING_META[share.funding].color,
+                    caption: [
+                      share.share != null ? `${share.share.toFixed(1)}%` : null,
+                      `${money(share.monthlyBase)} ${t("common.perMonth")}`,
+                      share.funding === "personal" ? null : t(`funding.${share.funding}.short`),
+                    ]
+                      .filter(Boolean)
+                      .join(" · "),
+                    badge: share.funding === "personal" ? undefined : FUNDING_META[share.funding].glyph,
+                    badgeTone: "neutral" as const,
+                  }))}
+                  formatValue={money}
+                />
+                {activityCosts.shares.length > 12 && (
+                  <span className="text-caption" style={{ color: "var(--text-tertiary)" }}>
+                    +{activityCosts.shares.length - 12}
+                  </span>
+                )}
+              </ChartCard>
+
+              <ChartCard title={t("stats.fundingSplit")} subtitle={t("funding.gross.hint")}>
+                {/* Three slices, never two: "paid by others" and "outside
+                    budget" behave identically against the budget and answer
+                    different questions, so collapsing them here would destroy
+                    the only place the difference is visible. */}
+                <DonutChart
+                  title={t("stats.fundingSplit")}
+                  segments={FUNDING_KINDS.map((kind) => ({
+                    id: kind,
+                    label: t(`funding.${kind}.short`),
+                    value: activityCosts.yearly[kind],
+                    color: FUNDING_META[kind].color,
+                  }))}
+                  centerValue={money(activityCosts.yearly.gross)}
+                  centerLabel={t("stats.grossCost")}
+                  formatValue={money}
+                  size={200}
+                  emptyMessage={t("stats.noActivitiesBody")}
+                />
+                <StatRow
+                  columns={150}
+                  items={FUNDING_KINDS.map((kind) => {
+                    const share = fundingShares(activityCosts.yearly)[kind];
+                    return {
+                      label: `${FUNDING_META[kind].glyph} ${t(`funding.${kind}.short`)}`,
+                      value: money(activityCosts.yearly[kind]),
+                      detail: `${money(activityCosts.monthly[kind])} ${t("common.perMonth")}${
+                        share != null ? ` · ${t("stats.shareOfTotal", { percent: `${share.toFixed(1)}%` })}` : ""
+                      }`,
+                      tone: kind === "personal" ? undefined : ("warning" as const),
+                    };
+                  })}
+                />
+              </ChartCard>
+
+              <div className="card" style={{ padding: 16, minWidth: 0 }}>
+                <StatRow
+                  columns={150}
+                  items={[
+                    {
+                      label: t("stats.grossCost"),
+                      value: money(activityCosts.yearly.gross),
+                      detail: `${money(activityCosts.monthly.gross)} ${t("common.perMonth")}`,
+                    },
+                    {
+                      label: t("stats.budgetRelevant"),
+                      value: money(activityCosts.yearly.personal),
+                      detail: `${money(activityCosts.monthly.personal)} ${t("common.perMonth")}`,
+                    },
+                    {
+                      label: t("activities.requiredThisMonth", { month: periodLabel(settings) }),
+                      value: money(activityCosts.requiredThisMonth.personal),
+                      detail: t("activities.requiredThisMonthHint"),
+                    },
+                    ...(activityCosts.unscheduled.length > 0
+                      ? [
+                          {
+                            label: t("activities.dateUnknown"),
+                            value: String(activityCosts.unscheduled.length),
+                            detail: money(activityCosts.unscheduledMonthly.gross),
+                            tone: "warning" as const,
+                          },
+                        ]
+                      : []),
+                  ]}
+                />
+              </div>
+            </>
+          )}
         </div>
       </Section>
 

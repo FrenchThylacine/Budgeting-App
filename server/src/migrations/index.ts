@@ -281,6 +281,61 @@ export async function runMigrations(
         await sql`ALTER TABLE wishlist_items ADD COLUMN IF NOT EXISTS icon_url TEXT;`;
       },
     },
+    {
+      /*
+       * Funding, for activities and for scenarios.
+       *
+       * `activities.funding_source` records which of the three classifications
+       * an activity is — paid by me, paid by other, outside budget. NULL is
+       * the fourth state that matters: it means the row predates this column,
+       * and every reader treats it as "paid by me", which is exactly how those
+       * rows have always behaved. No backfill is therefore needed, and running
+       * one would be indistinguishable from a user having chosen that value.
+       *
+       * `activities.funded_by` is the optional free-text name of whoever pays.
+       * Deliberately a plain column and not a foreign key to a people table:
+       * requiring somebody to create "Dad" as a record before they can write
+       * "Dad" is a worse product for no gain in correctness.
+       *
+       * `scenario_presets.activity_states` is the per-activity half of the
+       * generic scenario model — enabled, and an optional funding override —
+       * as JSON, for the same reason weekdays and schedule overrides are JSON:
+       * a small map read as a unit with its parent, never queried across rows.
+       * NULL means "every activity enabled with its own funding", which is
+       * what every scenario saved before this column meant.
+       *
+       * All three are additive and nullable, so an existing row is valid the
+       * moment the column exists. Nothing in `schema.ts` references them, per
+       * the rule migration 006 established the hard way.
+       */
+      name: "014-activity-funding-and-scenario-activity-states",
+      run: async (sql: NeonQueryFunction<any, any>) => {
+        await sql`ALTER TABLE activities ADD COLUMN IF NOT EXISTS funding_source TEXT;`;
+        await sql`ALTER TABLE activities ADD COLUMN IF NOT EXISTS funded_by TEXT;`;
+        await sql`ALTER TABLE scenario_presets ADD COLUMN IF NOT EXISTS activity_states TEXT;`;
+      },
+    },
+    {
+      /*
+       * The day a wallet movement happened.
+       *
+       * The wallet became a real ledger — money in, money out, budget
+       * allocations that carry across months — and a ledger needs a date.
+       * `year` and `month` were enough while the wallet was a per-month
+       * figure; they cannot order two movements inside one month, and they
+       * cannot say which day an allocation arrived.
+       *
+       * Nullable and un-backfilled on purpose. An entry written before this
+       * column existed genuinely does not know its day, and
+       * `walletEntryDate()` reads it as the first of its month — which is what
+       * that row can honestly claim. Inventing a day would be indistinguishable
+       * from one the user had entered.
+       */
+      name: "015-wallet-entry-date",
+      run: async (sql: NeonQueryFunction<any, any>) => {
+        await sql`ALTER TABLE wallet_entries ADD COLUMN IF NOT EXISTS date TEXT;`;
+      },
+    },
   ];
 
 

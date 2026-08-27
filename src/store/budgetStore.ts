@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { calculateRolloverDelta, createNextYearRecord } from "../domain/calculations";
+import { ALLOCATION_TYPE, TRANSFER_TYPE, monthlyBudgetPlan, walletState } from "../domain/wallet";
 import { monthFromDateInput, monthName, todayDateInput, weekFromDateInput } from "../domain/dates";
 import { isUsableAmount } from "../domain/wishlist";
 import type { WishlistLinkResult, WishlistPurchaseOverrides } from "../domain/wishlist";
@@ -138,6 +139,41 @@ interface BudgetStore {
   /** The live transaction an item points at, or null when there is none. */
   findLinkedSpendingEntry: (itemId: string) => SpendingEntry | null;
   addWalletEntry: (entry: WalletInput) => void;
+  /**
+   * Bring the wallet balance to exactly zero.
+   *
+   * Deliberately **not** a deletion. Wallet entries are a record of money that
+   * moved — an opening balance, a month-end rollover, a cash adjustment — and
+   * erasing them to make a figure read zero destroys history to fix a display.
+   * One balancing adjustment in the display currency does the job, is visible
+   * in the list, lands on the undo stack, and touches nothing else in the
+   * budget. Returns the amount that was written, or null when the balance was
+   * already zero and nothing needed doing.
+   */
+  resetWallet: () => number | null;
+  /**
+   * Record money genuinely received for this month's budget.
+   *
+   * Deliberately an explicit act. The planning system calculates what the
+   * month *needs*; only the user can say the money actually arrived, and
+   * assuming it did because a figure was computed is how a treasury starts
+   * lying about how much cash exists.
+   */
+  allocateBudget: (input: {
+    amount: number;
+    currency: CurrencyCode;
+    date: string;
+    note?: string;
+    source?: string;
+  }) => void;
+  /**
+   * Move leftover budget money to the personal side.
+   *
+   * Changes what is spoken for, not how much money exists — the wallet
+   * balance is deliberately unaffected. Offered at the two moments leftover
+   * budget comes up, and never performed without being asked for.
+   */
+  transferBudgetToPersonal: (amount: number, note?: string) => void;
   updateWalletEntry: (id: string, patch: Partial<WalletEntry>) => void;
   removeWalletEntry: (id: string) => void;
   closeMonth: (year: number, month: number, applyRollover: boolean) => void;
@@ -739,6 +775,132 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
     );
   },
 
+  allocateBudget: ({ amount, currency, date, note, source }) => {
+    if (!get().isCurrentPeriodMutable()) return;
+    if (!Number.isFinite(amount) || amount === 0) return;
+    const year = Number(date.slice(0, 4));
+    const month = Number(date.slice(5, 7));
+    commit(
+      set,
+      get,
+      (snapshot) => {
+        ensureYearRecord(snapshot, year).walletEntries.push({
+          id: id("wallet-allocation"),
+          year,
+          month,
+          date,
+          amount,
+          currency,
+          /*
+           * A translation key, not a sentence.
+           *
+           * The store has no language. Writing "Budget for August 2026" here
+           * put an English string into a French ledger for ever — and, worse,
+           * froze it: changing the interface language afterwards could not
+           * change a row that had already been saved. The panel resolves
+           * `wallet.allocationSource` at render time, so the ledger reads in
+           * whatever language the user is using today.
+           */
+          source: source?.trim() || `@wallet.allocationSource|${monthName(month)}|${year}`,
+          type: ALLOCATION_TYPE,
+          note: note?.trim() ?? "",
+          createdAt: new Date().toISOString(),
+        });
+      },
+      "wallet",
+      `Allocated budget for ${monthName(month)} ${year}.`,
+      { year, month, amount, currency },
+    );
+  },
+
+  transferBudgetToPersonal: (amount, note) => {
+    if (!get().isCurrentPeriodMutable()) return;
+    if (!Number.isFinite(amount) || amount <= 0) return;
+    const snapshot = get().snapshot;
+    const year = snapshot.settings.selectedYear;
+    const month = snapshot.settings.selectedMonth;
+    commit(
+      set,
+      get,
+      (draft) => {
+        ensureYearRecord(draft, year).walletEntries.push({
+          id: id("wallet-transfer"),
+          year,
+          month,
+          date: todayDateInput(),
+          amount,
+          currency: draft.settings.baseCurrency,
+          source: "@wallet.transferSource",
+          type: TRANSFER_TYPE,
+          note: note?.trim() || "@wallet.transferLedgerNote",
+          createdAt: new Date().toISOString(),
+        });
+      },
+      "wallet",
+      "Moved leftover budget to the personal balance.",
+      { year, month, amount },
+    );
+  },
+
+  resetWallet: () => {
+    if (!get().isCurrentPeriodMutable()) return null;
+    const snapshot = get().snapshot;
+    const year = snapshot.settings.selectedYear;
+    // The real balance across the whole ledger, not one year's entries: the
+    // wallet is continuous, and zeroing a slice of it would leave a figure
+    // that is zero on one screen and not on another.
+    const balance = walletState(snapshot).walletBalance;
+    // Below a hundredth of a unit is below anything the app displays, and
+    // writing a €0.000001 adjustment would be noise in the ledger forever.
+    if (Math.abs(balance) < 0.005) return null;
+
+    const adjustment = -balance;
+    // Budget money still claimed by the ledger. Zeroing the cash while leaving
+    // this standing would assert that €600 of budget money is available in a
+    // wallet the user has just declared empty — a contradiction they can see,
+    // and one that drives the personal balance negative by exactly that
+    // amount. The claim is released first, so all three figures land on zero.
+    const claimed = walletState(snapshot).budgetRemaining;
+
+    commit(
+      set,
+      get,
+      (draft) => {
+        const record = ensureYearRecord(draft, year);
+        if (Math.abs(claimed) >= 0.005) {
+          record.walletEntries.push({
+            id: id("wallet-reset-claim"),
+            year,
+            month: draft.settings.selectedMonth,
+            date: todayDateInput(),
+            amount: claimed,
+            currency: draft.settings.baseCurrency,
+            source: "@wallet.resetSource",
+            type: TRANSFER_TYPE,
+            note: "@wallet.resetClaimNote",
+            createdAt: new Date().toISOString(),
+          });
+        }
+        record.walletEntries.push({
+          id: id("wallet-reset"),
+          year,
+          month: draft.settings.selectedMonth,
+          amount: adjustment,
+          currency: draft.settings.baseCurrency,
+          date: todayDateInput(),
+          source: "@wallet.resetSource",
+          type: "adjustment",
+          note: "@wallet.resetLedgerNote",
+          createdAt: new Date().toISOString(),
+        });
+      },
+      "wallet",
+      "Reset the wallet balance to zero.",
+      { year, previousBalance: balance, adjustment },
+    );
+    return adjustment;
+  },
+
   updateWalletEntry: (idValue, patch) => {
     if (!get().isCurrentPeriodMutable()) return;
     commit(
@@ -1043,10 +1205,29 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
         const preset = snapshot.scenarioPresets.find((item) => item.id === presetId);
         if (!preset) return;
         if (preset.monthlyBudget != null) snapshot.settings.monthlyBudget = preset.monthlyBudget;
-        if (preset.pilotIncludedInBudget != null) snapshot.settings.pilotIncludedInBudget = preset.pilotIncludedInBudget;
+        /*
+         * `pilotIncludedInBudget` is deliberately not applied any more.
+         *
+         * It was the scenario system's one hard-coded assumption — that every
+         * budget has a "Piloting" activity — and it has been replaced by the
+         * per-activity states below, which say the same thing for any activity
+         * and are shown in the preview. A legacy scenario keeps the stored
+         * field so it round-trips, but applying a value the preview does not
+         * list would change a setting the user was never shown.
+         */
         for (const category of snapshot.categories) {
           const cap = preset.categoryCaps?.[category.id];
           if (cap != null) category.monthlyCap = cap;
+        }
+        // Per-activity: whether it runs, and who pays for it. Only activities
+        // that still exist — a state naming a deleted one is inert rather than
+        // an error.
+        const record = snapshot.years[String(snapshot.settings.selectedYear)];
+        for (const activity of record?.activities ?? []) {
+          const state = preset.activityStates?.[activity.id];
+          if (!state) continue;
+          activity.active = state.enabled !== false;
+          if (state.funding != null) activity.fundingSource = state.funding;
         }
       },
       "preset",

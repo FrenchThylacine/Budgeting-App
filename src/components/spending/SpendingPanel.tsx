@@ -3,12 +3,21 @@ import { Pencil, Plus, ShoppingBag, Trash2, X } from "lucide-react";
 import { currencyOptionsFor, formatMoney } from "../../domain/currency";
 import { monthFromDateInput, todayDateInput, weekFromDateInput, weekYear } from "../../domain/dates";
 import { selectedIsoWeekYear } from "../../domain/periods";
-import { FUNDING_SOURCES, fundingLabel, isExternallyFunded } from "../../domain/funding";
+import {
+  FUNDING_META,
+  FUNDING_SOURCES,
+  activityFundingKind,
+  entryFundingKind,
+  fundingKind,
+  isExternallyFunded,
+} from "../../domain/funding";
 import { fundingSplit } from "../../domain/analytics";
+import { findSeedCategory } from "../../domain/seedCategories";
+import { useTranslation } from "../../i18n/useTranslation";
 import { isActiveWishlistItem, sortWishlistItems } from "../../domain/wishlist";
 import { formatDualMoney } from "../../utils/formatters";
 import type { WishlistLinkResult } from "../../domain/wishlist";
-import type { CurrencyCode, RecurrenceType, SpendingEntry, WishlistItem } from "../../domain/types";
+import type { Activity, CurrencyCode, RecurrenceType, SpendingEntry, WishlistItem } from "../../domain/types";
 import { useBudgetStore } from "../../store/budgetStore";
 import { matchesEntryFilters } from "../../utils/formatters";
 import { Button } from "../ui/Button";
@@ -41,11 +50,19 @@ interface Draft {
   note: string;
   source: string;
   recurrenceType: RecurrenceType;
+  /**
+   * The activity this transaction paid for; "" when it stands on its own.
+   *
+   * Constrained to the selected category — see `activityOptions` below — and
+   * cleared rather than silently kept when the category changes underneath it.
+   */
+  activityId: string;
   /** Wishlist item this transaction fulfils; "" when it stands on its own. */
   wishlistItemId: string;
 }
 
 export const SpendingPanel: React.FC = () => {
+  const { t } = useTranslation();
   const snapshot = useBudgetStore((s) => s.snapshot);
   const add = useBudgetStore((s) => s.addSpendingEntry);
   const update = useBudgetStore((s) => s.updateSpendingEntry);
@@ -63,6 +80,7 @@ export const SpendingPanel: React.FC = () => {
     note: "",
     source: "personal",
     recurrenceType: "none",
+    activityId: "",
     wishlistItemId: "",
   });
 
@@ -92,6 +110,70 @@ export const SpendingPanel: React.FC = () => {
     if (current && !selectable.some((item) => item.id === current.id)) selectable.push(current);
     return sortWishlistItems(selectable);
   }, [wishlistItems, wishlistById, draft.wishlistItemId]);
+
+  const activities: Activity[] = snapshot.years[String(snapshot.settings.selectedYear)]?.activities ?? [];
+  const activityById = useMemo(() => new Map(activities.map((activity) => [activity.id, activity])), [activities]);
+
+  /**
+   * The wishlist category, resolved by seed key rather than by name.
+   *
+   * The wishlist selector belongs to exactly one category, and which category
+   * that is has to be a fact the app can look up — matching on the string
+   * "Wishlist" would break the moment somebody renamed it, and hardcoding an
+   * id broke the moment a second budget existed.
+   */
+  const wishlistCategoryId = useMemo(
+    () => findSeedCategory(snapshot.categories, "cat-wishlist")?.id,
+    [snapshot.categories],
+  );
+  const isWishlistCategory = wishlistCategoryId != null && draft.categoryId === wishlistCategoryId;
+
+  /**
+   * Activities inside the selected category.
+   *
+   * Only these are offered: an activity in another category has nothing to do
+   * with this transaction, and offering it is how a padel session ends up
+   * filed under Software. The transaction's existing activity stays in the
+   * list while it is being edited even if it has since moved category, for the
+   * same reason an archived category stays selectable — a `<select>` whose
+   * value is not among its options silently shows a different one.
+   */
+  const activityOptions = useMemo(() => {
+    const inCategory = activities
+      .filter((activity) => activity.categoryId === draft.categoryId)
+      .sort((a, b) => a.order - b.order);
+    const current = draft.activityId ? activityById.get(draft.activityId) : undefined;
+    if (current && !inCategory.some((activity) => activity.id === current.id)) return [...inCategory, current];
+    return inCategory;
+  }, [activities, activityById, draft.categoryId, draft.activityId]);
+
+  /**
+   * Changing the category re-scopes both selectors and clears a selection the
+   * new category cannot hold.
+   *
+   * Silently keeping an activity that belongs to another category would
+   * persist a relationship the interface says is impossible; silently keeping
+   * a wishlist link outside the wishlist category would do the same. The user
+   * is told, rather than left to notice.
+   */
+  const changeCategory = (categoryId: string) => {
+    setDraft((current) => {
+      const next = { ...current, categoryId };
+      const keepsActivity =
+        !current.activityId || activityById.get(current.activityId)?.categoryId === categoryId;
+      if (!keepsActivity) {
+        next.activityId = "";
+        setNotice(t("spending.activityCleared"));
+      }
+      if (wishlistCategoryId != null && categoryId !== wishlistCategoryId && current.wishlistItemId) {
+        next.wishlistItemId = "";
+      }
+      return next;
+    });
+  };
+
+  /** The activity this transaction is attached to, when it has one. */
+  const selectedActivity = draft.activityId ? activityById.get(draft.activityId) : undefined;
 
   /** Everything in the selected period, before the search box narrows it. */
   const periodEntries = useMemo(
@@ -196,6 +278,11 @@ export const SpendingPanel: React.FC = () => {
       month: monthFromDateInput(draft.date),
       week: weekFromDateInput(draft.date),
       categoryId: draft.categoryId,
+      // The relationship is persisted, not merely displayed: `activityId` is a
+      // real column, so the link survives a save, a reload and a round trip
+      // through the server. Empty means "stands on its own", stored as absent
+      // rather than as an empty string.
+      activityId: draft.activityId || undefined,
       currency: draft.currency,
       note: draft.note,
       source: draft.source,
@@ -259,6 +346,7 @@ export const SpendingPanel: React.FC = () => {
       // `isPiloting` is not a form field: it follows the category, and an
       // existing flag is carried through `editing` so an edit never drops it.
       recurrenceType: entry.recurrenceType ?? "none",
+      activityId: entry.activityId ?? "",
       wishlistItemId: entry.wishlistItemId ?? "",
     });
   };
@@ -287,14 +375,14 @@ export const SpendingPanel: React.FC = () => {
   return (
     <div className="page-enter" style={{ display: "grid", gap: 24 }}>
       <Section
-        title="Spending"
+        title={t("spending.title")}
         action={
           <Button variant="primary" onClick={beginNew} disabled={!mutable}>
-            <Plus size={16} /> Add transaction
+            <Plus size={16} /> {t("spending.add")}
           </Button>
         }
       >
-        {!mutable && <div className="historical-banner">Historical periods are read-only.</div>}
+        {!mutable && <div className="historical-banner">{t("common.readOnly")}</div>}
 
         {notice && (
           <div
@@ -315,7 +403,7 @@ export const SpendingPanel: React.FC = () => {
             <button
               type="button"
               onClick={() => setNotice(null)}
-              aria-label="Dismiss message"
+              aria-label={t("a11y.dismissMessage")}
               style={{ background: "none", border: "none", color: "inherit", cursor: "pointer", padding: 0 }}
             >
               <X size={13} />
@@ -325,14 +413,14 @@ export const SpendingPanel: React.FC = () => {
 
         {mutable && open && (
           <EditorSheet
-            title={editing ? "Edit transaction" : "New transaction"}
+            title={editing ? t("spending.edit") : t("spending.new")}
             subtitle={editing ? "Recorded on " + editing.date : undefined}
             onClose={reset}
             footer={
               <>
-                <Button variant="ghost" type="button" onClick={reset}>Cancel</Button>
+                <Button variant="ghost" type="button" onClick={reset}>{t("common.cancel")}</Button>
                 <Button variant="primary" type="submit" form="spending-editor-form">
-                  {editing ? "Save changes" : "Add transaction"}
+                  {editing ? t("common.save") : t("spending.add")}
                 </Button>
               </>
             }
@@ -346,7 +434,7 @@ export const SpendingPanel: React.FC = () => {
               gap: 12,
             }}
           >
-            <Field label="Amount">
+            <Field label={t("spending.amount")}>
               <input
                 className="input"
                 type="number"
@@ -357,7 +445,7 @@ export const SpendingPanel: React.FC = () => {
                 onChange={(e) => setDraft({ ...draft, amount: e.target.value })}
               />
             </Field>
-            <Field label="Currency">
+            <Field label={t("spending.currency")}>
               <select
                 className="select"
                 value={draft.currency}
@@ -368,7 +456,7 @@ export const SpendingPanel: React.FC = () => {
                 ))}
               </select>
             </Field>
-            <Field label="Date">
+            <Field label={t("spending.date")}>
               <input
                 className="input"
                 type="date"
@@ -378,7 +466,7 @@ export const SpendingPanel: React.FC = () => {
               />
             </Field>
             <Field
-              label="Category"
+              label={t("spending.category")}
               // The category decides whether this counts as piloting; the state
               // is shown rather than asked for a second time.
               hint={
@@ -392,7 +480,7 @@ export const SpendingPanel: React.FC = () => {
               <select
                 className="select"
                 value={draft.categoryId}
-                onChange={(e) => setDraft({ ...draft, categoryId: e.target.value })}
+                onChange={(e) => changeCategory(e.target.value)}
               >
                 {categoryOptions.map((category) => (
                   <option key={category.id} value={category.id}>
@@ -403,11 +491,11 @@ export const SpendingPanel: React.FC = () => {
               </select>
             </Field>
             <Field
-              label="Paid by"
+              label={t("funding.label")}
               // The consequence of the choice, said where the choice is made.
               // Marking a transaction as someone else's changes the remaining
               // budget the moment it is saved, and that has to be predictable.
-              hint={FUNDING_SOURCES.find((option) => option.value === draft.source)?.hint}
+              hint={t(`funding.${fundingKind(draft.source)}.hint`)}
             >
               <select
                 className="select"
@@ -416,12 +504,12 @@ export const SpendingPanel: React.FC = () => {
               >
                 {FUNDING_SOURCES.map((option) => (
                   <option key={option.value} value={option.value}>
-                    {option.label}
+                    {t(`funding.${option.kind}`)}
                   </option>
                 ))}
               </select>
             </Field>
-            <Field label="Repeats">
+            <Field label={t("spending.repeats")}>
               <select
                 className="select"
                 value={draft.recurrenceType}
@@ -434,33 +522,81 @@ export const SpendingPanel: React.FC = () => {
                 ))}
               </select>
             </Field>
-            <Field
-              label="Wishlist item"
-              hint={
-                draft.wishlistItemId
-                  ? editing
-                    ? "Links this transaction and marks the item bought."
-                    : "Marks the item bought when saved."
-                  : undefined
-              }
-            >
-              <select
-                className="select"
-                value={draft.wishlistItemId}
-                onChange={(e) => setDraft({ ...draft, wishlistItemId: e.target.value })}
+            {/* Activity, or wishlist item — never both, and never the wrong one.
+
+                The editor used to offer a wishlist dropdown on every category,
+                which is a control that is irrelevant on nine categories out of
+                ten and silently unrelated to the one thing a transaction
+                usually pays for: an activity. The selector shown now follows
+                the category: the wishlist category gets the wishlist items,
+                every other category gets its own activities. */}
+            {isWishlistCategory ? (
+              <Field
+                label={t("spending.wishlistItem")}
+                hint={draft.wishlistItemId ? t("spending.wishlistHint") : undefined}
               >
-                <option value="">No wishlist item</option>
-                {linkableWishlistItems.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.name}
-                    {item.actualPrice != null
-                      ? ` · ${formatMoney(item.actualPrice, item.currency, snapshot.settings.currencyDisplayMode)}`
-                      : ""}
-                  </option>
-                ))}
-              </select>
-            </Field>
-            <Field label="Note">
+                <select
+                  className="select"
+                  value={draft.wishlistItemId}
+                  onChange={(e) => setDraft({ ...draft, wishlistItemId: e.target.value })}
+                >
+                  <option value="">{t("spending.wishlistNone")}</option>
+                  {linkableWishlistItems.map((item) => (
+                    <option key={item.id} value={item.id}>
+                      {item.name}
+                      {item.actualPrice != null
+                        ? ` · ${formatMoney(item.actualPrice, item.currency, snapshot.settings.currencyDisplayMode)}`
+                        : ""}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+            ) : (
+              <Field
+                label={t("spending.activity")}
+                hint={
+                  activityOptions.length === 0
+                    ? t("spending.activityEmpty")
+                    : selectedActivity && activityFundingKind(selectedActivity) !== fundingKind(draft.source)
+                      ? t("spending.activityFundingHint", {
+                          name: selectedActivity.name,
+                          funding: t(`funding.${activityFundingKind(selectedActivity)}.short`).toLowerCase(),
+                        })
+                      : t("spending.activityHint")
+                }
+              >
+                <select
+                  className="select"
+                  value={draft.activityId}
+                  disabled={activityOptions.length === 0}
+                  onChange={(e) => {
+                    const activityId = e.target.value;
+                    const activity = activityId ? activityById.get(activityId) : undefined;
+                    setDraft((current) => ({
+                      ...current,
+                      activityId,
+                      /*
+                       * The activity's funding becomes this transaction's
+                       * default — a lesson your father pays for is normally
+                       * paid by him — but only while the user has not chosen
+                       * otherwise. The select below stays editable, so an
+                       * individual transaction can always override it.
+                       */
+                      source: activity ? FUNDING_META[activityFundingKind(activity)].value : current.source,
+                    }));
+                  }}
+                >
+                  <option value="">{t("spending.activityNone")}</option>
+                  {activityOptions.map((activity) => (
+                    <option key={activity.id} value={activity.id}>
+                      {activity.name}
+                      {activity.active ? "" : ` · ${t("activities.deactivated")}`}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+            )}
+            <Field label={t("spending.note")}>
               <input
                 className="input"
                 placeholder="Optional"
@@ -474,49 +610,68 @@ export const SpendingPanel: React.FC = () => {
 
         <input
           className="input"
-          aria-label="Search transactions"
-          placeholder="Search notes"
+          aria-label={t("spending.searchPlaceholder")}
+          placeholder={t("spending.searchPlaceholder")}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
       </Section>
 
       {/* What the period cost, and who paid for it.
-          Shown only when somebody else paid for something: otherwise the
-          personal figure is the only figure and a three-way split of one
-          number is noise. */}
-      {split.externalCount > 0 && (
+
+          Four figures rather than three: the two exclusions are shown
+          separately because "somebody else paid for this" and "this is my
+          money, kept off this budget" are different facts about a period, and
+          a report that adds them together cannot answer either question.
+
+          Shown only when there is something to split. A three-way breakdown of
+          one number is noise. */}
+      {(split.otherFundedCount > 0 || split.outsideBudgetCount > 0) && (
         <div className="funding-split">
-          <div>
-            <div className="text-footnote">Your budget</div>
+          <div data-funding="personal">
+            <div className="text-footnote">
+              <span aria-hidden="true" className="funding-glyph">{FUNDING_META.personal.glyph}</span>{" "}
+              {t("funding.personal.short")}
+            </div>
             <div className="money funding-split-value">{formatDualMoney(split.personal, snapshot.settings)}</div>
+            <div className="text-caption">{t("common.transactions", { count: split.personalCount })}</div>
+          </div>
+          <div data-funding="other">
+            <div className="text-footnote">
+              <span aria-hidden="true" className="funding-glyph">{FUNDING_META.other.glyph}</span>{" "}
+              {t("funding.other.short")}
+            </div>
+            <div className="money funding-split-value">{formatDualMoney(split.otherFunded, snapshot.settings)}</div>
             <div className="text-caption">
-              {split.personalCount} transaction{split.personalCount === 1 ? "" : "s"}
+              {t("common.transactions", { count: split.otherFundedCount })} · {t("funding.notCharged")}
+            </div>
+          </div>
+          <div data-funding="outside">
+            <div className="text-footnote">
+              <span aria-hidden="true" className="funding-glyph">{FUNDING_META.outside.glyph}</span>{" "}
+              {t("funding.outside.short")}
+            </div>
+            <div className="money funding-split-value">
+              {formatDualMoney(split.outsideBudget, snapshot.settings)}
+            </div>
+            <div className="text-caption">
+              {t("common.transactions", { count: split.outsideBudgetCount })} · {t("funding.notCharged")}
             </div>
           </div>
           <div>
-            <div className="text-footnote">Paid by others</div>
-            <div className="money funding-split-value" style={{ color: "var(--warning-text)" }}>
-              {formatDualMoney(split.external, snapshot.settings)}
-            </div>
-            <div className="text-caption">
-              {split.externalCount} transaction{split.externalCount === 1 ? "" : "s"} · not charged to you
-            </div>
-          </div>
-          <div>
-            <div className="text-footnote">All transactions</div>
+            <div className="text-footnote">{t("funding.gross")}</div>
             <div className="money funding-split-value" style={{ color: "var(--text-secondary)" }}>
               {formatDualMoney(split.transactions, snapshot.settings)}
             </div>
-            <div className="text-caption">Everything recorded this {mode}</div>
+            <div className="text-caption">{t("spending.everythingRecorded", { period: t(`common.${mode}`) })}</div>
           </div>
         </div>
       )}
 
       {entries.length === 0 ? (
         <EmptyState
-          title={`No transactions for this ${mode}`}
-          description="Add an expense to begin tracking this period."
+          title={t("spending.empty", { period: t(`common.${mode}`) })}
+          description={t("spending.emptyBody")}
         />
       ) : (
         <div className="item-list">
@@ -571,9 +726,22 @@ export const SpendingPanel: React.FC = () => {
                       </span>
                     )}
                     {entry.isPiloting && <span className="badge badge-neutral">Piloting</span>}
+                    {/* Which of the two exclusions it is, not merely that it
+                        is one. "Paid by other" and "Outside budget" behave the
+                        same against the budget and mean different things. */}
                     {isExternallyFunded(entry) && (
-                      <span className="badge badge-warning" title="Recorded in full, excluded from your budget">
-                        {fundingLabel(entry.source)}
+                      <span
+                        className="funding-badge"
+                        data-funding={entryFundingKind(entry)}
+                        title={t(`funding.${entryFundingKind(entry)}.hint`)}
+                      >
+                        <span aria-hidden="true">{FUNDING_META[entryFundingKind(entry)].glyph}</span>
+                        {t(`funding.${entryFundingKind(entry)}.short`)}
+                      </span>
+                    )}
+                    {entry.activityId && activityById.get(entry.activityId) && (
+                      <span className="badge badge-info" title={t("spending.activity")}>
+                        {activityById.get(entry.activityId)!.name}
                       </span>
                     )}
                     {entry.wishlistItemId && (
@@ -599,7 +767,7 @@ export const SpendingPanel: React.FC = () => {
                   <strong>{formatMoney(entry.amount, entry.currency, snapshot.settings.currencyDisplayMode)}</strong>
                   {mutable && (
                     <div className="row-actions">
-                      <Button variant="ghost" size="sm" icon onClick={() => beginEdit(entry)} aria-label="Edit transaction">
+                      <Button variant="ghost" size="sm" icon onClick={() => beginEdit(entry)} aria-label={t("a11y.editTransaction")}>
                         <Pencil size={15} />
                       </Button>
                       <Button
@@ -607,7 +775,7 @@ export const SpendingPanel: React.FC = () => {
                         size="sm"
                         icon
                         onClick={() => confirmDelete(entry)}
-                        aria-label="Delete transaction"
+                        aria-label={t("a11y.deleteTransaction")}
                       >
                         <Trash2 size={15} />
                       </Button>

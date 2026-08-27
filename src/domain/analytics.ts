@@ -7,7 +7,7 @@ import type {
 } from "./types";
 import { normalizeAmount } from "./currency";
 import { normalizeEntry } from "./calculations";
-import { externalEntries, personalEntries } from "./funding";
+import { externalEntries, otherFundedEntries, outsideBudgetEntries, personalEntries } from "./funding";
 import { movePeriod, periodLabel, selectedIsoWeekYear } from "./periods";
 import { dateInputValue, weekYear, weeksInIsoYear, startOfIsoWeek } from "./dates";
 
@@ -57,30 +57,49 @@ export function budgetRelevantEntries(entries: SpendingEntry[], _settings?: Sett
 export interface FundingSplit {
   /** Spend charged to this budget. `null` when the period holds no entries at all. */
   personal: number | null;
-  /** Spend somebody else paid for. `null` when there are none. */
+  /**
+   * Everything this budget did not pay for — paid-by-other **and**
+   * outside-budget together. Kept for callers that only need the exclusion.
+   */
   external: number | null;
-  /** Every transaction in the period, personal and external together. */
+  /** Spend somebody else paid for. `null` when there are none. */
+  otherFunded: number | null;
+  /** The user's own spend, deliberately kept outside this budget. */
+  outsideBudget: number | null;
+  /** Every transaction in the period, all three kinds together. */
   transactions: number | null;
   personalCount: number;
   externalCount: number;
+  otherFundedCount: number;
+  outsideBudgetCount: number;
 }
 
 /**
- * Personal / external / all-transactions for a set of entries.
+ * The funding breakdown of a set of entries.
  *
- * The three figures the user needs to see side by side to trust that a €200
- * dinner someone else paid for is both recorded and not charged to them.
+ * Four figures, because there are three ways something can be funded and one
+ * gross total. The user needs them side by side to trust that a €200 dinner
+ * somebody else paid for is both recorded *and* not charged to them — and to
+ * see that separately from the €150 they spent from another account on
+ * purpose. `external` is the two exclusions added together, for the callers
+ * that genuinely only need "not mine".
  */
 export function fundingSplit(entries: SpendingEntry[], snapshot: BudgetSnapshot): FundingSplit {
   const personal = personalEntries(entries);
   const external = externalEntries(entries);
+  const otherFunded = otherFundedEntries(entries);
+  const outsideBudget = outsideBudgetEntries(entries);
   const total = (list: SpendingEntry[]) => list.reduce((sum, entry) => sum + normalizeEntry(entry, snapshot), 0);
   return {
     personal: personal.length > 0 ? total(personal) : null,
     external: external.length > 0 ? total(external) : null,
+    otherFunded: otherFunded.length > 0 ? total(otherFunded) : null,
+    outsideBudget: outsideBudget.length > 0 ? total(outsideBudget) : null,
     transactions: entries.length > 0 ? total(entries) : null,
     personalCount: personal.length,
     externalCount: external.length,
+    otherFundedCount: otherFunded.length,
+    outsideBudgetCount: outsideBudget.length,
   };
 }
 

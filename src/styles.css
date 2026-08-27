@@ -106,6 +106,12 @@
   --purple-text: #7C3AED;
   --purple-soft: rgba(139, 92, 246, 0.12);
   --teal: #0EA5B7;
+  /* The fill hue measures 2.96 : 1 on white and 2.5 : 1 on the inset ground —
+     fine for a chart series, unreadable as 13px type. This is the same hue
+     darkened until it clears 4.5 on all three surfaces (5.36 / 4.99 / 4.52),
+     which is exactly the rule `--success-text` and `--warning-text` follow:
+     `background` and `border` may take the fill; `color` must take `-text`. */
+  --teal-text: #0E7490;
   --teal-soft: rgba(14, 165, 183, 0.12);
   --pink: #DB2777;
   --pink-soft: rgba(219, 39, 119, 0.12);
@@ -213,6 +219,9 @@
   --purple-text: #A78BFA;
   --purple-soft: rgba(167, 139, 250, 0.18);
   --teal: #22D3EE;
+  /* On a dark ground the saturated hue already passes, so the two are the
+     same value here — the same arrangement the other status colours use. */
+  --teal-text: #22D3EE;
   --teal-soft: rgba(34, 211, 238, 0.18);
   --pink: #F472B6;
   --pink-soft: rgba(244, 114, 182, 0.18);

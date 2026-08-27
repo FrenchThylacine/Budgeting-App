@@ -21,6 +21,61 @@ const CACHE_KEY = "exchange-rates-cache-v1";
 /** Rates older than this are refetched; younger ones are reused. */
 export const RATE_MAX_AGE_MS = 6 * 60 * 60 * 1000;
 
+/**
+ * The daily publication moment: 12:00 UTC.
+ *
+ * The provider publishes once a day, so a rate set is "the rates for today"
+ * from that moment. Refreshing on a rolling age alone means two devices in
+ * different time zones can hold different "current" rates for the same day and
+ * quietly disagree about every converted figure; anchoring to a fixed instant
+ * makes "have I got today's rates" a question with one answer everywhere.
+ */
+export const RATE_REFRESH_HOUR_UTC = 12;
+
+/**
+ * The most recent 12:00 UTC at or before `now`.
+ *
+ * Exported because it is the whole schedule, and a test that cannot name the
+ * boundary cannot check what happens either side of it.
+ */
+export function lastScheduledRefresh(now: number = Date.now()): Date {
+  const date = new Date(now);
+  const boundary = Date.UTC(
+    date.getUTCFullYear(),
+    date.getUTCMonth(),
+    date.getUTCDate(),
+    RATE_REFRESH_HOUR_UTC,
+    0,
+    0,
+    0,
+  );
+  // Before today's boundary, the current rate set is still yesterday's.
+  return new Date(boundary <= now ? boundary : boundary - 86_400_000);
+}
+
+/** The next 12:00 UTC strictly after `now`, for "next update" captions. */
+export function nextScheduledRefresh(now: number = Date.now()): Date {
+  return new Date(lastScheduledRefresh(now).getTime() + 86_400_000);
+}
+
+/**
+ * True when the stored rates predate the most recent 12:00 UTC publication.
+ *
+ * Independent of `isStale`, which is an age guard. Both are consulted: the
+ * daily boundary is what makes a set "yesterday's", and the age guard catches
+ * a set that is somehow older than a day without a boundary having been
+ * crossed (a clock change, a long-suspended laptop).
+ */
+export function isDueForScheduledRefresh(
+  fetchedAt: string | null | undefined,
+  now: number = Date.now(),
+): boolean {
+  if (!fetchedAt) return true;
+  const fetched = new Date(fetchedAt).getTime();
+  if (!Number.isFinite(fetched)) return true;
+  return fetched < lastScheduledRefresh(now).getTime();
+}
+
 export interface RateSnapshot {
   /** Units of each currency per 1 EUR. */
   ratesPerEur: Partial<Record<CurrencyCode, number>>;
@@ -76,7 +131,11 @@ export async function fetchExchangeRates(
   const now = options.now ?? Date.now();
   const cached = readCachedRates(now);
 
-  if (!options.force && !isStale(cached, now)) {
+  // Two independent reasons to refetch, and a fresh cache must satisfy both:
+  // the daily 12:00 UTC publication is what makes a set today's, and the age
+  // guard catches a set older than that boundary can express.
+  const due = isStale(cached, now) || isDueForScheduledRefresh(cached?.fetchedAt, now);
+  if (!options.force && !due) {
     return { status: "cached", snapshot: cached };
   }
 
@@ -125,6 +184,47 @@ export async function fetchExchangeRates(
  * keeps its existing manual value rather than being zeroed, which would make
  * every amount in that currency read as 0.
  */
+/**
+ * Record a failed refresh without pretending anything changed.
+ *
+ * `ratesUpdatedAt` is left exactly where it was — the stored rates are still
+ * the ones that were last genuinely fetched, and moving the timestamp would
+ * present yesterday's numbers as today's. Only the attempt is stamped, so the
+ * interface can say "checked at 14:02, still using Tuesday's rates" rather
+ * than either silently retrying forever or claiming to be current.
+ */
+export function noteRateFailure(current: ExchangeRates, message: string, now = new Date()): ExchangeRates {
+  return {
+    ...current,
+    customToBase: { ...current.customToBase },
+    perEur: current.perEur ? { ...current.perEur } : undefined,
+    ratesCheckedAt: now.toISOString(),
+    ratesLastError: message,
+  };
+}
+
+/**
+ * How the stored rates should be described, in words the interface prints.
+ *
+ * Four states worth telling apart: never fetched, current, a day or more old,
+ * and "the last attempt failed". The last one is the reason this exists — a
+ * failed refresh must never look like a successful one.
+ */
+export function rateFreshness(
+  rates: ExchangeRates,
+  now: number = Date.now(),
+): { state: "never" | "current" | "stale" | "failed"; updatedAt: string | null; checkedAt: string | null } {
+  const updatedAt = rates.ratesUpdatedAt ?? null;
+  const checkedAt = rates.ratesCheckedAt ?? null;
+  if (!updatedAt) return { state: "never", updatedAt, checkedAt };
+  if (rates.ratesLastError) return { state: "failed", updatedAt, checkedAt };
+  return {
+    state: isDueForScheduledRefresh(updatedAt, now) ? "stale" : "current",
+    updatedAt,
+    checkedAt,
+  };
+}
+
 export function applyRatesToSettings(current: ExchangeRates, snapshot: RateSnapshot): ExchangeRates {
   const { ratesPerEur } = snapshot;
 
@@ -137,6 +237,10 @@ export function applyRatesToSettings(current: ExchangeRates, snapshot: RateSnaps
     perEur: { ...(current.perEur ?? {}) },
     ratesUpdatedAt: snapshot.fetchedAt,
     ratesSource: snapshot.source,
+    ratesCheckedAt: snapshot.fetchedAt,
+    // A success clears the last failure: keeping it would leave the panel
+    // reporting an error against rates that have since arrived.
+    ratesLastError: undefined,
   };
 
   for (const [code, value] of Object.entries(ratesPerEur) as [CurrencyCode, number][]) {

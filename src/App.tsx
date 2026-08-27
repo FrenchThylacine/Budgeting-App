@@ -33,12 +33,22 @@ const loadScenarios = () => import("./components/scenarios/ScenarioLab");
 const loadHistory = () => import("./components/history/HistoryPanel");
 const loadSettings = () => import("./components/settings/SettingsPanel");
 const loadCategories = () => import("./components/categories/CategoryManager");
+const loadCurrencies = () => import("./components/currencies/CurrencyPanel");
 
 const AnalyticsPanel = lazy(() => loadAnalytics().then((m) => ({ default: m.AnalyticsPanel })));
 const ScenarioLab = lazy(() => loadScenarios().then((m) => ({ default: m.ScenarioLab })));
 const HistoryPanel = lazy(() => loadHistory().then((m) => ({ default: m.HistoryPanel })));
 const SettingsPanel = lazy(() => loadSettings().then((m) => ({ default: m.SettingsPanel })));
 const CategoryManager = lazy(() => loadCategories().then((m) => ({ default: m.CategoryManager })));
+const CurrencyPanel = lazy(() => loadCurrencies().then((m) => ({ default: m.CurrencyPanel })));
+/**
+ * The tour is deferred too.
+ *
+ * It is shown once, to a new account, and then never again unless somebody
+ * asks for it — so its card, its twelve steps and the permission module behind
+ * it have no business in the chunk that has to arrive before anything paints.
+ */
+const Tutorial = lazy(() => import("./components/onboarding/Tutorial").then((m) => ({ default: m.Tutorial })));
 
 /**
  * Fetch every deferred panel once the browser is idle.
@@ -49,7 +59,7 @@ const CategoryManager = lazy(() => loadCategories().then((m) => ({ default: m.Ca
  * never competes with a request the user is actually waiting on.
  */
 function preloadPanels(): void {
-  const loaders = [loadAnalytics, loadSettings, loadCategories, loadHistory, loadScenarios];
+  const loaders = [loadAnalytics, loadSettings, loadCurrencies, loadCategories, loadHistory, loadScenarios];
   let index = 0;
   const next = () => {
     if (index >= loaders.length) return;
@@ -65,7 +75,6 @@ function preloadPanels(): void {
 }
 import { RolloverDialog } from "./components/modals/RolloverDialog";
 import { HistoricalEditDialog } from "./components/modals/HistoricalEditDialog";
-import { Notifications } from "./components/Notifications";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { isViewingHistoricalPeriod } from "./utils/formatters";
 import { periodLabel, periodOrdinal } from "./domain/periods";
@@ -75,8 +84,21 @@ import { AuthScreen } from "./components/auth/AuthScreen";
 import { TabTransition } from "./components/ui/TabTransition";
 import { AircraftArt, AircraftMark } from "./components/ui/AircraftMark";
 import { Tricolour } from "./components/ui/Tricolour";
+import { shouldAutoStartTutorial } from "./domain/tutorial";
+import { useTranslation } from "./i18n/useTranslation";
 
-type TabKey = "dashboard" | "activities" | "spending" | "wishlist" | "wallet" | "analytics" | "scenarios" | "history" | "settings" | "categories";
+type TabKey =
+  | "dashboard"
+  | "activities"
+  | "spending"
+  | "wishlist"
+  | "wallet"
+  | "analytics"
+  | "scenarios"
+  | "history"
+  | "settings"
+  | "categories"
+  | "currencies";
 
 /*
  * The tab transition no longer takes a direction.
@@ -96,6 +118,16 @@ export default function App() {
     try { return localStorage.getItem(SIDEBAR_PREF_KEY) === "true"; } catch { return false; }
   });
   const [notice, setNotice] = useState("");
+  /**
+   * The tour.
+   *
+   * `null` means "has not been decided yet this session"; it is resolved once,
+   * after hydration, from the stored onboarding state and whether the account
+   * has any data. Re-deriving it on every render would reopen the tour the
+   * instant the user's Skip is written, because writing it is a state change.
+   */
+  const [tutorialOpen, setTutorialOpen] = useState(false);
+  const tutorialDecided = useRef(false);
   const [rolloverOpen, setRolloverOpen] = useState(false);
   const [historicalDialogOpen, setHistoricalDialogOpen] = useState(false);
 
@@ -127,6 +159,45 @@ export default function App() {
   useEffect(() => {
     if (hydrated) preloadPanels();
   }, [hydrated]);
+
+  /*
+   * Offer the tour to a genuinely new account, once.
+   *
+   * Decided a single time per session, on the first hydrated snapshot: an
+   * account that has completed or skipped it never sees it again, and neither
+   * does one that already has data — being walked through the basics after
+   * importing five years of records is patronising.
+   */
+  useEffect(() => {
+    if (!hydrated || tutorialDecided.current) return;
+    tutorialDecided.current = true;
+    if (shouldAutoStartTutorial(snapshot)) setTutorialOpen(true);
+  }, [hydrated, snapshot]);
+
+  // Reopened from Settings: the stored marks are cleared there, and this
+  // brings the card back without a reload.
+  useEffect(() => {
+    const onReplay = () => setTutorialOpen(true);
+    window.addEventListener("budget-os:replay-tutorial", onReplay);
+    return () => window.removeEventListener("budget-os:replay-tutorial", onReplay);
+  }, []);
+
+  /*
+   * Cross-panel navigation.
+   *
+   * Settings links to the Currencies tab, and the tab state lives here. An
+   * event rather than prop-drilling a setter through two lazily loaded panels:
+   * the alternative is a callback threaded through components that have no
+   * other reason to know navigation exists.
+   */
+  useEffect(() => {
+    const onNavigate = (event: Event) => {
+      const target = (event as CustomEvent<string>).detail;
+      if (typeof target === "string") setActiveTab(target as TabKey);
+    };
+    window.addEventListener("budget-os:navigate", onNavigate);
+    return () => window.removeEventListener("budget-os:navigate", onNavigate);
+  }, []);
   useEffect(() => {
     try { localStorage.setItem(SIDEBAR_PREF_KEY, String(sidebarCollapsed)); } catch { /* noop */ }
   }, [sidebarCollapsed]);
@@ -260,6 +331,7 @@ export default function App() {
     history: <HistoryPanel />,
     settings: <SettingsPanel />,
     categories: <CategoryManager />,
+    currencies: <CurrencyPanel />,
   };
 
   const isHistorical = isViewingHistoricalPeriod(snapshot.settings);
@@ -366,7 +438,17 @@ export default function App() {
           />
         )}
 
-        <Notifications />
+        {tutorialOpen && (
+          // No fallback: a card that is about to appear should appear, not be
+          // preceded by a placeholder for one.
+          <Suspense fallback={null}>
+            <Tutorial
+              onNavigate={(tab) => setActiveTab(tab as TabKey)}
+              onClose={() => setTutorialOpen(false)}
+            />
+          </Suspense>
+        )}
+
       </div>
     </ErrorBoundary>
   );

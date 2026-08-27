@@ -1,4 +1,6 @@
 import type { BudgetSnapshot, Settings, Activity, WishlistItem, BudgetCategory, CostModel, IsoWeekday } from "../domain/types";
+import type { FundingKind } from "../domain/funding";
+import { activityFundingKind } from "../domain/funding";
 import { normalizeAmount, formatMoney } from "../domain/currency";
 import { monthName } from "../domain/dates";
 import { isHistoricalPeriod } from "../domain/periods";
@@ -29,6 +31,10 @@ export interface ActivityDraft {
   iconSourceUrl: string;
   /** Accent colour, empty when the card stays neutral. */
   color: string;
+  /** Which of the three funding classifications this activity is. */
+  fundingSource: FundingKind;
+  /** Free-text name of whoever pays, for `other`. Empty when unstated. */
+  fundedBy: string;
   costModel: CostModel;
   sessionsPerMonth: string;
   /** Frequency for the session-pack model, e.g. "2". */
@@ -125,6 +131,8 @@ export function activityToDraft(activity: Activity | null, snapshot: BudgetSnaps
     iconUrl: activity?.iconUrl ?? "",
     iconSourceUrl: activity?.iconSourceUrl ?? "",
     color: activity?.color ?? "",
+    fundingSource: activityFundingKind(activity ?? {}),
+    fundedBy: activity?.fundedBy ?? "",
     costModel: activity?.costModel ?? "auto",
     sessionsPerMonth: valueToInput(activity?.sessionsPerMonth),
     sessionsPerPeriod: valueToInput(activity?.sessionsPerPeriod),
@@ -159,6 +167,14 @@ export function activityPayloadFromDraft(draft: ActivityDraft): Omit<Activity, "
     // is never stored — the same rule the wishlist links follow.
     iconUrl: normalizeItemUrl(draft.iconUrl),
     iconSourceUrl: normalizeItemUrl(draft.iconSourceUrl),
+    // `personal` is the absence of a funding source: storing it would only add
+    // noise to records that already behave that way, and would make "never
+    // chosen" indistinguishable from "chosen to be the default".
+    fundingSource: draft.fundingSource === "personal" ? undefined : draft.fundingSource,
+    // Only meaningful for "paid by other". Kept off the record entirely
+    // otherwise, so switching an activity back to your own budget cannot leave
+    // a stale name attached to it.
+    fundedBy: draft.fundingSource === "other" ? draft.fundedBy.trim() || undefined : undefined,
     color: draft.color.trim() || undefined,
     // `auto` is the absence of a cost model: storing it would only add noise to
     // records that already behave that way.

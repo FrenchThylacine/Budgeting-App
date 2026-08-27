@@ -3,10 +3,115 @@ import { BudgetService } from "../services/BudgetService.js";
 import { getDatabase } from "../db/index.js";
 import { snapshotIdFor } from "../auth/middleware.js";
 import { asyncHandler, AppError, validateEnum, validateFiniteNumber, validateRequired } from "../middleware/errorHandler.js";
-import type { Activity } from "../../../src/domain/types.js";
+import type { Activity, CostModel } from "../../../src/domain/types.js";
+import type { FundingKind } from "../../../src/domain/funding.js";
+import { ALL_CURRENCY_CODES } from "../../../src/domain/currencies.js";
 
-const currencies = ["EUR", "USD", "LBP", "GBP", "CAD", "AUD", "JPY", "TRY", "SAR", "AED"] as const;
+/**
+ * Imported rather than restated.
+ *
+ * This list used to be the same ten codes written out by hand, which would
+ * have started rejecting perfectly valid activities the moment the client
+ * learned about the rest of ISO 4217. One list, one place — the same fix the
+ * settings route needed.
+ */
+const currencies = ALL_CURRENCY_CODES;
 const recurrenceTypes = ["none", "weekly", "monthly", "yearly", "session", "purchase", "custom"] as const;
+const costModels = ["auto", "perSession", "schedule", "fixed", "sessionPack", "fixedYearly"] as const;
+const fundingKinds = ["personal", "other", "outside"] as const;
+const sessionPeriods = ["week", "month"] as const;
+
+/** `YYYY-MM-DD`, or nothing. A half-typed date is not a date. */
+function validateDateInput(value: unknown, field: string): string | undefined {
+  if (value == null || value === "") return undefined;
+  const text = String(value);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(text) || Number.isNaN(Date.parse(`${text}T12:00:00Z`))) {
+    throw new AppError(400, `Invalid ${field}: expected a YYYY-MM-DD date`);
+  }
+  return text;
+}
+
+/** ISO weekdays, 1 = Monday … 7 = Sunday. Duplicates and rubbish dropped. */
+function validateWeekdays(value: unknown, field: string): Activity["weekdays"] {
+  if (value == null) return undefined;
+  if (!Array.isArray(value)) throw new AppError(400, `Invalid ${field}: expected an array of ISO weekdays`);
+  const days = [...new Set(value.map(Number))].filter((day) => Number.isInteger(day) && day >= 1 && day <= 7);
+  return days.length > 0 ? (days.sort((a, b) => a - b) as Activity["weekdays"]) : undefined;
+}
+
+/**
+ * The fields the two write routes share, applied to a draft activity.
+ *
+ * Written once rather than twice: POST and PATCH drifting apart is exactly how
+ * these routes ended up handling a subset of the model in the first place —
+ * `costModel` had never been accepted by either of them, so an activity
+ * created through the API could not use any of the cost models the app has had
+ * for a year.
+ */
+function applyOptionalFields(target: Activity, body: Record<string, any>, partial: boolean): void {
+  const has = (field: string) => !partial || body[field] !== undefined;
+
+  if (has("costModel") && body.costModel != null) {
+    const model = validateEnum(body.costModel, "costModel", costModels) as CostModel;
+    // `auto` is the absence of a cost model; storing it would only add noise.
+    target.costModel = model === "auto" ? undefined : model;
+  } else if (body.costModel === null) {
+    target.costModel = undefined;
+  }
+
+  if (has("fundingSource") && body.fundingSource != null) {
+    const kind = validateEnum(body.fundingSource, "fundingSource", fundingKinds) as FundingKind;
+    // `personal` is the default and is stored as absent, so "never chosen" and
+    // "chosen to be the default" stay one state.
+    target.fundingSource = kind === "personal" ? undefined : kind;
+  } else if (body.fundingSource === null) {
+    target.fundingSource = undefined;
+  }
+
+  if (has("fundedBy")) {
+    const name = body.fundedBy == null ? "" : String(body.fundedBy).trim();
+    // Only meaningful for "paid by other", and never kept against any other
+    // funding kind — the same rule the editor follows.
+    target.fundedBy = name && target.fundingSource === "other" ? name : undefined;
+  }
+
+  if (has("sessionsPerMonth")) {
+    target.sessionsPerMonth =
+      body.sessionsPerMonth != null ? validateFiniteNumber(body.sessionsPerMonth, "sessionsPerMonth", { min: 0 }) : null;
+  }
+  if (has("sessionsPerPeriod")) {
+    target.sessionsPerPeriod =
+      body.sessionsPerPeriod != null ? validateFiniteNumber(body.sessionsPerPeriod, "sessionsPerPeriod", { min: 0 }) : null;
+  }
+  if (has("sessionPeriod") && body.sessionPeriod != null) {
+    const period = validateEnum(body.sessionPeriod, "sessionPeriod", sessionPeriods);
+    // `week` is the default, stored as absent so an older row keeps meaning it.
+    target.sessionPeriod = period === "month" ? "month" : undefined;
+  }
+  if (has("sessionsPerPayment")) {
+    target.sessionsPerPayment =
+      body.sessionsPerPayment != null
+        ? validateFiniteNumber(body.sessionsPerPayment, "sessionsPerPayment", { integer: true, min: 1 })
+        : null;
+  }
+  if (has("weekdays")) target.weekdays = validateWeekdays(body.weekdays, "weekdays");
+  if (has("dayOfMonth")) {
+    if (body.dayOfMonth == null) {
+      target.dayOfMonth = null;
+    } else {
+      const day = validateFiniteNumber(body.dayOfMonth, "dayOfMonth", { integer: true, min: 1 });
+      // The upper bound is checked here because `validateFiniteNumber` has no
+      // `max`: a day of 40 is not a day, and silently keeping it would produce
+      // a schedule that never fires.
+      if (day > 31) throw new AppError(400, "Invalid dayOfMonth: must be between 1 and 31");
+      target.dayOfMonth = day;
+    }
+  }
+  if (has("startDate")) target.startDate = validateDateInput(body.startDate, "startDate");
+  if (has("nextRenewalDate")) target.nextRenewalDate = validateDateInput(body.nextRenewalDate, "nextRenewalDate");
+  if (has("icon")) target.icon = body.icon ? String(body.icon) : undefined;
+  if (has("color")) target.color = body.color ? String(body.color) : undefined;
+}
 
 export function createActivitiesRoutes(): Router {
   const router = Router();
@@ -87,6 +192,10 @@ export function createActivitiesRoutes(): Router {
         notes: req.body.notes || "",
       };
 
+      // Cost model, funding, schedule and payment-cycle fields. These routes
+      // handled a subset of the model and silently dropped the rest.
+      applyOptionalFields(newActivity, req.body, false);
+
       yearRecord.activities.push(newActivity);
       yearRecord.updatedAt = new Date().toISOString();
       await service.commitServerChange(snapshot);
@@ -145,6 +254,7 @@ export function createActivitiesRoutes(): Router {
           if (req.body.visible !== undefined) activity.visible = Boolean(req.body.visible);
           if (req.body.seasonalTag !== undefined) activity.seasonalTag = String(req.body.seasonalTag);
           if (req.body.notes !== undefined) activity.notes = String(req.body.notes);
+          applyOptionalFields(activity, req.body, true);
 
           yearRecord.updatedAt = new Date().toISOString();
           await service.commitServerChange(snapshot);

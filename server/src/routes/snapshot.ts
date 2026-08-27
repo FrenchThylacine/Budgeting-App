@@ -3,6 +3,8 @@ import { BudgetService } from "../services/BudgetService.js";
 import { getDatabase } from "../db/index.js";
 import { snapshotIdFor } from "../auth/middleware.js";
 import { asyncHandler, AppError } from "../middleware/errorHandler.js";
+import { ALL_CURRENCY_CODES } from "../../../src/domain/currencies.js";
+import { LANGUAGES } from "../../../src/domain/languages.js";
 
 /**
  * Reject structurally invalid snapshots before they reach the database. A
@@ -46,7 +48,18 @@ function validateSnapshotPayload(snapshot: unknown): void {
  * so they are checked one at a time and anything unrecognised is refused
  * rather than quietly kept.
  */
-const CURRENCY_CODES = new Set(["EUR", "USD", "LBP", "GBP", "CAD", "AUD", "JPY", "TRY", "SAR", "AED"]);
+/**
+ * Imported from the client's own dataset rather than restated here.
+ *
+ * There were two lists of legal currency codes — this one and
+ * `src/domain/currencies.ts` — and the moment the app learned about a hundred
+ * and fifty more currencies, this one would have started rejecting perfectly
+ * valid settings sent by its own client. One list, one place.
+ */
+const CURRENCY_CODES = new Set<string>(ALL_CURRENCY_CODES);
+
+/** Language tags the client offers. Same argument as the currencies above. */
+const LANGUAGE_CODES = new Set<string>(LANGUAGES.map((language) => language.code));
 
 type SettingsFieldCheck = (value: unknown) => boolean;
 
@@ -72,6 +85,7 @@ const SETTINGS_FIELDS: Record<string, SettingsFieldCheck> = {
   trackedCurrencies: (value) =>
     Array.isArray(value) && value.length > 0 && value.every((code) => typeof code === "string" && CURRENCY_CODES.has(code)),
   currencyDisplayMode: isOneOf(["symbol", "code", "both"]),
+  language: (value) => typeof value === "string" && LANGUAGE_CODES.has(value),
   roundingRule: isOneOf(["none", "nearest-1", "nearest-5", "nearest-10", "ceil-10"]),
   monthlyBudget: isFiniteNumber,
   autoWishlistFlushEnabled: isBoolean,
@@ -84,6 +98,19 @@ const SETTINGS_FIELDS: Record<string, SettingsFieldCheck> = {
   // refuse a string or a number where an object belongs.
   exchangeRates: (value) => value != null && typeof value === "object" && !Array.isArray(value),
   gestures: (value) => value != null && typeof value === "object" && !Array.isArray(value),
+  // Both are small objects whose contents are validated where they are used;
+  // the point here is to refuse a string or a number where an object belongs,
+  // and to refuse a shape the reader could not make sense of.
+  notifications: (value) =>
+    value != null &&
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    ["unasked", "enabled", "declined", "unsupported"].includes(String((value as { choice?: unknown }).choice)),
+  onboarding: (value) =>
+    value != null &&
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    Number.isFinite(Number((value as { version?: unknown }).version)),
   dashboard: (value) =>
     Array.isArray(value) &&
     value.every(

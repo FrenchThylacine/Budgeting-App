@@ -2,24 +2,225 @@
 
 This is the active engineering tracker. A checkbox is ticked only after implementation **and** the relevant verification have both succeeded. "The code exists" is never sufficient.
 
-**Last updated:** 2026-08-22 — two new activity cost models (session packs and fixed yearly), a rebuilt period selector, the historical-mode layering bug fixed at its root, a shared icon system for activities, the supplied A350 artwork as the application's identity, and a contrast sweep that found what the previous one could not measure.
+**Last updated:** 2026-08-27 — a three-way funding classification, per-month budget requirements from real payment dates, a rebuilt Wallet that is a treasury rather than a number, the whole of ISO 4217 with live cross rates, generic scenarios, an interactive tour, a real notification permission request, and a translation layer with five languages.
 
-**Verification state.** 542 tests across 30 files, all passing: 467 unit and 75 integration against a real PostgreSQL 17 database. Every claim below marked *browser-verified* was driven through Chrome DevTools against the running app backed by a throwaway local PostgreSQL database (`budget_browser_2026`), never against production data. **Production was last verified live on 2026-08-16**: `/api/health` returned `{"status":"ok","database":"connected"}`, `/api/auth/me` answered 200, and every budget route returned 401 without a session. **Nothing since 2026-08-16 has been deployed**, so none of it is verified in production.
+**Verification state.** **789 tests across 42 files, all passing**: 707 unit and 82 integration against a real PostgreSQL 17 database (`budget_verify`, thrown away afterwards, never production data). Migrations `014` and `015` were each **falsified** — removed and re-run — to confirm the suites genuinely depend on them. TypeScript compiles clean for both the client and the server, and the production bundle builds. **The 2026-08-27 feature set was then driven through a real Chrome** against a throwaway local PostgreSQL database (`budget_browser`), on a brand-new account, at 1440px, 390px and 320px, in both themes. Nothing from 2026-08-17 onward is verified in production.
 
 ## How this session verified things
 
-- **Real PostgreSQL.** A local PostgreSQL 17 instance. The Neon driver speaks HTTP to Neon only, so `setDatabase()` injects a node-postgres adapter with the same interface; the SQL under test is byte-for-byte what production sends.
-- **Real browser.** Chrome DevTools drove the running app at 320px, 390px and 1440px in both themes: activities created through the editor by hand, a renewal date typed key by key, the mark's resolution chain observed through a dead link, and hit-testing with `elementFromPoint` over every control that overlaps the historical banner.
-- **Real upgrade path.** Migration 013 was run against a schema holding `activities` and `wishlist_items` in their pre-013 shape, so the new columns can only have come from the `ALTER`s — `CREATE TABLE IF NOT EXISTS` is a no-op there.
-- **Falsification, not just confirmation.** Three claims were checked by breaking them first: removing one `ALTER` from migration 013 (the upgrade test fails), restoring the old `z-index: 1` rule (two popover controls are captured by the banner again), and the editor-typing suite, which still fails against the pre-fix focus code.
+- **Real PostgreSQL.** A throwaway PostgreSQL 17 instance on port 55432. The Neon driver speaks HTTP to Neon only, so `setDatabase()` injects a node-postgres adapter with the same interface; the SQL under test is byte-for-byte what production sends.
+- **Falsification, not just confirmation.** Migration `014`'s `funding_source` column was deleted and the suite re-run: **31 integration tests failed** with the exact 42703 shape the migration exists to prevent. The same was done for `015`'s `wallet_entries.date`: **29 failures**. Both were restored and the suite re-run green.
+- **Real browser, real account.** Chrome DevTools drove a genuinely new account created through the sign-up form. Every figure quoted in the table below was read off the rendered page, not computed in a test.
+- **The specification's own worked examples, twice.** As tests, and again by hand: Navigraph at €81.64 renewing on 14 September; the €600 allocation spent down to €375; and the twenty-four-step acceptance scenario in §44, driven end to end through the interface.
+- **Black and white, by removing the colour.** The generated report was rendered in an iframe under `filter: grayscale(1)` and read back. Every distinction survived.
 
 Anything that could not be verified this way is under *Not verified* and stays unticked.
+
+## Verified in a browser, against real PostgreSQL — 2026-08-27
+
+| Check | Result |
+| --- | --- |
+| A brand-new account | The tour opened by itself at **step 1 of 13**; the interface picked up French from the browser locale and the `fr` chunk loaded on demand |
+| The tour drives the tab it describes | Step 3 switched the app to **Devises**; step 12 to **Réglages** |
+| **`Notification.requestPermission()` is genuinely called** | Instrumented the real API: **called exactly once** from the button press, never on load. The app then reported "Les notifications sont actives." |
+| The choice persists | `{"choice":"enabled","browserPermission":"granted"}` read back out of PostgreSQL, with `onboarding.completedAt` |
+| The tour does not reappear | Closed after Finish and stayed closed |
+| An activity paid by somebody else | Saved with the badge **"◆ Payé par un tiers · Papa"**; the optional payer field appears only for *paid by other* |
+| The three-way split on Activities | Total €734.80/mo · Paid by me €534.80 (72.8%) · Paid by other €200 (27.2%) · Outside €0 (0.0%) |
+| **Navigraph, August** | **Required in August = €523.00** — the rent only. The row reads "Rien à payer ce mois-ci" |
+| **Navigraph, September** | **€604.64** (= €523 + €81.64). The row reads "€81,64 · Dû le 14 sept." beside "€6,80 /month avg." |
+| An annual subscription with no renewal date | "Mois de paiement inconnu", excluded from the requirement, named in a note with its €5,00/month average |
+| The activity selector follows the category | Health offered one activity; switching to Software re-scoped the list to three |
+| An invalid selection is cleared, and said | "Cette activité n'appartient pas à la catégorie choisie : la sélection a été effacée." |
+| The wishlist category swaps the selector | "Activité" disappears, "Article de la liste d'envies" replaces it |
+| Selecting an activity adopts its funding | Choosing "Cours d'arabe" set *Paid by* to **Paid by other**, still overridable |
+| Currency pinning | Search "swiss" → CHF; pinned; **double-tapped** → confirmation → unpinned |
+| Unpinning what cannot be unpinned | EUR's button is disabled: "C'est votre devise d'affichage." |
+| **Exchange mode** | Amber treatment, a banner naming the mode, **unpin buttons hidden** so a double-tap cannot unpin |
+| Direction | EUR then USD → "**1 EUR = 1,19 USD**", inverse "1 USD = 0,84034 EUR"; Reverse → "1 USD = 0,84034 EUR" |
+| Rate provenance | Updated-at and source shown honestly as "never fetched" / "Inconnu" |
+| **§44, steps 1–2** | Activities require **€523,00** → planned monthly budget **€600,00** |
+| **§44, steps 3–6** | Allocation recorded: wallet €600 · budget €600 · personal €0 |
+| **§44, steps 7–9** | €100 spent: wallet €500 · budget €500 |
+| **§44, steps 10–13** | €200 personal added: wallet €700 · budget €500 · personal €200 |
+| **§44, steps 14–16** | €450 spent in total: wallet €350 · budget €150 · personal €200, and the leftover prompt appeared |
+| **§44, steps 17–20** | Transferred €150: budget €0 · personal €350 · **wallet unchanged at €350** |
+| **§44, steps 21–24** | September's €600 added: wallet €950 · budget €600 · personal €350, **and the plan still independently says €600** |
+| The ledger epoch | A €350 spend back-dated *before* the first ledger entry was correctly ignored; moved after it, it applied |
+| Budget month by month | September carried in from August; August showed allocated 600 / spent 450 / transferred 150 / remaining 0 |
+| Scenario activities | Every activity got a checkbox and a funding dropdown; no mention of Piloting anywhere |
+| Scenario count | "4 activités sur 4 activées" → "3 activités sur 4 activées" as one was disabled |
+| A disabled scenario row | Dimmed, struck through, and its funding dropdown disabled |
+| Scenario figures | Your monthly cost €5,00 · total €211,80 · paid by other €206,80 · "Appliquer (2 changements)" |
+| Statistics shares | Loyer 71.2% · Cours d'arabe 27.2% · Navigraph 0.9% · Abonnement 0.7% — **100.0%** |
+| Statistics funding split | Gross €8 818 · mine €6 418 (72.8%) · others €2 400 (27.2%) · outside €0 (0.0%) |
+| **Deactivate on the desktop** | The button reads **"Désactiver"**, not "Hide"; total fell €734,80 → €211,80, the row gained a "Désactivée" badge and the button flipped to "Réactiver" |
+| **Wallet reset** | Wallet €1 550 → **€0,00**, and budget and personal to €0,00; transactions and activities untouched |
+| The report | Sections: health, summary, **who funded this period**, **activity costs**, trend, categories |
+| The report's activity table | Navigraph "€0,00" in August · Abonnement "**not known**" · Loyer €523,00; shares sum to 100.0% |
+| **The report in pure greyscale** | Every funding kind still identifiable by glyph (●◆▲) and written label; "Required in August" by border weight; "not known" in italics; "?" for months with no records |
+| 390px and 320px, dark theme | **Zero** horizontal overflow and **zero** targets under 24px on Wallet, Currencies, Spending, Statistics and Activities |
+
+### Defects the browser found, and fixed
+
+Four of these are the reason browser verification is not optional: every one passed its unit tests.
+
+- [x] **English months inside translated sentences.** "Nécessaire en August". `monthName()` is English-only; the panels now take month names from `Intl` via `monthNames()`. Re-verified: "NÉCESSAIRE EN AOÛT", and the wallet's month table reads "septembre 2026".
+- [x] **The "why is the month unknown" sentences were hardcoded English** and printed as-is in a French interface. They are translation keys now, resolved by the panel — and by the English dictionary in the report, which is written in English by design. Re-verified in French.
+- [x] **"3 of 4 activities enabled" on a French card.** `scenarioActivityCount` built a sentence in the domain. The interface now passes the two numbers to `t()`; the English label survives for the report and non-React callers. Re-verified: "3 activités sur 4 activées".
+- [x] **The wallet ledger stored English sentences.** "Budget for August 2026" was written into the database, so it could never change language afterwards. The store writes `@key` sigils and the panel resolves them; anything the *user* typed passes through untouched. Rows written before the fix keep their stored text — rewriting saved records to change their wording would be worse than the bug. Re-verified: a new transfer renders fully in French.
+- [x] **Reset wallet left the personal balance at −€600.** Zeroing the cash while the ledger still claimed €600 of budget money asserts a contradiction the user can see. The reset now releases the budget claim first. Re-verified: €1 550 / €600 / €950 → **0 / 0 / 0**.
 
 ## In progress / next
 
 - [ ] Exercise the Neon HTTP driver's `sql.transaction([...])` specifically. Production runs on it; the integration suite drives an adapter with the same interface, not the driver itself.
-- [ ] Automate the browser checks (Playwright). Everything marked "browser-verified" was driven by hand or by an ad-hoc script in the DevTools session.
+- [ ] Automate the browser checks (Playwright). Everything in the table above was driven by hand through DevTools; there is still no end-to-end harness, and a stale Chrome process blocked this work for part of the session.
+- [ ] Translate the reports, and finish translation coverage on the dashboard, analytics, wishlist, categories and history. See the open issues.
 - [ ] Deploy, and re-verify in production. Everything from 2026-08-17 onward is unverified there.
+
+## Completed — 2026-08-27
+
+Everything in this section is **implemented, covered by automated tests, and — except where noted — driven through a real browser**. See the verification table above.
+
+### Funding: three classifications, not two and a label
+
+- [x] **`domain/funding.ts` models three kinds, not a boolean.** `personal` (paid by me — in budget), `other` (paid by other) and `outside` (outside budget). The two exclusions share one behaviour — neither consumes the personal budget — and are never merged in any statistic, report or badge. The **stored values are unchanged** (`personal` / `shared` / `external`), so not one historical record was rewritten; only the words on screen changed (20 tests in `tests/funding-classification.test.ts`).
+- [x] An unrecognised non-personal value from an old import reads as *paid by other*, never as *outside budget* — "gift" and "reimbursed" describe somebody else's money, and the weaker claim is the safe one.
+- [x] `PeriodSummary`, `YearCalculation` and `FundingSplit` all carry the three figures plus the gross. `externalTotal` survives as the two exclusions added together, for the callers that genuinely only need "not mine".
+- [x] **`includedBudget` is now the personal commitment**, not the gross. It previously overstated the monthly commitment by everything a parent, a club or an employer was paying for.
+- [x] Each kind carries a colour **and** a glyph (● ◆ ▲) **and** a written label, so nothing depends on colour alone — which is what makes the printed report work (asserted in `tests/report-presentation.test.ts`).
+
+### Activities: funding, real monthly requirements, and deactivation
+
+- [x] **`Activity.fundingSource` and `Activity.fundedBy`.** A funding classification per activity, and an optional free-text name of whoever pays — "Dad", "the club", "work". Never required, never a predefined people database, and stored only for *paid by other* so switching an activity back cannot leave a stale name attached (migration `014`; repository round trip covered).
+- [x] **`domain/activityBudget.ts`: the accrual and the requirement, kept apart.** €81.64/year is €6.80 a month *for comparison*, and €81.64 in September and nothing in the other eleven *as a cash requirement*. Both are reported; neither is derived from the other (28 tests in `tests/activity-budget.test.ts`).
+- [x] **An activity whose payment month is unknown is never assigned one.** `status: "unknown"` with a `null` amount and a written reason, excluded from "required this month" and listed separately underneath. Checked across all twelve months for an undated annual subscription.
+- [x] Every cost model answers the requirement question from its own real schedule: `fixedYearly` and `sessionPack` through `paymentsBetween`, `schedule` through the real occurrences, `fixed`/`perSession`/weekly/monthly as a genuine every-month commitment, `purchase` in the month it happens. No "monthly × 12" anywhere.
+- [x] 29 February clamps to the 28th; a December renewal lands in December and a January one in January; twelve months of a €81.64 subscription sum to €81.64 exactly once.
+- [x] **The Activities tab has a financial overview**: total activity cost, the three funding figures with their yearly totals and shares, and *Required in <month>* — with the unscheduled activities named beneath it rather than folded into it.
+- [x] **Deactivate is a real action on the desktop.** The eye icon that only changed whether an activity appeared in summaries has been replaced by a labelled power control that switches the activity off and takes it out of every total. Hiding remains, in the editor and as a configurable swipe, and the two are described in different words in `domain/gestures.ts`.
+- [x] **Deactivate is the default trailing swipe on mobile**, and asks before switching off (a budget that quietly drops by €60 is worse than one that asks) while never asking on the way back on.
+
+### The month's budget requirement
+
+- [x] **`monthlyBudgetPlan` is the single planning calculation.** The activity expenses genuinely required in the month, from real payment dates, rounded **up to the next hundred**: 523 → 600, 601 → 700, 1000 → 1000. `calculateSuggestedMonthlyBudget` delegates to it rather than keeping a second answer.
+- [x] It previously summed monthly *accruals*, which averaged an annual subscription across twelve months and so suggested a budget too small in the month it renewed and too large in the other eleven.
+- [x] Activities funded by somebody else, or kept outside the budget, are excluded from the amount to plan for: a budget is money this budget has to find.
+- [x] Whether piloting counts now follows `pilotIncludedInBudget` rather than being excluded unconditionally — the old behaviour suggested a figure that could not cover a budget which *did* include it.
+
+### The Wallet as a treasury (specification items 28–45)
+
+- [x] **`domain/wallet.ts`: three derived balances, none of them stored.** `walletBalance` (every real movement, minus budget spending), `budgetRemaining` (allocations, minus budget spending, minus transfers out) and `personalBalance` (the subtraction of the two). A stored balance is a balance that can disagree with the movements that produced it (35 tests in `tests/wallet-treasury.test.ts`).
+- [x] **The ledger has a start.** Spending affects the treasury only from the **epoch** — the date of the first ledger entry. Without it, a five-year-old budget opening the tab for the first time would be told it was tens of thousands overdrawn. Asserted directly.
+- [x] **Time does not spend money.** A month ending consumes, resets and deletes nothing; leftover budget carries into the next month, across a year boundary, and a purchase in February can be paid from January's allocation.
+- [x] **`createNextYearRecord` no longer manufactures an opening entry.** Correct while the wallet was a per-year figure, a straight double count now that the ledger is continuous.
+- [x] **Budget allocations are explicit.** The plan says what the month needs; only the user can record that the money arrived. The suggestion is offered as a one-press default and never applied for them.
+- [x] **Paid-by-other and outside-budget spending consume neither the wallet nor the budget**, while remaining fully visible in every spending figure. Money somebody else paid never entered this wallet, so it cannot leave it.
+- [x] **A budget→personal transfer moves nothing.** Its effect on the wallet balance is zero by construction; it changes only how much is spoken for. Asserted that the wallet total is unchanged across a transfer.
+- [x] **Leftover budget is offered, never taken.** Transfer it, keep it as budget money, or decide later — surfaced at the end of a period and again just before the next allocation, and dismissible for the session without touching the money.
+- [x] **A month-by-month allocation history** with `carriedIn`, allocated, spent, transferred and remaining, so September visibly starts with what August did not spend.
+- [x] **The wallet stays in step with spending**: a new transaction, a changed amount, a changed date, a changed funding classification and a deletion each recalculate correctly, and a deletion reverses the effect exactly.
+- [x] **Multi-currency movements** convert through the app's own canonical rates and keep the amount and currency they were recorded in.
+- [x] The full **twenty-four-step acceptance scenario of §44** runs as one test, end to end, including that the planning calculation still independently says $600 after funds from two budget periods coexist in the wallet.
+- [x] Migration `015` adds `wallet_entries.date`, nullable and un-backfilled: a row written before it genuinely does not know its day, and `walletEntryDate()` reads it as the first of its month rather than inventing one.
+
+### Spending: the activity selector
+
+- [x] **The category chooses the selector.** A normal category offers its own activities; the wishlist category offers wishlist items; neither shows the other. The wishlist category is resolved by **seed key**, so renaming it cannot break the rule (11 tests in `tests/spending-activity-link.test.ts`).
+- [x] **An invalid selection is cleared, and the user is told** — not silently retained, which would persist a relationship the interface says is impossible.
+- [x] The activity's own funding becomes the transaction's default while still being overridable, because a lesson somebody else usually pays for is occasionally paid for by you.
+- [x] The relationship is persisted on `spending_entries.activity_id` (a column that already existed and had no writer), survives a save and a reload, and is cleared on both sides when the activity is deleted.
+
+### Scenarios, without a Piloting assumption
+
+- [x] **The Piloting control is gone.** It assumed every budget has an activity of that name, could ask exactly one question about exactly one hard-coded thing, and did nothing at all for the overwhelming majority of users. `pilotIncludedInBudget` still round-trips on old scenarios but produces no change, is not previewed, and **is not applied** — applying a value the preview does not list would change a setting the user was never shown (21 tests in `tests/scenario-activities.test.ts`).
+- [x] **Every activity gets enable/disable and a funding override**, stored in `ScenarioPreset.activityStates` (migration `014`). Absent means "enabled, own funding", which is exactly what every scenario saved before the change meant.
+- [x] **"X of Y activities enabled"**, counted against the activities that *exist* rather than the ids a scenario happens to name — so a scenario mentioning three deleted activities cannot report a total nobody can see.
+- [x] `scenarioProjection` implements the four rules: enabled + paid by me contributes; enabled + paid by other and enabled + outside budget are visible and contribute nothing; disabled contributes nothing at all.
+
+### Currencies and exchange rates
+
+- [x] **The whole of ISO 4217** — 160 currencies with names, symbols and their real minor units — replacing a hardcoded ten. The historical ten lead the list in their original order, so no existing budget's dropdown reshuffles (27 tests in `tests/currency-pinning.test.ts`).
+- [x] **Only pinned currencies appear in dropdowns**, with a searchable picker as the explicit way to discover and pin more. Search matches code, English name and symbol, accent-folded.
+- [x] Unpinning is refused for the display currency, the budget currency and any currency real records are stored in; re-pinning is simply pinning again.
+- [x] **Currency-aware formatting**: the yen prints no decimals, the dinar three.
+- [x] **One canonical rate representation.** Everything pivots through the euro, the two legacy manual pairs are folded into the same pivot, and any pair converts — GBP→CHF included. An unknown pair returns **null, not 1**: a rate of one for an unknown pair looks like a conversion and is a fabrication.
+- [x] **Daily refresh at 12:00 UTC**, with the boundary as a first-class function so a test can check either side of it. A refresh is due when the stored set predates the most recent noon *or* exceeds the age guard (17 tests in `tests/exchange-schedule.test.ts`).
+- [x] **A failed refresh never moves `ratesUpdatedAt`.** The last known good rates stay, the attempt is stamped separately in `ratesCheckedAt`, the reason is kept, and the panel reports "failed" rather than "stale" or "current". A success clears it.
+- [x] **A Currencies tab**, with the exchange-rate controls inside it. The separate "Exchange rates" settings category is **removed**: which currencies a budget deals in and what they are worth were one subject on two screens, neither of which mentioned the other.
+- [x] **Exchange mode** is a single state machine (`onCurrencyPress`), so a double-tap can never unpin while exchange mode is on and a tap can never select while it is off. First tap, second tap, then a popup stating the rate **in the direction they were tapped**, with the reciprocal, a reverse button, the timestamp and the source.
+- [x] **Double-tap to unpin uses a 700 ms window**, not a 250 ms one — a finger does not hit a quarter-second reliably, and the cost of missing it is that a destructive action becomes unreachable. Safe because the second tap only opens a confirmation. An ordinary **Unpin button** does the same thing for anyone who cannot double-tap, always in the DOM and always visible on touch.
+
+### Multi-language support
+
+- [x] **A centralised translation layer.** One dictionary per language, one lookup, no strings in components (31 tests in `tests/i18n.test.ts`).
+- [x] **Pluralisation through `Intl.PluralRules`**, not `n === 1`: French treats zero as singular, Arabic has six categories, and both are asserted. A language with one form supplies `_other` alone.
+- [x] **Dates, numbers, percentages and lists through `Intl`**, against the chosen locale — so the whole app agrees on one locale rather than the browser's on one screen and the chosen language's on another.
+- [x] **76 languages offered**, each naming itself, searchable by code, English name or native name. Five are translated (English, French, Spanish, German, Arabic); the rest are offered for their **locale formatting** and labelled as such rather than pretending a translation exists.
+- [x] **Right-to-left is real**: `dir="rtl"` on the root, and the handful of rules that pin a side physically are mirrored.
+- [x] **Only English is bundled.** The other four load as their own chunks when chosen — four dictionaries are ~25 kB gzipped, and four fifths of them are dead weight for any given reader. Until a chunk lands the interface is English rather than blank.
+- [x] Two structural tests: every translated key exists in the English key set, and no translation invents a placeholder the original does not have.
+
+### The first-run tour, and notifications
+
+- [x] **A twelve-step tour** that switches to the tab each step describes, so the thing being explained is visible behind the words. Skip is a first-class control and records the same settled state finishing does; Escape leaves it; reduced motion is honoured by not adding the animation at all (13 tests in `tests/tutorial.test.ts`).
+- [x] **It appears once, for a genuinely new account** — never completed, never skipped, and with no records of its own. An imported budget is not a new user.
+- [x] **Reopenable from Settings**, which clears both marks so it runs from the top.
+- [x] **`Notification.requestPermission()` is genuinely called.** The previous attempt shipped a permission-shaped component and never called it, so the browser was never asked; there is now exactly one function that performs the request and a test that asserts it was invoked (12 tests in `tests/notifications-permission.test.ts`).
+- [x] It is reached only from a **user gesture**, from two places that explain first: the tour's notifications step and the Settings toggle. Nothing asks on load.
+- [x] **Every answer is stored**, including a dismissed prompt — `Notification.permission` reports "default" for both "never asked" and "asked and dismissed", which is exactly the difference between a reasonable prompt and nagging.
+- [x] **Denied and unsupported are handled and said out loud.** Once the browser has refused it is not asked again (that would be a button that silently does nothing); a browser with no `Notification` gets a control that does not pretend to work.
+
+### The wallet reset
+
+- [x] **Reset wallet sets the balance to exactly zero and touches nothing else** — not the transactions, not the activities, not the wishlist, not the account. Implemented as one balancing adjustment rather than a deletion: wallet entries record money that moved, and erasing them to make a figure read zero destroys history to fix a display (8 tests in `tests/wallet-reset.test.ts`).
+- [x] It is behind a confirmation that says what survives it, is on the undo stack, is refused on a locked historical period, does nothing at all when the balance is already zero, and persists across a reload.
+
+### Reports
+
+- [x] **Rebuilt for print.** A serif masthead, structural rules, tabular figures, `break-inside: avoid` on rows and cards, a repeating table header, and the print button hidden when printing.
+- [x] **Black and white is a tested property, not an intention.** Every funding line carries a glyph and a legend; "over cap" is a bordered word rather than a red bar; the emphasised card is distinguished by border *weight*; bars carry borders so they survive being unfilled. Ten assertions in `tests/report-presentation.test.ts`.
+- [x] **The funding breakdown and the activity table** are in the report: monthly and yearly cost, share of the year, and *due in this month* — with "not known" printed for an activity whose payment month is unknown, and a note naming it.
+- [x] The three treasury figures replace the single wallet total.
+- [x] Still entirely self-contained: no `<link>`, no `<img>`, no external URL, and user text escaped (asserted).
+
+## Not verified — other
+
+- [ ] Multi-device sync **in production**. Verified locally against PostgreSQL with two isolated contexts; the production instance has no data in it yet.
+- [ ] Live exchange rates **from the production runtime**. The daily-schedule and failure semantics are unit-tested against a stubbed provider; the last real fetch from `open.er-api.com` was on 2026-08-21.
+- [ ] Print/PDF output on a real printer **dialog**. The report was rendered and read back under a greyscale filter — which is what a monochrome printer does to it — and its black-and-white properties are asserted in tests. Nobody has pressed Print against a physical printer.
+- [ ] Swipe gestures on a **physical touchscreen**.
+
+## Discovered issues — open
+
+- [ ] **Reports are written in English only.** The report model and its HTML are not translated: a French user gets a French interface and an English report. The activity "reason" keys are resolved against the English dictionary there deliberately, so nothing prints a raw key — but the section headings, summary labels and notes are English. Threading a translator through `buildPeriodReport`/`reportHtml` is the fix, and it is roughly forty more keys in five languages.
+- [ ] **Translation coverage is partial outside the panels this session touched.** Navigation, activities, spending, currencies, the wallet, scenarios, the tour and the notification settings are translated. The dashboard, the analytics page, the wishlist, categories and history still carry English strings, and the period selector's "CURRENT PERIOD" / "Pending" / "Saved" chrome does too. The architecture is right — every one of these is a `t()` call and a dictionary row, not a rewrite.
+- [ ] **The first paint grew from 94 kB to 125 kB gzipped.** Measured. The four non-English dictionaries and the tour are code-split, and the remaining growth is the currency dataset, the 76-language list, the English dictionary and the new domain modules. Worth another pass; not worth blocking on.
+- [ ] **`sessionsPerMonth` and `sessionsPerPeriod` both describe a frequency**, unchanged from the previous session.
+- [ ] **The wallet does not model transfers between currencies.** A movement has one currency and converts for display; moving €100 into a dollar wallet is two entries, not one.
+- [ ] **Notifications are permission-only.** The request, the stored choice, the states and a test notification all work; nothing yet *schedules* a reminder. No service worker and no push subscription — a real push pipeline needs VAPID keys and a server endpoint, and inventing one would be exactly the "fake permission request" the brief forbids in another form.
+- [ ] `xlsx@0.18.5` carries two high-severity advisories with no registry fix, unchanged from the previous session.
+- [ ] No component or end-to-end tests beyond `tests/editor-typing.test.tsx`. This session made that gap expensive: with a Playwright harness the browser verification above would not have been blocked by one stale Chrome process.
+- [ ] `HorizontalBarChart` reserves a fixed minimum height, so a one-row breakdown leaves a tall empty card.
+
+## Discovered issues — closed 2026-08-27
+
+- ~~The granular activity REST routes handled a subset of the model~~ → `POST`/`PATCH /api/activities` now accept the cost model, the funding classification and payer, the session-pack fields, weekdays, day-of-month and both dates, through one shared validator so the two routes cannot drift again. They still have no live caller; the client persists through `GET`/`PUT /api/snapshot`.
+- ~~A dead `Notifications` toast component styled with Tailwind classes this project does not have~~ → deleted. It rendered `null` in every case because nothing ever mounted its provider, and its name collided with the real notification work.
+- ~~`summarizeWallet` carried a deprecated `personalWalletTotal` alias~~ → removed; `personalBalance` is the only name.
+- ~~The currency allow-list in the activities route was ten hardcoded codes~~ → imported from the dataset, like the settings route.
+- ~~"Paid by others" and "outside my budget" behaved identically and were reported as one~~ → three kinds, separate everywhere.
+- ~~The suggested budget averaged annual subscriptions across twelve months~~ → the real requirement for the month.
+- ~~`includedBudget` charged the personal budget for activities somebody else pays for~~ → personal only.
+- ~~The spending editor offered a wishlist dropdown on every category and never offered activities~~ → the category chooses the selector.
+- ~~Scenarios assumed a "Piloting" activity~~ → generic per-activity enable and funding.
+- ~~Ten hardcoded currencies~~ → the whole of ISO 4217, pinned subset in dropdowns.
+- ~~Exchange rates were a separate Settings category with no connection to the currency list~~ → both in the Currencies tab.
+- ~~A failed rate refresh was indistinguishable from a successful one~~ → `ratesCheckedAt` and `ratesLastError`, reported as "failed".
+- ~~Every string was hardcoded in its component~~ → a translation layer with real plural rules.
+- ~~The notification permission request was never called~~ → one function, two gestures, and a test that asserts the call.
+- ~~The wallet was a single figure that reset each year and answered no question about real money~~ → a treasury with three derived balances and a ledger.
+- ~~`Hide` was the desktop stand-in for deactivating an activity~~ → a labelled power control; the two concepts are now described in different words.
 
 ## Completed — 2026-08-22
 

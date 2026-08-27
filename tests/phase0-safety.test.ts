@@ -31,6 +31,15 @@ describe("Phase 0 safety net", () => {
     const before = JSON.stringify(snapshot.years[String(snapshot.settings.selectedYear)].wishlistItems);
     const next = createNextYearRecord(snapshot, snapshot.settings.selectedYear + 1, NOW);
     expect(JSON.stringify(snapshot.years[String(snapshot.settings.selectedYear)].wishlistItems)).toBe(before);
-    expect(next.walletEntries.some((e) => e.type === "opening")).toBe(true);
+    /*
+     * No opening entry any more.
+     *
+     * A new year used to be handed one equal to the previous year's balance.
+     * That was right while the wallet was a per-year figure and is a straight
+     * double count now that the ledger is continuous: the money in the wallet
+     * on 1 January is the money that was in it on 31 December, and the ledger
+     * already says so.
+     */
+    expect(next.walletEntries).toHaveLength(0);
   });
 });

@@ -1,9 +1,12 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { useBudgetStore } from "../../store/budgetStore";
 import { AdvancedFields, EditorSheet } from "../ui/EditorSheet";
 import { Button } from "../ui/Button";
 import { Field, FieldGroup } from "../ui/Field";
-import type { BudgetSnapshot, ScenarioPreset } from "../../domain/types";
+import type { BudgetSnapshot, ScenarioActivityState, ScenarioPreset } from "../../domain/types";
+import { FUNDING_META, FUNDING_SOURCES, activityFundingKind, type FundingKind } from "../../domain/funding";
+import { scenarioActivityState } from "../../domain/scenarios";
+import { useTranslation } from "../../i18n/useTranslation";
 
 interface ScenarioEditorProps {
   /** null when creating a new one. */
@@ -30,15 +33,45 @@ interface ScenarioEditorProps {
  * that leaves a category alone.
  */
 export const ScenarioEditor: React.FC<ScenarioEditorProps> = ({ preset, snapshot, onClose }) => {
+  const { t } = useTranslation();
   const add = useBudgetStore((s) => s.addScenarioPreset);
   const update = useBudgetStore((s) => s.updateScenarioPreset);
 
   const [name, setName] = useState(preset?.name ?? "");
   const [notes, setNotes] = useState(preset?.notes ?? "");
   const [budget, setBudget] = useState(preset?.monthlyBudget != null ? String(preset.monthlyBudget) : "");
-  const [piloting, setPiloting] = useState<"unchanged" | "counted" | "excluded">(
-    preset?.pilotIncludedInBudget == null ? "unchanged" : preset.pilotIncludedInBudget ? "counted" : "excluded",
-  );
+
+  /**
+   * Per-activity state, seeded from the scenario or from the activities
+   * themselves.
+   *
+   * A scenario that has never been told about an activity means "enabled, with
+   * its own funding" — so a new scenario starts as a faithful copy of today
+   * and the user edits away from it, rather than starting from an empty set
+   * that would silently disable everything.
+   */
+  const activities = useMemo(() => {
+    const record = snapshot.years[String(snapshot.settings.selectedYear)];
+    return (record?.activities ?? []).slice().sort((a, b) => a.order - b.order);
+  }, [snapshot]);
+
+  const [activityStates, setActivityStates] = useState<Record<string, ScenarioActivityState>>(() => {
+    const initial: Record<string, ScenarioActivityState> = {};
+    for (const activity of activities) {
+      const stored = preset ? scenarioActivityState(preset, activity.id) : null;
+      initial[activity.id] = {
+        enabled: stored ? stored.enabled : activity.active,
+        funding: stored?.funding ?? activityFundingKind(activity),
+      };
+    }
+    return initial;
+  });
+
+  const setActivity = (activityId: string, patch: Partial<ScenarioActivityState>) =>
+    setActivityStates((current) => ({
+      ...current,
+      [activityId]: { ...(current[activityId] ?? { enabled: true }), ...patch },
+    }));
   const [caps, setCaps] = useState<Record<string, string>>(() => {
     const initial: Record<string, string> = {};
     for (const [categoryId, cap] of Object.entries(preset?.categoryCaps ?? {})) {
@@ -71,8 +104,11 @@ export const ScenarioEditor: React.FC<ScenarioEditorProps> = ({ preset, snapshot
       name: trimmedName,
       notes: notes.trim(),
       monthlyBudget: numberOrUndefined(budget),
-      pilotIncludedInBudget: piloting === "unchanged" ? undefined : piloting === "counted",
       categoryCaps: Object.keys(categoryCaps).length > 0 ? categoryCaps : undefined,
+      // Written for every activity that exists, so the scenario is a complete
+      // statement rather than a set of exceptions to a state that will have
+      // moved on by the time it is applied.
+      activityStates: Object.keys(activityStates).length > 0 ? activityStates : undefined,
     };
 
     if (preset) update(preset.id, payload);
@@ -82,6 +118,7 @@ export const ScenarioEditor: React.FC<ScenarioEditorProps> = ({ preset, snapshot
 
   const visibleCategories = snapshot.categories.filter((category) => !category.archived);
   const cappedCount = Object.values(caps).filter((value) => value.trim() !== "").length;
+  const enabledCount = activities.filter((activity) => activityStates[activity.id]?.enabled !== false).length;
 
   return (
     <EditorSheet
@@ -122,20 +159,6 @@ export const ScenarioEditor: React.FC<ScenarioEditorProps> = ({ preset, snapshot
               placeholder="—"
             />
           </Field>
-          <Field
-            label="Piloting"
-            hint="Piloting stays visible either way — this only decides whether it counts toward the budget."
-          >
-            <select
-              className="select"
-              value={piloting}
-              onChange={(event) => setPiloting(event.target.value as typeof piloting)}
-            >
-              <option value="unchanged">Leave as it is</option>
-              <option value="counted">Counted in the budget</option>
-              <option value="excluded">Excluded from the budget</option>
-            </select>
-          </Field>
           <Field label="Notes" span hint="When you would use this">
             <input
               className="input"
@@ -143,6 +166,60 @@ export const ScenarioEditor: React.FC<ScenarioEditorProps> = ({ preset, snapshot
               onChange={(event) => setNotes(event.target.value)}
               placeholder="Optional"
             />
+          </Field>
+        </FieldGroup>
+
+        {/* Activities.
+
+            This replaced a single boolean called "Piloting counted in the
+            budget" — a control that assumed every budget has an activity of
+            that name, could only ever ask one question about it, and did
+            nothing at all for the overwhelming majority of users who have no
+            such activity. Every activity now gets the same two controls, and
+            no activity is named anywhere in the code. */}
+        <FieldGroup title={t("scenarios.activitiesSection")}>
+          <Field label={t("scenarios.activityCount", { enabled: enabledCount, total: activities.length })} span group>
+            {activities.length === 0 ? (
+              <p className="text-note" style={{ margin: 0 }}>{t("scenarios.activitiesEmpty")}</p>
+            ) : (
+              <ul className="scenario-activities">
+                {activities.map((activity) => {
+                  const state = activityStates[activity.id] ?? { enabled: true };
+                  return (
+                    <li key={activity.id} className={`scenario-activity${state.enabled ? "" : " scenario-activity-off"}`}>
+                      {/* On a phone the whole row is the target: a 44px strip
+                          rather than an 18px checkbox, with the checkbox still
+                          present and labelled for a mouse and a keyboard. */}
+                      <label className="scenario-activity-toggle">
+                        <input
+                          type="checkbox"
+                          checked={state.enabled}
+                          onChange={(event) => setActivity(activity.id, { enabled: event.target.checked })}
+                        />
+                        <span className="scenario-activity-name">{activity.name}</span>
+                        <span className="sr-only">{t("scenarios.enabled")}</span>
+                      </label>
+                      <select
+                        className="select scenario-activity-funding"
+                        value={state.funding ?? activityFundingKind(activity)}
+                        disabled={!state.enabled}
+                        aria-label={`${t("scenarios.fundingOverride")}: ${activity.name}`}
+                        onChange={(event) => setActivity(activity.id, { funding: event.target.value as FundingKind })}
+                      >
+                        {FUNDING_SOURCES.map((option) => (
+                          <option key={option.kind} value={option.kind}>
+                            {t(`funding.${option.kind}.short`)}
+                          </option>
+                        ))}
+                      </select>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </Field>
+          <Field label={t("scenarios.enabledHint")} span group>
+            <p className="text-note" style={{ margin: 0 }}>{t("scenarios.fundingOverrideHint")}</p>
           </Field>
         </FieldGroup>
 

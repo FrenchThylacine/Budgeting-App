@@ -1,30 +1,44 @@
 import React, { useState } from "react";
 import {
   LayoutDashboard, Receipt, Wallet, BarChart3, MoreHorizontal,
-  ListTodo, Gift, FlaskConical, Clock, Tags, Settings, X,
+  ListTodo, Gift, FlaskConical, Clock, Tags, Settings, Coins, X,
 } from "lucide-react";
+import { useTranslation } from "../../i18n/useTranslation";
 
-type TabKey = "dashboard" | "activities" | "spending" | "wishlist" | "wallet" | "analytics" | "scenarios" | "history" | "settings" | "categories";
+type TabKey =
+  | "dashboard"
+  | "activities"
+  | "spending"
+  | "wishlist"
+  | "wallet"
+  | "analytics"
+  | "scenarios"
+  | "history"
+  | "settings"
+  | "categories"
+  | "currencies";
 
-const mobileTabs: { key: TabKey; label: string; icon: React.ElementType }[] = [
-  { key: "dashboard", label: "Home", icon: LayoutDashboard },
-  { key: "spending", label: "Spend", icon: Receipt },
-  { key: "wallet", label: "Wallet", icon: Wallet },
-  { key: "analytics", label: "Stats", icon: BarChart3 },
+const mobileTabs: { key: TabKey; labelKey: string; icon: React.ElementType }[] = [
+  { key: "dashboard", labelKey: "nav.home", icon: LayoutDashboard },
+  { key: "spending", labelKey: "nav.spend", icon: Receipt },
+  { key: "wallet", labelKey: "nav.wallet", icon: Wallet },
+  { key: "analytics", labelKey: "nav.stats", icon: BarChart3 },
 ];
 
-const moreTabs: { key: TabKey; label: string; icon: React.ElementType }[] = [
-  { key: "activities", label: "Activities", icon: ListTodo },
-  { key: "wishlist", label: "Wishlist", icon: Gift },
-  { key: "categories", label: "Categories", icon: Tags },
-  { key: "history", label: "History", icon: Clock },
-  { key: "scenarios", label: "Scenarios", icon: FlaskConical },
-  { key: "settings", label: "Settings", icon: Settings },
+const moreTabs: { key: TabKey; labelKey: string; icon: React.ElementType }[] = [
+  { key: "activities", labelKey: "nav.activities", icon: ListTodo },
+  { key: "wishlist", labelKey: "nav.wishlist", icon: Gift },
+  { key: "categories", labelKey: "nav.categories", icon: Tags },
+  { key: "currencies", labelKey: "nav.currencies", icon: Coins },
+  { key: "history", labelKey: "nav.history", icon: Clock },
+  { key: "scenarios", labelKey: "nav.scenarios", icon: FlaskConical },
+  { key: "settings", labelKey: "nav.settings", icon: Settings },
 ];
 
 export const MobileNav: React.FC<{ activeTab: TabKey; setActiveTab: (t: TabKey) => void }> = ({ activeTab, setActiveTab }) => {
+  const { t } = useTranslation();
   const [moreOpen, setMoreOpen] = useState(false);
-  const moreActive = moreTabs.some((t) => t.key === activeTab);
+  const moreActive = moreTabs.some((tab) => tab.key === activeTab);
 
   return (
     <>
@@ -41,27 +55,27 @@ export const MobileNav: React.FC<{ activeTab: TabKey; setActiveTab: (t: TabKey) 
             onClick={(e) => e.stopPropagation()}
           >
             <div className="mobile-more-header">
-              <span className="text-title">More</span>
+              <span className="text-title">{t("nav.more")}</span>
               <button
                 className="btn btn-ghost btn-sm"
                 onClick={() => setMoreOpen(false)}
-                aria-label="Close menu"
+                aria-label={t("nav.closeMenu")}
               >
                 <X size={18} />
               </button>
             </div>
             <div className="mobile-more-grid">
-              {moreTabs.map((t) => (
+              {moreTabs.map((tab) => (
                 <button
-                  key={t.key}
-                  className={`mobile-more-item ${activeTab === t.key ? "active" : ""}`}
+                  key={tab.key}
+                  className={`mobile-more-item ${activeTab === tab.key ? "active" : ""}`}
                   onClick={() => {
-                    setActiveTab(t.key);
+                    setActiveTab(tab.key);
                     setMoreOpen(false);
                   }}
                 >
-                  <t.icon size={20} />
-                  <span>{t.label}</span>
+                  <tab.icon size={20} />
+                  <span>{t(tab.labelKey)}</span>
                 </button>
               ))}
             </div>
@@ -70,18 +84,18 @@ export const MobileNav: React.FC<{ activeTab: TabKey; setActiveTab: (t: TabKey) 
       )}
 
       <nav className="mobile-nav" aria-label="Mobile navigation">
-        {mobileTabs.map((t) => (
+        {mobileTabs.map((tab) => (
           <button
-            key={t.key}
-            className={`mobile-nav-item ${activeTab === t.key ? "active" : ""}`}
+            key={tab.key}
+            className={`mobile-nav-item ${activeTab === tab.key ? "active" : ""}`}
             onClick={() => {
-              setActiveTab(t.key);
+              setActiveTab(tab.key);
               setMoreOpen(false);
             }}
-            aria-current={activeTab === t.key ? "page" : undefined}
+            aria-current={activeTab === tab.key ? "page" : undefined}
           >
-            <t.icon size={20} />
-            <span>{t.label}</span>
+            <tab.icon size={20} />
+            <span>{t(tab.labelKey)}</span>
           </button>
         ))}
         <button
@@ -91,7 +105,7 @@ export const MobileNav: React.FC<{ activeTab: TabKey; setActiveTab: (t: TabKey) 
           aria-haspopup="dialog"
         >
           <MoreHorizontal size={20} />
-          <span>More</span>
+          <span>{t("nav.more")}</span>
         </button>
       </nav>
     </>

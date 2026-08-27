@@ -67,6 +67,38 @@ function parseMonthlyNotes(raw: unknown): Record<number, MonthlyNote> {
   return notes;
 }
 
+/**
+ * Per-activity scenario state, stored as a JSON map.
+ *
+ * A malformed value becomes "no per-activity state" rather than throwing —
+ * the same rule the weekday and override parsers follow, and for the same
+ * reason: one bad row must not make a whole budget unloadable. Individual
+ * entries are validated one at a time, so a single corrupt key costs that key
+ * and nothing else.
+ */
+function parseActivityStates(raw: unknown): ScenarioPreset["activityStates"] {
+  if (typeof raw !== "string" || raw.length === 0) return undefined;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return undefined;
+  }
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return undefined;
+
+  const states: NonNullable<ScenarioPreset["activityStates"]> = {};
+  for (const [activityId, value] of Object.entries(parsed as Record<string, unknown>)) {
+    if (!activityId || typeof value !== "object" || value === null) continue;
+    const entry = value as { enabled?: unknown; funding?: unknown };
+    const funding =
+      entry.funding === "personal" || entry.funding === "other" || entry.funding === "outside"
+        ? entry.funding
+        : undefined;
+    states[activityId] = { enabled: entry.enabled !== false, funding };
+  }
+  return Object.keys(states).length > 0 ? states : undefined;
+}
+
 function parseScheduleOverrides(raw: unknown): ScheduleOverride[] | undefined {
   if (typeof raw !== "string" || raw.length === 0) return undefined;
   try {
@@ -313,13 +345,14 @@ export class SnapshotRepository {
       writes.push({
         text: `
         INSERT INTO scenario_presets
-        (id, snapshot_id, name, monthly_budget, pilot_included_in_budget, category_caps, notes)
-        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        (id, snapshot_id, name, monthly_budget, pilot_included_in_budget, category_caps, activity_states, notes)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
         ON CONFLICT (id) DO UPDATE SET
           name = EXCLUDED.name,
           monthly_budget = EXCLUDED.monthly_budget,
           pilot_included_in_budget = EXCLUDED.pilot_included_in_budget,
           category_caps = EXCLUDED.category_caps,
+          activity_states = EXCLUDED.activity_states,
           notes = EXCLUDED.notes
         WHERE scenario_presets.snapshot_id = EXCLUDED.snapshot_id
       `,
@@ -330,6 +363,12 @@ export class SnapshotRepository {
           preset.monthlyBudget ?? null,
           preset.pilotIncludedInBudget === true,
           preset.categoryCaps ? JSON.stringify(preset.categoryCaps) : null,
+          // Absent rather than `{}` so "this scenario says nothing about
+          // activities" and "it says nothing about any of them" stay the same
+          // single state.
+          preset.activityStates && Object.keys(preset.activityStates).length > 0
+            ? JSON.stringify(preset.activityStates)
+            : null,
           preset.notes,
         ],
       });
@@ -455,9 +494,11 @@ export class SnapshotRepository {
          sessions_per_period, session_period, sessions_per_payment,
          weekdays, day_of_month, start_date,
          next_renewal_date, schedule_overrides,
+         funding_source, funded_by,
          created_at, updated_at)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17,
-                $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33)
+                $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33,
+                $34, $35)
         ON CONFLICT (id) DO UPDATE SET
           name = EXCLUDED.name,
           category_id = EXCLUDED.category_id,
@@ -488,6 +529,8 @@ export class SnapshotRepository {
           start_date = EXCLUDED.start_date,
           next_renewal_date = EXCLUDED.next_renewal_date,
           schedule_overrides = EXCLUDED.schedule_overrides,
+          funding_source = EXCLUDED.funding_source,
+          funded_by = EXCLUDED.funded_by,
           updated_at = EXCLUDED.updated_at
         WHERE activities.year_id = EXCLUDED.year_id
       `,
@@ -530,6 +573,12 @@ export class SnapshotRepository {
           activity.scheduleOverrides && activity.scheduleOverrides.length > 0
             ? JSON.stringify(activity.scheduleOverrides)
             : null,
+          // NULL, not "personal", when the activity does not say: an absent
+          // value already means "paid by me" everywhere it is read, and
+          // writing the default would make "never chosen" and "chosen to be
+          // the default" indistinguishable.
+          activity.fundingSource ?? null,
+          activity.fundedBy?.trim() || null,
           now,
           now,
         ],
@@ -670,10 +719,11 @@ export class SnapshotRepository {
     for (const entry of yearRecord.walletEntries) {
       writes.push({
         text: `
-        INSERT INTO wallet_entries (id, year_id, month, amount, currency, source, type, note, created_at)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        INSERT INTO wallet_entries (id, year_id, month, date, amount, currency, source, type, note, created_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
         ON CONFLICT (id) DO UPDATE SET
           month = EXCLUDED.month,
+          date = EXCLUDED.date,
           amount = EXCLUDED.amount,
           currency = EXCLUDED.currency,
           source = EXCLUDED.source,
@@ -685,6 +735,7 @@ export class SnapshotRepository {
           entry.id,
           yearId,
           entry.month,
+          entry.date ?? null,
           entry.amount,
           entry.currency,
           entry.source,
@@ -812,6 +863,7 @@ export class SnapshotRepository {
       monthlyBudget: r.monthly_budget ?? undefined,
       pilotIncludedInBudget: r.pilot_included_in_budget === 1 || r.pilot_included_in_budget === true,
       categoryCaps: r.category_caps ? JSON.parse(r.category_caps) : undefined,
+      activityStates: parseActivityStates(r.activity_states),
       notes: r.notes ?? undefined,
     }));
   }
@@ -892,6 +944,12 @@ export class SnapshotRepository {
       dayOfMonth: row.day_of_month != null ? Number(row.day_of_month) : undefined,
       startDate: row.start_date ?? undefined,
       nextRenewalDate: row.next_renewal_date ?? undefined,
+      // Anything other than the two non-default values means "paid by me",
+      // which is also what an absent column means — so a row written before
+      // migration 014 keeps behaving exactly as it did.
+      fundingSource:
+        row.funding_source === "other" || row.funding_source === "outside" ? row.funding_source : undefined,
+      fundedBy: row.funded_by ?? undefined,
       scheduleOverrides: parseScheduleOverrides(row.schedule_overrides),
     };
   }
@@ -946,6 +1004,10 @@ export class SnapshotRepository {
       id: row.id,
       year,
       month: Number(row.month),
+      // Absent for every row written before migration 015. `walletEntryDate`
+      // reads that as the first of the month, which is what such a row can
+      // honestly claim — see `domain/wallet.ts`.
+      date: row.date ?? undefined,
       amount: Number(row.amount),
       currency: row.currency,
       source: row.source,

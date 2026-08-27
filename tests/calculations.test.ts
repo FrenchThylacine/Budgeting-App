@@ -113,9 +113,14 @@ describe("budget calculations", () => {
     expect(JSON.stringify(snapshot.years["2026"].wishlistItems)).toBe(previousWishlist);
   });
 
-  it("suggests monthly budget from active recurring costs excluding piloting", () => {
+  it("suggests a monthly budget from the costs actually required that month", () => {
     const snapshot = createSeedBudgetSnapshot(NOW);
     snapshot.settings.baseCurrency = "EUR";
+    // Whether piloting counts is a setting, and the suggestion now follows it
+    // rather than excluding piloting unconditionally — the old behaviour meant
+    // a budget that *did* include piloting was suggested a figure that could
+    // not cover it.
+    snapshot.settings.pilotIncludedInBudget = false;
     snapshot.years["2026"].activities = [
       recurringActivity({ id: "normal-recurring", categoryId: catId(snapshot, "cat-other"), pricePerMonth: 1234, estimatedCost: 1234 }),
       recurringActivity({ id: "pilot-recurring", categoryId: catId(snapshot, "cat-piloting"), pricePerMonth: 9999, estimatedCost: 9999 }),
@@ -126,11 +131,18 @@ describe("budget calculations", () => {
 
     expect(suggestion.recurringTotal).toBe(1234);
     expect(suggestion.suggestedAmount).toBe(1300);
+
+    // Turned on, the piloting activity is part of what the month requires.
+    snapshot.settings.pilotIncludedInBudget = true;
+    const withPiloting = calculateSuggestedMonthlyBudget(snapshot);
+    expect(withPiloting.recurringTotal).toBe(1234 + 9999);
+    expect(withPiloting.suggestedAmount).toBe(11300);
   });
 
   it("rounds suggested budget up to the next hundred in USD", () => {
     const snapshot = createSeedBudgetSnapshot(NOW);
     snapshot.settings.baseCurrency = "USD";
+    snapshot.settings.pilotIncludedInBudget = false;
     snapshot.years["2026"].activities = [
       recurringActivity({ id: "usd-recurring", categoryId: catId(snapshot, "cat-other"), currency: "USD", pricePerMonth: 5678, estimatedCost: 5678 }),
     ];

@@ -7,7 +7,7 @@
  *
  *     Budget           €1,000
  *     Personal spend     €300
- *     Paid by others     €200
+ *     Paid by other      €200
  *     Remaining          €700   ← not €500
  *
  * Every figure that answers "how am I doing against my budget" is asserted
@@ -108,8 +108,11 @@ describe("the funding predicate", () => {
   });
 
   it("names the source for a badge", () => {
-    expect(fundingLabel("shared")).toBe("Someone else paid");
-    expect(fundingLabel(undefined)).toBe("My budget");
+    // Renamed deliberately: the three classifications are now "Paid by me —
+    // in budget", "Paid by other" and "Outside budget", and the stored values
+    // are unchanged so no record had to be rewritten.
+    expect(fundingLabel("shared")).toBe("Paid by other");
+    expect(fundingLabel(undefined)).toBe("Paid by me — in budget");
   });
 });
 
@@ -213,7 +216,7 @@ describe("the worked example: €1,000 budget, €300 personal, €200 external"
     const line = (label: string) => report.summary.find((item) => item.label === label)?.value;
     expect(line("Total spending")).toContain("300");
     expect(line("Remaining")).toContain("700");
-    expect(line("Paid by others")).toContain("200");
+    expect(line("Paid by other")).toContain("200");
     // And the report says so in words, so a printed page cannot mislead.
     expect(report.notes.join(" ")).toMatch(/excluded from the budget/i);
   });

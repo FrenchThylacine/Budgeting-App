@@ -3,7 +3,14 @@ import { normalizeAmount, roundAmount } from "./currency";
 import { monthlyEstimateFromSchedule, yearlyEstimateFromSchedule } from "./schedule";
 import { fixedYearlyAmount, sessionsInMonth, sessionsInYear } from "./payments";
 import { findSeedCategory } from "./seedCategories";
-import { externalEntries, personalEntries } from "./funding";
+import { monthlyBudgetPlan, walletState } from "./wallet";
+import {
+  activityFundingKind,
+  externalEntries,
+  otherFundedEntries,
+  outsideBudgetEntries,
+  personalEntries,
+} from "./funding";
 import type {
   Activity,
   ActivityEstimate,
@@ -32,10 +39,29 @@ export function calculateYear(snapshot: BudgetSnapshot, now = new Date()): YearC
     .map((activity) => estimateActivity(activity, snapshot))
     .sort((a, b) => a.activity.order - b.activity.order);
 
+  // Bucket totals are **gross**: they describe which part of the budget an
+  // activity belongs to, not who pays for it. The funding split is reported
+  // separately, because the two questions are independent — a piloting
+  // activity can be funded by somebody else, and a general one can be outside
+  // the budget.
   const generalBudget = sum(activityEstimates.filter((item) => item.bucket !== "piloting").map((item) => item.monthlyBase));
   const pilotingBudget = sum(activityEstimates.filter((item) => item.bucket === "piloting").map((item) => item.monthlyBase));
   const combinedBudget = generalBudget + pilotingBudget;
-  const includedBudget = snapshot.settings.pilotIncludedInBudget ? combinedBudget : generalBudget;
+  /*
+   * What the personal budget actually has to carry.
+   *
+   * Only activities funded "paid by me" consume it: an activity somebody else
+   * pays for, or one the user keeps outside this budget, costs real money and
+   * costs *this budget* nothing. It was the gross figure before, which
+   * overstated the commitment by everything a parent, a club or an employer
+   * was paying for.
+   */
+  const personalEstimates = activityEstimates.filter((item) => item.funding === "personal");
+  const includedBudget = sum(
+    personalEstimates
+      .filter((item) => (snapshot.settings.pilotIncludedInBudget ? true : item.bucket !== "piloting"))
+      .map((item) => item.monthlyBase),
+  );
   const monthlyBudgetBase = normalizeAmount(
     snapshot.settings.monthlyBudget,
     snapshot.settings.monthlyBudgetCurrency,
@@ -69,10 +95,14 @@ export function calculateYear(snapshot: BudgetSnapshot, now = new Date()): YearC
     // below rather than folded in — see domain/funding.ts.
     totalSpend: sum(personalEntries(record.spendingEntries).map((entry) => normalizeEntry(entry, snapshot))),
     externalSpend: sum(externalEntries(record.spendingEntries).map((entry) => normalizeEntry(entry, snapshot))),
+    // Paid-by-other and outside-budget behave identically against the budget
+    // and are two different facts, so both are reported. See domain/funding.ts.
+    otherFundedSpend: sum(otherFundedEntries(record.spendingEntries).map((entry) => normalizeEntry(entry, snapshot))),
+    outsideBudgetSpend: sum(outsideBudgetEntries(record.spendingEntries).map((entry) => normalizeEntry(entry, snapshot))),
     delta,
     rolloverDelta: delta,
     roundedMonthlyValue: roundAmount(includedBudget, snapshot.settings.roundingRule),
-    wallet: summarizeWallet(record.walletEntries, snapshot),
+    wallet: summarizeWallet(snapshot),
     wishlist: summarizeWishlist(record.wishlistItems, snapshot),
     ytdTotal: sum(
       personalEntries(record.spendingEntries)
@@ -81,6 +111,16 @@ export function calculateYear(snapshot: BudgetSnapshot, now = new Date()): YearC
     ),
     externalYtdTotal: sum(
       externalEntries(record.spendingEntries)
+        .filter((entry) => entry.month <= month)
+        .map((entry) => normalizeEntry(entry, snapshot)),
+    ),
+    otherFundedYtdTotal: sum(
+      otherFundedEntries(record.spendingEntries)
+        .filter((entry) => entry.month <= month)
+        .map((entry) => normalizeEntry(entry, snapshot)),
+    ),
+    outsideBudgetYtdTotal: sum(
+      outsideBudgetEntries(record.spendingEntries)
         .filter((entry) => entry.month <= month)
         .map((entry) => normalizeEntry(entry, snapshot)),
     ),
@@ -120,6 +160,7 @@ export function estimateActivity(
     monthlyBase: normalizeAmount(monthlyNative, activity.currency, snapshot.settings),
     yearlyBase: normalizeAmount(yearlyNative, activity.currency, snapshot.settings),
     bucket,
+    funding: activityFundingKind(activity),
   };
 }
 
@@ -278,15 +319,28 @@ export function summarizeWishlist(items: WishlistItem[], snapshot: BudgetSnapsho
   };
 }
 
-export function summarizeWallet(entries: WalletEntry[], snapshot: BudgetSnapshot): WalletSummary {
-  const opening = entries.filter((entry) => entry.type === "opening");
-  const personal = entries.filter((entry) => entry.type !== "budget");
-  const rollover = entries.filter((entry) => entry.type === "rollover");
+/**
+ * The three balances, from the whole ledger.
+ *
+ * Takes the snapshot rather than one year's entries because a treasury does
+ * not restart in January: the money in a wallet on 1 January is the money that
+ * was in it on 31 December. Every figure is derived — see `domain/wallet.ts`
+ * for the model and for why nothing here is stored.
+ */
+export function summarizeWallet(snapshot: BudgetSnapshot): WalletSummary {
+  const state = walletState(snapshot);
+  const entries = Object.values(snapshot.years).flatMap((record) => record.walletEntries ?? []);
+  const totalOf = (predicate: (entry: WalletEntry) => boolean) =>
+    sum(entries.filter(predicate).map((entry) => normalizeEntry(entry, snapshot)));
+
   return {
-    walletTotal: sum(entries.map((entry) => normalizeEntry(entry, snapshot))),
-    personalWalletTotal: sum(personal.map((entry) => normalizeEntry(entry, snapshot))),
-    rolloverTotal: sum(rollover.map((entry) => normalizeEntry(entry, snapshot))),
-    openingBalance: sum(opening.map((entry) => normalizeEntry(entry, snapshot))),
+    walletTotal: state.walletBalance,
+    budgetRemaining: state.budgetRemaining,
+    personalBalance: state.personalBalance,
+    rolloverTotal: totalOf((entry) => entry.type === "rollover"),
+    openingBalance: totalOf((entry) => entry.type === "opening"),
+    allocatedTotal: state.allocatedTotal,
+    budgetSpent: state.budgetSpent,
   };
 }
 
@@ -303,20 +357,23 @@ export function calculateRolloverDelta(snapshot: BudgetSnapshot, year: number, m
   return monthlyBudgetBase - (summary.total ?? 0);
 }
 
+/**
+ * The month's suggested budget.
+ *
+ * Delegates to `monthlyBudgetPlan`, which is the single place the planning
+ * arithmetic lives: the activity expenses genuinely required in this month,
+ * from real payment dates, rounded up to the next hundred. This function used
+ * to sum monthly *accruals* instead, which quietly averaged an annual
+ * subscription across twelve months and so suggested a budget that was too
+ * small in the month it renewed and too large in the other eleven.
+ *
+ * `recurringTotal` is kept in the returned shape — the dashboard's approval
+ * card states it beside the suggestion — and is now the requirement rather
+ * than the accrual.
+ */
 export function calculateSuggestedMonthlyBudget(snapshot: BudgetSnapshot): { recurringTotal: number; suggestedAmount: number } {
-  const record = snapshot.years[String(snapshot.settings.selectedYear)] ?? emptyYearRecord(snapshot.settings.selectedYear);
-  const categoryMap = new Map(snapshot.categories.map((category) => [category.id, category]));
-  const recurringTotal = sum(
-    record.activities
-      .filter((activity) => activity.active && activity.visible)
-      .filter((activity) => activity.recurrenceType !== "none" && activity.recurrenceType !== "purchase")
-      .filter((activity) => categoryMap.get(activity.categoryId)?.bucket !== "piloting")
-      .map((activity) => estimateActivity(activity, snapshot).monthlyBase),
-  );
-  return {
-    recurringTotal,
-    suggestedAmount: Math.ceil(recurringTotal / 100) * 100,
-  };
+  const plan = monthlyBudgetPlan(snapshot);
+  return { recurringTotal: plan.requirement, suggestedAmount: plan.suggested };
 }
 
 export function createNextYearRecord(snapshot: BudgetSnapshot, targetYear: number, now = new Date()): YearRecord {
@@ -327,7 +384,6 @@ export function createNextYearRecord(snapshot: BudgetSnapshot, targetYear: numbe
       .filter((year) => year < targetYear),
   );
   const source = snapshot.years[String(sourceYear)] ?? emptyYearRecord(targetYear - 1, timestamp);
-  const wallet = summarizeWallet(source.walletEntries, snapshot);
   const wishlistItems = snapshot.settings.autoWishlistFlushEnabled
     ? source.wishlistItems.filter((item) => item.active && item.inWishlist && !item.bought)
     : source.wishlistItems;
@@ -344,19 +400,16 @@ export function createNextYearRecord(snapshot: BudgetSnapshot, targetYear: numbe
       bought: false,
       effectiveValue: item.actualPrice ?? 0,
     })),
-    walletEntries: [
-      {
-        id: `wallet-opening-${targetYear}`,
-        year: targetYear,
-        month: 1,
-        amount: wallet.personalWalletTotal,
-        currency: snapshot.settings.baseCurrency,
-        source: `Opening from ${source.year}`,
-        type: "opening",
-        note: "Generated when switching into a new year. Prior year remains untouched.",
-        createdAt: timestamp,
-      },
-    ],
+    /*
+     * No opening entry.
+     *
+     * A new year used to be given one, equal to the previous year's balance —
+     * which was right while the wallet was a per-year figure and is a straight
+     * double count now that it is a continuous ledger. The money in the wallet
+     * on 1 January is the money that was in it on 31 December, and the ledger
+     * already says so. See `domain/wallet.ts`.
+     */
+    walletEntries: [],
     closedMonths: [],
     monthlyNotes: {},
     createdAt: timestamp,
@@ -447,8 +500,12 @@ function summarizePeriod({
       pilotingTotal: null,
       personalTotal: null,
       externalTotal: null,
+      otherFundedTotal: null,
+      outsideBudgetTotal: null,
       transactionTotal: null,
       externalCount: 0,
+      otherFundedCount: 0,
+      outsideBudgetCount: 0,
       entryCount: 0,
       isClosed,
     };
@@ -458,6 +515,8 @@ function summarizePeriod({
   // paid is kept in full below, never added to this.
   const budgetEntries = personalEntries(entries);
   const externallyFunded = externalEntries(entries);
+  const otherFunded = otherFundedEntries(entries);
+  const outsideBudget = outsideBudgetEntries(entries);
 
   const generalEntries = budgetEntries.filter((entry) => !entry.isPiloting);
   const pilotingEntries = budgetEntries.filter((entry) => entry.isPiloting);
@@ -466,6 +525,10 @@ function summarizePeriod({
   const total = generalTotal + pilotingTotal;
 
   const externalTotal = sum(externallyFunded.map((entry) => normalizeEntry(entry, snapshot)));
+  // Reported apart, never merged: "somebody else paid" and "I keep this off
+  // this budget" answer different questions in every report and statistic.
+  const otherFundedTotal = sum(otherFunded.map((entry) => normalizeEntry(entry, snapshot)));
+  const outsideBudgetTotal = sum(outsideBudget.map((entry) => normalizeEntry(entry, snapshot)));
 
   return {
     label,
@@ -481,8 +544,12 @@ function summarizePeriod({
     // thing.
     personalTotal: total,
     externalTotal,
+    otherFundedTotal,
+    outsideBudgetTotal,
     transactionTotal: total + externalTotal,
     externalCount: externallyFunded.length,
+    otherFundedCount: otherFunded.length,
+    outsideBudgetCount: outsideBudget.length,
     entryCount: entries.length,
     isClosed,
   };
