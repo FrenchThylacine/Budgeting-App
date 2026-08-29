@@ -1,9 +1,15 @@
 import React, { useRef, useState } from "react";
 import { Upload } from "lucide-react";
 import { importJsonBackup, exportJson } from "../../domain/importExport";
-import { WorkbookShapeError, importBudgetWorkbook } from "../../domain/workbookImport";
+/*
+ * Type-only here, and fetched when a file is actually chosen. The workbook
+ * parser is dead weight on every visit that never imports one — which, after
+ * the first, is all of them.
+ */
+
 import { ImportPreviewDialog, type ImportPreview } from "../modals/ImportPreviewDialog";
 import { useBudgetStore } from "../../store/budgetStore";
+import { useTranslation } from "../../i18n/useTranslation";
 
 interface ImportControlProps {
   /** `full` gives the button a label and room to breathe; `compact` fits the sidebar. */
@@ -19,6 +25,7 @@ interface ImportControlProps {
  * error handling and preview wiring drifting apart.
  */
 export const ImportControl: React.FC<ImportControlProps> = ({ variant = "full", className = "" }) => {
+  const { t } = useTranslation();
   const snapshot = useBudgetStore((s) => s.snapshot);
   const importSnapshot = useBudgetStore((s) => s.importSnapshot);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -56,16 +63,15 @@ export const ImportControl: React.FC<ImportControlProps> = ({ variant = "full", 
         return;
       }
 
+      const { importBudgetWorkbook } = await import("../../domain/workbookImport");
       const result = await importBudgetWorkbook(file);
       setPreview({ fileName: file.name, ...result });
     } catch (caught) {
       // A file that is not this workbook gets a message naming what was wrong,
-      // rather than importing whatever it could find.
-      setError(
-        caught instanceof WorkbookShapeError || caught instanceof Error
-          ? caught.message
-          : "That file could not be read.",
-      );
+      // rather than importing whatever it could find. `WorkbookShapeError`
+      // extends `Error`, so the narrower check the class import used to allow
+      // adds nothing now that the module is loaded on demand.
+      setError(caught instanceof Error ? caught.message : t("import.unreadable"));
     }
   };
 
@@ -76,7 +82,7 @@ export const ImportControl: React.FC<ImportControlProps> = ({ variant = "full", 
         className={variant === "compact" ? "btn btn-secondary btn-sm" : "btn btn-secondary"}
         onClick={() => fileInputRef.current?.click()}
       >
-        <Upload size={variant === "compact" ? 14 : 15} /> Import a file
+        <Upload size={variant === "compact" ? 14 : 15} /> {t("import.importAFile")}
       </button>
 
       <input
@@ -89,8 +95,7 @@ export const ImportControl: React.FC<ImportControlProps> = ({ variant = "full", 
 
       {variant === "full" && (
         <p className="text-note" style={{ margin: "8px 0 0" }}>
-          An Excel workbook with <strong>Budget</strong> and <strong>Spending</strong> sheets, or a JSON
-          backup exported from this app. You will see exactly what changes before anything is written.
+          {t("import.anExcelWorkbookWith")} <strong>{t("settings.budget")}</strong> {t("import.and")} <strong>{t("nav.spending")}</strong> {t("import.sheetsOrAJsonBackup")}
         </p>
       )}
 

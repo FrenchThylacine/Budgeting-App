@@ -95,6 +95,8 @@ export function upcomingSchedule(
   snapshot: BudgetSnapshot,
   from = new Date(),
   horizonDays = 14,
+  /** Optional, so a test or an export gets the English wording as before. */
+  t?: (key: string, params?: Record<string, string | number>) => string,
 ): UpcomingSchedule {
   const record = snapshot.years[String(snapshot.settings.selectedYear)];
   const activities = (record?.activities ?? []).filter((a) => a.active && a.visible);
@@ -132,7 +134,7 @@ export function upcomingSchedule(
         }
         continue;
       }
-      const cycleNote = describePaymentCycle(activity) ?? undefined;
+      const cycleNote = describePaymentCycle(activity, t) ?? undefined;
       for (const payment of payments) {
         occurrences.push({
           activity,
@@ -218,17 +220,27 @@ export function localDayKey(date: Date): string {
   return `${year}-${month}-${day}`;
 }
 
-/** "Today", "Tomorrow", or a written date. Relative labels only where they help. */
-export function dayLabel(date: Date, now = new Date()): string {
+/**
+ * "Today", "Tomorrow", or a written date. Relative labels only where they help.
+ *
+ * The two relative words are the only strings here; the dates themselves go
+ * through the caller's own formatter, so the whole application agrees on one
+ * locale rather than this function using the browser's.
+ */
+export function dayLabel(
+  date: Date,
+  now = new Date(),
+  t?: (key: string, params?: Record<string, string | number>) => string,
+  formatDate?: (value: Date, options?: Intl.DateTimeFormatOptions) => string,
+): string {
+  const format = formatDate ?? ((value: Date, options?: Intl.DateTimeFormatOptions) => value.toLocaleDateString(undefined, options));
   const days = Math.round(
     (new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime() -
       new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()) /
       86_400_000,
   );
-  if (days === 0) return "Today";
-  if (days === 1) return "Tomorrow";
-  if (days > 1 && days < 7) {
-    return date.toLocaleDateString(undefined, { weekday: "long" });
-  }
-  return date.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" });
+  if (days === 0) return t ? t("upcoming.today") : "Today";
+  if (days === 1) return t ? t("upcoming.tomorrow") : "Tomorrow";
+  if (days > 1 && days < 7) return format(date, { weekday: "long" });
+  return format(date, { weekday: "short", day: "numeric", month: "short" });
 }

@@ -29,16 +29,6 @@ import type { Activity, IsoWeekday, ScheduleOverride } from "./types";
 /** Monday-first ISO weekday order, for pickers and labels. */
 export const ISO_WEEKDAYS: IsoWeekday[] = [1, 2, 3, 4, 5, 6, 7];
 
-export const WEEKDAY_LABELS: Record<IsoWeekday, string> = {
-  1: "Monday",
-  2: "Tuesday",
-  3: "Wednesday",
-  4: "Thursday",
-  5: "Friday",
-  6: "Saturday",
-  7: "Sunday",
-};
-
 export const WEEKDAY_SHORT_LABELS: Record<IsoWeekday, string> = {
   1: "Mon",
   2: "Tue",
@@ -346,13 +336,25 @@ export function yearlyEstimateFromSchedule(activity: Activity, year: number): nu
   return total;
 }
 
-/** Short human summary of a schedule, e.g. "Mon, Wed" or "Day 15 monthly". */
-export function describeSchedule(activity: Activity): string {
+/**
+ * Short human summary of a schedule, e.g. "Mon, Wed" or "Day 15 monthly".
+ *
+ * The translator is optional so that a test, an export or any other caller
+ * without one still gets a readable English string; a component passes its own
+ * and gets the reader's language.
+ */
+export function describeSchedule(
+  activity: Activity,
+  t?: (key: string, params?: Record<string, string | number>) => string,
+  weekdayNames: Record<IsoWeekday, string> = WEEKDAY_SHORT_LABELS,
+): string {
   const weekdays = normalizeWeekdays(activity.weekdays);
-  if (weekdays.length > 0) return weekdays.map((day) => WEEKDAY_SHORT_LABELS[day]).join(", ");
+  if (weekdays.length > 0) return weekdays.map((day) => weekdayNames[day]).join(", ");
   const dayOfMonth = normalizeDayOfMonth(activity.dayOfMonth);
-  if (dayOfMonth != null) return `Day ${dayOfMonth} monthly`;
-  return "No schedule set";
+  if (dayOfMonth != null) {
+    return t ? t("activity.dayMonthly", { day: dayOfMonth }) : `Day ${dayOfMonth} monthly`;
+  }
+  return t ? t("activity.noSchedule") : "No schedule set";
 }
 
 /**

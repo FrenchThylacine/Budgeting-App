@@ -1040,7 +1040,6 @@
   color: var(--warning-text);
   font-size: 0.6875rem;
   font-weight: 700;
-  text-transform: capitalize;
   white-space: nowrap;
 }
 
@@ -1072,7 +1071,6 @@
   font: inherit;
   font-size: 0.75rem;
   font-weight: 600;
-  text-transform: capitalize;
   cursor: pointer;
   white-space: nowrap;
 }
@@ -1293,7 +1291,9 @@
   position: absolute;
   left: 0;
   top: 50%;
-  margin-top: -15px;
+  /* Centred by the transform rather than by a margin: the silhouettes are
+     different heights — a Concorde is a sliver, an A350 is nearly square — and
+     a fixed negative margin only centres one of them. */
   animation: craftRun 620ms cubic-bezier(0.35, 0, 0.2, 1) 40ms forwards;
   will-change: transform;
   filter: drop-shadow(0 2px 10px rgba(0, 0, 0, 0.45));
@@ -1310,8 +1310,8 @@
 }
 
 @keyframes craftRun {
-  from { transform: translate3d(-16px, 0, 0); }
-  to   { transform: translate3d(min(460px, 64vw), 0, 0); }
+  from { transform: translate3d(-16px, -50%, 0); }
+  to   { transform: translate3d(min(460px, 64vw), -50%, 0); }
 }
 
 /* The page arrives travelling the same way the sweep did: it starts left of
@@ -1328,23 +1328,148 @@
   .tab-panel-arriving { animation: none; }
 }
 
-/* ─── Boot screen ─────────────────────────────────────────────────────────── */
+/* ─── Loading screen ──────────────────────────────────────────────────────────
+
+   The stage the formation flies on. Everything that moves here is written by
+   `components/loading/LoadingScreen.tsx` as a `transform`, and everything that
+   does not move is here. The division is deliberate: the trails, the sky and
+   the horizon are declarative and belong in CSS; the escorts' positions have to
+   be interruptible mid-turn and cannot be. */
 
 .boot-screen {
-  /* Deep navy ground with a low horizon glow, so the mark reads as airborne
-     rather than as an icon on a grey page. */
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: grid;
+  grid-template-rows: 1fr auto;
+  place-items: center;
+  overflow: hidden;
+  /* Deep navy at altitude: a cold high glow above, the signature red as a warm
+     band at the horizon. */
   background:
-    radial-gradient(120% 80% at 50% 120%, rgba(228, 0, 43, 0.20) 0%, transparent 60%),
-    radial-gradient(90% 60% at 50% -10%, rgba(107, 165, 255, 0.18) 0%, transparent 70%),
-    var(--brand-mark-from);
+    radial-gradient(120% 70% at 50% 118%, rgba(228, 0, 43, 0.22) 0%, transparent 62%),
+    radial-gradient(90% 65% at 50% -12%, rgba(107, 165, 255, 0.22) 0%, transparent 72%),
+    linear-gradient(168deg, #0B1B38 0%, #081226 58%, #050B18 100%);
   color: #FFFFFF;
+
+  --boot-blue: #1E3FA8;
+  --boot-white: #F2F6FC;
+  --boot-red: #E4002B;
+  --boot-scale: 1;
 }
 
-.boot-craft {
+/* A faint horizon, so the formation reads as flying over something. */
+.boot-sky {
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 42%;
+  background: linear-gradient(180deg, transparent, rgba(107, 165, 255, 0.10) 60%, rgba(228, 0, 43, 0.10));
+  pointer-events: none;
+}
+
+.boot-stage {
+  grid-row: 1;
+  position: relative;
+  width: 100%;
+  height: 100%;
   display: grid;
   place-items: center;
-  animation: bootCruise 3.2s var(--ease-out) infinite;
 }
+
+/* The body the whole formation is a part of. The departure translates this,
+   which is why the escorts' own transforms stay relative to the lead. */
+.boot-scene {
+  position: relative;
+  width: 0;
+  height: 0;
+  transform: translate3d(0, 0, 0);
+  scale: var(--boot-scale);
+  will-change: transform;
+}
+
+.boot-lead {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform: translate(-50%, -50%);
+  z-index: 2;
+  filter: drop-shadow(0 10px 26px rgba(0, 0, 0, 0.5));
+}
+
+.boot-lead-art {
+  /* A shallow, slow bank. The lead is holding station, not manoeuvring. */
+  animation: bootLeadHold 5.2s ease-in-out infinite;
+}
+
+@keyframes bootLeadHold {
+  0%, 100% { transform: translate3d(0, -5px, 0) rotate(-1.1deg); }
+  50%      { transform: translate3d(0, 5px, 0) rotate(1.1deg); }
+}
+
+.boot-escort {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 0;
+  height: 0;
+  display: grid;
+  place-items: center;
+  z-index: 1;
+  will-change: transform;
+}
+
+/* No transform of its own: the escort is a zero-sized grid box centring its
+   children on the point the script positions, so the artwork is already
+   centred. Translating it by half its size again would put the aeroplane up and
+   to the left of the position its trail is drawn from. */
+.boot-escort-art { filter: drop-shadow(0 3px 10px rgba(0, 0, 0, 0.45)); }
+
+/* The third jet is in the DOM from the first frame — decoding an image in the
+   middle of the join is a dropped frame nobody misses — and is simply
+   invisible until the other two have rolled out of the turn. */
+.boot-escort-late {
+  opacity: 0;
+  transition: opacity 420ms var(--ease-out) 260ms;
+}
+
+.boot-escort-late.is-joined { opacity: 1; }
+
+/* The smoke. A tapering ribbon behind the tail, drawn from the aircraft's own
+   frame so it banks with it for free. */
+.boot-trail {
+  position: absolute;
+  right: 22px;
+  top: -3px;
+  height: 6px;
+  width: 90px;
+  border-radius: 6px;
+  transform-origin: right center;
+  background: linear-gradient(270deg, var(--trail-colour) 0%, color-mix(in srgb, var(--trail-colour) 55%, transparent) 45%, transparent 100%);
+  filter: blur(1.5px);
+  opacity: 0.85;
+  transition: width 520ms var(--ease-out), opacity 320ms linear;
+}
+
+/* Once in formation the ribbons run long and level: three parallel bands, blue
+   over white over red. */
+.boot-escort.is-joined .boot-trail { width: 300px; }
+
+.boot-phase-depart .boot-trail {
+  /* The blast: the ribbons stretch as the formation accelerates away. */
+  width: 720px;
+  transition: width 720ms cubic-bezier(0.4, 0, 1, 1);
+}
+
+.boot-caption-block {
+  grid-row: 2;
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+  padding-bottom: clamp(28px, 8vh, 76px);
+  transition: opacity 260ms linear;
+}
+
+.boot-phase-depart .boot-caption-block { opacity: 0; }
 
 .boot-title {
   font-size: 1.25rem;
@@ -1355,20 +1480,20 @@
 
 .boot-caption {
   font-size: var(--text-caption);
-  color: rgba(255, 255, 255, 0.72);
+  /* 6.9 : 1 on the darkest part of the ground. */
+  color: rgba(255, 255, 255, 0.78);
 }
 
-/* A slow drift, not a bounce: the aircraft is cruising, not hopping. */
-@keyframes bootCruise {
-  0%, 100% { transform: translate3d(-6px, 2px, 0) rotate(-1.5deg); }
-  50%      { transform: translate3d(6px, -2px, 0) rotate(1.5deg); }
-}
-
-.boot-track { background: rgba(255, 255, 255, 0.18); }
-.boot-fill { background: linear-gradient(90deg, #FFFFFF, var(--brand-mark-to)); }
+/* The orbit is 190px wide before the aircraft are drawn on it; a 320px phone
+   cannot hold that, so the whole stage is scaled rather than each part of it
+   being given its own breakpoint. */
+@media (max-width: 720px) { .boot-screen { --boot-scale: 0.72; } }
+@media (max-width: 400px) { .boot-screen { --boot-scale: 0.56; } }
 
 @media (prefers-reduced-motion: reduce) {
-  .boot-craft { animation: none; }
+  .boot-lead-art { animation: none; }
+  .boot-trail { transition: none; }
+  .boot-escort-late { transition: none; opacity: 1; }
 }
 
 /* ─── Gesture preferences ─────────────────────────────────────────────────── */
@@ -1388,10 +1513,11 @@
 
 .gesture-row:last-child { border-bottom: 0; padding-bottom: 0; }
 
-.gesture-surface {
-  font-weight: var(--weight-semibold);
-  text-transform: capitalize;
-}
+/* No `text-transform: capitalize`: these three rules existed because the text
+   was an interpolated lower-case English word. It is a translated string now,
+   and capitalising every word of one turns "Mois en cours" into "Mois En
+   Cours" — which is wrong in most languages that are not English. */
+.gesture-surface { font-weight: var(--weight-semibold); }
 
 .gesture-choice { display: grid; gap: 4px; min-width: 0; }
 
@@ -1561,55 +1687,6 @@
 }
 
 .auth-card { position: relative; }
-
-/* ─── Loading screen ──────────────────────────────────────────────────────── */
-
-/* A route line the aircraft travels along, rather than a bar that fills.
-   A progress bar promises a known duration; this is a wait of unknown length,
-   and pretending otherwise is the thing that makes a loading screen annoying. */
-.boot-route {
-  position: relative;
-  width: min(260px, 70vw);
-  height: 2px;
-  border-radius: 2px;
-  background: rgba(255, 255, 255, 0.18);
-  /* Clipped: the travelling highlight is animated a full width past each end,
-     and with this visible it drew a bright line off across the whole screen. */
-  overflow: hidden;
-}
-
-.boot-route::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.75), transparent);
-  transform: translateX(-100%);
-  animation: bootRoute 2.4s var(--sweep-ease) infinite;
-}
-
-/* The dots at each end read as origin and destination. */
-.boot-route::after {
-  content: "";
-  position: absolute;
-  top: 50%;
-  left: 0;
-  width: 5px;
-  height: 5px;
-  margin-top: -2.5px;
-  border-radius: 50%;
-  background: var(--brand-mark-to);
-  box-shadow: calc(min(260px, 70vw) - 5px) 0 0 rgba(255, 255, 255, 0.55);
-}
-
-@keyframes bootRoute {
-  from { transform: translateX(-100%); }
-  to   { transform: translateX(100%); }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .boot-route::before { animation: none; opacity: 0.5; transform: none; }
-}
 
 /* ─── Labelled form fields ────────────────────────────────────────────────── */
 
@@ -2823,4 +2900,365 @@ label:has(> input[type="radio"]) {
 [dir="rtl"] .wallet-leftover {
   border-left: 1px solid var(--warning);
   border-right: 3px solid var(--warning);
+}
+
+/* ─── Settings ────────────────────────────────────────────────────────────────
+
+   Five groups rather than one long column. On a wide screen the groups are a
+   rail beside the content; on a phone they are a scrollable row above it,
+   because a vertical rail on a 390px screen is a third of the width spent on
+   navigation. */
+
+.settings-page {
+  display: grid;
+  gap: var(--space-5);
+  align-items: start;
+}
+
+@media (min-width: 900px) {
+  .settings-page {
+    grid-template-columns: 210px minmax(0, 1fr);
+    gap: var(--space-6);
+  }
+}
+
+.settings-groups {
+  display: flex;
+  gap: 6px;
+  /* A row that scrolls on a phone. `-webkit-overflow-scrolling` is the reason
+     it feels native on iOS rather than snapping. */
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  padding-bottom: 2px;
+}
+
+.settings-groups::-webkit-scrollbar { display: none; }
+
+@media (min-width: 900px) {
+  .settings-groups {
+    position: sticky;
+    top: var(--space-4);
+    flex-direction: column;
+    overflow: visible;
+  }
+}
+
+.settings-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  flex: 0 0 auto;
+  min-height: 40px;
+  padding: 8px 14px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  font-size: var(--text-callout);
+  font-weight: var(--weight-medium);
+  text-align: start;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background var(--duration-fast) var(--ease-out), color var(--duration-fast) var(--ease-out);
+}
+
+@media (min-width: 900px) {
+  .settings-group { width: 100%; background: transparent; }
+}
+
+.settings-group:hover { color: var(--text-primary); background: var(--bg-inset); }
+
+.settings-group.is-active {
+  background: var(--accent-soft);
+  border-color: var(--accent-soft);
+  color: var(--accent);
+  font-weight: var(--weight-semibold);
+}
+
+.settings-content { display: grid; gap: var(--space-6); min-width: 0; }
+
+.settings-card {
+  display: grid;
+  gap: var(--space-4);
+  max-width: 640px;
+}
+
+/* Every explanatory line in Settings, so the margin is stated once. */
+.settings-note { margin: 0; }
+
+.settings-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+/* Two fields side by side where they are two halves of one answer — an amount
+   and its currency — and stacked below the width where that stops working. */
+.settings-pair {
+  display: grid;
+  gap: var(--space-3);
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+}
+
+.settings-actions { display: flex; gap: var(--space-2); flex-wrap: wrap; }
+
+.settings-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-height: 32px;
+  font-size: var(--text-caption);
+  cursor: pointer;
+}
+
+.settings-check > span { display: grid; gap: 2px; }
+
+/* ─── Theme picker ─────────────────────────────────────────────────────────── */
+
+.theme-grid {
+  display: grid;
+  gap: var(--space-2);
+  grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+}
+
+.theme-swatch {
+  display: grid;
+  gap: 8px;
+  justify-items: start;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  cursor: pointer;
+  text-align: start;
+  transition: border-color var(--duration-fast) var(--ease-out), box-shadow var(--duration-fast) var(--ease-out);
+}
+
+.theme-swatch:hover { border-color: var(--border-strong); }
+
+.theme-swatch.is-active {
+  border-color: var(--accent);
+  /* A second ring rather than a thicker border: a border that changes width
+     moves the label by a pixel, which reads as a jump on selection. */
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+.theme-swatch-colours {
+  display: flex;
+  width: 100%;
+  height: 30px;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  /* The swatches are theme colours on a card that may be the same colour, so
+     they carry their own outline or a light theme disappears on a light card. */
+  border: 1px solid var(--border-strong);
+}
+
+.theme-swatch-colours > span { flex: 1; }
+
+/* ─── Aircraft picker ─────────────────────────────────────────────────────── */
+
+.aircraft-grid {
+  display: grid;
+  gap: var(--space-2);
+  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+}
+
+.aircraft-choice {
+  display: grid;
+  gap: 6px;
+  justify-items: center;
+  align-content: center;
+  min-height: 108px;
+  padding: 12px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  /* The silhouettes are white, so they need a dark ground of their own in
+     either theme — otherwise the light theme offers three invisible buttons. */
+  background: linear-gradient(160deg, #12294F, #0A1730);
+  color: rgba(255, 255, 255, 0.82);
+  cursor: pointer;
+  transition: border-color var(--duration-fast) var(--ease-out), box-shadow var(--duration-fast) var(--ease-out);
+}
+
+.aircraft-choice:hover { border-color: var(--border-strong); }
+
+.aircraft-choice.is-active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+.aircraft-choice .text-caption { color: rgba(255, 255, 255, 0.86); }
+
+.aircraft-choice img { max-width: 100%; height: auto; }
+
+/* ─── An amount and its equivalent ────────────────────────────────────────── */
+
+/* The original is the figure; the equivalent is a smaller line under it,
+   aligned to the same edge so a column of amounts still reads as a column. */
+.money-pair {
+  display: inline-grid;
+  justify-items: inherit;
+  gap: 1px;
+}
+
+.row-trailing .money-pair { justify-items: end; }
+
+.money-secondary {
+  font-size: var(--text-footnote);
+  font-weight: var(--weight-regular);
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}
+
+/* ─── The error screen ────────────────────────────────────────────────────────
+
+   The one screen shown when something has already gone wrong, so it uses the
+   application's own tokens rather than a utility framework this project does
+   not have — which is what it used to do, resolving every class to nothing. */
+
+.error-screen {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: var(--space-5);
+  background: var(--bg);
+}
+
+.error-card { max-width: 520px; display: grid; gap: var(--space-4); }
+
+.error-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  color: var(--danger-text);
+}
+
+.error-head h1 { margin: 0; color: var(--text-primary); }
+
+.error-actions { display: flex; gap: var(--space-2); flex-wrap: wrap; }
+
+.error-stack {
+  margin-top: var(--space-2);
+  max-height: 180px;
+  overflow: auto;
+  font-family: var(--font-mono);
+  font-size: var(--text-footnote);
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+}
+
+/* ─── The tour's tasks, and its reminder ─────────────────────────────────── */
+
+/* The task line. Undone it is an instruction; done it is a tick and a
+   consequence — the reader is told what the thing they just did *means*, which
+   is the part a slideshow never gets to say. */
+.tutorial-task {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: var(--space-3);
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-inline-start: 3px solid var(--accent);
+  border-radius: var(--radius-md);
+  background: var(--bg-subtle);
+  font-size: var(--text-caption);
+  color: var(--text-secondary);
+}
+
+.tutorial-task.is-done {
+  border-inline-start-color: var(--success);
+  background: var(--success-soft);
+  color: var(--success-text);
+}
+
+.tutorial-task-mark {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+
+/* An open circle while the task is outstanding: a hollow shape reads as "not
+   yet" without needing a word for it. */
+.tutorial-task-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid var(--accent);
+}
+
+.tutorial-foot-leave { display: flex; gap: 4px; flex-wrap: wrap; }
+
+.tutorial-reminder {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-4);
+  padding: 10px var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  font-size: var(--text-caption);
+}
+
+.tutorial-reminder > span { flex: 1 1 200px; min-width: 0; }
+
+/* ─── Section headers ─────────────────────────────────────────────────────── */
+
+.section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  /* Wraps, because a title and a row of buttons do not fit on one line in
+     every language at every width — and the alternative is the page scrolling
+     sideways, which is the one thing a phone layout must never do. */
+  flex-wrap: wrap;
+  margin-bottom: var(--space-4);
+}
+
+.section-title { min-width: 0; overflow-wrap: anywhere; }
+
+.section-actions {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+/* A long label wraps inside its button rather than widening it past the screen.
+   `height: auto` with a minimum keeps the 36px target on one line and lets two
+   lines have the room they need. */
+@media (max-width: 520px) {
+  .section-actions .btn {
+    white-space: normal;
+    height: auto;
+    min-height: 36px;
+    padding-top: 6px;
+    padding-bottom: 6px;
+    text-align: center;
+  }
+  .section-actions { width: 100%; }
+  .section-actions > * { flex: 1 1 auto; }
+}
+
+.btn { max-width: 100%; }
+
+/* The consequence of a swipe choice, stated under the choice — and only for the
+   two actions whose names do not already say what they do. `.text-note` rather
+   than `.text-footnote`, which uppercases: this is a sentence, not a label. */
+.gesture-note {
+  display: block;
+  margin-top: 2px;
+  font-size: var(--text-footnote);
+  color: var(--text-tertiary);
 }

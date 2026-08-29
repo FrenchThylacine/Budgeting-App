@@ -9,6 +9,8 @@
 export type { CurrencyCode } from "./currencies";
 import type { CurrencyCode } from "./currencies";
 import type { FundingKind } from "./funding";
+import type { AircraftId } from "./aircraft";
+import type { Appearance } from "./theme";
 
 export type CurrencyDisplayMode = "symbol" | "code" | "both";
 export type RoundingRule = "none" | "nearest-1" | "nearest-5" | "nearest-10" | "ceil-10";
@@ -135,6 +137,16 @@ export interface OnboardingSettings {
   version: number;
   completedAt?: string;
   skippedAt?: string;
+  /**
+   * "Decide later" — not the same answer as Skip.
+   *
+   * Skip is "no" and ends the offer. This is "not now": the tour does not
+   * reopen by itself, and a single quiet reminder appears instead, resumable at
+   * the step it was left on. Two different answers, two different fields.
+   */
+  postponedAt?: string;
+  /** The reminder was dismissed. It never returns on its own after that. */
+  reminderDismissedAt?: string;
   /** The step reached, so a reopened tutorial resumes rather than restarts. */
   lastStep?: number;
 }
@@ -161,6 +173,18 @@ export interface Settings {
   trackedCurrencies?: CurrencyCode[];
   currencyDisplayMode: CurrencyDisplayMode;
   /**
+   * A second currency shown beside every amount that is not already in it.
+   *
+   * Absent — which is every budget written before this existed — means the
+   * feature is off and nothing changes. Set, an amount recorded in another
+   * currency prints its own value first and the equivalent underneath, so the
+   * transaction still says what was actually paid. See `secondaryAmount` in
+   * `domain/currency.ts`: it returns null rather than guessing when no rate
+   * connects the two, because "≈" in front of a fabricated number is worse
+   * than no second line at all.
+   */
+  secondaryCurrency?: CurrencyCode;
+  /**
    * The interface language, as a BCP 47 tag ("en", "fr", "pt-BR").
    *
    * Absent means "follow the browser", which is what every budget written
@@ -175,7 +199,18 @@ export interface Settings {
   /** First-run tutorial state. Absent means never started. */
   onboarding?: OnboardingSettings;
   autoWishlistFlushEnabled: boolean;
-  pilotIncludedInBudget: boolean;
+  /**
+   * @deprecated Piloting is no longer a concept the application knows about.
+   *
+   * It was a category bucket with powers no other category had: its activities
+   * were counted in a separate total, this setting decided whether that total
+   * joined the budget, and its spending was kept out of every category share.
+   * All of that assumed a budget with a "Piloting" category in it, and asked one
+   * hard-coded question the funding classification already answers for every
+   * activity. Nothing reads this. It is still declared so a snapshot written
+   * before the change round-trips unchanged rather than losing a key on save.
+   */
+  pilotIncludedInBudget?: boolean;
   /**
    * Whether the period widget shows today's date and a live wall clock.
    *
@@ -209,6 +244,29 @@ export interface Settings {
   exchangeRates: ExchangeRates;
   lastUpdated: string;
   darkMode: boolean;
+  /**
+   * Light, dark, or whatever the operating system is doing.
+   *
+   * Absent means "read `darkMode`", which is what every budget written before
+   * this existed has. Both are kept in step when the user changes one, so an
+   * older client — or a code path this session missed — reading the boolean
+   * still gets the right answer.
+   */
+  appearance?: Appearance;
+  /**
+   * Which colour theme. Absent means the application's own identity.
+   * See `domain/theme.ts`; the presets are data precisely so their contrast
+   * can be tested rather than assumed.
+   */
+  themePreset?: string;
+  /**
+   * The aircraft flown by the loading sequence and by the tab transition.
+   *
+   * One preference, not two: they are the same aeroplane seen twice, and
+   * offering a Concorde that turns into an A350 halfway through a session is a
+   * setting nobody wants. Absent means the Concorde. See `domain/aircraft.ts`.
+   */
+  aircraft?: AircraftId;
   /**
    * @deprecated Externally funded spending is now always excluded from the
    * personal budget — see `domain/funding.ts`. Nothing reads this. The field is
@@ -444,7 +502,14 @@ export interface SpendingEntry {
   amount: number;
   currency: CurrencyCode;
   recurrenceType: RecurrenceType;
-  isPiloting: boolean;
+  /**
+   * @deprecated Follows from nothing and is read by nothing.
+   *
+   * It mirrored the category's `piloting` bucket, which no longer carries any
+   * behaviour. The column stays so historical rows round-trip; new entries
+   * write `false`.
+   */
+  isPiloting?: boolean;
   /**
    * Source indicates whether this spending came from the user's personal budget
    * or from an external payer (shared, reimbursed, etc.). Defaults to 'personal'.
@@ -684,8 +749,6 @@ export interface PeriodSummary {
    * that includes them.
    */
   total: number | null;
-  generalTotal: number | null;
-  pilotingTotal: number | null;
   /** The same figure as `total`, named for the three-way funding display. */
   personalTotal?: number | null;
   /**
@@ -757,8 +820,7 @@ export interface YearCalculation {
   month: number;
   week: number;
   monthlyBudgetBase: number;
-  generalBudget: number;
-  pilotingBudget: number;
+  /** Every active activity's monthly cost, whoever pays for it. */
   combinedBudget: number;
   includedBudget: number;
   selectedMonthSpend: PeriodSummary;

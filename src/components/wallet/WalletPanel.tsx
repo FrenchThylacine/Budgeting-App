@@ -19,6 +19,7 @@ import { EditorSheet } from "../ui/EditorSheet";
 import { EmptyState } from "../ui/EmptyState";
 import { Field, FieldGroup } from "../ui/Field";
 import { Section } from "../ui/Section";
+import { resolveStoredText } from "../../domain/storedText";
 
 /**
  * The Wallet: actual money, as distinct from planned money
@@ -67,24 +68,6 @@ const TYPE_TONE: Record<WalletEntryType | "spending", "neutral" | "info" | "succ
   spending: "warning",
 };
 
-/**
- * Resolve a ledger string the store wrote.
- *
- * The store has no language, so it writes `@key` (optionally with `|`-joined
- * positional values) instead of a sentence — see `allocateBudget`. Anything
- * the *user* typed is passed through untouched, which is the whole point of
- * the sigil: their own words are never run through a dictionary.
- */
-function ledgerText(
-  value: string,
-  t: (key: string, params?: Record<string, string | number | null | undefined>) => string,
-): string {
-  if (!value.startsWith("@")) return value;
-  const [key, ...parts] = value.slice(1).split("|");
-  // The one key that takes values takes month and year, in that order.
-  return t(key, { month: parts[0] ?? "", year: parts[1] ?? "" }).trim();
-}
-
 export const WalletPanel: React.FC = () => {
   const { t, formatDate, monthNames } = useTranslation();
   const snapshot = useBudgetStore((s) => s.snapshot);
@@ -129,6 +112,7 @@ export const WalletPanel: React.FC = () => {
             <Button
               variant="primary"
               size="sm"
+              data-action="allocate-budget"
               disabled={!mutable}
               onClick={() => {
                 // The natural second moment to reconcile leftover budget: just
@@ -143,7 +127,13 @@ export const WalletPanel: React.FC = () => {
             <Button variant="secondary" size="sm" disabled={!mutable} onClick={() => setMovementOpen(true)}>
               <ArrowDownLeft size={14} /> {t("wallet.addMovement")}
             </Button>
-            <Button variant="ghost" size="sm" disabled={!mutable} onClick={() => setResetOpen(true)}>
+            <Button
+              variant="ghost"
+              size="sm"
+              data-action="reset-wallet"
+              disabled={!mutable}
+              onClick={() => setResetOpen(true)}
+            >
               <RotateCcw size={14} /> {t("wallet.reset")}
             </Button>
           </div>
@@ -351,6 +341,7 @@ export const WalletPanel: React.FC = () => {
               <Button
                 type="button"
                 variant="danger"
+                data-action="confirm-reset-wallet"
                 onClick={() => {
                   const written = resetWallet();
                   setNotice(written == null ? t("wallet.resetAlreadyZero") : t("wallet.resetDone"));
@@ -390,12 +381,12 @@ const MovementRow: React.FC<{
       </span>
       <div style={{ minWidth: 0, flex: "1 1 auto" }}>
         <div className="text-callout wallet-row-title">
-          {ledgerText(movement.label, t)}
+          {resolveStoredText(movement.label, t)}
           <Badge tone={TYPE_TONE[movement.kind]}>{t(TYPE_LABEL[movement.kind])}</Badge>
         </div>
         <div className="text-footnote">
           {formatDate(movement.date, { day: "numeric", month: "short", year: "numeric" })}
-          {movement.note ? <span className="user-text"> · {ledgerText(movement.note, t)}</span> : ""}
+          {movement.note ? <span className="user-text"> · {resolveStoredText(movement.note, t)}</span> : ""}
         </div>
       </div>
       <div className="row-trailing">
@@ -470,7 +461,7 @@ const AllocationSheet: React.FC<{
         style={{ display: "grid", gap: 20 }}
       >
         <FieldGroup title={t("wallet.plannedBudget", { month: monthLabel })}>
-          <Field label={t("wallet.allocationAmount")}>
+          <Field label={t("wallet.allocationAmount")} name="allocationAmount">
             <input
               className="input"
               type="number"
@@ -651,7 +642,7 @@ const MovementSheet: React.FC<{
             <input
               className="input"
               required
-              placeholder="Salary, cash withdrawal…"
+              placeholder={t("wallet.salaryCashWithdrawal")}
               value={source}
               onChange={(event) => setSource(event.target.value)}
             />

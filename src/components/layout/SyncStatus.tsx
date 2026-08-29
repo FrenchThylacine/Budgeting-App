@@ -2,6 +2,8 @@ import React, { useEffect, useState } from "react";
 import { AlertTriangle, Check, CloudOff, Loader2, RefreshCw } from "lucide-react";
 import { useBudgetStore } from "../../store/budgetStore";
 import { formatDateTime } from "../../domain/dates";
+import { useTranslation } from "../../i18n/useTranslation";
+import { resolveStoredText } from "../../domain/storedText";
 
 /**
  * Makes the persistence state explicit.
@@ -12,6 +14,7 @@ import { formatDateTime } from "../../domain/dates";
  * appear to work while silently holding different data.
  */
 export const SyncStatus: React.FC = () => {
+  const { t } = useTranslation();
   const syncState = useBudgetStore((s) => s.syncState);
   const lastSyncedAt = useBudgetStore((s) => s.lastSyncedAt);
   const syncError = useBudgetStore((s) => s.syncError);
@@ -37,11 +40,11 @@ export const SyncStatus: React.FC = () => {
   }, [syncNow]);
 
   const config = {
-    saved: { icon: Check, label: "Saved", tone: "success" as const },
-    saving: { icon: Loader2, label: "Saving…", tone: "neutral" as const },
-    offline: { icon: CloudOff, label: "Offline — this device only", tone: "warning" as const },
-    conflict: { icon: AlertTriangle, label: "Sync conflict", tone: "warning" as const },
-    error: { icon: AlertTriangle, label: "Sync failed", tone: "danger" as const },
+    saved: { icon: Check, label: t("sync.saved"), tone: "success" as const },
+    saving: { icon: Loader2, label: t("sync.saving"), tone: "neutral" as const },
+    offline: { icon: CloudOff, label: t("sync.offlineThisDeviceOnly"), tone: "warning" as const },
+    conflict: { icon: AlertTriangle, label: t("sync.syncConflict"), tone: "warning" as const },
+    error: { icon: AlertTriangle, label: t("sync.syncFailed"), tone: "danger" as const },
   }[syncState];
 
   const Icon = config.icon;
@@ -49,9 +52,9 @@ export const SyncStatus: React.FC = () => {
 
   const title = [
     config.label,
-    syncError,
-    lastSyncedAt ? `Last synced ${formatDateTime(lastSyncedAt)}` : "Not yet synced with the server",
-    pending ? "Changes on this device have not reached the server." : null,
+    syncError ? resolveStoredText(syncError, t) : null,
+    lastSyncedAt ? t("settings.syncLast", { when: formatDateTime(lastSyncedAt) }) : t("settings.syncNever"),
+    pending ? t("sync.pendingChanges") : null,
   ]
     .filter(Boolean)
     .join(" · ");
@@ -75,7 +78,7 @@ export const SyncStatus: React.FC = () => {
           className="sync-status-action"
           onClick={handleRetry}
           disabled={busy}
-          aria-label="Retry synchronization"
+          aria-label={t("sync.retrySynchronization")}
         >
           <RefreshCw size={12} /> Retry
         </button>

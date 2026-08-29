@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from "react";
 import { X } from "lucide-react";
+import { useTranslation } from "../../i18n/useTranslation";
 
 interface EditorSheetProps {
   title: string;
@@ -33,6 +34,7 @@ export const EditorSheet: React.FC<EditorSheetProps> = ({
   children,
   initialFocusRef,
 }) => {
+  const { t } = useTranslation();
   const sheetRef = useRef<HTMLDivElement>(null);
 
   /**
@@ -129,7 +131,7 @@ export const EditorSheet: React.FC<EditorSheetProps> = ({
             type="button"
             className="btn btn-ghost btn-sm btn-icon"
             onClick={() => closeRef.current()}
-            aria-label="Close editor"
+            aria-label={t("a11y.closeEditor")}
           >
             <X size={18} />
           </button>
@@ -152,12 +154,12 @@ export const EditorSheet: React.FC<EditorSheetProps> = ({
  * away. Showing twenty fields at once does not make an editor powerful, it
  * makes the four that matter harder to find.
  */
-export const AdvancedFields: React.FC<{ label?: string; children: React.ReactNode }> = ({
-  label = "Advanced",
-  children,
-}) => (
-  <details className="sheet-advanced">
-    <summary>{label}</summary>
-    <div className="sheet-advanced-body">{children}</div>
-  </details>
-);
+export const AdvancedFields: React.FC<{ label?: string; children: React.ReactNode }> = ({ label, children }) => {
+  const { t } = useTranslation();
+  return (
+    <details className="sheet-advanced">
+      <summary>{label ?? t("editor.advanced")}</summary>
+      <div className="sheet-advanced-body">{children}</div>
+    </details>
+  );
+};

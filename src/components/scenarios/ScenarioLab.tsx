@@ -48,7 +48,7 @@ export const ScenarioLab: React.FC = () => {
   return (
     <div className="page-enter">
       <Section
-        title="Scenarios"
+        title={t("nav.scenarios")}
         action={
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <Button
@@ -60,10 +60,10 @@ export const ScenarioLab: React.FC = () => {
                 if (name?.trim()) capture(name.trim());
               }}
             >
-              <Check size={14} /> Save current
+              <Check size={14} /> {t("scenarios.saveCurrent")}
             </Button>
             <Button variant="primary" size="sm" disabled={!mutable} onClick={() => setEditing("new")}>
-              <Plus size={14} /> New scenario
+              <Plus size={14} /> {t("scenarios.new")}
             </Button>
           </div>
         }
@@ -117,7 +117,7 @@ export const ScenarioLab: React.FC = () => {
                       {preset.notes && <p className="text-note scenario-notes">{preset.notes}</p>}
                     </div>
                     {active && (
-                      <span className="scenario-badge" title="These settings are already in effect">
+                      <span className="scenario-badge" title={t("scenario.theseSettingsAreAlreadyIn")}>
                         <Check size={12} aria-hidden="true" /> {t("scenarios.inEffect")}
                       </span>
                     )}
@@ -125,7 +125,7 @@ export const ScenarioLab: React.FC = () => {
 
                   <dl className="scenario-figures">
                     <div>
-                      <dt className="text-footnote">Budget</dt>
+                      <dt className="text-footnote">{t("settings.budget")}</dt>
                       <dd className="money">{money(preset.monthlyBudget)}</dd>
                     </div>
                     {/* "X of Y activities enabled" — the generic replacement
@@ -141,7 +141,7 @@ export const ScenarioLab: React.FC = () => {
                       <dd className="money">{money(projection.personalMonthly)}</dd>
                     </div>
                     <div>
-                      <dt className="text-footnote">Caps</dt>
+                      <dt className="text-footnote">{t("scenario.caps")}</dt>
                       <dd>{Object.keys(preset.categoryCaps ?? {}).length || "—"}</dd>
                     </div>
                   </dl>
@@ -218,7 +218,7 @@ export const ScenarioLab: React.FC = () => {
           none, so the feature could never be used. Capturing is the way in:
           set the activities up, then name what you have. */}
       <Section
-        title="Seasons"
+        title={t("scenario.seasons")}
         action={
           <Button
             variant="secondary"
@@ -234,21 +234,19 @@ export const ScenarioLab: React.FC = () => {
               captureSeason(name.trim(), name.trim().toLowerCase());
             }}
           >
-            <Plus size={14} /> Save current as a season
+            <Plus size={14} /> {t("scenario.saveCurrentAsASeason")}
           </Button>
         }
       >
         <p className="text-note" style={{ marginBottom: 20 }}>
-          A season remembers which activities are running and what they cost. Applying one switches
-          them all at once — it never touches names, categories or schedules, and it never changes a
-          recorded transaction.
+          {t("scenario.aSeasonRemembersWhichActivities")}
         </p>
 
         {seasons.length === 0 ? (
           <EmptyState
             icon={<Leaf size={24} />}
-            title="No seasons saved"
-            description="Pause the activities that stop over the summer, then save that arrangement as a season. Switching back is one tap."
+            title={t("scenario.noSeasonsSaved")}
+            description={t("scenario.pauseTheActivitiesThatStop")}
           />
         ) : (
           <div className="scenario-list">
@@ -265,7 +263,7 @@ export const ScenarioLab: React.FC = () => {
                       {season.notes && <p className="text-note scenario-notes">{season.notes}</p>}
                     </div>
                     {active && (
-                      <span className="scenario-badge" title="This season is currently selected">
+                      <span className="scenario-badge" title={t("scenario.thisSeasonIsCurrentlySelected")}>
                         <Check size={12} aria-hidden="true" /> Current
                       </span>
                     )}
@@ -273,14 +271,14 @@ export const ScenarioLab: React.FC = () => {
 
                   <dl className="scenario-figures">
                     <div>
-                      <dt className="text-footnote">Activities</dt>
+                      <dt className="text-footnote">{t("nav.activities")}</dt>
                       {/* Only the ones that still exist: an override naming a
                           deleted activity does nothing, and counting it would
                           promise a change that cannot happen. */}
                       <dd>{covered}</dd>
                     </div>
                     <div>
-                      <dt className="text-footnote">Season tag</dt>
+                      <dt className="text-footnote">{t("scenario.seasonTag")}</dt>
                       <dd>{season.season || "—"}</dd>
                     </div>
                   </dl>

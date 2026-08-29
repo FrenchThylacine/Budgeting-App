@@ -17,6 +17,15 @@ interface FieldProps {
   group?: boolean;
   /** Marks the field the current cost model actually reads. */
   emphasised?: boolean;
+  /**
+   * A stable identity for the field, independent of its label.
+   *
+   * The browser verification harness addresses controls by this. Labels are
+   * translated, so matching on text means the checks only run in English —
+   * which is precisely the language the defects this project has found were
+   * *not* in.
+   */
+  name?: string;
   children: React.ReactNode;
 }
 
@@ -48,10 +57,13 @@ export const FieldGroup: React.FC<{ title: string; children: React.ReactNode }> 
   </fieldset>
 );
 
-export const Field: React.FC<FieldProps> = ({ label, hint, span, group, emphasised, children }) => {
+export const Field: React.FC<FieldProps> = ({ label, hint, span, group, emphasised, name, children }) => {
   const Wrapper = group ? "div" : "label";
   return (
-    <Wrapper className={`field${span ? " field-span" : ""}${emphasised ? " field-emphasised" : ""}`}>
+    <Wrapper
+      className={`field${span ? " field-span" : ""}${emphasised ? " field-emphasised" : ""}`}
+      data-field={name}
+    >
       <span className="field-label">{label}</span>
       {children}
       {hint && <span className="field-hint">{hint}</span>}

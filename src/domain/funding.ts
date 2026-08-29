@@ -48,22 +48,6 @@ export const FUNDING_KINDS: readonly FundingKind[] = ["personal", "other", "outs
 /** The stored value meaning "this came out of my own budget". */
 export const PERSONAL_SOURCE = "personal";
 
-/**
- * Stored `source` values, per kind.
- *
- * The stored strings are what they have always been — `personal`, `shared`,
- * `external` — because rewriting a column of historical records to rename a
- * concept is a migration that can only lose data. `shared` has always been
- * labelled "Someone else paid" and `external` "Outside my budget", so the
- * mapping below is exactly what those records already meant. Only the words on
- * screen change.
- */
-export const SOURCE_FOR_KIND: Record<FundingKind, string> = {
-  personal: "personal",
-  other: "shared",
-  outside: "external",
-};
-
 export interface FundingKindMeta {
   kind: FundingKind;
   /** The stored `source` value written for this kind. */

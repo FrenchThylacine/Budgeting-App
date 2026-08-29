@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { AlertCircle, ArrowLeft, CheckCircle2, Eye, EyeOff } from "lucide-react";
 import { useAuthStore } from "../../store/authStore";
-import { FinMark } from "../ui/FinMark";
+import { AppMark } from "../ui/AppMark";
 import { Tricolour } from "../ui/Tricolour";
+import { useTranslation } from "../../i18n/useTranslation";
 
 type Mode = "signin" | "signup" | "forgot" | "reset";
 
@@ -35,6 +36,7 @@ function clearTokenFromLocation(): void {
 }
 
 export const AuthScreen: React.FC = () => {
+  const { t } = useTranslation();
   const initialToken = useMemo(resetTokenFromLocation, []);
   const [mode, setMode] = useState<Mode>(initialToken ? "reset" : "signin");
   const [resetToken] = useState<string | null>(initialToken);
@@ -124,10 +126,10 @@ export const AuthScreen: React.FC = () => {
   }
 
   const copy = {
-    signin: { title: "Welcome back", sub: "Sign in to your budget.", action: "Sign in" },
-    signup: { title: "Create your account", sub: "Your budget stays private to you.", action: "Create account" },
-    forgot: { title: "Reset your password", sub: "We'll email you a link.", action: "Send reset link" },
-    reset: { title: "Choose a new password", sub: "This link works once.", action: "Update password" },
+    signin: { title: t("auth.welcomeBack"), sub: "Sign in to your budget.", action: "Sign in" },
+    signup: { title: t("auth.createYourAccount"), sub: "Your budget stays private to you.", action: "Create account" },
+    forgot: { title: t("auth.resetYourPassword"), sub: "We'll email you a link.", action: "Send reset link" },
+    reset: { title: t("auth.chooseANewPassword"), sub: "This link works once.", action: "Update password" },
   }[mode];
 
   return (
@@ -136,10 +138,10 @@ export const AuthScreen: React.FC = () => {
         <Tricolour />
         <div className="auth-brand">
           <div className="auth-mark" aria-hidden="true">
-            <FinMark size={34} />
+            <AppMark size={38} />
           </div>
           <div>
-            <div className="text-title">Budget OS</div>
+            <div className="text-title">{t("notifications.testTitle")}</div>
             <div className="text-caption">{copy.sub}</div>
           </div>
         </div>
@@ -161,7 +163,7 @@ export const AuthScreen: React.FC = () => {
 
         {mode !== "reset" && (
           <label className="auth-field">
-            <span className="text-caption">Email</span>
+            <span className="text-caption">{t("auth.email")}</span>
             <input
               className="input"
               type="email"
@@ -170,7 +172,7 @@ export const AuthScreen: React.FC = () => {
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@example.com"
+              placeholder={t("auth.youExampleCom")}
             />
           </label>
         )}
@@ -212,7 +214,7 @@ export const AuthScreen: React.FC = () => {
 
         {(mode === "signup" || mode === "reset") && (
           <label className="auth-field">
-            <span className="text-caption">Confirm password</span>
+            <span className="text-caption">{t("auth.confirmPassword")}</span>
             <input
               className="input"
               type={showPassword ? "text" : "password"}
@@ -226,13 +228,13 @@ export const AuthScreen: React.FC = () => {
 
         {mode === "signup" && (
           <label className="auth-field">
-            <span className="text-caption">Invite code (if this deployment requires one)</span>
+            <span className="text-caption">{t("auth.inviteCodeIfThisDeployment")}</span>
             <input
               className="input"
               type="text"
               value={inviteCode}
               onChange={(e) => setInviteCode(e.target.value)}
-              placeholder="Leave blank if you weren't given one"
+              placeholder={t("auth.leaveBlankIfYouWerent")}
             />
           </label>
         )}
@@ -244,22 +246,24 @@ export const AuthScreen: React.FC = () => {
         <div className="auth-links">
           {mode === "signin" && (
             <>
-              <button type="button" className="btn btn-ghost btn-sm" onClick={() => switchMode("forgot")}>
-                Forgot your password?
+              {/* Stable hooks for the browser verification harness: the labels
+                  are translated, so text is not an address. */}
+              <button type="button" data-auth="forgot" className="btn btn-ghost btn-sm" onClick={() => switchMode("forgot")}>
+                {t("auth.forgotYourPassword")}
               </button>
-              <button type="button" className="btn btn-ghost btn-sm" onClick={() => switchMode("signup")}>
-                Create an account
+              <button type="button" data-auth="signup" className="btn btn-ghost btn-sm" onClick={() => switchMode("signup")}>
+                {t("auth.createAnAccount")}
               </button>
             </>
           )}
           {mode === "signup" && (
-            <button type="button" className="btn btn-ghost btn-sm" onClick={() => switchMode("signin")}>
-              <ArrowLeft size={14} aria-hidden="true" /> Back to sign in
+            <button type="button" data-auth="signin" className="btn btn-ghost btn-sm" onClick={() => switchMode("signin")}>
+              <ArrowLeft size={14} aria-hidden="true" /> {t("auth.backToSignIn")}
             </button>
           )}
           {(mode === "forgot" || mode === "reset") && (
-            <button type="button" className="btn btn-ghost btn-sm" onClick={() => switchMode("signin")}>
-              <ArrowLeft size={14} aria-hidden="true" /> Back to sign in
+            <button type="button" data-auth="signin" className="btn btn-ghost btn-sm" onClick={() => switchMode("signin")}>
+              <ArrowLeft size={14} aria-hidden="true" /> {t("auth.backToSignIn")}
             </button>
           )}
         </div>

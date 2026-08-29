@@ -68,9 +68,6 @@ export function trackedCurrencies(settings: Pick<Settings, "trackedCurrencies" |
   return ALL_CURRENCY_CODES.filter((code) => withBase.includes(code));
 }
 
-/** Alias that says what it is at the call site: these are the pinned ones. */
-export const pinnedCurrencies = trackedCurrencies;
-
 /**
  * The tracked list, plus whatever `current` is.
  *
@@ -294,6 +291,34 @@ export function formatMoney(
     minimumFractionDigits: digits,
     maximumFractionDigits: digits,
   })}`;
+}
+
+/**
+ * The second line under an amount, or null when there should not be one.
+ *
+ * Null in four cases, and each of them matters:
+ *
+ *  - no second currency is configured — the feature is off by default;
+ *  - the amount is *already* in the second currency, so an "≈" line would
+ *    restate it;
+ *  - there is no amount;
+ *  - **no rate connects the two.** A fabricated equivalent under a real
+ *    transaction is worse than no equivalent at all: "≈ €1.35" reads as a fact,
+ *    and `rateToBase` falls back to 1:1 to keep the interface rendering. This
+ *    is the caller that must not accept that fallback.
+ */
+export function secondaryAmount(
+  amount: number | null | undefined,
+  currency: CurrencyCode,
+  settings: Pick<Settings, "secondaryCurrency" | "exchangeRates">,
+): { amount: number; currency: CurrencyCode } | null {
+  const target = settings.secondaryCurrency;
+  if (!target || target === currency) return null;
+  if (amount == null || !Number.isFinite(amount)) return null;
+  if (!canConvert(currency, target, settings.exchangeRates)) return null;
+  const converted = convertAmount(amount, currency, target, settings.exchangeRates);
+  if (converted == null || !Number.isFinite(converted)) return null;
+  return { amount: converted, currency: target };
 }
 
 /**

@@ -19,7 +19,6 @@ import { dateInputValue, weekYear, weeksInIsoYear, startOfIsoWeek } from "./date
  * follow the project's financial rules:
  *  - 0 is a real value and is never treated as missing;
  *  - periods without recorded entries yield `null` totals (missing ≠ 0);
- *  - piloting spend stays visible but is excluded from category share %.
  */
 
 // ─── Period filtering ────────────────────────────────────────────────────────
@@ -279,7 +278,7 @@ export interface CategoryStat {
   categoryId: string;
   total: number;
   count: number;
-  /** % of non-piloting spend; null for piloting categories (excluded from shares). */
+  /** % of the period's spend, or null when there is none to take a share of. */
   share: number | null;
   /**
    * The category's monthly cap in base currency, or null when none is set.
@@ -320,9 +319,15 @@ export function categoryBreakdown(
     count,
   }));
 
-  const normalTotal = stats
-    .filter((s) => s.category?.bucket !== "piloting")
-    .reduce((sum, s) => sum + s.total, 0);
+  /*
+   * Every category takes a share of the same total.
+   *
+   * The `piloting` bucket used to be subtracted from the denominator and given
+   * a null share, so one category was visible in the chart and absent from the
+   * percentages — which is the only reason the shares needed a footnote
+   * explaining why they did not add up. Piloting is a category like any other.
+   */
+  const normalTotal = stats.reduce((sum, s) => sum + s.total, 0);
 
   return stats
     .map((s) => {
@@ -332,10 +337,7 @@ export function categoryBreakdown(
       const cap = applyCaps && rawCap != null && Number.isFinite(rawCap) ? rawCap : null;
       return {
         ...s,
-        share:
-          s.category?.bucket === "piloting" || normalTotal <= 0
-            ? null
-            : (s.total / normalTotal) * 100,
+        share: normalTotal <= 0 ? null : (s.total / normalTotal) * 100,
         cap,
         capUsage: cap != null && cap > 0 ? (s.total / cap) * 100 : cap === 0 ? (s.total > 0 ? 100 : 0) : null,
         overCap: cap != null && s.total > cap,
@@ -749,15 +751,26 @@ export function cumulativeForecast(
 
 export interface HealthFactor {
   id: string;
-  label: string;
+  /**
+   * Translation key for the factor's name, not the name.
+   *
+   * This module is a leaf and has no translator; it also feeds the printed
+   * report, which is written in the reader's language rather than in the
+   * interface's. Returning keys is what lets both resolve the same fact in
+   * their own language, and is why `detailParams` carries the numbers instead
+   * of a sentence with the numbers already baked into it.
+   */
+  labelKey: string;
   /** 0–100 for this factor alone. */
   score: number;
   /** Relative importance within the composite. */
   weight: number;
-  detail: string;
+  detailKey?: string;
+  detailParams?: Record<string, string | number>;
 }
 
-export type HealthGrade = "Excellent" | "Good" | "Fair" | "At risk";
+/** A stable identifier for the grade band, never a word shown to anybody. */
+export type HealthGrade = "excellent" | "good" | "fair" | "at-risk";
 
 export interface FinancialHealth {
   /** 0–100, or `null` when nothing measurable is available for the period. */
@@ -807,10 +820,11 @@ export function financialHealth(input: {
         : 75 - ((ratio - 1) / 0.3) * 75;
     factors.push({
       id: "budget",
-      label: "Budget adherence",
+      labelKey: "health.budget",
       weight: 40,
       score: clampScore(score),
-      detail: `${(ratio * 100).toFixed(0)}% of budget at the current pace`,
+      detailKey: "health.budget.detail",
+      detailParams: { percent: Math.round(ratio * 100) },
     });
   }
 
@@ -820,23 +834,27 @@ export function financialHealth(input: {
     const breaches = capped.filter((category) => category.overCap).length;
     factors.push({
       id: "caps",
-      label: "Category caps",
+      labelKey: "health.caps",
       weight: 20,
       score: scores.reduce((sum, value) => sum + value, 0) / scores.length,
-      detail:
-        breaches === 0
-          ? `All ${capped.length} cap${capped.length !== 1 ? "s" : ""} respected`
-          : `${breaches} of ${capped.length} caps exceeded`,
+      detailKey: breaches === 0 ? "health.caps.respected" : "health.caps.exceeded",
+      detailParams: { count: breaches === 0 ? capped.length : breaches, total: capped.length },
     });
   }
 
   if (comparison.deltaPct != null) {
     factors.push({
       id: "trend",
-      label: "Spending trend",
+      labelKey: "health.trend",
       weight: 20,
       score: clampScore(100 - Math.max(0, comparison.deltaPct) * 2),
-      detail: `${comparison.deltaPct > 0 ? "+" : ""}${comparison.deltaPct.toFixed(1)}% vs ${comparison.previousLabel}`,
+      detailKey: "health.trend.detail",
+      detailParams: {
+        // The sign is part of the fact and is carried here rather than by the
+        // sentence, so a language that puts it elsewhere still gets it.
+        change: `${comparison.deltaPct > 0 ? "+" : ""}${comparison.deltaPct.toFixed(1)}%`,
+        period: comparison.previousLabel,
+      },
     });
   }
 
@@ -844,10 +862,11 @@ export function financialHealth(input: {
     // A period dominated by commitments leaves little room to react.
     factors.push({
       id: "flexibility",
-      label: "Flexibility",
+      labelKey: "health.flexibility",
       weight: 20,
       score: clampScore(((90 - stats.recurringShare) / 50) * 100),
-      detail: `${stats.recurringShare.toFixed(0)}% of spend is recurring`,
+      detailKey: "health.flexibility.detail",
+      detailParams: { percent: Math.round(stats.recurringShare) },
     });
   }
 
@@ -860,7 +879,15 @@ export function financialHealth(input: {
 
   return {
     score,
-    grade: score >= 85 ? "Excellent" : score >= 70 ? "Good" : score >= 50 ? "Fair" : "At risk",
+    /*
+     * A stable identifier, not a word.
+     *
+     * It used to be the English adjective, which meant a French dashboard read
+     * "Excellent" (by luck) and a German one read "Fair" (by accident). It is
+     * also a lookup key for the colour, and a lookup key that changes with the
+     * interface language is a colour that stops working when the language does.
+     */
+    grade: score >= 85 ? "excellent" : score >= 70 ? "good" : score >= 50 ? "fair" : "at-risk",
     factors,
   };
 }

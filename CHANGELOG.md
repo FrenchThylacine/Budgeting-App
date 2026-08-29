@@ -1,5 +1,101 @@
 # Changelog
 
+## 2026-08-29 — One identity, five languages, and no special categories
+
+### The application speaks the reader's language, everywhere
+
+The interface was translated. The *application* was not.
+
+A French user got a French navigation bar, a French activity editor — and an English report, English audit history, English sync messages, English chart titles, an English period heading directly above a French date range, and "August 2026" above "1 août 2026 – 31 août 2026". The architecture had been right since the translation layer was built; what was missing was coverage, and coverage is not something you can be *nearly* finished with. Somebody reads the page.
+
+So: **1,054 keys, five languages, and a test that fails the build if any of them is short one.** Every language marked *translated* in the language list now genuinely is, and `tests/i18n.test.ts` asserts both directions — every key the source asks for exists, and every translated language covers the whole English key set. The reports are translated too, including their month names, their number formats and their `<html lang>`.
+
+Three classes of string needed more than a dictionary lookup.
+
+**Sentences built by concatenation.** `${money(price)}/session × ${count} sessions` cannot be translated into a language that orders those pieces differently. Every one of them is now a key with named values, which is why the activity preview, the schedule summary and the payment cycle all got rewritten rather than merely wrapped.
+
+**Strings written into the database.** The audit trail stored "Added activity Padel". The wallet ledger stored "Budget for August 2026". Those rows outlive the session that wrote them, so the English was in PostgreSQL rather than on the screen — and writing the *current* language instead would give a budget a history in three languages, one per session. `src/domain/storedText.ts` is the answer: the store writes `@audit.activityAdded|name=Padel`, the interface resolves it at render time in the language being read *now*, and anything the user typed is passed through untouched because it never begins with `@`. Rows written before this keep their English sentence; rewriting saved records to change their wording would destroy history to fix a display.
+
+The same defect had a second form. `AuditLog.historicalPeriod` stored `periodLabel(settings)` — a display string — so a record written in a French session read "juillet 2026" for ever, in every language. It stores `month:2026-07` now.
+
+**Words in leaf modules.** `financialHealth` returned `grade: "Excellent"`, which was both a word shown to the user and the key a colour was looked up by — so translating it would have broken the colour. It returns `"excellent"` now, and the word comes from the dictionary.
+
+### No category is special
+
+At the owner's direction: *"Do not create special logic for piloting. Piloting is simply another activity which can be paid by me, someone else or outside the budget."*
+
+`piloting` was a `BudgetCategory.bucket` value with powers no other category had. It had its own budget total; a setting decided whether that total joined the budget; its spending was subtracted from the denominator of every category share and given a `null` share of its own; the monthly plan excluded its activities; scenarios carried a boolean about it; and the spending editor kept an `isPiloting` flag in step with the category. All of that assumed a budget with a Piloting category in it, and asked one hard-coded question that the funding classification already answers for **every** activity.
+
+It is all gone. Every category takes a share of the same total — which is why the shares no longer need a footnote explaining why they do not add up to 100. The stored fields stay declared and deprecated so records in the wild round-trip; nothing reads them.
+
+The `bucket` field itself is no longer asked for. It was a required four-way choice on every category whose only behaviour was the one just deleted, which left a question nobody could answer without reading the source.
+
+### A new identity, and three aircraft
+
+The owner supplied a Budget OS badge — a Concorde over a euro sign, under a tricolour — and three aircraft illustrations. The badge arrived as a JPEG with its transparency already flattened onto a checkerboard, and the aircraft on a watercolour sky, so neither could be keyed out by colour: the badge's own outlines use the same near-black the checkerboard does, and the Concorde is as white as the brightest part of the sky. `scripts/lib/cutout.mjs` flood-fills inward from the border with a *predicate* rather than a seed colour, keeps only the largest connected shape for the aircraft — the A350 arrived with a speck below its tail that padded the finished asset by 40% of its height — and feathers the alpha so a JPEG's edge ramp dissolves instead of fringing.
+
+Each aircraft is turned nose-right, because every animation in this application travels left to right and building that constant into the artwork keeps it out of the CSS. Two derivatives ship: the full-colour illustration for the loading sequence, and a flat white silhouette — taken from the artwork's own outline, not redrawn — for the tab transition.
+
+**The loading screen is a formation.** The chosen aircraft holds the centre while two Alpha Jets orbit it, one trailing blue smoke and one red. When the data arrives they roll out of the turn and form up behind it, a third joins trailing white, the three ribbons settle into a tricolour, and the formation accelerates away to the right — taking the loading screen with it and uncovering the application.
+
+It is the one animation here driven by `requestAnimationFrame`, for a reason worth stating: the escorts have to leave the orbit *from wherever they happen to be* the instant the data is ready. A CSS animation cannot be interrupted and continued from its current value — swapping to a second animation snaps the element to that animation's first frame, which is a visible jump on the one screen every user is guaranteed to look at. Either the transition waits for the orbit to come round, doing nothing while the data sits ready, or the position is a number the component owns.
+
+The old A350 fin identity and the drawn airliner are deleted rather than left beside the new ones.
+
+### Six themes, measured rather than eyeballed
+
+Air France, Concorde, Paper, Deep black, Alpine and Plum, each with a light and a dark variant, plus a Light / Dark / **System** appearance that follows the operating system live.
+
+The themes are **data**, not stylesheets — which is the whole point. `tests/theme-contrast.test.ts` walks every preset in both appearances and measures every text colour against every surface the application puts it on. A theme that drops below WCAG AA fails the build rather than being noticed six months later on a laptop in daylight. The same test asserts that the default preset and the stylesheet — which carries it so the app paints before any script runs — have not drifted apart.
+
+### A tour that asks rather than tells
+
+Six of the thirteen cards now wait for the reader to actually do the thing: pin a currency, add an activity, record a transaction, mark something as paid by somebody else, allocate a month's budget, save a scenario. The tick is read from the real snapshot, never from a flag the tour sets for itself.
+
+**"Skip this step" sits beside every locked Next.** A tour that traps somebody is worse than one that teaches nothing, and a reader who does not want a scenario should not have to invent one to reach the end.
+
+**"Decide later" is a third answer.** Skip is "no" and ends the offer; this is "not now" — the tour does not reopen by itself, and a single dismissible reminder appears instead, resumable at the step it was left on. Reopening the tour every time somebody says "not now" is exactly the behaviour the option exists to prevent.
+
+### Rates that arrive on their own
+
+Live exchange rates were fetched by exactly one thing: the *Update now* button in the Currencies tab. `fetchExchangeRates` was written, unit-tested and called from nowhere else, so a new account converted nothing until somebody went looking for that button.
+
+They now refresh when the application opens — once per session, and only when the day's rates are actually due, because a fresh cache answers without touching the network. Nothing is stored unless something changed: an identical rate set written again is a revision bump and a sync to every other device, to record that nothing happened.
+
+A refresh that fails is recorded rather than disguised. The attempt and its reason are stamped; the *updated* timestamp is not moved. The pair sheet then says the rates are stale, or that the last attempt failed, instead of presenting last week's numbers with today's confidence.
+
+The defect underneath this one was invisible to the unit tests and obvious in a browser: under StrictMode the effect mounts, tears down and mounts again on the same fiber, so the once-per-session guard was already set when the second run arrived — and the first run's cleanup had cancelled the only fetch that was ever made.
+
+### A second currency, honestly
+
+An amount recorded in another currency can now show its equivalent underneath. The original stays the primary figure: a transaction of 150 000 LBP *is* a transaction of 150 000 LBP, and showing €1.35 in its place replaces what happened with an interpretation of it that changes every time the rate moves.
+
+The line is absent whenever it would be a guess — no second currency configured, the amount already in it, or **no rate connecting the pair**. `rateToBase` falls back to 1:1 so the interface keeps rendering; printing that fallback under a real transaction would state "≈ €150,000" as calmly as it states a real rate.
+
+### The report, rebuilt
+
+Bright, sans-serif and scannable: a headline row of the four figures the report exists to give, the funding split as one proportional bar, then each section as a compact table. It used to be set in a serif and read as a broadsheet — dignified, and slow to scan — and its notes were four paragraphs explaining, at the foot of the page, facts the tables had already stated three times. Those facts now sit beside the numbers they qualify.
+
+Black and white is still a tested property, not an intention. Every segment of the split bar keeps its border when a printer drops the fill and carries its own glyph and share *inside* it; the funding kinds keep ● ◆ ▲ and their written labels; "over cap" is a word in a box; the emphasised card is distinguished by border weight.
+
+### Settings, in five groups rather than one column of eleven
+
+Finding "dark mode" meant scrolling past the monthly budget, and finding the monthly budget meant scrolling past a seventy-six-entry language list. The groups are chosen by what the user is trying to do, and each fits on a screen.
+
+The header lost five of its eight lines for the same reason: the period selector sits directly beneath it and states the mode, the period, the range, today's date and the way back to the present, so the header was repeating all of it. What is left is what only it can say.
+
+### A browser harness, without Playwright
+
+Every interesting defect this project has found was found in a browser, and every one of them passed its unit tests first. Those checks had always been driven by hand, which meant they ran when somebody remembered — and a stale Chrome process once blocked a whole session's verification.
+
+`scripts/lib/cdp.mjs` is about two hundred lines: Node 22 ships a WebSocket client and Chrome ships a protocol, so a browser-automation dependency would be a hundred megabytes and a supply chain for `Runtime.evaluate` and `Page.captureScreenshot`. `scripts/verify-browser.mjs` drives it through the loading sequence, every theme, the aircraft, the transition's direction, the period selector's layering, building the specification's own gym, the funding split, the wallet and its reset, and the report — on a fresh account each run.
+
+It found four defects on its first pass, all of which had passed the unit suite: `/month avg.` and `/year` hardcoded on the activity card, the loose English word "per" wedged between two controls where no translation could move it, "August 2026" above "1 août 2026", and "Mois En Cours" — three CSS rules applying `text-transform: capitalize` to text that used to be an interpolated lower-case English word.
+
+### Removed
+
+`budget-refactor-prompt/` (a snapshot of a version of the app from three refactors ago, kept as a prompt for another tool), `work/` (one-off import diagnostics and a Playwright script superseded by the harness above), `new_chat.md`, a Windows `.lnk` shortcut with an absolute path in it, the A350 identity assets, `FinMark`/`AircraftMark`, thirty dead translation keys, and the Tailwind classes on the error screen — which this project has never had Tailwind to resolve, so the one screen shown when something has already gone wrong was unstyled black text on white.
+
 ## 2026-08-22 — Two sessions a week is not two payments a week
 
 ### The gym problem

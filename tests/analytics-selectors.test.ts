@@ -164,7 +164,7 @@ describe("budgetPacing", () => {
 });
 
 describe("categoryBreakdown", () => {
-  it("excludes piloting from shares but keeps its total visible", () => {
+  it("gives every category a share of the same total", () => {
     const snap = snapshotWith([
       entry({ amount: 100, categoryId: "cat-spending" }),
       entry({ amount: 300, categoryId: "cat-food" }),
@@ -179,11 +179,12 @@ describe("categoryBreakdown", () => {
     const food = breakdown.find((b) => b.categoryId === "cat-food")!;
     const spending = breakdown.find((b) => b.categoryId === "cat-spending")!;
 
+    // No category is exempt from the denominator: 100 + 300 + 500.
     expect(piloting.total).toBe(500);
-    expect(piloting.share).toBeNull();
-    expect(food.share).toBeCloseTo(75); // 300 / (100 + 300)
-    expect(spending.share).toBeCloseTo(25);
-    // Sorted by total descending: piloting first
+    expect(piloting.share).toBeCloseTo(55.5555, 3);
+    expect(food.share).toBeCloseTo(33.3333, 3);
+    expect(spending.share).toBeCloseTo(11.1111, 3);
+    // Sorted by total descending.
     expect(breakdown[0].categoryId).toBe("cat-piloting");
   });
 });

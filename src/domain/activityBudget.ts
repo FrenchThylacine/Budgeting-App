@@ -436,25 +436,6 @@ export function activityBudgetSummary(
 }
 
 /**
- * The funding split of a set of activity estimates.
- *
- * Used where the estimates have already been computed — `calculateYear` builds
- * them once per snapshot — so the dashboard does not recost every activity to
- * answer "how much of this is mine".
- */
-export function fundingTotalsFromEstimates(
-  estimates: readonly { monthlyBase: number; yearlyBase: number; funding: FundingKind }[],
-): { monthly: FundingTotals; yearly: FundingTotals } {
-  const monthly = emptyTotals();
-  const yearly = emptyTotals();
-  for (const estimate of estimates) {
-    addTo(monthly, estimate.funding, estimate.monthlyBase);
-    addTo(yearly, estimate.funding, estimate.yearlyBase);
-  }
-  return { monthly, yearly };
-}
-
-/**
  * Percentage shares of a set of totals, guaranteed to sum to 100.
  *
  * Computed from the gross rather than from the sum of the three, so a rounding
@@ -470,11 +451,3 @@ export function fundingShares(totals: FundingTotals): Record<FundingKind, number
   return shares;
 }
 
-/**
- * The activity estimate for one activity in the display currency, funding
- * included. A thin wrapper so callers that only need one figure do not build a
- * whole summary.
- */
-export function activityEstimateWithFunding(activity: Activity, snapshot: BudgetSnapshot) {
-  return estimateActivity(activity, snapshot);
-}

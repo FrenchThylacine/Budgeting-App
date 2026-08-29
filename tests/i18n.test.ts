@@ -7,6 +7,8 @@
  * concatenation, a date formatted by hand.
  */
 import { beforeAll, describe, expect, it } from "vitest";
+import { readFileSync, readdirSync, statSync } from "node:fs";
+import { join, resolve } from "node:path";
 import {
   DICTIONARIES,
   FALLBACK_LANGUAGE,
@@ -237,6 +239,67 @@ describe("the dictionaries themselves", () => {
         expect(known.has(key) || known.has(`${base}_one`) || known.has(`${base}_other`) || known.has(base), `${code}: ${key}`).toBe(true);
       }
     }
+  });
+
+
+  it("has every translated language covering the whole English key set", () => {
+    /*
+     * A language listed as *translated* promises a translated interface. A key
+     * it does not carry falls back to English, which is the right behaviour and
+     * the wrong promise: it puts an English sentence in the middle of a French
+     * page. This is the check that turns "translated" into something true.
+     */
+    const englishKeys = Object.keys(en);
+    for (const language of LANGUAGES.filter((entry) => entry.translated && entry.code !== FALLBACK_LANGUAGE)) {
+      const dictionary = DICTIONARIES[language.code];
+      expect(dictionary, `${language.code} is marked translated but has no dictionary`).toBeTruthy();
+      const missing = englishKeys.filter((key) => {
+        if (dictionary[key] != null) return false;
+        // A plural family counts as covered when the language supplies the
+        // forms its own plural rules select; `_other` alone is legitimate.
+        const base = key.replace(/_(zero|one|two|few|many|other)$/, "");
+        return base === key ? true : !Object.keys(dictionary).some((other) => other.startsWith(`${base}_`));
+      });
+      expect(missing, `${language.code} is missing ${missing.length} keys, e.g. ${missing.slice(0, 5).join(", ")}`).toEqual([]);
+    }
+  });
+
+  it("has every key the source code asks for", () => {
+    /*
+     * The other direction: a `t("some.key")` whose key does not exist prints
+     * the key on screen. TypeScript cannot catch it — the translator
+     * deliberately accepts a plain string so a key can be built from a value.
+     */
+    const files: string[] = [];
+    const walk = (dir: string): void => {
+      for (const name of readdirSync(dir)) {
+        const path = join(dir, name);
+        if (statSync(path).isDirectory()) {
+          if (name !== "i18n") walk(path);
+        } else if (/\.tsx?$/.test(path)) files.push(path);
+      }
+    };
+    walk(resolve(__dirname, "../src"));
+
+    const known = new Set(Object.keys(en));
+    const missing = new Set<string>();
+    for (const file of files) {
+      const source = readFileSync(file, "utf8");
+      for (const match of source.matchAll(/\bt\(\s*"([a-zA-Z0-9_.-]+)"/g)) {
+        const key = match[1];
+        if (known.has(key)) continue;
+        if ([...known].some((candidate) => candidate.startsWith(`${key}_`))) continue;
+        missing.add(`${key} (${file.split("/src/")[1]})`);
+      }
+      // Keys held in a data table and resolved later: labelKey, hintKey, …
+      for (const match of source.matchAll(/\b\w*(?:label|hint|description|detail)Key\w*:\s*"([a-zA-Z0-9_.-]+)"/gi)) {
+        const key = match[1];
+        if (known.has(key)) continue;
+        if ([...known].some((candidate) => candidate.startsWith(`${key}_`))) continue;
+        missing.add(`${key} (${file.split("/src/")[1]})`);
+      }
+    }
+    expect([...missing]).toEqual([]);
   });
 
   it("keeps every placeholder a translation uses present in the English original", () => {

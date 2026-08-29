@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { CalendarX2, X } from "lucide-react";
 import { toLocalDateInput } from "../../domain/schedule";
 import type { Activity, ScheduleOverride, ScheduleOverrideKind } from "../../domain/types";
+import { useTranslation } from "../../i18n/useTranslation";
 
 interface OccurrenceOverrideDialogProps {
   activity: Activity;
@@ -34,6 +35,7 @@ export const OccurrenceOverrideDialog: React.FC<OccurrenceOverrideDialogProps> =
   onApply,
   onCancel,
 }) => {
+  const { t } = useTranslation();
   const dialogRef = useRef<HTMLDivElement>(null);
   const isoDate = toLocalDateInput(date);
 
@@ -142,37 +144,37 @@ export const OccurrenceOverrideDialog: React.FC<OccurrenceOverrideDialogProps> =
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12, marginBottom: 14 }}>
           <div style={{ minWidth: 0 }}>
             <h2 id="occurrence-title" className="text-title" style={{ margin: 0 }}>
-              Just this once
+              {t("override.justThisOnce")}
             </h2>
             <p className="text-caption" style={{ margin: "4px 0 0" }}>
               {activity.name} · {readable}
             </p>
           </div>
-          <button className="btn btn-ghost btn-sm btn-icon" onClick={onCancel} aria-label="Close dialog">
+          <button className="btn btn-ghost btn-sm btn-icon" onClick={onCancel} aria-label={t("override.closeDialog")}>
             <X size={18} />
           </button>
         </div>
 
         <p className="text-note" style={{ margin: "0 0 14px" }}>
-          The recurring rule stays as it is. Only this date changes.
+          {t("override.theRecurringRuleStaysAs")}
         </p>
 
         <fieldset className="occurrence-choices">
-          <legend className="sr-only">What to change</legend>
+          <legend className="sr-only">{t("override.whatToChange")}</legend>
 
           <label className="occurrence-choice">
             <input type="radio" name="occurrence" checked={choice === "skip"} onChange={() => setChoice("skip")} />
             <span>
-              <strong>Skip it</strong>
-              <span className="text-note"> — it does not happen this time</span>
+              <strong>{t("override.skipIt")}</strong>
+              <span className="text-note"> {t("override.itDoesNotHappenThis")}</span>
             </span>
           </label>
 
           <label className="occurrence-choice">
             <input type="radio" name="occurrence" checked={choice === "move"} onChange={() => setChoice("move")} />
             <span>
-              <strong>Move it</strong>
-              <span className="text-note"> — same cost, different day</span>
+              <strong>{t("override.moveIt")}</strong>
+              <span className="text-note"> {t("override.sameCostDifferentDay")}</span>
             </span>
           </label>
           {choice === "move" && (
@@ -181,15 +183,15 @@ export const OccurrenceOverrideDialog: React.FC<OccurrenceOverrideDialogProps> =
               type="date"
               value={movedTo}
               onChange={(event) => setMovedTo(event.target.value)}
-              aria-label="New date"
+              aria-label={t("override.newDate")}
             />
           )}
 
           <label className="occurrence-choice">
             <input type="radio" name="occurrence" checked={choice === "price"} onChange={() => setChoice("price")} />
             <span>
-              <strong>Different price</strong>
-              <span className="text-note"> — just for this one</span>
+              <strong>{t("override.differentPrice")}</strong>
+              <span className="text-note"> {t("override.justForThisOne")}</span>
             </span>
           </label>
           {choice === "price" && (
@@ -209,15 +211,15 @@ export const OccurrenceOverrideDialog: React.FC<OccurrenceOverrideDialogProps> =
             <label className="occurrence-choice">
               <input type="radio" name="occurrence" checked={choice === "clear"} onChange={() => setChoice("clear")} />
               <span>
-                <strong>Remove the exception</strong>
-                <span className="text-note"> — go back to the rule</span>
+                <strong>{t("override.removeTheException")}</strong>
+                <span className="text-note"> {t("override.goBackToTheRule")}</span>
               </span>
             </label>
           )}
         </fieldset>
 
         <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 18 }}>
-          <button className="btn btn-secondary" onClick={onCancel}>Cancel</button>
+          <button className="btn btn-secondary" onClick={onCancel}>{t("common.cancel")}</button>
           <button className="btn btn-primary" onClick={apply}>
             <CalendarX2 size={15} /> Apply
           </button>

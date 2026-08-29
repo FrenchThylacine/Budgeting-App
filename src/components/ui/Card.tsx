@@ -14,14 +14,8 @@ export const Card: React.FC<CardProps> = ({ children, className = "", hover = fa
   </div>
 );
 
-export const CardHeader: React.FC<{ children: React.ReactNode; className?: string }> = ({ children, className = "" }) => (
-  <div className={`card-header ${className}`}>{children}</div>
-);
 
 export const CardBody: React.FC<{ children: React.ReactNode; className?: string }> = ({ children, className = "" }) => (
   <div className={`card-body ${className}`}>{children}</div>
 );
 
-export const CardFooter: React.FC<{ children: React.ReactNode; className?: string }> = ({ children, className = "" }) => (
-  <div className={`card-footer ${className}`}>{children}</div>
-);

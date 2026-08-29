@@ -1,9 +1,23 @@
 import React, { useMemo, useState } from "react";
-import { ArrowRight, Bell, Coins, Languages, RefreshCw, Search } from "lucide-react";
+import {
+  ArrowRight,
+  Bell,
+  Coins,
+  Database,
+  Languages,
+  Palette,
+  Pointer,
+  RefreshCw,
+  Search,
+  UserRound,
+} from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { trackedCurrencies } from "../../domain/currency";
 import { formatDateTime } from "../../domain/dates";
 import { LANGUAGES, findLanguage, searchLanguages } from "../../domain/languages";
 import { resolveLanguage } from "../../domain/i18n";
+import { AIRCRAFT } from "../../domain/aircraft";
+import { THEME_PRESETS, themeFor } from "../../domain/theme";
 import {
   declineNotifications,
   notificationStatus,
@@ -14,141 +28,226 @@ import { restartedOnboarding } from "../../domain/tutorial";
 import { useTranslation } from "../../i18n/useTranslation";
 import { Button } from "../ui/Button";
 import { EditorSheet } from "../ui/EditorSheet";
+import { AircraftSilhouette } from "../ui/Aircraft";
 import { useBudgetStore } from "../../store/budgetStore";
+import type { Appearance } from "../../domain/theme";
 import type { CurrencyCode, CurrencyDisplayMode, RoundingRule } from "../../domain/types";
-import { ACTION_LABELS, AVAILABLE_ACTIONS, gesturesFor } from "../../domain/gestures";
+import { ACTION_DESCRIPTION_KEYS, ACTION_LABEL_KEYS, AVAILABLE_ACTIONS, gesturesFor } from "../../domain/gestures";
 import { ImportControl } from "../data/ImportControl";
 import { AccountSettings } from "./AccountSettings";
 import { Section } from "../ui/Section";
 import { SyncStatus } from "../layout/SyncStatus";
+import { resolveStoredText } from "../../domain/storedText";
 
-const DISPLAY_MODES: { value: CurrencyDisplayMode; label: string }[] = [
-  { value: "symbol", label: "Symbol only (€1 234)" },
-  { value: "code", label: "Code only (EUR 1 234)" },
-  { value: "both", label: "Symbol and code (€ EUR 1 234)" },
+/**
+ * Settings, in five groups rather than as one column of eleven.
+ *
+ * The previous version was a single page you scrolled: account, language,
+ * currency, budget, year-end, appearance, sync, gestures, notifications, help,
+ * data — in that order, every one of them always expanded. Finding "dark mode"
+ * meant scrolling past the monthly budget, and finding the monthly budget meant
+ * scrolling past the language list.
+ *
+ * The groups are chosen by *what the user is trying to do*, not by which part
+ * of the code owns the setting: everything that changes how the application
+ * looks is in one place, everything about money is in another. Each group fits
+ * on a screen, which is the actual measure.
+ */
+type GroupId = "general" | "money" | "interaction" | "data" | "account";
+
+const GROUPS: { id: GroupId; labelKey: string; icon: LucideIcon }[] = [
+  { id: "general", labelKey: "settings.groupGeneral", icon: Palette },
+  { id: "money", labelKey: "settings.groupMoney", icon: Coins },
+  { id: "interaction", labelKey: "settings.groupInteraction", icon: Pointer },
+  { id: "data", labelKey: "settings.groupData", icon: Database },
+  { id: "account", labelKey: "settings.groupAccount", icon: UserRound },
 ];
 
-const ROUNDING_RULES: { value: RoundingRule; label: string }[] = [
-  { value: "none", label: "No rounding" },
-  { value: "nearest-1", label: "Nearest 1" },
-  { value: "nearest-5", label: "Nearest 5" },
-  { value: "nearest-10", label: "Nearest 10" },
-  { value: "ceil-10", label: "Round up to 10" },
+const DISPLAY_MODES: { value: CurrencyDisplayMode; labelKey: string }[] = [
+  { value: "symbol", labelKey: "settings.formatSymbol" },
+  { value: "code", labelKey: "settings.formatCode" },
+  { value: "both", labelKey: "settings.formatBoth" },
+];
+
+const ROUNDING_RULES: { value: RoundingRule; labelKey: string }[] = [
+  { value: "none", labelKey: "settings.roundNone" },
+  { value: "nearest-1", labelKey: "settings.roundNearest1" },
+  { value: "nearest-5", labelKey: "settings.roundNearest5" },
+  { value: "nearest-10", labelKey: "settings.roundNearest10" },
+  { value: "ceil-10", labelKey: "settings.roundCeil10" },
+];
+
+const APPEARANCE_CHOICES: { value: Appearance; labelKey: string }[] = [
+  { value: "light", labelKey: "settings.appearanceLight" },
+  { value: "dark", labelKey: "settings.appearanceDark" },
+  { value: "system", labelKey: "settings.appearanceSystem" },
 ];
 
 export const SettingsPanel: React.FC = () => {
-  const { t, language } = useTranslation();
-  const snapshot = useBudgetStore((s) => s.snapshot);
-  const settings = snapshot.settings;
-  const update = useBudgetStore((s) => s.updateSettings);
-  const lastSyncedAt = useBudgetStore((s) => s.lastSyncedAt);
-  const syncError = useBudgetStore((s) => s.syncError);
-  const pendingLocalChanges = useBudgetStore((s) => s.pendingLocalChanges);
-  const syncNow = useBudgetStore((s) => s.syncNow);
-  const retrySync = useBudgetStore((s) => s.retrySync);
-
-  /** The pinned set, for the two display dropdowns this panel still owns. */
-  const tracked = trackedCurrencies(settings);
-
-  const fieldStyle: React.CSSProperties = { display: "grid", gap: 6 };
-  const checkboxStyle: React.CSSProperties = { display: "flex", alignItems: "flex-start", gap: 10, cursor: "pointer" };
+  const { t } = useTranslation();
+  const [group, setGroup] = useState<GroupId>("general");
 
   return (
-    <div className="page-enter" style={{ display: "grid", gap: 24 }}>
-      <AccountSettings />
+    <div className="page-enter settings-page">
+      <nav className="settings-groups" aria-label={t("settings.title")}>
+        {GROUPS.map(({ id, labelKey, icon: Icon }) => (
+          <button
+            key={id}
+            type="button"
+            className={`settings-group${group === id ? " is-active" : ""}`}
+            aria-current={group === id ? "page" : undefined}
+            onClick={() => setGroup(id)}
+          >
+            <Icon size={16} />
+            <span>{t(labelKey)}</span>
+          </button>
+        ))}
+      </nav>
 
-      {/* Language leads.
+      <div className="settings-content">
+        {group === "general" && <GeneralSettings />}
+        {group === "money" && <MoneySettings />}
+        {group === "interaction" && <InteractionSettings />}
+        {group === "data" && <DataSettings />}
+        {group === "account" && <AccountGroup />}
+      </div>
+    </div>
+  );
+};
 
-          It changes every other word on this page, so it belongs above them
-          rather than at the bottom of a list somebody has to scroll past in a
-          language they cannot read. */}
+// ─── General: language, theme, aircraft ──────────────────────────────────────
+
+const GeneralSettings: React.FC = () => {
+  const { t } = useTranslation();
+  const settings = useBudgetStore((s) => s.snapshot.settings);
+  const update = useBudgetStore((s) => s.updateSettings);
+  const theme = themeFor(settings.themePreset);
+  const appearance: Appearance = settings.appearance ?? (settings.darkMode ? "dark" : "light");
+
+  return (
+    <>
       <Section title={t("settings.language")}>
-        <div className="card card-body" style={{ display: "grid", gap: 12, maxWidth: 620 }}>
-          <p className="text-note" style={{ margin: 0 }}>{t("settings.languageHint")}</p>
+        <div className="card card-body settings-card">
           <LanguageSelector />
         </div>
       </Section>
 
-      <Section title="Currency">
-        <div className="card card-body" style={{ display: "grid", gap: 16, maxWidth: 620 }}>
-          {/* Currencies moved out.
-
-              Which currencies a budget deals in, and what they are worth
-              against each other, are one subject; they used to be two screens
-              — a chip list here and an "Exchange rates" category further down,
-              neither of which said anything about the other. Both now live in
-              the Currencies tab, and this section keeps only the two settings
-              that are genuinely about *display*. */}
-          <div className="settings-crosslink">
-            <Coins size={16} aria-hidden="true" />
-            <div>
-              <div className="text-callout">{t("currencies.pinned")}</div>
-              <p className="text-note" style={{ margin: "2px 0 0" }}>
-                {t("currencies.pinnedHint")}
-              </p>
-            </div>
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => window.dispatchEvent(new CustomEvent("budget-os:navigate", { detail: "currencies" }))}
-            >
-              {t("nav.currencies")} <ArrowRight size={14} />
-            </Button>
+      <Section title={t("settings.theme")}>
+        <div className="card card-body settings-card">
+          {/* Swatches rather than a dropdown of names: "Alpine" means nothing
+              until you have seen it, and three colours say the whole thing. */}
+          <div className="theme-grid" role="radiogroup" aria-label={t("settings.theme")}>
+            {THEME_PRESETS.map((preset) => (
+              <button
+                key={preset.id}
+                type="button"
+                role="radio"
+                aria-checked={preset.id === theme.id}
+                className={`theme-swatch${preset.id === theme.id ? " is-active" : ""}`}
+                onClick={() => update({ themePreset: preset.id })}
+              >
+                <span className="theme-swatch-colours" aria-hidden="true">
+                  {preset.swatch.map((colour, index) => (
+                    <span key={index} style={{ background: colour }} />
+                  ))}
+                </span>
+                <span className="text-callout">{t(preset.labelKey)}</span>
+              </button>
+            ))}
           </div>
 
-          <label className="text-callout" style={fieldStyle}>
-            Display currency
-            <select
-              className="select"
-              value={settings.baseCurrency}
-              onChange={(e) => update({ baseCurrency: e.target.value as CurrencyCode })}
-            >
-              {tracked.map((currency) => (
-                <option key={currency}>{currency}</option>
+          <div className="settings-row">
+            <span className="text-callout">{t("settings.appearance")}</span>
+            <div className="segmented" role="radiogroup" aria-label={t("settings.appearance")}>
+              {APPEARANCE_CHOICES.map((choice) => (
+                <button
+                  key={choice.value}
+                  type="button"
+                  role="radio"
+                  aria-checked={appearance === choice.value}
+                  className={`segmented-item${appearance === choice.value ? " active" : ""}`}
+                  disabled={theme.darkOnly}
+                  onClick={() =>
+                    // Both are written. `darkMode` is what every snapshot
+                    // before `appearance` existed carries, and anything still
+                    // reading it — an older client, an export — must not be
+                    // told the opposite of what is on screen.
+                    update({
+                      appearance: choice.value,
+                      darkMode: choice.value === "system" ? settings.darkMode : choice.value === "dark",
+                    })
+                  }
+                >
+                  {t(choice.labelKey)}
+                </button>
               ))}
-            </select>
-            <span className="text-note">Everything is converted to this currency for display only.</span>
-          </label>
-
-          <label className="text-callout" style={fieldStyle}>
-            Currency format
-            <select
-              className="select"
-              value={settings.currencyDisplayMode}
-              onChange={(e) => update({ currencyDisplayMode: e.target.value as CurrencyDisplayMode })}
-            >
-              {DISPLAY_MODES.map((mode) => (
-                <option key={mode.value} value={mode.value}>
-                  {mode.label}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          <label className="text-callout" style={fieldStyle}>
-            Rounding for suggested budgets
-            <select
-              className="select"
-              value={settings.roundingRule}
-              onChange={(e) => update({ roundingRule: e.target.value as RoundingRule })}
-            >
-              {ROUNDING_RULES.map((rule) => (
-                <option key={rule.value} value={rule.value}>
-                  {rule.label}
-                </option>
-              ))}
-            </select>
-          </label>
+            </div>
+          </div>
+          {theme.darkOnly && <p className="text-note settings-note">{t("settings.themeDarkOnly")}</p>}
         </div>
       </Section>
 
-      <Section title="Budget">
-        <div className="card card-body" style={{ display: "grid", gap: 16, maxWidth: 620 }}>
-          <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 2fr) minmax(0, 1fr)", gap: 12 }}>
-            <label className="text-callout" style={fieldStyle}>
-              Monthly budget
+      <Section title={t("settings.aircraft")}>
+        <div className="card card-body settings-card">
+          <p className="text-note settings-note">{t("settings.aircraftHint")}</p>
+          <div className="aircraft-grid" role="radiogroup" aria-label={t("settings.aircraft")}>
+            {AIRCRAFT.map((craft) => {
+              const active = (settings.aircraft ?? AIRCRAFT[0].id) === craft.id;
+              return (
+                <button
+                  key={craft.id}
+                  type="button"
+                  role="radio"
+                  aria-checked={active}
+                  className={`aircraft-choice${active ? " is-active" : ""}`}
+                  onClick={() => update({ aircraft: craft.id })}
+                >
+                  <AircraftSilhouette id={craft.id} size={72} />
+                  <span className="text-caption">{t(craft.labelKey)}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </Section>
+
+      <Section title={t("settings.interfaceExtras")}>
+        <div className="card card-body settings-card">
+          <label className="settings-check">
+            <input
+              type="checkbox"
+              checked={settings.liveClockEnabled !== false}
+              onChange={(e) => update({ liveClockEnabled: e.target.checked })}
+            />
+            <span>
+              {t("settings.liveClock")}
+              <span className="text-note">{t("settings.liveClockHint")}</span>
+            </span>
+          </label>
+        </div>
+      </Section>
+    </>
+  );
+};
+
+// ─── Money ───────────────────────────────────────────────────────────────────
+
+const MoneySettings: React.FC = () => {
+  const { t } = useTranslation();
+  const settings = useBudgetStore((s) => s.snapshot.settings);
+  const update = useBudgetStore((s) => s.updateSettings);
+  const tracked = trackedCurrencies(settings);
+
+  return (
+    <>
+      <Section title={t("settings.budget")}>
+        <div className="card card-body settings-card">
+          <div className="settings-pair">
+            <label className="field">
+              <span className="field-label">{t("settings.monthlyBudget")}</span>
               <input
                 className="input"
+                data-setting="monthlyBudget"
                 type="number"
                 step="any"
                 min="0"
@@ -163,10 +262,11 @@ export const SettingsPanel: React.FC = () => {
             {/* The budget amount is stored in this currency and converted for
                 display. Without this control the number was interpreted in a
                 currency the user could neither see nor change. */}
-            <label className="text-callout" style={fieldStyle}>
-              Budget currency
+            <label className="field">
+              <span className="field-label">{t("settings.budgetCurrency")}</span>
               <select
                 className="select"
+                data-setting="monthlyBudgetCurrency"
                 value={settings.monthlyBudgetCurrency}
                 onChange={(e) => update({ monthlyBudgetCurrency: e.target.value as CurrencyCode })}
               >
@@ -177,165 +277,263 @@ export const SettingsPanel: React.FC = () => {
             </label>
           </div>
 
-          <label className="text-caption" style={checkboxStyle}>
-            <input
-              type="checkbox"
-              checked={settings.pilotIncludedInBudget}
-              onChange={(e) => update({ pilotIncludedInBudget: e.target.checked })}
-            />
-            <span>Include Piloting in the monthly budget total</span>
-          </label>
-
-          {/* This used to be a checkbox reading "Exclude non-budget payment
-              sources from analytics", off by default — which meant the app's
-              default behaviour charged the user for money somebody else spent.
-              It is a rule about what the figures mean, not a preference, so it
-              is now unconditional and stated rather than offered. */}
-          <p className="text-note" style={{ margin: 0 }}>
-            Transactions marked <strong>Someone else paid</strong> or <strong>Outside my budget</strong> are
-            kept at full value and stay visible in your spending, but never count against your budget,
-            categories, forecast or health score.
-          </p>
+          {/* The old "Include Piloting in the monthly budget total" checkbox is
+              gone. It assumed every budget has an activity called Piloting,
+              could ask exactly one question about exactly one hard-coded thing,
+              and did nothing for anyone who does not fly. What an activity
+              costs the budget is now decided by its own funding — see the
+              Activities tab. */}
+          <p className="text-note settings-note">{t("settings.fundingRule")}</p>
         </div>
       </Section>
 
-      <Section title="Year-end behaviour">
-        <div className="card card-body" style={{ display: "grid", gap: 16, maxWidth: 620 }}>
-          <label className="text-caption" style={checkboxStyle}>
+      <Section title={t("settings.currencyDisplay")}>
+        <div className="card card-body settings-card">
+          {/* Currencies moved out.
+
+              Which currencies a budget deals in, and what they are worth
+              against each other, are one subject; they used to be two screens —
+              a chip list here and an "Exchange rates" category further down,
+              neither of which said anything about the other. Both live in the
+              Currencies tab, and this keeps only what is genuinely display. */}
+          <div className="settings-crosslink">
+            <Coins size={16} aria-hidden="true" />
+            <div>
+              <div className="text-callout">{t("currencies.pinned")}</div>
+              <p className="text-note settings-note">{t("currencies.pinnedHint")}</p>
+            </div>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => window.dispatchEvent(new CustomEvent("budget-os:navigate", { detail: "currencies" }))}
+            >
+              {t("nav.currencies")} <ArrowRight size={14} />
+            </Button>
+          </div>
+
+          <div className="settings-pair">
+            <label className="field">
+              <span className="field-label">{t("settings.displayCurrency")}</span>
+              <select
+                className="select"
+                data-setting="baseCurrency"
+                value={settings.baseCurrency}
+                onChange={(e) => update({ baseCurrency: e.target.value as CurrencyCode })}
+              >
+                {tracked.map((currency) => (
+                  <option key={currency}>{currency}</option>
+                ))}
+              </select>
+            </label>
+
+            {/*
+              The second currency.
+
+              Off by default and off for every budget that has never set it: an
+              extra line under every amount is a cost, and it only pays for
+              itself if you genuinely think in two currencies.
+            */}
+            <label className="field">
+              <span className="field-label">{t("settings.secondaryCurrency")}</span>
+              <select
+                className="select"
+                data-setting="secondaryCurrency"
+                value={settings.secondaryCurrency ?? ""}
+                onChange={(e) =>
+                  update({ secondaryCurrency: e.target.value ? (e.target.value as CurrencyCode) : undefined })
+                }
+              >
+                <option value="">{t("settings.secondaryCurrencyOff")}</option>
+                {tracked
+                  .filter((currency) => currency !== settings.baseCurrency)
+                  .map((currency) => (
+                    <option key={currency}>{currency}</option>
+                  ))}
+              </select>
+            </label>
+          </div>
+          <p className="text-note settings-note">{t("settings.secondaryCurrencyHint")}</p>
+
+          <div className="settings-pair">
+            <label className="field">
+              <span className="field-label">{t("settings.currencyFormat")}</span>
+              <select
+                className="select"
+                data-setting="currencyDisplayMode"
+                value={settings.currencyDisplayMode}
+                onChange={(e) => update({ currencyDisplayMode: e.target.value as CurrencyDisplayMode })}
+              >
+                {DISPLAY_MODES.map((mode) => (
+                  <option key={mode.value} value={mode.value}>{t(mode.labelKey)}</option>
+                ))}
+              </select>
+            </label>
+
+            <label className="field">
+              <span className="field-label">{t("settings.rounding")}</span>
+              <select
+                className="select"
+                data-setting="roundingRule"
+                value={settings.roundingRule}
+                onChange={(e) => update({ roundingRule: e.target.value as RoundingRule })}
+              >
+                {ROUNDING_RULES.map((rule) => (
+                  <option key={rule.value} value={rule.value}>{t(rule.labelKey)}</option>
+                ))}
+              </select>
+            </label>
+          </div>
+        </div>
+      </Section>
+
+      <Section title={t("settings.yearEnd")}>
+        <div className="card card-body settings-card">
+          <label className="settings-check">
             <input
               type="checkbox"
               checked={settings.autoWishlistFlushEnabled}
               onChange={(e) => update({ autoWishlistFlushEnabled: e.target.checked })}
             />
             <span>
-              Carry only unbought wishlist items into a new year
-              <span className="text-note" style={{ display: "block" }}>
-                When off, the whole wishlist is copied forward.
-              </span>
+              {t("settings.wishlistCarry")}
+              <span className="text-note">{t("settings.wishlistCarryHint")}</span>
             </span>
           </label>
 
-          <label className="text-caption" style={checkboxStyle}>
+          <label className="settings-check">
             <input
               type="checkbox"
               checked={settings.saveTimestampEnabled}
               onChange={(e) => update({ saveTimestampEnabled: e.target.checked })}
             />
-            <span>Record a “last updated” timestamp on every change</span>
+            <span>{t("settings.saveTimestamp")}</span>
           </label>
         </div>
       </Section>
+    </>
+  );
+};
 
-      <Section title="Appearance">
-        <div className="card card-body" style={{ display: "grid", gap: 16, maxWidth: 620 }}>
-          <label className="text-caption" style={checkboxStyle}>
-            <input
-              type="checkbox"
-              checked={settings.darkMode}
-              onChange={(e) => update({ darkMode: e.target.checked })}
-            />
-            <span>Dark mode</span>
-          </label>
+// ─── Interaction: gestures and notifications ─────────────────────────────────
 
-          <label className="text-caption" style={checkboxStyle}>
-            <input
-              type="checkbox"
-              checked={settings.liveClockEnabled !== false}
-              onChange={(e) => update({ liveClockEnabled: e.target.checked })}
-            />
-            <span>
-              Show a live clock in the period selector
-              <span className="text-note" style={{ display: "block" }}>
-                The date is always shown. Off, the time is omitted and the minute timer
-                behind it stops.
-              </span>
-            </span>
-          </label>
-        </div>
+const InteractionSettings: React.FC = () => {
+  const { t } = useTranslation();
+  const settings = useBudgetStore((s) => s.snapshot.settings);
+  const update = useBudgetStore((s) => s.updateSettings);
+
+  return (
+    <>
+      <Section title={t("notifications.title")}>
+        <NotificationSettings />
       </Section>
 
-      <Section title="Synchronization">
-        <div className="card card-body" style={{ display: "grid", gap: 12, maxWidth: 620 }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+      <Section title={t("settings.gestures")}>
+        <div className="card card-body settings-card">
+          <p className="text-note settings-note">{t("settings.gesturesHint")}</p>
+          <div className="gesture-grid">
+            {(["wishlist", "activities", "spending"] as const).map((surface) => {
+              const current = gesturesFor(settings, surface);
+              return (
+                <div key={surface} className="gesture-row">
+                  <span className="text-callout gesture-surface">{t(`nav.${surface}`)}</span>
+                  {(["trailing", "leading"] as const).map((direction) => (
+                    <label key={direction} className="gesture-choice">
+                      <span className="text-footnote">
+                        {direction === "trailing" ? t("settings.swipeLeft") : t("settings.swipeRight")}
+                      </span>
+                      <select
+                        className="select"
+                        value={current[direction]}
+                        onChange={(event) =>
+                          update({
+                            gestures: {
+                              ...settings.gestures,
+                              [surface]: { ...current, [direction]: event.target.value },
+                            },
+                          })
+                        }
+                      >
+                        {AVAILABLE_ACTIONS[surface].map((action) => (
+                          <option key={action} value={action}>{t(ACTION_LABEL_KEYS[action])}</option>
+                        ))}
+                      </select>
+                      {/* "Hide" and "Deactivate" are one keystroke apart in a
+                          list and worlds apart in what they do to the budget,
+                          so the chosen one says which it is — where the choice
+                          is made, and only for the two that need it. */}
+                      {ACTION_DESCRIPTION_KEYS[current[direction]] && (
+                        <span className="text-note gesture-note">
+                          {t(ACTION_DESCRIPTION_KEYS[current[direction]]!)}
+                        </span>
+                      )}
+                    </label>
+                  ))}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </Section>
+    </>
+  );
+};
+
+// ─── Data: import and sync ───────────────────────────────────────────────────
+
+const DataSettings: React.FC = () => {
+  const { t } = useTranslation();
+  const lastSyncedAt = useBudgetStore((s) => s.lastSyncedAt);
+  const syncError = useBudgetStore((s) => s.syncError);
+  const pendingLocalChanges = useBudgetStore((s) => s.pendingLocalChanges);
+  const syncNow = useBudgetStore((s) => s.syncNow);
+  const retrySync = useBudgetStore((s) => s.retrySync);
+
+  return (
+    <>
+      <Section title={t("settings.sync")}>
+        <div className="card card-body settings-card">
+          <div className="settings-row">
             <SyncStatus />
             <span className="text-caption">
-              {lastSyncedAt ? `Last synced ${formatDateTime(lastSyncedAt)}` : "Not yet synced with the server"}
+              {lastSyncedAt ? t("settings.syncLast", { when: formatDateTime(lastSyncedAt) }) : t("settings.syncNever")}
             </span>
           </div>
-          {syncError && (
-            <div className="text-caption" style={{ color: "var(--warning-text)" }}>{syncError}</div>
-          )}
-          <div className="text-note">
-            The server is the source of truth. This device keeps a local copy so the app works offline, but a
-            change only reaches your other devices once it has been sent.
-          </div>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <button className="btn btn-secondary btn-sm" onClick={() => void syncNow({ force: true })}>
-              <RefreshCw size={14} /> Sync now
-            </button>
+          {syncError && <div className="text-caption" style={{ color: "var(--warning-text)" }}>{resolveStoredText(syncError, t)}</div>}
+          <p className="text-note settings-note">{t("settings.syncHint")}</p>
+          <div className="settings-actions">
+            <Button variant="secondary" size="sm" onClick={() => void syncNow({ force: true })}>
+              <RefreshCw size={14} /> {t("settings.syncNow")}
+            </Button>
             {pendingLocalChanges && (
-              <button className="btn btn-primary btn-sm" onClick={() => void retrySync()}>
-                Send local changes
-              </button>
+              <Button variant="primary" size="sm" onClick={() => void retrySync()}>
+                {t("settings.sendLocal")}
+              </Button>
             )}
           </div>
         </div>
       </Section>
 
-      <Section title="Gestures">
-        <p className="text-note" style={{ margin: "0 0 14px" }}>
-          Swiping a row reveals its actions — it never performs them. The revealed button is a
-          second, deliberate tap, and the same actions stay on the card for a mouse or a keyboard.
-        </p>
-        <div className="gesture-grid">
-          {(["wishlist", "activities", "spending"] as const).map((surface) => {
-            const current = gesturesFor(settings, surface);
-            return (
-              <div key={surface} className="gesture-row">
-                <span className="text-callout gesture-surface">{surface}</span>
-                {(["trailing", "leading"] as const).map((direction) => (
-                  <label key={direction} className="gesture-choice">
-                    <span className="text-footnote">
-                      {direction === "trailing" ? "Swipe left" : "Swipe right"}
-                    </span>
-                    <select
-                      className="select"
-                      value={current[direction]}
-                      onChange={(event) =>
-                        update({
-                          gestures: {
-                            ...settings.gestures,
-                            [surface]: { ...current, [direction]: event.target.value },
-                          },
-                        })
-                      }
-                    >
-                      {AVAILABLE_ACTIONS[surface].map((action) => (
-                        <option key={action} value={action}>{ACTION_LABELS[action]}</option>
-                      ))}
-                    </select>
-                  </label>
-                ))}
-              </div>
-            );
-          })}
-        </div>
+      <Section title={t("settings.import")}>
+        <p className="text-note settings-note" style={{ marginBottom: 12 }}>{t("settings.importHint")}</p>
+        <ImportControl />
       </Section>
+    </>
+  );
+};
 
-      {/* Notifications.
+// ─── Account and help ────────────────────────────────────────────────────────
 
-          The previous attempt shipped a component and never called
-          `Notification.requestPermission()` from anywhere, so the browser was
-          never asked and nothing could ever be shown. The button below is one
-          of exactly two places that make the request, and it is a real user
-          gesture — which is what every browser requires. */}
-      <Section title={t("notifications.title")}>
-        <NotificationSettings />
-      </Section>
+const AccountGroup: React.FC = () => {
+  const { t } = useTranslation();
+  const update = useBudgetStore((s) => s.updateSettings);
+
+  return (
+    <>
+      <AccountSettings />
 
       <Section title={t("settings.help")}>
-        <div className="card card-body" style={{ display: "grid", gap: 10, maxWidth: 620 }}>
-          <p className="text-note" style={{ margin: 0 }}>{t("settings.replayTutorialHint")}</p>
+        <div className="card card-body settings-card">
+          <p className="text-note settings-note">{t("settings.replayTutorialHint")}</p>
           <div>
             <Button
               variant="secondary"
@@ -353,16 +551,7 @@ export const SettingsPanel: React.FC = () => {
           </div>
         </div>
       </Section>
-
-      <Section title="Data">
-        <p className="text-note" style={{ margin: "0 0 12px" }}>
-          Importing <strong>replaces</strong> your budget rather than merging into it. The preview shows
-          what changes, and offers a backup, before anything is written.
-        </p>
-        <ImportControl />
-      </Section>
-
-    </div>
+    </>
   );
 };
 
@@ -496,10 +685,10 @@ const NotificationSettings: React.FC = () => {
   };
 
   return (
-    <div className="card card-body" style={{ display: "grid", gap: 12, maxWidth: 620 }}>
-      <p className="text-note" style={{ margin: 0 }}>{t("notifications.body")}</p>
+    <div className="card card-body settings-card">
+      <p className="text-note settings-note">{t("notifications.body")}</p>
 
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+      <div className="settings-actions">
         {status.state === "granted" ? (
           <>
             <Button

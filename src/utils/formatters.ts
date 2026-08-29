@@ -70,14 +70,16 @@ export interface WishlistDraft {
   color: string;
 }
 
-export function statusLabel(status: string): string {
-  switch (status) {
-    case "value": return "Recorded";
-    case "zero": return "No spend";
-    case "pending": return "Pending";
-    case "nan": return "Closed";
-    default: return status;
-  }
+/**
+ * The translation key for a period's status.
+ *
+ * A key, not a word: this is a leaf utility with no translator, and the four
+ * statuses are shown on the History page and in the header. `status.<value>`
+ * for anything unrecognised so a future status prints something greppable
+ * rather than nothing.
+ */
+export function statusLabelKey(status: string): string {
+  return `status.${status}`;
 }
 
 interface FormatOptions {

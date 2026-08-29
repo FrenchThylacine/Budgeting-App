@@ -589,7 +589,7 @@ describe("financialHealth", () => {
 // ─── Financial rules that must survive the chart layer ───────────────────────
 
 describe("chart data honours the financial rules", () => {
-  it("keeps piloting spend visible but out of every share percentage", () => {
+  it("gives every category a share of the same total, with no category exempt", () => {
     // Resolved against this snapshot: seed ids are generated per budget, so a
     // second snapshotWith() call would produce ids that do not exist here.
     const snap = snapshotWith([]);
@@ -597,15 +597,19 @@ describe("chart data honours the financial rules", () => {
     const healthId = catId(snap, "cat-health");
     snap.years["2026"].spendingEntries = [
       entry({ amount: 400, categoryId: healthId }),
-      entry({ amount: 600, categoryId: pilotingId, isPiloting: true }),
+      entry({ amount: 600, categoryId: pilotingId }),
     ];
     const rows = categoryBreakdown(snap.years["2026"].spendingEntries, snap);
     const piloting = rows.find((row) => row.categoryId === pilotingId)!;
     const health = rows.find((row) => row.categoryId === healthId)!;
 
-    expect(piloting.total).toBe(600); // still charted
-    expect(piloting.share).toBeNull(); // but never a share
-    expect(health.share).toBeCloseTo(100); // shares use non-piloting spend only
+    // The "piloting" bucket used to be charted but given a null share, which
+    // is why the shares needed a footnote explaining why they did not sum to
+    // 100. It is a category like any other now.
+    expect(piloting.total).toBe(600);
+    expect(piloting.share).toBeCloseTo(60);
+    expect(health.share).toBeCloseTo(40);
+    expect((piloting.share ?? 0) + (health.share ?? 0)).toBeCloseTo(100);
   });
 
   it("never turns a recorded zero into missing data", () => {

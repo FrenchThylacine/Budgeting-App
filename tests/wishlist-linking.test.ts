@@ -21,6 +21,8 @@ import {
 } from "../src/domain/wishlist";
 import type { BudgetSnapshot, WishlistItem, WishlistPriority } from "../src/domain/types";
 import { useBudgetStore } from "../src/store/budgetStore";
+import { resolveStoredText } from "../src/domain/storedText";
+import { createTranslator } from "../src/domain/i18n";
 import { wishlistPayloadFromDraft, wishlistToDraft } from "../src/utils/formatters";
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
@@ -285,7 +287,10 @@ describe("recording a wishlist purchase", () => {
 
     const latest = store().snapshot.auditLog[0];
     expect(latest.type).toBe("spending");
-    expect(latest.summary).toContain("Studio headphones");
+    // The item's name is a value inside the stored key, percent-encoded, so a
+    // name containing a pipe or an equals sign cannot break the record.
+    expect(latest.summary).toBe("@audit.wishlistPurchased|name=Studio%20headphones");
+    expect(resolveStoredText(latest.summary, createTranslator("en"))).toContain("Studio headphones");
   });
 
   it("treats a price of 0 as a real purchase", () => {
@@ -545,7 +550,11 @@ describe("historical protection", () => {
 
     const latest = store().snapshot.auditLog[0];
     expect(latest.historicalEdit).toBe(true);
-    expect(latest.summary).toContain("historical edit");
+    // The fact lives on the record, not glued onto the end of the summary:
+    // appending to a `@key|name=value` sigil would corrupt its last parameter,
+    // and the History panel reads `historicalEdit` and `historicalPeriod`.
+    expect(latest.historicalEdit).toBe(true);
+    expect(latest.summary).not.toContain("historical edit");
   });
 });
 

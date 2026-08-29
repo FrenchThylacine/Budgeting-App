@@ -39,14 +39,18 @@ export function calculateYear(snapshot: BudgetSnapshot, now = new Date()): YearC
     .map((activity) => estimateActivity(activity, snapshot))
     .sort((a, b) => a.activity.order - b.activity.order);
 
-  // Bucket totals are **gross**: they describe which part of the budget an
-  // activity belongs to, not who pays for it. The funding split is reported
-  // separately, because the two questions are independent — a piloting
-  // activity can be funded by somebody else, and a general one can be outside
-  // the budget.
-  const generalBudget = sum(activityEstimates.filter((item) => item.bucket !== "piloting").map((item) => item.monthlyBase));
-  const pilotingBudget = sum(activityEstimates.filter((item) => item.bucket === "piloting").map((item) => item.monthlyBase));
-  const combinedBudget = generalBudget + pilotingBudget;
+  /*
+   * The gross cost of everything, whoever pays for it.
+   *
+   * This used to be split into "general" and "piloting" by the category's
+   * bucket, with a setting deciding whether the second half counted. That
+   * assumed every budget has a piloting category, gave one category powers no
+   * other category had, and answered a question — "what does flying cost me" —
+   * that the activity list already answers for any category. Whether an
+   * activity costs *this* budget anything is decided by its funding, which is
+   * a property every activity has.
+   */
+  const combinedBudget = sum(activityEstimates.map((item) => item.monthlyBase));
   /*
    * What the personal budget actually has to carry.
    *
@@ -57,11 +61,7 @@ export function calculateYear(snapshot: BudgetSnapshot, now = new Date()): YearC
    * was paying for.
    */
   const personalEstimates = activityEstimates.filter((item) => item.funding === "personal");
-  const includedBudget = sum(
-    personalEstimates
-      .filter((item) => (snapshot.settings.pilotIncludedInBudget ? true : item.bucket !== "piloting"))
-      .map((item) => item.monthlyBase),
-  );
+  const includedBudget = sum(personalEstimates.map((item) => item.monthlyBase));
   const monthlyBudgetBase = normalizeAmount(
     snapshot.settings.monthlyBudget,
     snapshot.settings.monthlyBudgetCurrency,
@@ -85,8 +85,6 @@ export function calculateYear(snapshot: BudgetSnapshot, now = new Date()): YearC
     month,
     week,
     monthlyBudgetBase,
-    generalBudget,
-    pilotingBudget,
     combinedBudget,
     includedBudget,
     selectedMonthSpend,
@@ -496,8 +494,6 @@ function summarizePeriod({
       week,
       status: isClosed ? "nan" : "pending",
       total: null,
-      generalTotal: null,
-      pilotingTotal: null,
       personalTotal: null,
       externalTotal: null,
       otherFundedTotal: null,
@@ -518,11 +514,7 @@ function summarizePeriod({
   const otherFunded = otherFundedEntries(entries);
   const outsideBudget = outsideBudgetEntries(entries);
 
-  const generalEntries = budgetEntries.filter((entry) => !entry.isPiloting);
-  const pilotingEntries = budgetEntries.filter((entry) => entry.isPiloting);
-  const generalTotal = sum(generalEntries.map((entry) => normalizeEntry(entry, snapshot)));
-  const pilotingTotal = sum(pilotingEntries.map((entry) => normalizeEntry(entry, snapshot)));
-  const total = generalTotal + pilotingTotal;
+  const total = sum(budgetEntries.map((entry) => normalizeEntry(entry, snapshot)));
 
   const externalTotal = sum(externallyFunded.map((entry) => normalizeEntry(entry, snapshot)));
   // Reported apart, never merged: "somebody else paid" and "I keep this off
@@ -537,8 +529,6 @@ function summarizePeriod({
     week,
     status: total === 0 ? "zero" : "value",
     total,
-    generalTotal,
-    pilotingTotal,
     // The same number as `total`, named for the split display. Kept distinct so
     // a reader of `personalTotal` never has to know that `total` means the same
     // thing.

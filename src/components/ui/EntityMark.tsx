@@ -5,6 +5,7 @@ import { ActivityIcon, IconPicker } from "./IconPicker";
 import { Button } from "./Button";
 import { AdvancedFields } from "./EditorSheet";
 import { Field, FieldGroup } from "./Field";
+import { useTranslation } from "../../i18n/useTranslation";
 
 /**
  * One mark, one resolution order, one fallback
@@ -66,6 +67,7 @@ export const EntityMark: React.FC<EntityMarkProps> = ({
   radius = 10,
   onResolve,
 }) => {
+  const { t } = useTranslation();
   const iconUrl = normalizeItemUrl(source.iconUrl);
   const domain = itemDomain(source.sourceUrl);
 
@@ -237,6 +239,7 @@ export const MarkFields: React.FC<MarkFieldsProps> = ({
   sourcePlaceholder,
   fallback,
 }) => {
+  const { t } = useTranslation();
   const iconUrlError = (source.iconUrl ?? "").trim().length > 0 && normalizeItemUrl(source.iconUrl) == null;
   const sourceUrlError = (source.sourceUrl ?? "").trim().length > 0 && normalizeItemUrl(source.sourceUrl) == null;
   const hasAnything = Boolean(source.icon || (source.iconUrl ?? "").trim() || (source.sourceUrl ?? "").trim());
@@ -249,7 +252,7 @@ export const MarkFields: React.FC<MarkFieldsProps> = ({
 
   return (
     <>
-      <FieldGroup title="Icon">
+      <FieldGroup title={t("mark.icon")}>
         {/* What the mark will actually be, resolved live from whatever is
             filled in. The chain has four steps and any of them can quietly
             fail — a site with no icon, an image link that 404s. Seeing the
@@ -259,17 +262,17 @@ export const MarkFields: React.FC<MarkFieldsProps> = ({
             Inside the group rather than above it: floating between the
             previous group and this heading, it read as belonging to whatever
             came before. */}
-        <Field label="Preview" span group>
+        <Field label={t("mark.preview")} span group>
           <div className="wishlist-mark-preview">
             <EntityMark source={resolved} accent={accent} size={40} fallback={fallback} onResolve={setLayer} />
             <span className="text-caption">{describeMarkSource(resolved, layer)}</span>
           </div>
         </Field>
         <Field
-          label="From the library"
+          label={t("mark.fromTheLibrary")}
           span
           group
-          hint="Searchable, grouped, and always available offline — unlike anything fetched from a website."
+          hint={t("mark.searchableGroupedAndAlwaysAvailable")}
         >
           <IconPicker
             value={source.icon || undefined}
@@ -279,14 +282,14 @@ export const MarkFields: React.FC<MarkFieldsProps> = ({
           />
         </Field>
         {hasAnything && (
-          <Field label="Start again" group>
+          <Field label={t("mark.startAgain")} group>
             <Button
               type="button"
               variant="ghost"
               size="sm"
               onClick={() => onChange({ icon: "", iconUrl: "", sourceUrl: "" })}
             >
-              Reset the icon
+              {t("mark.resetTheIcon")}
             </Button>
           </Field>
         )}
@@ -296,14 +299,14 @@ export const MarkFields: React.FC<MarkFieldsProps> = ({
           to take the icon from are the answer when it does not, and asking
           everyone for two URLs to serve the minority is how an editor becomes
           a form nobody finishes. */}
-      <AdvancedFields label="Use an image or a website instead">
-      <FieldGroup title="Custom icon">
+      <AdvancedFields label={t("mark.useAnImageOrA")}>
+      <FieldGroup title={t("mark.customIcon")}>
         <Field
-          label="Image link"
+          label={t("mark.imageLink")}
           span
           hint={
             iconUrlError ? (
-              <span style={{ color: "var(--danger-text)" }}>Enter a valid web address (http or https only).</span>
+              <span style={{ color: "var(--danger-text)" }}>{t("wishlist.enterAValidWebAddress")}</span>
             ) : (
               "A direct link to an image. It beats both the library icon and the site icon below. If it ever fails to load, the next one in the list is used instead of a broken image."
             )
@@ -317,7 +320,7 @@ export const MarkFields: React.FC<MarkFieldsProps> = ({
             // javascript: and data:, which type="url" accepts.
             type="text"
             inputMode="url"
-            placeholder="example.com/logo.png"
+            placeholder={t("mark.exampleComLogoPng")}
             value={source.iconUrl ?? ""}
             onChange={(event) => onChange({ iconUrl: event.target.value })}
             style={{ borderColor: iconUrlError ? "var(--danger)" : undefined }}
@@ -328,7 +331,7 @@ export const MarkFields: React.FC<MarkFieldsProps> = ({
           span
           hint={
             sourceUrlError ? (
-              <span style={{ color: "var(--danger-text)" }}>Enter a valid web address (http or https only).</span>
+              <span style={{ color: "var(--danger-text)" }}>{t("wishlist.enterAValidWebAddress")}</span>
             ) : (
               sourceHint
             )

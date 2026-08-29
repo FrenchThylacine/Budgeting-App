@@ -63,6 +63,29 @@ describe("PATCH /api/snapshot/settings payload validation", () => {
     expect(() => validateSettingsPatch({ exchangeRates: "1.19" })).toThrow(AppError);
   });
 
+
+  it("accepts the preferences added for the interface, and only their legal values", () => {
+    // Every one of these decides how the whole application looks or reads, and
+    // an unrecognised value stored here would be synced to every device.
+    expect(validateSettingsPatch({ themePreset: "plum" })).toEqual({ themePreset: "plum" });
+    expect(validateSettingsPatch({ appearance: "system" })).toEqual({ appearance: "system" });
+    expect(validateSettingsPatch({ aircraft: "a350" })).toEqual({ aircraft: "a350" });
+    expect(validateSettingsPatch({ secondaryCurrency: "CHF" })).toEqual({ secondaryCurrency: "CHF" });
+
+    for (const bad of [
+      { themePreset: "hot-pink" },
+      { appearance: "sepia" },
+      { aircraft: "spitfire" },
+      { secondaryCurrency: "XXXX" },
+    ]) {
+      expect(() => validateSettingsPatch(bad), JSON.stringify(bad)).toThrow();
+    }
+  });
+
+  it("lets null clear the second currency, which is a legal thing to want", () => {
+    expect(validateSettingsPatch({ secondaryCurrency: null })).toEqual({ secondaryCurrency: null });
+  });
+
   it("refuses a field it does not recognise instead of storing it forever", () => {
     expect(() => validateSettingsPatch({ somethingNobodyDefined: 1 })).toThrow(AppError);
   });

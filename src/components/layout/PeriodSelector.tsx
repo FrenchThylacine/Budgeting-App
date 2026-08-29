@@ -13,6 +13,7 @@ import {
 } from "../../domain/periods";
 import type { PeriodMode, Settings } from "../../domain/types";
 import { useBudgetStore } from "../../store/budgetStore";
+import { useTranslation } from "../../i18n/useTranslation";
 
 /**
  * The period selector
@@ -50,10 +51,10 @@ import { useBudgetStore } from "../../store/budgetStore";
 
 type PeriodPatch = Partial<Settings>;
 
-const MODES: { value: PeriodMode; label: string; short: string }[] = [
-  { value: "week", label: "Week", short: "W" },
-  { value: "month", label: "Month", short: "M" },
-  { value: "year", label: "Year", short: "Y" },
+const MODES: { value: PeriodMode; labelKey: string }[] = [
+  { value: "week", labelKey: "period.week" },
+  { value: "month", labelKey: "period.month" },
+  { value: "year", labelKey: "period.year" },
 ];
 
 export const PeriodSelector: React.FC = () => {
@@ -68,15 +69,17 @@ export const PeriodSelector: React.FC = () => {
   const triggerRef = useRef<HTMLButtonElement>(null);
   const panelId = useId();
 
+  const { t, language, formatDate, formatList, monthNames } = useTranslation();
+  const shortMonths = monthNames("short");
   const mode = settings.selectedPeriodMode ?? "month";
-  const label = periodLabel(settings);
-  const range = periodRangeLabel(settings);
+  const label = periodLabel(settings, language);
+  const range = periodRangeLabel(settings, language);
   const atCurrent = isAtCurrentPeriod(settings);
   const historical = isHistoricalPeriod(settings);
   const activeYear = mode === "week" ? selectedIsoWeekYear(settings) : settings.selectedYear;
   // The real period of the same mode, so a historical view can never be
   // mistaken for the present one even when the banner is scrolled away.
-  const currentLabel = periodLabel({ ...settings, ...currentPeriodPatch(settings) } as Settings);
+  const currentLabel = periodLabel({ ...settings, ...currentPeriodPatch(settings) } as Settings, language);
 
   /**
    * The wall clock, refreshed each minute.
@@ -154,7 +157,7 @@ export const PeriodSelector: React.FC = () => {
     <div className="period-bar" ref={containerRef}>
       {/* Mode. A segmented control rather than a dropdown: three options that
           change what everything else means should be visible at once. */}
-      <div className="period-modes" role="group" aria-label="Period type">
+      <div className="period-modes" role="group" aria-label={t("period.periodType")}>
         {MODES.map((item) => (
           <button
             key={item.value}
@@ -163,7 +166,7 @@ export const PeriodSelector: React.FC = () => {
             aria-pressed={mode === item.value}
             onClick={() => apply(periodPatchForMode(settings, item.value))}
           >
-            {item.label}
+            {t(item.labelKey)}
           </button>
         ))}
       </div>
@@ -172,7 +175,7 @@ export const PeriodSelector: React.FC = () => {
         <button
           type="button"
           className="period-step"
-          aria-label={`Previous ${mode}`}
+          aria-label={t("period.previous", { period: t(`period.${mode}`) })}
           onClick={() => apply(movePeriod(settings, -1))}
         >
           <ChevronLeft size={18} aria-hidden="true" />
@@ -194,7 +197,7 @@ export const PeriodSelector: React.FC = () => {
         <button
           type="button"
           className="period-step"
-          aria-label={`Next ${mode}`}
+          aria-label={t("period.next", { period: t(`period.${mode}`) })}
           onClick={() => apply(movePeriod(settings, 1))}
         >
           <ChevronRight size={18} aria-hidden="true" />
@@ -207,32 +210,34 @@ export const PeriodSelector: React.FC = () => {
       {historical && (
         <span
           className="period-flag"
-          title={`This ${mode} has already ended. The current ${mode} is ${currentLabel}.`}
+          title={t("period.pastHint", { period: t(`period.${mode}`), current: currentLabel })}
         >
           <History size={13} aria-hidden="true" />
-          Past {mode}
+          {t("period.past", { period: t(`period.${mode}`) })}
         </span>
       )}
 
       <div className="period-now">
         <span className="period-today text-footnote">
-          {new Intl.DateTimeFormat(undefined, { dateStyle: "medium" }).format(now)}
-          {liveClock ? ` · ${new Intl.DateTimeFormat(undefined, { timeStyle: "short" }).format(now)}` : ""}
+          {/* One locale for the whole application, not the browser's here and
+              the chosen language's everywhere else. */}
+          {formatDate(now, { dateStyle: "medium" })}
+          {liveClock ? ` · ${formatDate(now, { timeStyle: "short" })}` : ""}
         </span>
         <button
           type="button"
           className="period-jump"
           onClick={() => apply(currentPeriodPatch(settings))}
           disabled={atCurrent}
-          title={atCurrent ? `Already on the current ${mode}` : `Go to the current ${mode}`}
+          title={t(atCurrent ? "period.alreadyCurrent" : "period.goToCurrent", { period: t(`period.${mode}`) })}
         >
           <CalendarCheck size={14} aria-hidden="true" />
-          <span>Current {mode}</span>
+          <span>{t("period.current", { period: t(`period.${mode}`) })}</span>
         </button>
       </div>
 
       {open && (
-        <div className="period-panel" id={panelId} ref={panelRef} role="group" aria-label={`Choose a ${mode}`}>
+        <div className="period-panel" id={panelId} ref={panelRef} role="group" aria-label={t("period.choose", { period: t(`period.${mode}`) })}>
           {/* The year, in every mode. In year mode it is the whole choice; in
               the other two it is the frame the months or weeks sit in, which is
               why it is a stepper rather than a list that scrolls away. */}
@@ -240,7 +245,7 @@ export const PeriodSelector: React.FC = () => {
             <button
               type="button"
               className="period-step"
-              aria-label="Previous year"
+              aria-label={t("period.previousYear")}
               onClick={() => pickYear(activeYear - 1)}
             >
               <ChevronLeft size={16} aria-hidden="true" />
@@ -249,7 +254,7 @@ export const PeriodSelector: React.FC = () => {
             <button
               type="button"
               className="period-step"
-              aria-label="Next year"
+              aria-label={t("period.nextYear")}
               onClick={() => pickYear(activeYear + 1)}
             >
               <ChevronRight size={16} aria-hidden="true" />
@@ -257,7 +262,7 @@ export const PeriodSelector: React.FC = () => {
           </div>
 
           {mode === "month" && (
-            <div className="period-grid period-grid-months" role="group" aria-label="Month">
+            <div className="period-grid period-grid-months" role="group" aria-label={t("period.month")}>
               {Array.from({ length: 12 }, (_, index) => index + 1).map((month) => (
                 <button
                   key={month}
@@ -266,21 +271,21 @@ export const PeriodSelector: React.FC = () => {
                   aria-pressed={settings.selectedMonth === month}
                   onClick={() => pickMonth(month)}
                 >
-                  {monthName(month).slice(0, 3)}
+                  {shortMonths[month - 1]}
                 </button>
               ))}
             </div>
           )}
 
           {mode === "week" && (
-            <div className="period-grid period-grid-weeks" role="group" aria-label="ISO week">
+            <div className="period-grid period-grid-weeks" role="group" aria-label={t("period.isoWeek")}>
               {Array.from({ length: weeksInIsoYear(activeYear) }, (_, index) => index + 1).map((week) => (
                 <button
                   key={week}
                   type="button"
                   className={`period-cell${settings.selectedWeek === week ? " active" : ""}`}
                   aria-pressed={settings.selectedWeek === week}
-                  aria-label={`Week ${week}`}
+                  aria-label={t("period.weekNumber", { week })}
                   onClick={() => pickWeek(week)}
                 >
                   {week}
@@ -290,7 +295,7 @@ export const PeriodSelector: React.FC = () => {
           )}
 
           {mode === "year" && (
-            <div className="period-grid period-grid-years" role="group" aria-label="Year">
+            <div className="period-grid period-grid-years" role="group" aria-label={t("period.year")}>
               {yearOptions.map((year) => (
                 <button
                   key={year}
@@ -314,8 +319,8 @@ export const PeriodSelector: React.FC = () => {
           {mode !== "week" && (
             <p className="period-panel-note text-note">
               {Object.keys(years).length > 0
-                ? `Records exist for ${Object.keys(years).sort().join(", ")}.`
-                : "No year has any records yet."}
+                ? t("period.recordsExist", { years: formatList(Object.keys(years).sort()) })
+                : t("period.noRecords")}
             </p>
           )}
         </div>

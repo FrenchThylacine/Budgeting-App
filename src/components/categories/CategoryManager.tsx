@@ -7,6 +7,7 @@ import { Button } from "../ui/Button";
 import { Section } from "../ui/Section";
 import { EditorSheet } from "../ui/EditorSheet";
 import { EmptyState } from "../ui/EmptyState";
+import { useTranslation } from "../../i18n/useTranslation";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -21,27 +22,17 @@ interface CategoryDraft {
   parentId: string;
 }
 
-const BUCKET_OPTIONS: BudgetBucket[] = ["general", "piloting", "personal", "wallet"];
-
-const BUCKET_LABELS: Record<BudgetBucket, string> = {
-  general: "General",
-  piloting: "Piloting",
-  personal: "Personal",
-  wallet: "Wallet",
-};
-
-/**
- * The bucket name is set *in* its colour, so these are the text variants
- * rather than the fill ones — the saturated tokens read at 2.6–4.0 against the
- * card, which is under the minimum for 12px type.
+/*
+ * `bucket` is no longer asked for.
+ *
+ * It was a four-way choice — general, piloting, personal, wallet — presented on
+ * every category, and the only thing any of the four ever did was make
+ * "piloting" behave differently from the other three. That behaviour is gone
+ * (see `domain/calculations.ts`), which left a required field that changed
+ * nothing and that nobody could answer without reading the source. New
+ * categories are `general`; existing ones keep whatever they have, because the
+ * value still round-trips through the database.
  */
-const BUCKET_COLORS: Record<BudgetBucket, string> = {
-  general: "var(--accent)",
-  piloting: "var(--purple-text)",
-  personal: "var(--success-text)",
-  wallet: "var(--warning-text)",
-};
-
 function emptyDraft(): CategoryDraft {
   return {
     name: "",
@@ -98,6 +89,7 @@ const CategoryForm: React.FC<CategoryFormProps> = ({
   submitLabel,
   hideActions,
 }) => {
+  const { t } = useTranslation();
   const valid = draft.name.trim().length > 0;
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -126,34 +118,22 @@ const CategoryForm: React.FC<CategoryFormProps> = ({
         gap: 10,
       }}
     >
-      {/* Row 1: name + bucket + color */}
+      {/* Row 1: name and colour */}
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
         <input
           className="input"
           required
-          placeholder="Category name *"
+          placeholder={t("categories.categoryName")}
           value={draft.name}
           onChange={(e) => onChange({ name: e.target.value })}
           style={{ flex: "2 1 150px", minWidth: 130 }}
           autoFocus
         />
-        <select
-          className="select"
-          value={draft.bucket}
-          onChange={(e) => onChange({ bucket: e.target.value as BudgetBucket })}
-          style={{ flex: "1 1 100px", minWidth: 90 }}
-        >
-          {BUCKET_OPTIONS.map((b) => (
-            <option key={b} value={b}>
-              {BUCKET_LABELS[b]}
-            </option>
-          ))}
-        </select>
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-          <label style={{ fontSize: 13, color: "var(--text-secondary)" }}>Colour</label>
+          <label style={{ fontSize: 13, color: "var(--text-secondary)" }}>{t("activity.colour")}</label>
           <input
             type="color"
-            aria-label="Category colour"
+            aria-label={t("categories.categoryColour")}
             value={draft.color}
             onChange={(e) => onChange({ color: e.target.value })}
             style={{ width: 36, height: 36, border: "none", background: "none", cursor: "pointer", padding: 2 }}
@@ -169,14 +149,14 @@ const CategoryForm: React.FC<CategoryFormProps> = ({
             type="number"
             step="any"
             min="0"
-            placeholder="Monthly cap (optional)"
+            placeholder={t("categories.monthlyCapOptional")}
             value={draft.monthlyCap}
             onChange={(e) => onChange({ monthlyCap: e.target.value })}
             style={{ width: "100%" }}
           />
           {!capValid && (
             <div style={{ fontSize: 11, color: "var(--danger-text)", marginTop: 2 }}>
-              Must be a non-negative number
+              {t("categories.mustBeANonNegative")}
             </div>
           )}
         </div>
@@ -186,7 +166,7 @@ const CategoryForm: React.FC<CategoryFormProps> = ({
           onChange={(e) => onChange({ parentId: e.target.value })}
           style={{ flex: "1 1 130px", minWidth: 110 }}
         >
-          <option value="">No parent category</option>
+          <option value="">{t("categories.noParentCategory")}</option>
           {parentOptions.map((c) => (
             <option key={c.id} value={c.id}>
               {c.name}
@@ -198,7 +178,7 @@ const CategoryForm: React.FC<CategoryFormProps> = ({
       {/* Row 3: description */}
       <textarea
         className="input"
-        placeholder="Description (optional)"
+        placeholder={t("categories.descriptionOptional")}
         value={draft.description}
         onChange={(e) => onChange({ description: e.target.value })}
         rows={2}
@@ -209,14 +189,14 @@ const CategoryForm: React.FC<CategoryFormProps> = ({
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
         <input
           className="input"
-          placeholder="Icon name (e.g. ShoppingCart)"
+          placeholder={t("categories.iconNameEGShoppingcart")}
           value={draft.icon}
           onChange={(e) => onChange({ icon: e.target.value })}
           style={{ flex: "1 1 140px", minWidth: 120 }}
         />
         <input
           className="input"
-          placeholder="Notes (optional)"
+          placeholder={t("categories.notesOptional")}
           value={draft.notes}
           onChange={(e) => onChange({ notes: e.target.value })}
           style={{ flex: "2 1 160px", minWidth: 130 }}
@@ -246,6 +226,7 @@ const CategoryForm: React.FC<CategoryFormProps> = ({
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export const CategoryManager: React.FC = () => {
+  const { t } = useTranslation();
   const snapshot = useBudgetStore((s) => s.snapshot);
   const addCategory = useBudgetStore((s) => s.addCategory);
   const updateCategory = useBudgetStore((s) => s.updateCategory);
@@ -361,15 +342,6 @@ export const CategoryManager: React.FC = () => {
                 {cat.name}
               </div>
               <div className="text-footnote" style={{ display: "flex", gap: 8, marginTop: 2, flexWrap: "wrap" }}>
-                <span
-                  style={{
-                    color: BUCKET_COLORS[cat.bucket],
-                    fontWeight: 500,
-                    textTransform: "capitalize",
-                  }}
-                >
-                  {BUCKET_LABELS[cat.bucket]}
-                </span>
                 {parentCat && (
                   <span style={{ color: "var(--text-tertiary)" }}>
                     ↳ {parentCat.name}
@@ -381,7 +353,7 @@ export const CategoryManager: React.FC = () => {
                   </span>
                 )}
                 {cat.archived && (
-                  <span style={{ color: "var(--text-tertiary)" }}>archived</span>
+                  <span style={{ color: "var(--text-tertiary)" }}>{t("categories.archived")}</span>
                 )}
                 {cat.description && (
                   <span
@@ -419,8 +391,8 @@ export const CategoryManager: React.FC = () => {
                 size="sm"
                 variant="ghost"
                 onClick={() => unarchiveCategory(cat.id)}
-                aria-label="Restore category"
-                title="Restore"
+                aria-label={t("categories.restoreCategory")}
+                title={t("categories.restore")}
               >
                 <RotateCcw size={14} /> Restore
               </Button>
@@ -429,8 +401,8 @@ export const CategoryManager: React.FC = () => {
                 size="sm"
                 variant="ghost"
                 onClick={() => archiveCategory(cat.id)}
-                aria-label="Archive category"
-                title="Archive"
+                aria-label={t("categories.archiveCategory")}
+                title={t("categories.archive")}
                 style={{ color: "var(--text-secondary)" }}
               >
                 <Archive size={14} /> Archive
@@ -444,12 +416,12 @@ export const CategoryManager: React.FC = () => {
         {isEditing && editDraft && (
           <EditorSheet
             title={`Edit ${cat.name}`}
-            subtitle="Bucket and cap are locked while a closed period is selected."
+            subtitle={t("categories.bucketAndCapAreLocked")}
             onClose={cancelEdit}
             footer={
               <>
-                <Button variant="ghost" onClick={cancelEdit}>Cancel</Button>
-                <Button variant="primary" onClick={saveEdit}>Save changes</Button>
+                <Button variant="ghost" onClick={cancelEdit}>{t("common.cancel")}</Button>
+                <Button variant="primary" onClick={saveEdit}>{t("common.save")}</Button>
               </>
             }
           >
@@ -473,11 +445,11 @@ export const CategoryManager: React.FC = () => {
 
   return (
     <div className="page-enter" style={{ display: "grid", gap: 20 }}>
-      <Section title="Categories">
+      <Section title={t("nav.categories")}>
         <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 4 }}>
           {!showAdd && (
             <Button variant="primary" size="sm" onClick={() => setShowAdd(true)}>
-              <Plus size={14} /> New category
+              <Plus size={14} /> {t("categories.newCategory")}
             </Button>
           )}
         </div>
@@ -496,8 +468,8 @@ export const CategoryManager: React.FC = () => {
       {/* Active categories */}
       {activeCategories.length === 0 && !showAdd ? (
         <EmptyState
-          title="No categories yet"
-          description="Categories organise your activities and spending."
+          title={t("categories.noCategoriesYet")}
+          description={t("categories.categoriesOrganiseYourActivitiesAnd")}
         />
       ) : (
         <div className="item-list">{activeCategories.map(renderCategory)}</div>
@@ -545,10 +517,8 @@ export const CategoryManager: React.FC = () => {
           borderRadius: "var(--radius-sm)",
         }}
       >
-        ℹ️ Transactions are never rewritten by a category edit, and archiving hides a category from new entries
-        while preserving every existing transaction. Note that <strong>bucket</strong> and <strong>monthly cap</strong>
-        are read live by budget calculations, so changing them also changes how past periods are reported — they are
-        locked while you are viewing a historical period.
+        {t("categories.transactionsAreNeverRewrittenBy")} <strong>{t("categories.monthlyCap")}</strong>
+        {t("categories.areReadLiveByBudget")}
       </div>
     </div>
   );

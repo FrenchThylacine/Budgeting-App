@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { calculateYear } from "../../domain/calculations";
-import { formatDualMoney, statusLabel } from "../../utils/formatters";
+import { formatDualMoney, statusLabelKey } from "../../utils/formatters";
 import { monthName, formatDateTime } from "../../domain/dates";
 import { useBudgetStore } from "../../store/budgetStore";
 import type { AuditLog, AuditType } from "../../domain/types";
@@ -8,22 +8,27 @@ import { Badge } from "../ui/Badge";
 import { EmptyState } from "../ui/EmptyState";
 import { Section } from "../ui/Section";
 import { AlertTriangle, CheckCircle2, Lock, ShieldAlert, StickyNote } from "lucide-react";
+import { useTranslation } from "../../i18n/useTranslation";
+import { resolveStoredText } from "../../domain/storedText";
+import { formatPeriodToken } from "../../domain/periods";
 
 type Tab = "periods" | "closures" | "approvals" | "audit";
 
-const AUDIT_FILTERS: { value: AuditType | "all" | "historical"; label: string }[] = [
-  { value: "all", label: "All" },
-  { value: "historical", label: "Historical edits" },
-  { value: "spending", label: "Spending" },
-  { value: "activity", label: "Activities" },
-  { value: "wishlist", label: "Wishlist" },
-  { value: "wallet", label: "Wallet" },
-  { value: "rollover", label: "Month close" },
-  { value: "settings", label: "Settings" },
-  { value: "delete", label: "Deletions" },
+/** Keys, not words: this table is module-level and has no translator. */
+const AUDIT_FILTERS: { value: AuditType | "all" | "historical"; labelKey: string }[] = [
+  { value: "all", labelKey: "history.filterAll" },
+  { value: "historical", labelKey: "history.historicalEdits" },
+  { value: "spending", labelKey: "nav.spending" },
+  { value: "activity", labelKey: "nav.activities" },
+  { value: "wishlist", labelKey: "nav.wishlist" },
+  { value: "wallet", labelKey: "nav.wallet" },
+  { value: "rollover", labelKey: "history.monthClose" },
+  { value: "settings", labelKey: "nav.settings" },
+  { value: "delete", labelKey: "history.filterDeletions" },
 ];
 
 export const HistoryPanel: React.FC = () => {
+  const { t } = useTranslation();
   const snapshot = useBudgetStore((s) => s.snapshot);
   const calculation = useMemo(() => calculateYear(snapshot), [snapshot]);
   const setMonthlyNote = useBudgetStore((s) => s.setMonthlyNote);
@@ -59,18 +64,18 @@ export const HistoryPanel: React.FC = () => {
     [snapshot.auditLog],
   );
 
-  const tabs: { value: Tab; label: string; count?: number }[] = [
-    { value: "periods", label: "Periods" },
-    { value: "closures", label: "Month closes", count: closedMonths.length },
-    { value: "approvals", label: "Budget approvals", count: approvals.length },
-    { value: "audit", label: "Audit trail", count: snapshot.auditLog.length },
+  const tabs: { value: Tab; labelKey: string; count?: number }[] = [
+    { value: "periods", labelKey: "history.periods" },
+    { value: "closures", labelKey: "history.monthCloses", count: closedMonths.length },
+    { value: "approvals", labelKey: "history.budgetApprovals", count: approvals.length },
+    { value: "audit", labelKey: "history.auditTrail", count: snapshot.auditLog.length },
   ];
 
   return (
     <div className="page-enter" style={{ display: "grid", gap: 20 }}>
-      <Section title="Financial history">
+      <Section title={t("history.financialHistory")}>
         <div className="text-caption" style={{ marginBottom: 12 }}>
-          Closed periods retain their recorded status; missing data is shown as unavailable rather than zero.
+          {t("history.closedPeriodsRetain")}
         </div>
 
         {historicalEditCount > 0 && (
@@ -104,7 +109,7 @@ export const HistoryPanel: React.FC = () => {
           </div>
         )}
 
-        <div className="segmented" role="tablist" aria-label="History sections">
+        <div className="segmented" role="tablist" aria-label={t("history.historySections")}>
           {tabs.map((entry) => (
             <button
               key={entry.value}
@@ -113,7 +118,7 @@ export const HistoryPanel: React.FC = () => {
               className={`segmented-item ${tab === entry.value ? "active" : ""}`}
               onClick={() => setTab(entry.value)}
             >
-              {entry.label}
+              {t(entry.labelKey)}
               {entry.count != null && <span className="segmented-count">{entry.count}</span>}
             </button>
           ))}
@@ -134,8 +139,8 @@ export const HistoryPanel: React.FC = () => {
                     {period.label} {period.year}
                   </div>
                   <div className="text-footnote">
-                    {statusLabel(period.status)} · {period.entryCount} transaction{period.entryCount !== 1 ? "s" : ""}
-                    {period.externalCount ? ` · ${period.externalCount} paid by others` : ""}
+                    {t(statusLabelKey(period.status))} · {t("common.transactions", { count: period.entryCount })}
+                    {period.externalCount ? ` · ${t("history.paidByOthers", { count: period.externalCount })}` : ""}
                   </div>
                   {/* The note lives with the month it describes: "the boiler
                       broke" is why March cost what it did, and a year later
@@ -158,13 +163,13 @@ export const HistoryPanel: React.FC = () => {
                       <input
                         className="input"
                         autoFocus
-                        aria-label={`Note for ${period.label} ${period.year}`}
-                        placeholder="Why this month looked the way it did"
+                        aria-label={t("history.noteFor", { period: `${period.label} ${period.year}` })}
+                        placeholder={t("history.whyThisMonthLookedThe")}
                         value={noteDraft}
                         onChange={(event) => setNoteDraft(event.target.value)}
                         style={{ flex: "1 1 220px", minWidth: 0 }}
                       />
-                      <button className="btn btn-primary btn-sm" type="submit">Save</button>
+                      <button className="btn btn-primary btn-sm" type="submit">{t("history.save")}</button>
                       <button className="btn btn-ghost btn-sm" type="button" onClick={() => setNoteMonth(null)}>
                         Cancel
                       </button>
@@ -196,8 +201,8 @@ export const HistoryPanel: React.FC = () => {
       {tab === "closures" && (
         closedMonths.length === 0 ? (
           <EmptyState
-            title="No months closed yet"
-            description="Closing a month records its final total and whether the remainder rolled into your wallet."
+            title={t("history.noMonthsClosedYet")}
+            description={t("history.closingAMonthRecordsIts")}
           />
         ) : (
           <div className="item-list">
@@ -249,7 +254,7 @@ export const HistoryPanel: React.FC = () => {
       {/* ── Budget approvals (previously never rendered) ── */}
       {tab === "approvals" && (
         approvals.length === 0 ? (
-          <EmptyState title="No budget approvals" description="Approved budgets are retained here as historical records." />
+          <EmptyState title={t("history.noBudgetApprovals")} description={t("history.approvedBudgetsAreRetainedHere")} />
         ) : (
           <div className="item-list">
             {approvals.map((approval) => {
@@ -271,7 +276,7 @@ export const HistoryPanel: React.FC = () => {
                       <span
                         className="text-footnote"
                         style={{ display: "inline-flex", alignItems: "center", gap: 4, color: "var(--text-tertiary)" }}
-                        title="Approvals are permanent decision records and stay locked even when a period is unlocked for editing."
+                        title={t("history.approvalsArePermanentDecisionRecords")}
                       >
                         <Lock size={11} /> immutable
                       </span>
@@ -309,7 +314,7 @@ export const HistoryPanel: React.FC = () => {
                 className={`chip ${auditFilter === filter.value ? "active" : ""}`}
                 onClick={() => setAuditFilter(filter.value)}
               >
-                {filter.label}
+                {t(filter.labelKey)}
                 {filter.value === "historical" && historicalEditCount > 0 ? ` (${historicalEditCount})` : ""}
               </button>
             ))}
@@ -317,7 +322,7 @@ export const HistoryPanel: React.FC = () => {
 
           {auditEntries.length === 0 ? (
             <EmptyState
-              title="Nothing recorded"
+              title={t("report.noDataRecorded")}
               description={
                 auditFilter === "historical"
                   ? "No closed period has been edited."
@@ -343,7 +348,9 @@ export const HistoryPanel: React.FC = () => {
   );
 };
 
-const AuditRow: React.FC<{ entry: AuditLog }> = ({ entry }) => (
+const AuditRow: React.FC<{ entry: AuditLog }> = ({ entry }) => {
+  const { t, language } = useTranslation();
+  return (
   <div
     className="item-row"
     style={{
@@ -357,13 +364,17 @@ const AuditRow: React.FC<{ entry: AuditLog }> = ({ entry }) => (
         style={{ fontWeight: 600, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}
       >
         {entry.historicalEdit && <ShieldAlert size={14} style={{ color: "var(--warning-text)", flexShrink: 0 }} />}
-        <span style={{ overflowWrap: "anywhere" }}>{entry.summary}</span>
+        {/* The store had no language when it wrote this. See domain/storedText.ts:
+            a summary it produced is a `@key` resolved here, in the language
+            being read now; a summary a user typed passes through untouched. */}
+        <span style={{ overflowWrap: "anywhere" }}>{resolveStoredText(entry.summary, t)}</span>
       </div>
       <div className="text-footnote">
         {formatDateTime(entry.createdAt)} · {entry.type}
-        {entry.historicalPeriod ? ` · rewrote ${entry.historicalPeriod}` : ""}
+        {entry.historicalPeriod ? ` · ${t("history.rewrote", { period: formatPeriodToken(entry.historicalPeriod, language) })}` : ""}
       </div>
     </div>
-    {entry.historicalEdit && <Badge tone="warning">Historical</Badge>}
+    {entry.historicalEdit && <Badge tone="warning">{t("history.historical")}</Badge>}
   </div>
-);
+  );
+};

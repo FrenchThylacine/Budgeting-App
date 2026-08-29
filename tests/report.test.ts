@@ -6,6 +6,7 @@
 
 import { describe, expect, it } from "vitest";
 import { buildPeriodReport, reportHtml } from "../src/domain/report";
+import { createTranslator } from "../src/domain/i18n";
 import { createSeedBudgetSnapshot } from "../src/data/seedBudget";
 import { catId } from "./helpers/seedIds";
 import { formatMoney } from "../src/domain/currency";
@@ -45,12 +46,23 @@ const money = (snap: BudgetSnapshot) => (value: number) =>
   formatMoney(value, snap.settings.baseCurrency, snap.settings.currencyDisplayMode);
 
 describe("buildPeriodReport", () => {
+  it("is written in the reader's language when one is supplied", () => {
+    const snap = snapshotWith([entry({ amount: 100 })]);
+    const report = buildPeriodReport(snap, "month", NOW, createTranslator("fr"));
+
+    // The dictionary chunk is not loaded in this process, so the strings fall
+    // back to English — but the *locale* is live from the first call, which is
+    // what decides the month name and the number format.
+    expect(report.language).toBe("fr");
+    expect(report.title).toBe("août 2026");
+  });
+
   it("reports the selected month", () => {
     const snap = snapshotWith([entry({ amount: 120 }), entry({ amount: 80 })]);
     const report = buildPeriodReport(snap, "month", NOW);
 
     expect(report.title).toBe("August 2026");
-    expect(report.subtitle).toBe("Monthly financial report");
+    expect(report.subtitle).toBe("Monthly report");
     const total = report.summary.find((s) => s.label === "Total spending")!;
     expect(total.value).toContain("200");
     expect(report.summary.find((s) => s.label === "Transactions")!.value).toBe("2");
@@ -71,14 +83,14 @@ describe("buildPeriodReport", () => {
     const snap = snapshotWith([]);
     const report = buildPeriodReport(snap, "month", NOW);
 
-    expect(report.summary.find((s) => s.label === "Total spending")!.value).toBe("No data recorded");
+    expect(report.summary.find((s) => s.label === "Total spending")!.value).toBe("Nothing recorded");
     expect(report.notes.some((n) => n.includes("not as zero"))).toBe(true);
   });
 
   it("keeps a real zero distinct from missing", () => {
     const snap = snapshotWith([entry({ amount: 0 })]);
     const report = buildPeriodReport(snap, "month", NOW);
-    expect(report.summary.find((s) => s.label === "Total spending")!.value).not.toBe("No data recorded");
+    expect(report.summary.find((s) => s.label === "Total spending")!.value).not.toBe("Nothing recorded");
   });
 
   it("leaves months with no records as null in the trend", () => {
@@ -99,18 +111,21 @@ describe("buildPeriodReport", () => {
       monthlyCap: 100,
     });
     const report = buildPeriodReport(snap, "month", NOW);
-    expect(report.notes.some((n) => n.includes("exceeded the monthly cap"))).toBe(true);
+    expect(report.notes.some((n) => /over (its|their) cap/i.test(n))).toBe(true);
   });
 
-  it("notes that piloting is excluded from shares", () => {
+  it("has no note about piloting, because there is nothing special about it", () => {
     // Resolved against this snapshot: seed ids are generated per budget, so a
     // second snapshotWith() call would produce ids that do not exist here.
     const snap = snapshotWith([]);
-    snap.years["2026"].spendingEntries = [
-      entry({ amount: 100, categoryId: catId(snap, "cat-piloting"), isPiloting: true }),
-    ];
+    snap.years["2026"].spendingEntries = [entry({ amount: 100, categoryId: catId(snap, "cat-piloting") })];
     const report = buildPeriodReport(snap, "month", NOW);
-    expect(report.notes.some((n) => n.includes("Piloting"))).toBe(true);
+
+    // The note existed to explain why one category was charted but had no
+    // share. Every category takes a share now, so there is nothing to explain.
+    expect(report.notes.some((n) => /piloting/i.test(n))).toBe(false);
+    const line = report.categories.find((c) => /piloting/i.test(c.category?.name ?? ""))!;
+    expect(line.share).toBeCloseTo(100);
   });
 
   it("does not mutate the snapshot it reports on", () => {
@@ -214,7 +229,7 @@ describe("reports for a custom range", () => {
     const report = buildPeriodReport(snap, { from: "2026-04-01", to: "2026-05-15" }, NOW);
     expect(report.summary.find((item) => item.label === "Budget")).toBeUndefined();
     expect(report.summary.find((item) => item.label === "Remaining")).toBeUndefined();
-    expect(report.notes.join(" ")).toMatch(/budget is set per month/i);
+    expect(report.notes.join(" ")).toMatch(/the budget is monthly/i);
   });
 
   it("compares against the range of equal length immediately before", () => {
@@ -242,18 +257,19 @@ describe("reports for a custom range", () => {
   it("reports an empty range as unavailable rather than as zero", () => {
     const snap = snapshotWithDates([{ date: "2026-04-05", amount: 100 }]);
     const report = buildPeriodReport(snap, { from: "2026-06-01", to: "2026-06-30" }, NOW);
-    expect(report.summary.find((item) => item.label === "Total spending")?.value).toBe("No data recorded");
-    expect(report.notes.join(" ")).toMatch(/Missing data is reported as unavailable, not as zero/);
+    expect(report.summary.find((item) => item.label === "Total spending")?.value).toBe("Nothing recorded");
+    expect(report.notes.join(" ")).toMatch(/Missing data is reported as unavailable, not as zero/i);
   });
 
   it("titles the report with the range it covers", () => {
     const snap = snapshotWithDates([]);
     const report = buildPeriodReport(snap, { from: "2026-04-01", to: "2026-04-30" }, NOW);
-    // Locale-formatted, so the assertion is on the structure rather than on
-    // English month names: this suite runs under whatever locale the machine
-    // has, and "avr." is as correct as "Apr".
-    expect(report.title).toMatch(/^1 .+ – 30 .+ 2026$/);
-    expect(report.subtitle).toBe("Report for 30 days");
+    // Formatted against the *report's* locale, not the machine's. That is the
+    // whole point of threading a translator through: this assertion used to
+    // have to be a loose regex because the answer depended on where the test
+    // was run.
+    expect(report.title).toBe("Apr 1 – Apr 30, 2026");
+    expect(report.subtitle).toBe("30-day report");
   });
 
   it("renders to self-contained HTML like any other report", () => {
@@ -262,6 +278,6 @@ describe("reports for a custom range", () => {
     const html = reportHtml(report, (value) => `EUR ${value.toFixed(2)}`);
     expect(html).toContain("<!doctype html>");
     expect(html).not.toContain("http://");
-    expect(html).toContain("Print / Save as PDF");
+    expect(html).toContain("Print / save as PDF");
   });
 });

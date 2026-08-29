@@ -1,5 +1,6 @@
 import React, { ReactNode } from "react";
 import { AlertTriangle } from "lucide-react";
+import { useTranslation } from "../i18n/useTranslation";
 
 interface ErrorBoundaryProps {
   children: ReactNode;
@@ -60,44 +61,45 @@ interface ErrorFallbackProps {
   onRetry: () => void;
 }
 
+/**
+ * What the application shows when a render throws.
+ *
+ * It was styled with Tailwind utility classes — `min-h-screen`, `bg-red-50`,
+ * `rounded-lg` — and this project has no Tailwind. Every one of them resolved
+ * to nothing, so the one screen a user sees when something has already gone
+ * wrong was unstyled black text on white. It uses the application's own classes
+ * now, and its own words.
+ */
 function ErrorFallback({ error, errorInfo, onRetry }: ErrorFallbackProps) {
+  const { t } = useTranslation();
   return (
-    <div className="min-h-screen bg-red-50 flex items-center justify-center p-4">
-      <div className="max-w-md w-full bg-white rounded-lg shadow-lg p-6">
-        <div className="flex items-center mb-4">
-          <AlertTriangle className="w-6 h-6 text-red-600 mr-3" />
-          <h1 className="text-xl font-bold text-red-600">Something went wrong</h1>
+    <div className="error-screen" role="alert">
+      <div className="card card-body error-card">
+        <div className="error-head">
+          <AlertTriangle size={22} aria-hidden="true" />
+          <h1 className="text-title">{t("error.title")}</h1>
         </div>
 
-        <p className="text-sm text-gray-600 mb-4">
-          The app encountered an unexpected error. Please try again.
-        </p>
+        <p className="text-note">{t("error.body")}</p>
 
         {error && (
-          <details className="mb-4">
-            <summary className="text-sm font-semibold text-gray-700 cursor-pointer">
-              Error details
-            </summary>
-            <div className="mt-2 p-3 bg-gray-100 rounded text-xs font-mono text-gray-700 overflow-auto max-h-32">
-              {error.message}
-              {errorInfo && <pre className="text-xs mt-2">{errorInfo.componentStack}</pre>}
+          <details className="sheet-advanced">
+            <summary>{t("error.details")}</summary>
+            <div className="sheet-advanced-body">
+              <p className="text-caption user-text">{error.message}</p>
+              {errorInfo && <pre className="error-stack">{errorInfo.componentStack}</pre>}
             </div>
           </details>
         )}
 
-        <button
-          onClick={onRetry}
-          className="w-full px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition-colors"
-        >
-          Try Again
-        </button>
-
-        <button
-          onClick={() => window.location.reload()}
-          className="w-full mt-2 px-4 py-2 bg-gray-300 text-gray-700 rounded hover:bg-gray-400 transition-colors"
-        >
-          Reload Page
-        </button>
+        <div className="error-actions">
+          <button type="button" className="btn btn-primary" onClick={onRetry}>
+            {t("error.retry")}
+          </button>
+          <button type="button" className="btn btn-secondary" onClick={() => window.location.reload()}>
+            {t("error.reload")}
+          </button>
+        </div>
       </div>
     </div>
   );

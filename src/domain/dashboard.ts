@@ -25,9 +25,11 @@ export type DashboardWidgetId =
 
 export interface DashboardWidget {
   id: DashboardWidgetId;
-  label: string;
+  /** Translation key, not a word. */
+  labelKey: string;
   /** What the section actually shows, for the customiser's list. */
-  description: string;
+  /** Translation keys, not words: this module is a leaf with no translator. */
+  descriptionKey: string;
   /**
    * Sections that answer a question nothing else answers. They can be
    * reordered but not hidden: a dashboard with no figures on it is not a
@@ -40,39 +42,39 @@ export interface DashboardWidget {
 export const DASHBOARD_WIDGETS: readonly DashboardWidget[] = [
   {
     id: "alerts",
-    label: "Alerts",
-    description: "Categories over their monthly cap. Hidden automatically when there are none.",
+    labelKey: "widget.alerts",
+    descriptionKey: "widget.alerts.description",
   },
   {
     id: "health",
-    label: "Health and headline figures",
-    description: "The score, what is left of the budget, this period's spending, and the change since last time.",
+    labelKey: "widget.health",
+    descriptionKey: "widget.health.description",
     required: true,
   },
   {
     id: "charts",
-    label: "Trend and forecast",
-    description: "Spending per period against the budget, and where this period lands at the current pace.",
+    labelKey: "widget.charts",
+    descriptionKey: "widget.charts.description",
   },
   {
     id: "upcoming",
-    label: "Upcoming",
-    description: "Dated timeline of what is scheduled next, and what recurs without a date.",
+    labelKey: "widget.upcoming",
+    descriptionKey: "widget.upcoming.description",
   },
   {
     id: "budget",
-    label: "Budget suggestion",
-    description: "The suggested monthly budget from your recurring costs, and the decision once made.",
+    labelKey: "widget.budget",
+    descriptionKey: "widget.budget.description",
   },
   {
     id: "detail",
-    label: "Detail",
-    description: "Category split and the recurring share of this period. Collapsed by default.",
+    labelKey: "widget.detail",
+    descriptionKey: "widget.detail.description",
   },
   {
     id: "savings",
-    label: "Savings and wallet",
-    description: "Wallet balance, rollover, wishlist and year to date. Collapsed by default.",
+    labelKey: "widget.savings",
+    descriptionKey: "widget.savings.description",
   },
 ];
 

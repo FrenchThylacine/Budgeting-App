@@ -8,15 +8,16 @@ import {
   LogOut, UserRound, Upload, CalendarRange, Coins
 } from "lucide-react";
 import { exportCurrentYearToExcel, exportAllYearsToExcel, exportJson } from "../../domain/importExport";
-import { FinMark } from "../ui/FinMark";
+import { AppMark } from "../ui/AppMark";
 import { ImportControl } from "../data/ImportControl";
-import { buildPeriodReport, reportHtml, type CustomRange, type ReportScope } from "../../domain/report";
+import type { CustomRange, ReportScope } from "../../domain/report";
 import { EditorSheet } from "../ui/EditorSheet";
 import { Button } from "../ui/Button";
 import { Field, FieldGroup } from "../ui/Field";
 import { todayDateInput } from "../../domain/dates";
 import { formatMoney } from "../../domain/currency";
 import type { BudgetSnapshot } from "../../domain/types";
+import type { Translator } from "../../domain/i18n";
 import { useTranslation } from "../../i18n/useTranslation";
 
 /**
@@ -26,10 +27,23 @@ import { useTranslation } from "../../i18n/useTranslation";
  * without adding a PDF library to the bundle. The document is written from a
  * self-contained HTML string, so it also works with no network.
  */
-function openPeriodReport(snapshot: BudgetSnapshot, scope: ReportScope): void {
-  const report = buildPeriodReport(snapshot, scope);
-  const html = reportHtml(report, (value) =>
-    formatMoney(value, snapshot.settings.baseCurrency, snapshot.settings.currencyDisplayMode),
+async function openPeriodReport(snapshot: BudgetSnapshot, scope: ReportScope, t: Translator): Promise<void> {
+  /*
+   * Loaded on demand.
+   *
+   * The report model and its print stylesheet are about fifteen kilobytes that
+   * nothing needs until somebody presses a report button — and the first paint
+   * was carrying them for every visit that never generates one.
+   */
+  const { buildPeriodReport, reportHtml } = await import("../../domain/report");
+
+  // The reader's own language, all the way through: the model resolves its
+  // labels and formats its dates against it, and the document declares it.
+  const report = buildPeriodReport(snapshot, scope, new Date(), t);
+  const html = reportHtml(
+    report,
+    (value) => formatMoney(value, snapshot.settings.baseCurrency, snapshot.settings.currencyDisplayMode),
+    t,
   );
 
   const win = window.open("", "_blank", "noopener,noreferrer,width=1024,height=768");
@@ -100,7 +114,7 @@ export const Sidebar: React.FC<{
   const systemItems = navItems.slice(6);
 
   return (
-    <aside className="sidebar" aria-label="Primary navigation">
+    <aside className="sidebar" aria-label={t("nav.primaryNavigation")}>
       {/* The mark *is* the control.
 
           There were two things here: a decorative logo tile and, beside it, a
@@ -123,12 +137,12 @@ export const Sidebar: React.FC<{
         title={collapsed ? t("nav.expandSidebar") : t("nav.collapseSidebar")}
       >
         <span className="brand-icon">
-          <FinMark size={30} />
+          <AppMark size={30} />
         </span>
         {!collapsed && (
           <span className="brand-text">
             <strong>Budget OS</strong>
-            <span>Personal Finance</span>
+            <span>{t("nav.personalFinance")}</span>
           </span>
         )}
         <span className="brand-chevron" aria-hidden="true">
@@ -142,6 +156,9 @@ export const Sidebar: React.FC<{
           <button
             key={item.key}
             className={`nav-item ${activeTab === item.key ? "active" : ""}`}
+            /* A stable hook for the browser verification harness. The class
+               names are styling and may change; this is the tab's identity. */
+            data-tab={item.key}
             onClick={() => setActiveTab(item.key)}
             title={collapsed ? t(item.labelKey) : undefined}
             aria-current={activeTab === item.key ? "page" : undefined}
@@ -158,6 +175,9 @@ export const Sidebar: React.FC<{
           <button
             key={item.key}
             className={`nav-item ${activeTab === item.key ? "active" : ""}`}
+            /* A stable hook for the browser verification harness. The class
+               names are styling and may change; this is the tab's identity. */
+            data-tab={item.key}
             onClick={() => setActiveTab(item.key)}
             title={collapsed ? t(item.labelKey) : undefined}
             aria-current={activeTab === item.key ? "page" : undefined}
@@ -173,7 +193,7 @@ export const Sidebar: React.FC<{
           snapshot={snapshot}
           onClose={() => setRangeOpen(false)}
           onGenerate={(range) => {
-            openPeriodReport(snapshot, range);
+            void openPeriodReport(snapshot, range, t);
             setRangeOpen(false);
           }}
         />
@@ -183,10 +203,10 @@ export const Sidebar: React.FC<{
         <div className="nav-section" style={{ marginTop: "auto" }}>
           <div className="nav-section-title">{t("nav.reports")}</div>
           <div style={{ display: "grid", gap: 8, marginBottom: 16 }}>
-            <button className="btn btn-secondary btn-sm" onClick={() => openPeriodReport(snapshot, "month")}>
+            <button className="btn btn-secondary btn-sm" onClick={() => void openPeriodReport(snapshot, "month", t)}>
               <FileText size={14} /> {t("reports.monthly")}
             </button>
-            <button className="btn btn-secondary btn-sm" onClick={() => openPeriodReport(snapshot, "year")}>
+            <button className="btn btn-secondary btn-sm" onClick={() => void openPeriodReport(snapshot, "year", t)}>
               <FileText size={14} /> {t("reports.annual")}
             </button>
             {/* Any window, not only the ones the period selector offers: a
@@ -199,13 +219,13 @@ export const Sidebar: React.FC<{
           <div className="nav-section-title">{t("nav.data")}</div>
           <div style={{ display: "grid", gap: 8 }}>
             <button className="btn btn-secondary btn-sm" onClick={() => exportCurrentYearToExcel(snapshot)}>
-              <FileSpreadsheet size={14} /> Export Year
+              <FileSpreadsheet size={14} /> {t("nav.exportYear")}
             </button>
             <button className="btn btn-secondary btn-sm" onClick={() => exportAllYearsToExcel(snapshot)}>
-              <Download size={14} /> Export All
+              <Download size={14} /> {t("nav.exportAll")}
             </button>
             <button className="btn btn-secondary btn-sm" onClick={() => exportJson(snapshot)}>
-              <FileJson size={14} /> Backup JSON
+              <FileJson size={14} /> {t("nav.backupJson")}
             </button>
             <ImportControl variant="compact" />
             <button
@@ -249,6 +269,7 @@ const CustomRangeReport: React.FC<{
   onClose: () => void;
   onGenerate: (range: CustomRange) => void;
 }> = ({ snapshot, onClose, onGenerate }) => {
+  const { t } = useTranslation();
   const today = todayDateInput();
   const [from, setFrom] = useState(() => {
     const date = new Date();
@@ -267,7 +288,7 @@ const CustomRangeReport: React.FC<{
     { label: "Last 30 days", apply: () => { setFrom(daysBack(30)); setTo(today); } },
     { label: "Last 90 days", apply: () => { setFrom(daysBack(90)); setTo(today); } },
     {
-      label: "This quarter",
+      label: t("common.thisQuarter"),
       apply: () => {
         const now = new Date();
         const quarterStart = new Date(now.getFullYear(), Math.floor(now.getMonth() / 3) * 3, 1);
@@ -276,7 +297,7 @@ const CustomRangeReport: React.FC<{
       },
     },
     {
-      label: "Year to date",
+      label: t("common.yearToDate"),
       apply: () => {
         setFrom(`${new Date().getFullYear()}-01-01`);
         setTo(today);
@@ -295,14 +316,14 @@ const CustomRangeReport: React.FC<{
 
   return (
     <EditorSheet
-      title="Report for a custom range"
-      subtitle="Any window you like. Opens in a new tab, ready to print or save as a PDF."
+      title={t("nav.reportForACustomRange")}
+      subtitle={t("nav.anyWindowYouLikeOpens")}
       onClose={onClose}
       footer={
         <>
-          <Button type="button" variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button type="button" variant="ghost" onClick={onClose}>{t("common.cancel")}</Button>
           <Button type="submit" variant="primary" form="range-report-form" disabled={!valid}>
-            <FileText size={14} /> Generate report
+            <FileText size={14} /> {t("nav.generateReport")}
           </Button>
         </>
       }
@@ -315,8 +336,8 @@ const CustomRangeReport: React.FC<{
         }}
         style={{ display: "grid", gap: 20 }}
       >
-        <FieldGroup title="Quick ranges">
-          <Field label="Common windows" span group>
+        <FieldGroup title={t("nav.quickRanges")}>
+          <Field label={t("nav.commonWindows")} span group>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               {presets.map((preset) => (
                 <button key={preset.label} type="button" className="chip" onClick={preset.apply}>
@@ -327,15 +348,15 @@ const CustomRangeReport: React.FC<{
           </Field>
         </FieldGroup>
 
-        <FieldGroup title="Dates">
-          <Field label="From">
+        <FieldGroup title={t("nav.dates")}>
+          <Field label={t("nav.from")}>
             <input className="input" type="date" required value={from} onChange={(e) => setFrom(e.target.value)} />
           </Field>
           <Field label="To">
             <input className="input" type="date" required value={to} onChange={(e) => setTo(e.target.value)} />
           </Field>
           <Field
-            label="What this covers"
+            label={t("nav.whatThisCovers")}
             span
             group
             hint={

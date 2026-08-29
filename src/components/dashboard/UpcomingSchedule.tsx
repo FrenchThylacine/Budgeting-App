@@ -6,6 +6,7 @@ import { normalizeAmount } from "../../domain/currency";
 import type { Activity, BudgetSnapshot, ScheduleOverride } from "../../domain/types";
 import { useBudgetStore } from "../../store/budgetStore";
 import { OccurrenceOverrideDialog } from "./OccurrenceOverrideDialog";
+import { useTranslation } from "../../i18n/useTranslation";
 
 interface UpcomingScheduleProps {
   snapshot: BudgetSnapshot;
@@ -29,11 +30,12 @@ interface UpcomingScheduleProps {
  * get fixed.
  */
 export const UpcomingSchedule: React.FC<UpcomingScheduleProps> = ({ snapshot, money, now = new Date() }) => {
+  const { t, formatDate } = useTranslation();
   const updateActivity = useBudgetStore((s) => s.updateActivity);
   const mutable = useBudgetStore((s) => s.isCurrentPeriodMutable)();
   const [editing, setEditing] = useState<{ activity: Activity; date: Date } | null>(null);
 
-  const { occurrences, undated, horizonDays } = upcomingSchedule(snapshot, now);
+  const { occurrences, undated, horizonDays } = upcomingSchedule(snapshot, now, 14, t);
   const allDays = groupByDay(occurrences);
 
   // A twice-weekly activity alone fills a fortnight. Showing every day turns
@@ -46,9 +48,9 @@ export const UpcomingSchedule: React.FC<UpcomingScheduleProps> = ({ snapshot, mo
   if (days.length === 0 && undated.length === 0) {
     return (
       <div className="empty-state">
-        <div className="empty-title">Nothing scheduled</div>
+        <div className="empty-title">{t("upcoming.nothingScheduled")}</div>
         <p className="empty-description">
-          Add recurring activities, and give them a day or weekday, to see them here.
+          {t("upcoming.addRecurringActivitiesAndGive")}
         </p>
       </div>
     );
@@ -61,7 +63,7 @@ export const UpcomingSchedule: React.FC<UpcomingScheduleProps> = ({ snapshot, mo
           {days.map((day) => (
             <li key={day.key} className="upcoming-day">
               <div className="upcoming-day-head">
-                <span className="upcoming-day-label">{dayLabel(day.date, now)}</span>
+                <span className="upcoming-day-label">{dayLabel(day.date, now, t, formatDate)}</span>
                 <span className="upcoming-day-rule" aria-hidden="true" />
               </div>
               <ul className="upcoming-items">
@@ -125,7 +127,7 @@ export const UpcomingSchedule: React.FC<UpcomingScheduleProps> = ({ snapshot, mo
                           className="btn btn-ghost btn-sm btn-icon upcoming-action"
                           onClick={() => setEditing({ activity: item.activity, date: item.date })}
                           aria-label={`Change ${item.activity.name} on ${item.date.toLocaleDateString()}`}
-                          title="Skip, move, or reprice just this one"
+                          title={t("upcoming.skipMoveOrRepriceJust")}
                         >
                           <MoreHorizontal size={15} />
                         </button>
@@ -154,8 +156,7 @@ export const UpcomingSchedule: React.FC<UpcomingScheduleProps> = ({ snapshot, mo
             </span>
           </summary>
           <p className="text-note upcoming-note">
-            These recur but have no weekday, day of the month or renewal date, so they cannot be placed on a
-            calendar. Set one in the activity to see it above.
+            {t("upcoming.theseRecurButHaveNo")}
           </p>
           <ul className="upcoming-items">
             {undated.slice(0, 8).map(({ activity, monthlyBase }) => (
@@ -171,7 +172,7 @@ export const UpcomingSchedule: React.FC<UpcomingScheduleProps> = ({ snapshot, mo
                   {money(monthlyBase)}
                   {/* Labelled as an average, because a yearly subscription is
                       not a monthly charge even when it divides neatly. */}
-                  <span className="text-footnote"> avg/mo</span>
+                  <span className="text-footnote"> {t("upcoming.avgMo")}</span>
                 </span>
               </li>
             ))}

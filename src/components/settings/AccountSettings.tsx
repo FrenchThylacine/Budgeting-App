@@ -4,6 +4,7 @@ import { useAuthStore } from "../../store/authStore";
 import { Button } from "../ui/Button";
 import { Field } from "../ui/Field";
 import { Section } from "../ui/Section";
+import { useTranslation } from "../../i18n/useTranslation";
 
 /**
  * The account itself: which address signs in, and the password that protects it.
@@ -20,6 +21,7 @@ import { Section } from "../ui/Section";
  * future password reset with it.
  */
 export const AccountSettings: React.FC = () => {
+  const { t } = useTranslation();
   const user = useAuthStore((s) => s.user);
   const busy = useAuthStore((s) => s.busy);
   const error = useAuthStore((s) => s.error);
@@ -70,10 +72,10 @@ export const AccountSettings: React.FC = () => {
   if (!user) return null;
 
   return (
-    <Section title="Account">
+    <Section title={t("nav.account")}>
       <div className="card card-body" style={{ display: "grid", gap: 16, maxWidth: 620 }}>
         <div>
-          <div className="text-footnote">Signed in as</div>
+          <div className="text-footnote">{t("account.signedInAs")}</div>
           <div className="text-callout" style={{ fontWeight: 600, overflowWrap: "anywhere" }}>
             {user.email}
           </div>
@@ -88,20 +90,20 @@ export const AccountSettings: React.FC = () => {
         {mode === "none" ? (
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <Button variant="secondary" size="sm" onClick={() => { setDone(null); setMode("email"); }}>
-              <AtSign size={14} /> Change email
+              <AtSign size={14} /> {t("account.changeEmail")}
             </Button>
             <Button variant="secondary" size="sm" onClick={() => { setDone(null); setMode("password"); }}>
-              <KeyRound size={14} /> Change password
+              <KeyRound size={14} /> {t("account.changePassword")}
             </Button>
             <Button variant="ghost" size="sm" onClick={() => void signOut()}>
-              <LogOut size={14} /> Sign out
+              <LogOut size={14} /> {t("nav.signOut")}
             </Button>
           </div>
         ) : (
           <form onSubmit={submit} style={{ display: "grid", gap: 12 }}>
             <Field
-              label="Current password"
-              hint="Asked for every change here, because being signed in is not proof of being the owner."
+              label={t("account.currentPassword")}
+              hint={t("account.askedForEveryChangeHere")}
             >
               <input
                 className="input"
@@ -114,7 +116,7 @@ export const AccountSettings: React.FC = () => {
             </Field>
 
             {mode === "email" ? (
-              <Field label="New email address" hint="Your budget is unaffected — only how you sign in changes.">
+              <Field label={t("account.newEmailAddress")} hint={t("account.yourBudgetIsUnaffectedOnly")}>
                 <input
                   className="input"
                   type="email"
@@ -126,7 +128,7 @@ export const AccountSettings: React.FC = () => {
               </Field>
             ) : (
               <>
-                <Field label="New password">
+                <Field label={t("account.newPassword")}>
                   <input
                     className="input"
                     type="password"
@@ -136,7 +138,7 @@ export const AccountSettings: React.FC = () => {
                     onChange={(event) => setNewPassword(event.target.value)}
                   />
                 </Field>
-                <Field label="Repeat new password">
+                <Field label={t("account.repeatNewPassword")}>
                   <input
                     className="input"
                     type="password"
@@ -149,11 +151,11 @@ export const AccountSettings: React.FC = () => {
                 </Field>
                 {mismatch && (
                   <p className="text-caption" style={{ color: "var(--danger-text)", margin: 0 }}>
-                    The two passwords do not match.
+                    {t("account.theTwoPasswordsDoNot")}
                   </p>
                 )}
                 <p className="text-caption" style={{ margin: 0, color: "var(--text-tertiary)" }}>
-                  Changing your password signs out every other device. This one stays signed in.
+                  {t("account.changingYourPasswordSignsOut")}
                 </p>
               </>
             )}

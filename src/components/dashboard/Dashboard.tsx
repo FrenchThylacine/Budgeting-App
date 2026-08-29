@@ -34,12 +34,13 @@ import { UpcomingSchedule } from "./UpcomingSchedule";
 import { EmptyState } from "../ui/EmptyState";
 import { Button } from "../ui/Button";
 import { Disclosure } from "../ui/Disclosure";
-import { AircraftArt } from "../ui/AircraftMark";
+import { AircraftArt } from "../ui/Aircraft";
 import {
   AlertTriangle, ArrowDown, ArrowRight, ArrowUp, Calendar, CreditCard, Eye, EyeOff, Lock,
   PiggyBank, SlidersHorizontal, TrendingDown, TrendingUp, Zap,
 } from "lucide-react";
 import { EditorSheet } from "../ui/EditorSheet";
+import { useTranslation } from "../../i18n/useTranslation";
 import {
   dashboardWidgets,
   moveWidget,
@@ -70,10 +71,10 @@ import {
  * must take `-text`.
  */
 const GRADE_COLOR: Record<string, string> = {
-  Excellent: "var(--success-text)",
-  Good: "var(--success-text)",
-  Fair: "var(--warning-text)",
-  "At risk": "var(--danger-text)",
+  excellent: "var(--success-text)",
+  good: "var(--success-text)",
+  fair: "var(--warning-text)",
+  "at-risk": "var(--danger-text)",
 };
 
 /**
@@ -133,6 +134,7 @@ const Figure: React.FC<{
 export const Dashboard: React.FC<{ onNavigate?: (tab: "spending" | "activities" | "settings") => void }> = ({
   onNavigate,
 }) => {
+  const { t, language } = useTranslation();
   const snapshot = useBudgetStore((state) => state.snapshot);
   const recordBudgetApproval = useBudgetStore((state) => state.recordBudgetApproval);
   const updateSettings = useBudgetStore((state) => state.updateSettings);
@@ -242,42 +244,38 @@ export const Dashboard: React.FC<{ onNavigate?: (tab: "spending" | "activities" 
             <div className="start-card">
               <div style={{ display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
                 {/* On a medallion, not bare: the livery is white, and a white
-                    aircraft on a white card is a navy fin and a red line. */}
+                    aircraft on a white card is an outline and a shadow. */}
                 <span className="start-mark">
-                  <AircraftArt size={78} />
+                  <AircraftArt id={snapshot.settings.aircraft} size={104} />
                 </span>
                 <div style={{ minWidth: 0 }}>
-                  <h2 className="text-title" style={{ margin: 0 }}>Nothing recorded yet</h2>
+                  <h2 className="text-title" style={{ margin: 0 }}>{t("dashboard.blankTitle")}</h2>
                   <p className="text-caption" style={{ marginTop: 4 }}>
-                    Figures, trends and forecasts appear here as soon as there is something to
-                    compute them from. Three ways to begin:
+                    {t("dashboard.blankBody")}
                   </p>
                 </div>
               </div>
 
               <div className="start-steps">
                 <button type="button" className="start-step" onClick={() => onNavigate?.("settings")}>
-                  <span className="start-step-index">Import</span>
-                  <span className="text-callout">Bring in a spreadsheet</span>
+                  <span className="start-step-index">{t("settings.import")}</span>
+                  <span className="text-callout">{t("dashboard.bringInASpreadsheet")}</span>
                   <span className="text-caption">
-                    Load an existing workbook or a JSON backup from Settings. You see exactly what
-                    it contains before anything is written.
+                    {t("dashboard.loadAnExistingWorkbookOr")}
                   </span>
                 </button>
                 <button type="button" className="start-step" onClick={() => onNavigate?.("activities")}>
-                  <span className="start-step-index">Set up</span>
-                  <span className="text-callout">Add your recurring expenses</span>
+                  <span className="start-step-index">{t("dashboard.setUp")}</span>
+                  <span className="text-callout">{t("dashboard.addYourRecurringExpenses")}</span>
                   <span className="text-caption">
-                    Subscriptions, rent, lessons. These drive the suggested budget and the
-                    schedule of what is coming.
+                    {t("dashboard.subscriptionsRentLessonsTheseDrive")}
                   </span>
                 </button>
                 <button type="button" className="start-step" onClick={() => onNavigate?.("spending")}>
-                  <span className="start-step-index">Record</span>
-                  <span className="text-callout">Log a transaction</span>
+                  <span className="start-step-index">{t("dashboard.record")}</span>
+                  <span className="text-callout">{t("dashboard.logATransaction")}</span>
                   <span className="text-caption">
-                    One expense is enough to start the trend, the category split and the health
-                    score for {periodLabel(settings)}.
+                    {t("dashboard.recordHint", { period: periodLabel(settings, language) })}
                   </span>
                 </button>
               </div>
@@ -287,7 +285,7 @@ export const Dashboard: React.FC<{ onNavigate?: (tab: "spending" | "activities" 
 
         <Card>
           <CardBody>
-            <h2 className="text-title" style={{ margin: "0 0 12px" }}>Upcoming</h2>
+            <h2 className="text-title" style={{ margin: "0 0 12px" }}>{t("dashboard.upcoming")}</h2>
             <UpcomingSchedule snapshot={snapshot} money={money} />
           </CardBody>
         </Card>
@@ -338,7 +336,7 @@ export const Dashboard: React.FC<{ onNavigate?: (tab: "spending" | "activities" 
                   <ProgressRing
                     value={health.score}
                     valueText={health.score != null ? String(Math.round(health.score)) : "—"}
-                    label={health.grade ?? "Not enough data"}
+                    label={health.grade ? t(`health.grade.${health.grade}`) : t("health.notEnoughData")}
                     caption={health.score != null ? "out of 100" : undefined}
                     ariaLabel={`Budget health ${health.score != null ? Math.round(health.score) : "unavailable"} out of 100`}
                     size={230}
@@ -350,7 +348,7 @@ export const Dashboard: React.FC<{ onNavigate?: (tab: "spending" | "activities" 
 
                   <div style={{ display: "grid", gap: 12, minWidth: 0, alignContent: "center" }}>
                     <h2 className="text-title" style={{ margin: 0 }}>
-                      Budget health · {periodLabel(settings)}
+                      Budget health · {periodLabel(settings, language)}
                     </h2>
                     {/* One sentence saying what the number means, so the gauge is
                         not a score with no explanation attached to it. */}
@@ -363,9 +361,9 @@ export const Dashboard: React.FC<{ onNavigate?: (tab: "spending" | "activities" 
                     {health.factors.length > 0 ? (
                       <div style={{ display: "grid", gap: 10 }}>
                         {health.factors.map((factor) => (
-                          <div key={factor.label} style={{ display: "grid", gap: 4, minWidth: 0 }}>
+                          <div key={factor.id} style={{ display: "grid", gap: 4, minWidth: 0 }}>
                             <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
-                              <span className="text-callout">{factor.label}</span>
+                              <span className="text-callout">{t(factor.labelKey)}</span>
                               <span className="text-callout" style={{ fontWeight: 600, flexShrink: 0 }}>
                                 {Math.round(factor.score)}
                               </span>
@@ -382,9 +380,9 @@ export const Dashboard: React.FC<{ onNavigate?: (tab: "spending" | "activities" 
                                 }}
                               />
                             </div>
-                            {factor.detail && (
+                            {factor.detailKey && (
                               <div className="text-caption" style={{ color: "var(--text-tertiary)" }}>
-                                {factor.detail}
+                                {t(factor.detailKey, factor.detailParams)}
                               </div>
                             )}
                           </div>
@@ -392,7 +390,7 @@ export const Dashboard: React.FC<{ onNavigate?: (tab: "spending" | "activities" 
                       </div>
                     ) : (
                       <div className="text-caption">
-                        Record spending and set a monthly budget to score this period.
+                        {t("dashboard.recordSpendingAndSetA")}
                       </div>
                     )}
                   </div>
@@ -498,7 +496,7 @@ export const Dashboard: React.FC<{ onNavigate?: (tab: "spending" | "activities" 
           <Card>
             <CardBody>
               {trendBars.every((bar) => bar.value == null) ? (
-                <EmptyState title="No spending data" description="Record transactions to see the trend." />
+                <EmptyState title={t("dashboard.noSpendingData")} description={t("dashboard.recordTransactionsToSeeThe")} />
               ) : (
                 <BarChart
                   title={mode === "week" ? "Weekly trend" : "Monthly trend"}
@@ -516,12 +514,12 @@ export const Dashboard: React.FC<{ onNavigate?: (tab: "spending" | "activities" 
           <Card>
             <CardBody>
               {forecast == null || forecast.actual.every((v) => v == null) ? (
-                <EmptyState title="No forecast yet" description="Forecasting starts once the period has spending." />
+                <EmptyState title={t("dashboard.noForecastYet")} description={t("dashboard.forecastingStartsOnceThePeriod")} />
               ) : (
                 <>
                   <LineChart
-                    title="Forecast"
-                    description="Cumulative spend, projected to the end of the period"
+                    title={t("dashboard.forecast")}
+                    description={t("dashboard.cumulativeSpendProjectedToThe")}
                     labels={forecast.labels}
                     series={[
                       { id: "actual", name: "Actual", color: "var(--series-1)", values: forecast.actual, area: true },
@@ -557,16 +555,16 @@ export const Dashboard: React.FC<{ onNavigate?: (tab: "spending" | "activities" 
         {/* Everything below is reference rather than answer: it explains figures
             already stated above. Collapsed by default on a phone, where it is
             several screens of scrolling past the part people came for. */}
-        <Disclosure title="Detail" summary="Category split and recurring share">
+        <Disclosure title={t("report.detail")} summary={t("dashboard.categorySplitAndRecurringShare")}>
         <div className="dashboard-row">
           <Card>
             <CardBody>
               <HorizontalBarChart
-                title="Where the money went"
-                description={`Top categories · ${periodLabel(settings)}`}
+                title={t("dashboard.whereTheMoneyWent")}
+                description={`Top categories · ${periodLabel(settings, language)}`}
                 rows={categoryRows}
                 formatValue={(v) => money(v)}
-                emptyMessage="Add transactions to see your category breakdown."
+                emptyMessage={t("dashboard.addTransactionsToSeeYour")}
               />
             </CardBody>
           </Card>
@@ -574,8 +572,8 @@ export const Dashboard: React.FC<{ onNavigate?: (tab: "spending" | "activities" 
           <Card>
             <CardBody>
               <DonutChart
-                title="Recurring vs one-off"
-                description="How much of this period was already committed"
+                title={t("dashboard.recurringVsOneOff")}
+                description={t("dashboard.howMuchOfThisPeriod")}
                 segments={[
                   { id: "recurring", label: "Recurring", value: stats.recurringTotal, color: "var(--series-1)" },
                   { id: "oneoff", label: "One-off", value: stats.oneOffTotal, color: "var(--series-2)" },
@@ -583,11 +581,11 @@ export const Dashboard: React.FC<{ onNavigate?: (tab: "spending" | "activities" 
                 centerValue={stats.total != null ? money(stats.total) : "—"}
                 centerLabel="total"
                 formatValue={(v) => money(v)}
-                emptyMessage="This split appears once the period has spending."
+                emptyMessage={t("dashboard.thisSplitAppearsOnceThe")}
               />
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: 12, marginTop: 12 }}>
                 <Figure
-                  label="Recurring"
+                  label={t("report.recurring")}
                   value={money(stats.recurringTotal)}
                   detail={stats.recurringShare != null ? `${stats.recurringShare.toFixed(0)}% of spend` : undefined}
                 />
@@ -597,7 +595,7 @@ export const Dashboard: React.FC<{ onNavigate?: (tab: "spending" | "activities" 
                     personal figure, and it is what the remaining budget is
                     measured against. */}
                 <Figure
-                  label="Committed monthly"
+                  label={t("dashboard.committedMonthly")}
                   value={money(calculation.includedBudget)}
                   detail={`${calculation.activityEstimates.length} ${calculation.activityEstimates.length === 1 ? "activity" : "activities"}`}
                 />
@@ -622,7 +620,7 @@ export const Dashboard: React.FC<{ onNavigate?: (tab: "spending" | "activities" 
               <CardBody>
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 16 }}>
                   <div>
-                    <div className="text-title">Suggested monthly budget</div>
+                    <div className="text-title">{t("dashboard.suggestedMonthlyBudget")}</div>
                     <div className="text-caption" style={{ marginTop: 4 }}>
                       Based on {calculation.activityEstimates.filter((a) => a.activity.active && a.activity.visible).length} active
                       recurring expenses
@@ -634,7 +632,7 @@ export const Dashboard: React.FC<{ onNavigate?: (tab: "spending" | "activities" 
                     <Button variant="primary" onClick={() => handleApproveBudget("approved")}>
                       Approve <ArrowRight size={16} />
                     </Button>
-                    <Button variant="ghost" onClick={() => handleApproveBudget("rejected")}>Skip</Button>
+                    <Button variant="ghost" onClick={() => handleApproveBudget("rejected")}>{t("tutorial.skip")}</Button>
                   </div>
                 </div>
               </CardBody>
@@ -669,7 +667,7 @@ export const Dashboard: React.FC<{ onNavigate?: (tab: "spending" | "activities" 
             the future, and the one thing a glance is usually for. */}
         <Card>
           <CardBody>
-            <h2 className="text-title" style={{ margin: "0 0 12px" }}>Upcoming</h2>
+            <h2 className="text-title" style={{ margin: "0 0 12px" }}>{t("dashboard.upcoming")}</h2>
             <UpcomingSchedule snapshot={snapshot} money={money} />
           </CardBody>
         </Card>
@@ -677,14 +675,14 @@ export const Dashboard: React.FC<{ onNavigate?: (tab: "spending" | "activities" 
     ),
     savings: (
       <>
-        <Disclosure title="Savings and wallet" summary="Personal wallet, rollover, wishlist, year to date">
+        <Disclosure title={t("dashboard.savingsAndWallet")} summary={t("dashboard.personalWalletRolloverWishlistYear")}>
           <Card>
             <CardBody>
-              <h2 className="text-title" style={{ margin: "0 0 12px" }}>Savings &amp; wallet</h2>
+              <h2 className="text-title" style={{ margin: "0 0 12px" }}>{t("dashboard.savingsAndWallet")}</h2>
               <div style={{ display: "grid", gap: 14 }}>
                 <div>
                   <div className="text-footnote" style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
-                    <CreditCard size={14} /> Wallet balance
+                    <CreditCard size={14} /> {t("wallet.balance")}
                   </div>
                   {/* The real cash figure, from the ledger — not the planning
                       budget, and not a per-year slice of it. The Wallet tab
@@ -693,23 +691,23 @@ export const Dashboard: React.FC<{ onNavigate?: (tab: "spending" | "activities" 
                 </div>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: 12 }}>
                   <Figure
-                    label="Remaining budget"
+                    label={t("wallet.budgetRemaining")}
                     value={money(calculation.wallet.budgetRemaining)}
-                    detail="Budget money still available"
+                    detail={t("report.budgetMoneyAvailable")}
                     tone={calculation.wallet.budgetRemaining >= 0 ? "positive" : "negative"}
                   />
                   <Figure
-                    label="Personal balance"
+                    label={t("wallet.personalBalance")}
                     value={money(calculation.wallet.personalBalance)}
-                    detail="Money outside your budget"
+                    detail={t("dashboard.moneyOutsideYourBudget")}
                   />
                   <Figure
-                    label="Wishlist"
+                    label={t("nav.wishlist")}
                     value={money(calculation.wishlist.activeTotal)}
                     detail={`${calculation.wishlist.activeCount} active`}
                   />
                   <Figure
-                    label="YTD spend"
+                    label={t("dashboard.ytdSpend")}
                     value={money(calculation.ytdTotal)}
                     detail={
                       calculation.otherFundedYtdTotal > 0 || calculation.outsideBudgetYtdTotal > 0
@@ -748,7 +746,7 @@ export const Dashboard: React.FC<{ onNavigate?: (tab: "spending" | "activities" 
           dashboard should not be the most prominent thing on it. */}
       <div className="dashboard-customise-row">
         <Button variant="ghost" size="sm" onClick={() => setCustomising(true)}>
-          <SlidersHorizontal size={14} /> Customise this dashboard
+          <SlidersHorizontal size={14} /> {t("dashboard.customise")}
         </Button>
         {hiddenCount > 0 && (
           <span className="text-caption">
@@ -784,10 +782,12 @@ const DashboardCustomiser: React.FC<{
   widgets: ResolvedWidget[];
   onChange: (next: ResolvedWidget[]) => void;
   onClose: () => void;
-}> = ({ widgets, onChange, onClose }) => (
+}> = ({ widgets, onChange, onClose }) => {
+  const { t } = useTranslation();
+  return (
   <EditorSheet
-    title="Customise the dashboard"
-    subtitle="Changes apply straight away, on this device and every other one."
+    title={t("dashboard.customiseTheDashboard")}
+    subtitle={t("dashboard.changesApplyStraightAwayOn")}
     onClose={onClose}
     footer={
       <Button type="button" variant="primary" onClick={onClose}>
@@ -802,14 +802,14 @@ const DashboardCustomiser: React.FC<{
           <li key={widget.id} className={`widget-row${widget.visible ? "" : " widget-row-hidden"}`}>
             <div className="widget-text">
               <span className="text-callout widget-name">
-                {definition.label}
+                {t(definition.labelKey)}
                 {definition.required && (
                   <span className="text-caption widget-required">
-                    <Lock size={11} aria-hidden="true" /> always shown
+                    <Lock size={11} aria-hidden="true" /> {t("dashboard.alwaysShown")}
                   </span>
                 )}
               </span>
-              <span className="text-caption">{definition.description}</span>
+              <span className="text-caption">{t(definition.descriptionKey)}</span>
             </div>
             <div className="widget-controls">
               <Button
@@ -817,7 +817,7 @@ const DashboardCustomiser: React.FC<{
                 size="sm"
                 icon
                 disabled={index === 0}
-                aria-label={`Move ${definition.label} up`}
+                aria-label={t("dashboard.moveUp", { name: t(definition.labelKey) })}
                 onClick={() => onChange(moveWidget(widgets, widget.id, -1))}
               >
                 <ArrowUp size={15} />
@@ -827,7 +827,7 @@ const DashboardCustomiser: React.FC<{
                 size="sm"
                 icon
                 disabled={index === widgets.length - 1}
-                aria-label={`Move ${definition.label} down`}
+                aria-label={t("dashboard.moveDown", { name: t(definition.labelKey) })}
                 onClick={() => onChange(moveWidget(widgets, widget.id, 1))}
               >
                 <ArrowDown size={15} />
@@ -837,10 +837,10 @@ const DashboardCustomiser: React.FC<{
                 size="sm"
                 icon
                 disabled={definition.required}
-                aria-label={widget.visible ? `Hide ${definition.label}` : `Show ${definition.label}`}
+                aria-label={t(widget.visible ? "dashboard.hideWidget" : "dashboard.showWidget", { name: t(definition.labelKey) })}
                 title={
                   definition.required
-                    ? "A dashboard with no figures on it is a blank page, not a simpler one."
+                    ? t("dashboard.requiredWidget")
                     : undefined
                 }
                 onClick={() => onChange(toggleWidget(widgets, widget.id))}
@@ -853,4 +853,5 @@ const DashboardCustomiser: React.FC<{
       })}
     </ul>
   </EditorSheet>
-);
+  );
+};

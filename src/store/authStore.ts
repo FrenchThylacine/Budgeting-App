@@ -12,6 +12,7 @@ import {
   signUp as apiSignUp,
 } from "../api/auth";
 import { clearAllCachedSnapshots, setCacheOwner } from "../storage/idb";
+import { storedText } from "../domain/storedText";
 
 interface AuthStore {
   user: AuthUser | null;
@@ -153,7 +154,7 @@ export const useAuthStore = create<AuthStore>((set) => ({
     set({
       user: null,
       checked: true,
-      error: "Your session expired. Sign in again to continue.",
+      error: storedText("auth.sessionExpired"),
     });
   },
 
@@ -162,5 +163,5 @@ export const useAuthStore = create<AuthStore>((set) => ({
 
 function messageFor(error: unknown): string {
   if (error instanceof AuthError) return error.message;
-  return "Something went wrong. Try again.";
+  return storedText("auth.genericError");
 }

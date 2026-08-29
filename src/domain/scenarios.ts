@@ -26,8 +26,16 @@ export type ScenarioChangeKind = "budget" | "cap" | "activity-enabled" | "activi
 
 export interface ScenarioChange {
   kind: ScenarioChangeKind;
-  /** Human label: "Monthly budget", or the category's or activity's name. */
-  label: string;
+  /**
+   * What changed, named.
+   *
+   * A category's or an activity's name is the user's own text and is passed
+   * through untouched; the two fixed labels this module produces are
+   * translation keys instead, because a scenario preview is read in the
+   * interface's language and this module has no translator.
+   */
+  label?: string;
+  labelKey?: string;
   /** Current value, or null when nothing is set today. */
   before: number | boolean | string | null;
   after: number | boolean | string;
@@ -179,7 +187,9 @@ export function scenarioDiff(snapshot: BudgetSnapshot, preset: ScenarioPreset): 
   if (preset.monthlyBudget != null && !nearlyEqual(preset.monthlyBudget, settings.monthlyBudget)) {
     changes.push({
       kind: "budget",
-      label: "Monthly budget",
+      // A key. The scenario preview is rendered in the interface language, and
+      // this module cannot know what that is.
+      labelKey: "scenario.monthlyBudget",
       before: settings.monthlyBudget ?? null,
       after: preset.monthlyBudget,
     });
@@ -192,7 +202,7 @@ export function scenarioDiff(snapshot: BudgetSnapshot, preset: ScenarioPreset): 
     if (!category) {
       changes.push({
         kind: "cap",
-        label: "Cap for a category that no longer exists",
+        labelKey: "scenario.missingCategory",
         before: null,
         after: cap,
         categoryId,

@@ -21,13 +21,14 @@ import type { CurrencyCode, RecurrenceType, SpendingEntry, WishlistItem, Wishlis
 export const PRIORITY_ORDER: readonly WishlistPriority[] = ["high", "medium", "low", "dream"];
 
 export interface PriorityMeta {
-  label: string;
+  /** Translation key for the priority's name. */
+  labelKey: string;
   /** Theme token, so the colour stays legible in light and dark mode. */
   color: string;
   /** Matching translucent background token. */
   soft: string;
-  /** Short explanation shown as a tooltip. */
-  hint: string;
+  /** Translation key for the short explanation shown as a tooltip. */
+  hintKey: string;
 }
 
 /**
@@ -35,10 +36,10 @@ export interface PriorityMeta {
  * blue for what can wait, purple for what is only a wish.
  */
 export const PRIORITY_META: Record<WishlistPriority, PriorityMeta> = {
-  high: { label: "High", color: "var(--danger-text)", soft: "var(--danger-soft)", hint: "Buying this soon" },
-  medium: { label: "Medium", color: "var(--warning-text)", soft: "var(--warning-soft)", hint: "Worth planning for" },
-  low: { label: "Low", color: "var(--accent)", soft: "var(--accent-soft)", hint: "No rush" },
-  dream: { label: "Dream", color: "var(--purple-text)", soft: "var(--purple-soft)", hint: "Aspiration, not this month's budget" },
+  high: { labelKey: "priority.high", color: "var(--danger-text)", soft: "var(--danger-soft)", hintKey: "priority.high.hint" },
+  medium: { labelKey: "priority.medium", color: "var(--warning-text)", soft: "var(--warning-soft)", hintKey: "priority.medium.hint" },
+  low: { labelKey: "priority.low", color: "var(--accent)", soft: "var(--accent-soft)", hintKey: "priority.low.hint" },
+  dream: { labelKey: "priority.dream", color: "var(--purple-text)", soft: "var(--purple-soft)", hintKey: "priority.dream.hint" },
 };
 
 /**

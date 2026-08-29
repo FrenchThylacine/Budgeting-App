@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { createSeedBudgetSnapshot } from "../src/data/seedBudget";
 import { catId } from "./helpers/seedIds";
 import { useBudgetStore } from "../src/store/budgetStore";
+import { formatPeriodToken } from "../src/domain/periods";
 
 const NOW = new Date("2026-08-10T12:00:00Z");
 
@@ -248,8 +249,17 @@ describe("historical editing override", () => {
 
     const latest = useBudgetStore.getState().snapshot.auditLog[0];
     expect(latest.historicalEdit).toBe(true);
-    expect(latest.historicalPeriod).toBe("July 2026");
-    expect(latest.summary).toContain("historical edit");
+    // A stable token, not a display string: the audit trail outlives the
+    // session that wrote it, and a French session must not stamp "juillet
+    // 2026" onto a record every other language then has to read.
+    expect(latest.historicalPeriod).toBe("month:2026-07");
+    expect(formatPeriodToken(latest.historicalPeriod!, "en")).toBe("July 2026");
+    expect(formatPeriodToken(latest.historicalPeriod!, "fr")).toBe("juillet 2026");
+    // The fact lives on the record, not glued onto the end of the summary:
+    // appending to a `@key|name=value` sigil would corrupt its last parameter,
+    // and the History panel reads `historicalEdit` and `historicalPeriod`.
+    expect(latest.historicalEdit).toBe(true);
+    expect(latest.summary).not.toContain("historical edit");
   });
 
   it("does not flag ordinary current-period changes", () => {

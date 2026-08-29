@@ -25,6 +25,48 @@ Do not solve the same problem twice.
 
 ---
 
+# Resolved 2026-08-29
+
+## The application was translated; the reports, the history and the store were not
+
+The translation layer was correct and had been since it was built. What was missing was **coverage**, which is not something you can be nearly finished with — somebody reads the page.
+
+A French user got a French navigation bar and an English report; a French activity editor and an English audit trail; "August 2026" printed directly above "1 août 2026 – 31 août 2026". Three classes of string needed more than a dictionary lookup:
+
+- **Sentences built by concatenation.** `${money(price)}/session × ${count} sessions` cannot be translated into a language that orders those pieces differently. They are keys with named values now.
+- **Strings written into the database.** The audit trail and the wallet ledger stored finished English sentences, so the English was in PostgreSQL rather than on the screen — and writing the *current* language instead would give a budget a history in three languages, one per session. `src/domain/storedText.ts` writes `@key|name=value`; the interface resolves it in the language being read now; the user's own words never begin with `@` and pass through untouched.
+- **Words in leaf modules.** `financialHealth` returned `grade: "Excellent"` — a word shown to the user *and* the key a colour was looked up by, so translating it would have broken the colour.
+
+**The rule to preserve:** a module with no translator returns a **key**, never a word. If it needs values in the sentence, it returns the key and the values separately.
+
+## `text-transform: capitalize` on translated text
+
+Three rules capitalised every word of a string that used to be an interpolated lower-case English noun. In French they turned "Mois en cours" into "Mois En Cours".
+
+**The rule to preserve:** `capitalize` is only ever correct for a word you generated yourself and know the language of. Once a string comes from a dictionary, its own capitalisation is the translator's decision.
+
+## An article glued in front of a translated noun
+
+"pay every 10 sessions (≈ every 5 weeks)" was assembled as `"(≈ tous les " + describeDays(...) + ")"`. In French the article agrees with the noun — *tous les 35 jours*, *toutes les 5 semaines* — so the sentence was wrong whenever the unit came back as weeks. `describeDays` now takes an `every` flag and returns the whole phrase from one key per unit.
+
+## Numbers formatted with `String()` inside translated sentences
+
+`String(8.86)` is "8.86" in every locale, which put a full stop in the middle of a French sentence otherwise full of commas.
+
+## Piloting was a category with powers no other category had
+
+Removed at the owner's direction. See `docs/AI_CONTEXT.md` — the section is titled "No category is special" and lists every behaviour that was deleted and every field that stays declared for round-tripping.
+
+## The error screen was styled with Tailwind, which this project has never had
+
+`min-h-screen bg-red-50 rounded-lg shadow-lg` — every class resolved to nothing, so the one screen shown when something has *already* gone wrong was unstyled black text on white. It uses the application's own tokens now.
+
+## Four defects the new browser harness found on its first pass
+
+Every one had passed the unit suite: `/month avg.` and `/year` hardcoded on the activity card; the loose word "per" wedged between two controls where no translation could move it; the English month name above the French date range; and the capitalisation above. This is the entire argument for the harness existing.
+
+---
+
 # Resolved 2026-08-22
 
 ## The historical banner captured clicks aimed at the period selector

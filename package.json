@@ -15,7 +15,8 @@
     "server:prod": "cd server && NODE_ENV=production HOST=0.0.0.0 PORT=3001 node dist/server/src/index.js",
     "dev:all": "concurrently \"npm run dev\" \"npm run server:dev\"",
     "server:dev:pg": "tsx scripts/dev-server-local-pg.mjs",
-    "test:db": "vitest run tests/db-integration.test.ts tests/api-integration.test.ts"
+    "test:db": "vitest run tests/db-integration.test.ts tests/api-integration.test.ts",
+    "verify": "node scripts/verify-browser.mjs"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.1.0",

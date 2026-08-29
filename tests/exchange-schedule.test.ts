@@ -21,6 +21,7 @@ import {
   nextScheduledRefresh,
   noteRateFailure,
   rateFreshness,
+  refreshRatesOnOpen,
   type RateSnapshot,
 } from "../src/domain/exchangeRates";
 import type { ExchangeRates } from "../src/domain/types";
@@ -173,5 +174,72 @@ describe("a failed refresh", () => {
   it("reports a set from before today's publication as stale", () => {
     const stored = applyRatesToSettings(baseRates(), good);
     expect(rateFreshness(stored, at("2026-08-21T13:00:00Z")).state).toBe("stale");
+  });
+});
+
+describe("refreshing when the application is opened", () => {
+  const rates = (patch: Partial<ExchangeRates> = {}): ExchangeRates => ({
+    eurUsd: 1.1,
+    usdLbp: 90000,
+    customToBase: {},
+    ...patch,
+  });
+
+  const provider = (body: unknown, ok = true) =>
+    (async () => ({ ok, status: ok ? 200 : 503, json: async () => body })) as unknown as typeof fetch;
+
+  beforeEach(() => localStorage.clear());
+
+  it("fetches and stores when nothing has ever been fetched", async () => {
+    const result = await refreshRatesOnOpen(rates(), {
+      now: Date.parse("2026-08-29T13:00:00Z"),
+      fetchImpl: provider({ rates: { USD: 1.19, LBP: 89000 } }),
+    });
+    expect(result?.outcome).toBe("updated");
+    expect(result?.rates.perEur?.USD).toBe(1.19);
+    expect(result?.rates.ratesUpdatedAt).toBe("2026-08-29T13:00:00.000Z");
+  });
+
+  it("writes nothing when the stored rates are already the current set", async () => {
+    /*
+     * The reason this returns null rather than the same object: storing an
+     * identical rate set bumps the snapshot revision and pushes a sync to
+     * every other device, to record that nothing changed.
+     */
+    const now = Date.parse("2026-08-29T13:00:00Z");
+    const first = await refreshRatesOnOpen(rates(), { now, fetchImpl: provider({ rates: { USD: 1.19 } }) });
+    const again = await refreshRatesOnOpen(first!.rates, { now: now + 60_000, fetchImpl: provider({ rates: { USD: 1.19 } }) });
+    expect(again).toBeNull();
+  });
+
+  it("records a failure without moving the timestamp of the rates it still holds", async () => {
+    const held = rates({ perEur: { USD: 1.15 }, ratesUpdatedAt: "2026-08-28T12:00:00.000Z", ratesSource: "open.er-api.com" });
+    const result = await refreshRatesOnOpen(held, {
+      now: Date.parse("2026-08-29T13:00:00Z"),
+      fetchImpl: provider(null, false),
+    });
+    expect(result?.outcome).toBe("failed");
+    expect(result?.rates.ratesUpdatedAt).toBe("2026-08-28T12:00:00.000Z");
+    expect(result?.rates.ratesCheckedAt).toBe("2026-08-29T13:00:00.000Z");
+    expect(result?.rates.ratesLastError).toMatch(/503/);
+    expect(result?.rates.perEur?.USD).toBe(1.15);
+  });
+
+  it("does not rewrite the same failure on every load", async () => {
+    const now = Date.parse("2026-08-29T13:00:00Z");
+    const first = await refreshRatesOnOpen(rates(), { now, fetchImpl: provider(null, false) });
+    const again = await refreshRatesOnOpen(first!.rates, { now: now + 60_000, fetchImpl: provider(null, false) });
+    expect(again).toBeNull();
+  });
+
+  it("clears a recorded failure once rates arrive", async () => {
+    const now = Date.parse("2026-08-29T13:00:00Z");
+    const failed = await refreshRatesOnOpen(rates(), { now, fetchImpl: provider(null, false) });
+    const recovered = await refreshRatesOnOpen(failed!.rates, {
+      now: now + 60_000,
+      fetchImpl: provider({ rates: { USD: 1.2 } }),
+    });
+    expect(recovered?.outcome).toBe("updated");
+    expect(recovered?.rates.ratesLastError).toBeUndefined();
   });
 });

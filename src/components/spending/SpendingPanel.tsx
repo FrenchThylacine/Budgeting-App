@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { Pencil, Plus, ShoppingBag, Trash2, X } from "lucide-react";
 import { currencyOptionsFor, formatMoney } from "../../domain/currency";
+import { Money } from "../ui/Money";
 import { monthFromDateInput, todayDateInput, weekFromDateInput, weekYear } from "../../domain/dates";
 import { selectedIsoWeekYear } from "../../domain/periods";
 import {
@@ -31,14 +32,14 @@ import type { SwipeActionId } from "../../domain/types";
 
 const today = () => todayDateInput();
 
-const RECURRENCE_OPTIONS: { value: RecurrenceType; label: string }[] = [
-  { value: "none", label: "One-off" },
-  { value: "weekly", label: "Weekly" },
-  { value: "monthly", label: "Monthly" },
-  { value: "yearly", label: "Yearly" },
-  { value: "session", label: "Per session" },
-  { value: "purchase", label: "Purchase" },
-  { value: "custom", label: "Custom" },
+const RECURRENCE_OPTIONS: { value: RecurrenceType; labelKey: string }[] = [
+  { value: "none", labelKey: "recurrence.none" },
+  { value: "weekly", labelKey: "recurrence.weekly" },
+  { value: "monthly", labelKey: "recurrence.monthly" },
+  { value: "yearly", labelKey: "recurrence.yearly" },
+  { value: "session", labelKey: "activity.perSession" },
+  { value: "purchase", labelKey: "recurrence.purchase" },
+  { value: "custom", labelKey: "recurrence.custom" },
 ];
 
 
@@ -233,15 +234,6 @@ export const SpendingPanel: React.FC = () => {
 
   const selectedCategory = snapshot.categories.find((category) => category.id === draft.categoryId);
 
-  /**
-   * Piloting is a property of the category, not a separate switch: a "piloting"
-   * bucket says the spend is piloting, and nothing else does. Any other
-   * category leaves the question open, so an entry that was already flagged
-   * keeps its flag instead of being silently reclassified by an unrelated edit.
-   */
-  const categorySaysPiloting = selectedCategory?.bucket === "piloting";
-  const pilotingForDraft = categorySaysPiloting ? true : (editing?.isPiloting ?? false);
-
   /** Turns a refused link into words instead of a silent no-op. */
   const reportLinkResult = (result: WishlistLinkResult, itemName: string): boolean => {
     if (result.status === "already-linked") {
@@ -286,7 +278,6 @@ export const SpendingPanel: React.FC = () => {
       currency: draft.currency,
       note: draft.note,
       source: draft.source,
-      isPiloting: pilotingForDraft,
       // Carried from the form so editing an entry cannot silently reset a
       // recurring transaction to one-off.
       recurrenceType: draft.recurrenceType,
@@ -319,7 +310,6 @@ export const SpendingPanel: React.FC = () => {
         currency: draft.currency,
         note: draft.note,
         source: draft.source,
-        isPiloting: pilotingForDraft,
         recurrenceType: draft.recurrenceType,
       });
       if (!reportLinkResult(result, item?.name ?? "That item")) return;
@@ -343,8 +333,6 @@ export const SpendingPanel: React.FC = () => {
       currency: entry.currency,
       note: entry.note,
       source: entry.source ?? "personal",
-      // `isPiloting` is not a form field: it follows the category, and an
-      // existing flag is carried through `editing` so an edit never drops it.
       recurrenceType: entry.recurrenceType ?? "none",
       activityId: entry.activityId ?? "",
       wishlistItemId: entry.wishlistItemId ?? "",
@@ -377,7 +365,7 @@ export const SpendingPanel: React.FC = () => {
       <Section
         title={t("spending.title")}
         action={
-          <Button variant="primary" onClick={beginNew} disabled={!mutable}>
+          <Button variant="primary" data-action="add-spending" onClick={beginNew} disabled={!mutable}>
             <Plus size={16} /> {t("spending.add")}
           </Button>
         }
@@ -434,7 +422,7 @@ export const SpendingPanel: React.FC = () => {
               gap: 12,
             }}
           >
-            <Field label={t("spending.amount")}>
+            <Field label={t("spending.amount")} name="amount">
               <input
                 className="input"
                 type="number"
@@ -456,7 +444,7 @@ export const SpendingPanel: React.FC = () => {
                 ))}
               </select>
             </Field>
-            <Field label={t("spending.date")}>
+            <Field label={t("spending.date")} name="date">
               <input
                 className="input"
                 type="date"
@@ -465,18 +453,7 @@ export const SpendingPanel: React.FC = () => {
                 onChange={(e) => setDraft({ ...draft, date: e.target.value })}
               />
             </Field>
-            <Field
-              label={t("spending.category")}
-              // The category decides whether this counts as piloting; the state
-              // is shown rather than asked for a second time.
-              hint={
-                pilotingForDraft
-                  ? categorySaysPiloting
-                    ? "Counts as piloting spend."
-                    : "Kept as piloting spend."
-                  : undefined
-              }
-            >
+            <Field label={t("spending.category")} name="category">
               <select
                 className="select"
                 value={draft.categoryId}
@@ -492,6 +469,7 @@ export const SpendingPanel: React.FC = () => {
             </Field>
             <Field
               label={t("funding.label")}
+              name="funding"
               // The consequence of the choice, said where the choice is made.
               // Marking a transaction as someone else's changes the remaining
               // budget the moment it is saved, and that has to be predictable.
@@ -517,7 +495,7 @@ export const SpendingPanel: React.FC = () => {
               >
                 {RECURRENCE_OPTIONS.map((option) => (
                   <option key={option.value} value={option.value}>
-                    {option.label}
+                    {t(option.labelKey)}
                   </option>
                 ))}
               </select>
@@ -596,10 +574,10 @@ export const SpendingPanel: React.FC = () => {
                 </select>
               </Field>
             )}
-            <Field label={t("spending.note")}>
+            <Field label={t("spending.note")} name="note">
               <input
                 className="input"
-                placeholder="Optional"
+                placeholder={t("common.optional")}
                 value={draft.note}
                 onChange={(e) => setDraft({ ...draft, note: e.target.value })}
               />
@@ -725,7 +703,6 @@ export const SpendingPanel: React.FC = () => {
                         {entry.recurrenceType}
                       </span>
                     )}
-                    {entry.isPiloting && <span className="badge badge-neutral">Piloting</span>}
                     {/* Which of the two exclusions it is, not merely that it
                         is one. "Paid by other" and "Outside budget" behave the
                         same against the budget and mean different things. */}
@@ -748,7 +725,7 @@ export const SpendingPanel: React.FC = () => {
                       <span
                         className="badge badge-success"
                         style={{ maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
-                        title="Linked wishlist item"
+                        title={t("spending.linkedWishlistItem")}
                       >
                         <ShoppingBag size={11} />{" "}
                         {wishlistById.get(entry.wishlistItemId)?.name ?? "Wishlist item"}
@@ -764,7 +741,10 @@ export const SpendingPanel: React.FC = () => {
                     hidden on touch, where the swipe replaces the buttons, and
                     the figure is the one thing on the row that must never go. */}
                 <div className="row-trailing">
-                  <strong>{formatMoney(entry.amount, entry.currency, snapshot.settings.currencyDisplayMode)}</strong>
+                  {/* The transaction's own currency is the figure; the
+                      configured second currency, when there is one and a rate
+                      exists, is a smaller line under it. */}
+                  <Money amount={entry.amount} currency={entry.currency} strong />
                   {mutable && (
                     <div className="row-actions">
                       <Button variant="ghost" size="sm" icon onClick={() => beginEdit(entry)} aria-label={t("a11y.editTransaction")}>

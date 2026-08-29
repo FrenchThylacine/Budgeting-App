@@ -5,6 +5,8 @@ import { snapshotIdFor } from "../auth/middleware.js";
 import { asyncHandler, AppError } from "../middleware/errorHandler.js";
 import { ALL_CURRENCY_CODES } from "../../../src/domain/currencies.js";
 import { LANGUAGES } from "../../../src/domain/languages.js";
+import { AIRCRAFT_IDS } from "../../../src/domain/aircraft.js";
+import { APPEARANCES, THEME_IDS } from "../../../src/domain/theme.js";
 
 /**
  * Reject structurally invalid snapshots before they reach the database. A
@@ -85,7 +87,13 @@ const SETTINGS_FIELDS: Record<string, SettingsFieldCheck> = {
   trackedCurrencies: (value) =>
     Array.isArray(value) && value.length > 0 && value.every((code) => typeof code === "string" && CURRENCY_CODES.has(code)),
   currencyDisplayMode: isOneOf(["symbol", "code", "both"]),
+  // `null` clears the second currency, which is a legal thing to want; every
+  // other value has to be a currency this application knows.
+  secondaryCurrency: (value) => value === null || isCurrency(value),
   language: (value) => typeof value === "string" && LANGUAGE_CODES.has(value),
+  appearance: isOneOf(APPEARANCES),
+  themePreset: isOneOf(THEME_IDS),
+  aircraft: isOneOf(AIRCRAFT_IDS),
   roundingRule: isOneOf(["none", "nearest-1", "nearest-5", "nearest-10", "ceil-10"]),
   monthlyBudget: isFiniteNumber,
   autoWishlistFlushEnabled: isBoolean,
