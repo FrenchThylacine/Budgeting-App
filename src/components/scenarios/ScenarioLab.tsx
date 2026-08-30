@@ -56,7 +56,7 @@ export const ScenarioLab: React.FC = () => {
               size="sm"
               disabled={!mutable}
               onClick={() => {
-                const name = window.prompt("Name this snapshot of your current budget:", "Current setup");
+                const name = window.prompt(t("scenario.nameThisSnapshot"), t("scenario.currentSetup"));
                 if (name?.trim()) capture(name.trim());
               }}
             >
@@ -68,9 +68,16 @@ export const ScenarioLab: React.FC = () => {
           </div>
         }
       >
-        <p className="text-note" style={{ marginBottom: 20 }}>
-          {t("scenarios.intro")}
-        </p>
+        {/* The explanation, and only where the empty state is not already
+            giving it. An empty Scenario Lab showed both — a paragraph saying
+            what a scenario stores, and, four inches below, an empty state
+            saying what to do with one — which is the same lesson twice on the
+            one screen a new reader actually meets. */}
+        {presets.length > 0 && (
+          <p className="text-note" style={{ marginBottom: 20 }}>
+            {t("scenarios.intro")}
+          </p>
+        )}
 
         {presets.length === 0 ? (
           <EmptyState
@@ -235,9 +242,11 @@ export const ScenarioLab: React.FC = () => {
           </Button>
         }
       >
-        <p className="text-note" style={{ marginBottom: 20 }}>
-          {t("scenario.aSeasonRemembersWhichActivities")}
-        </p>
+        {seasons.length > 0 && (
+          <p className="text-note" style={{ marginBottom: 20 }}>
+            {t("scenario.aSeasonRemembersWhichActivities")}
+          </p>
+        )}
 
         {seasons.length === 0 ? (
           <EmptyState
@@ -289,7 +298,10 @@ export const ScenarioLab: React.FC = () => {
                       onClick={() => {
                         if (
                           window.confirm(
-                            `Apply "${season.name}"?\n\nThis changes whether ${covered} activit${covered === 1 ? "y is" : "ies are"} running, and what they cost. Your transactions are untouched, and you can undo it.`,
+                            `${t("scenario.applySeasonConfirm", { name: season.name })}\n\n${t(
+                              "scenario.applySeasonEffect",
+                              { count: covered },
+                            )}`,
                           )
                         ) {
                           applySeason(season.id);

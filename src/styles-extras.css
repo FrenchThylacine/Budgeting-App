@@ -1446,7 +1446,10 @@
   top: 50%;
   transform: translate(-50%, -50%);
   pointer-events: none;
-  filter: blur(3px);
+  /* Two pixels, not three. The softness comes from the four alpha passes
+     underneath; the blur is only there to take the polygon edges off, and at
+     three it was erasing the newest smoke entirely. */
+  filter: blur(2px);
 }
 
 .boot-smoke-back { z-index: 0; }

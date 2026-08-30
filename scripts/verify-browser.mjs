@@ -32,6 +32,8 @@ const BASE = (arg("url", process.env.VERIFY_URL ?? "http://localhost:5173")).rep
 const HEADLESS = !argv.includes("--headed");
 
 const results = [];
+/** Set when the harness itself throws, so the run cannot exit 0 in silence. */
+let fatal = null;
 let currentGroup = "";
 
 const group = (name) => {
@@ -109,6 +111,8 @@ try {
    */
   let emitterGap = null;
   const radii = [];
+  /** Where the third jet was, sample by sample, while it was joining. */
+  const thirdTrack = [];
   const deadline = Date.now() + 20000;
   while (Date.now() < deadline) {
     const frame = await page.evaluate(`
@@ -176,6 +180,22 @@ try {
         }
         if (gaps.length) gap = Math.max(...gaps);
       }
+      /*
+       * The third jet, while it is joining.
+       *
+       * It used to slide in from a fixed offset 210px to the left of its slot,
+       * at a fixed attitude, with no smoke until it was nearly there — which is
+       * an object appearing beside the formation rather than an aircraft
+       * joining it. What is asserted below is that it comes from outside the
+       * frame and covers real distance on the way in.
+       */
+      let third = null;
+      const late = document.querySelector('.boot-escort-late');
+      if (late && phase === 'join') {
+        // Doubled backslashes, for the reason spelled out above.
+        const m = /translate3d\\(([-\\d.]+)px, ([-\\d.]+)px/.exec(late.style.transform ?? '');
+        if (m) third = [Number(m[1]), Number(m[2])];
+      }
       let bands = null;
       if (phase === 'settle' || phase === 'depart') {
         const canvases = [...document.querySelectorAll('.boot-smoke')];
@@ -205,19 +225,24 @@ try {
           bands = runs.filter((r) => r.to - r.from >= 4);
         }
       }
-      return { phase, layers, bands, gap, track };
+      return { phase, layers, bands, gap, track, third };
     `);
     if (phases.at(-1) !== frame.phase) phases.push(frame.phase);
     for (const layer of frame.layers) depth.add(layer);
     if (frame.gap != null) emitterGap = emitterGap == null ? frame.gap : Math.min(emitterGap, frame.gap);
     for (const radius of frame.track ?? []) radii.push(radius);
+    if (frame.third) thirdTrack.push(frame.third);
     // The three ribbons nearest the slots, once all three are laid down.
     if (frame.bands) {
       const near = frame.bands.filter((band) => band.from >= -80 && band.to <= 80);
       if (near.length === 3) bands = near;
     }
     if (frame.phase === "gone") break;
-    await sleep(40);
+    // The join lasts 1.5s and is the only phase whose *path* is asserted, so
+    // it is sampled as fast as the protocol allows. At a flat 40ms the loop
+    // occasionally came away with two points and reported a jet that had not
+    // flown far — a flaky check, which is worse than no check.
+    await sleep(frame.phase === "join" ? 0 : 40);
   }
 
   await check("flies the whole sequence: orbit, join, settle, depart", () => {
@@ -264,6 +289,20 @@ try {
     const max = Math.max(...radii);
     assert(max - min > 40, `the track varies by only ${Math.round(max - min)}px — that is a ring`);
     return `${Math.round(min)}–${Math.round(max)}px from the lead`;
+  });
+
+  await check("the third jet joins the formation rather than appearing in it", () => {
+    assert(thirdTrack.length >= 3, `only ${thirdTrack.length} samples of the join`);
+    // The widest separation seen, not the first and last: a sample that lands
+    // late says nothing about where the aircraft came from.
+    const start = thirdTrack.reduce((left, point) => (point[0] < left[0] ? point : left));
+    const end = thirdTrack.reduce((right, point) => (point[0] > right[0] ? point : right));
+    const flown = Math.hypot(end[0] - start[0], end[1] - start[1]);
+    // Its slot is 136px left of the lead; anything starting near that is not
+    // arriving from anywhere.
+    assert(start[0] < -400, `it started ${Math.round(-start[0])}px out, already beside the formation`);
+    assert(flown > 300, `it covered only ${Math.round(flown)}px on the way in`);
+    return `in from ${Math.round(start[0])}px, ${Math.round(flown)}px flown`;
   });
 
   await check("the formation leaves a tricolour: blue, white, red", () => {
@@ -1348,12 +1387,31 @@ try {
     equal(real.length, 0, `errors: ${real.slice(0, 3).join(" | ")}`);
     return `${page.consoleMessages.length} console messages, 0 errors`;
   });
+} catch (error) {
+  /*
+   * A harness that dies quietly reports success
+   * ===========================================
+   *
+   * Everything above was inside a `try` whose only companion was a `finally`,
+   * so a fault in the *harness* — a syntax error in one of the evaluated
+   * blocks, a tab that went away — unwound straight past every remaining check
+   * and printed "0/0 checks passed" with an exit code of zero. That is the one
+   * failure mode a verification script must not have, and it happened: a
+   * single backslash in a new regex ended a run after the first group and the
+   * script said nothing was wrong.
+   */
+  fatal = error;
 } finally {
   const failed = results.filter((result) => !result.ok);
   console.log(
     `\n\x1b[1m${results.length - failed.length}/${results.length} checks passed\x1b[0m` +
       (failed.length ? `\n\x1b[31m${failed.map((f) => `  ${f.group} → ${f.name}`).join("\n")}\x1b[0m` : ""),
   );
+  if (fatal) console.log(`\x1b[31mthe run itself failed: ${fatal?.stack ?? fatal}\x1b[0m`);
+  // A floor, not the exact count: adding checks is routine, but finishing with
+  // a handful of them is the shape of a run that stopped early.
+  const tooFew = results.length < 50;
+  if (tooFew) console.log(`\x1b[31monly ${results.length} checks ran — the run did not finish\x1b[0m`);
   await chrome.close();
-  process.exit(failed.length ? 1 : 0);
+  process.exit(failed.length || fatal || tooFew ? 1 : 0);
 }

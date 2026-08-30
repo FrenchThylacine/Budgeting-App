@@ -182,7 +182,7 @@ export const UpcomingSchedule: React.FC<UpcomingScheduleProps> = ({ snapshot, mo
         <p className="text-footnote upcoming-note">
           <CalendarClock size={12} aria-hidden="true" />
           {hiddenOccurrences > 0
-            ? `${hiddenOccurrences} more in the next ${horizonDays} days`
+            ? t("dashboard.moreInNextDays", { count: hiddenOccurrences, days: horizonDays })
             : t("dashboard.nextDays", { count: horizonDays })}
         </p>
       )}

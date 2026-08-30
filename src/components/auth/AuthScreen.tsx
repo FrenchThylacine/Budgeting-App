@@ -129,7 +129,7 @@ export const AuthScreen: React.FC = () => {
         setMode("signin");
         setPassword("");
         setConfirmPassword("");
-        setNotice("Password updated. Sign in with your new password.");
+        setNotice(t("auth.passwordUpdatedSignIn"));
       }
     }
   }

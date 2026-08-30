@@ -9,6 +9,7 @@ with one small fix gets a patch rather than a new minor.
 
 | Version | What it was |
 | --- | --- |
+| **4.3.0** | The audit pass: a rejoin that is a curve, one visual vocabulary, and twenty-three sentences nobody had translated |
 | **4.2.0** | The refinement pass: currency semantics, the funding ambiguity, a cadence vocabulary, an aerobatic routine, half the pixels |
 | **4.0.0** | The V4 pass: minimalism, the whole aircraft fleet, a real 3D loading sequence, funding correctness |
 | **3.2.0** | One identity, five languages, no special categories |
@@ -16,6 +17,94 @@ with one small fix gets a patch rather than a new minor.
 | **2.0.0**–**2.1.0** | Accounts, Excel import, dedicated editors, scenarios, swipe, the first identity |
 | **1.0.0**–**1.1.0** | The first working budget: activities, spending, wishlist, reports |
 | **0.1.0**–**0.2.0** | Before it was an application |
+
+## 4.3.0 — 2026-08-30 — The audit pass
+
+### A rejoin is a curve, not a chord
+
+The routine reads as a manoeuvre, so the join had to stop reading as a state
+change. Three faults, all from the same habit — interpolating a *position* and
+leaving the aeroplane pointing wherever it already was.
+
+The two escorts crossed to their slots in a straight line. They now fly a
+quadratic curve whose control point sits ahead of them along the heading they
+were released on, so they carry on out of the turn and bend onto the formation.
+Heading comes from the curve's tangent and bank from its rate of turn, as the
+routes already did; the last quarter levels the wings, so arriving in the slot
+is the end of a turn rather than a jump to zero degrees on the next frame.
+
+The third jet used to slide in from a point 210px left of its slot, at a fixed
+attitude, and only started smoking once it was nearly there — an object
+appearing beside the formation, not an aircraft joining it. It now enters from
+900px out, off the frame, on its own curve, banked, nose on the path, trailing
+smoke the whole way. Measured on the page: in from −883px, 806px flown.
+
+And the smoke's head was being laid down correctly and then erased. Measured at
+the backing store, the newest puff came out at an alpha of 53 out of 255, which
+the canvas blur wiped against a dark sky — so the ribbon looked detached from
+an aircraft it was one pixel behind. The core pass is denser and reaches
+further back in age, the blur is two pixels rather than three, and the head now
+measures 243. White is laid down thinner than blue and red: at equal alpha it
+read as a searchlight beside two plumes of smoke.
+
+### One vocabulary, one component
+
+`FundingMark` is `CadenceMark`'s counterpart — one component for the three
+funding kinds, in three variants. It replaces three hand-written copies of the
+same three glyphs: the badge in the transaction list, the same badge in the
+activity list, and the dashboard's chip, each spelling out the glyph, the
+`data-funding` attribute and the tooltip key itself. A test now asserts there
+is exactly one rendering of each mark.
+
+### Twenty-three sentences nobody had translated
+
+The scanner that reported the interface fully translated had five blind spots,
+and there was live English in every one of them:
+
+- a string given to an **object property** — `detail: "of monthly budget"` —
+  which is the shape every `StatRow`, `Figure` and chart is configured with;
+- **JSX text with a value in the middle of it**, on one line: `Last {count}
+  {mode}s`, which formed its plural by gluing an "s" onto the raw enum, so
+  every language read "Last 8 months";
+- a **template literal opening with its interpolation**, so the capitalised
+  word the rule looked for had nothing to be found in: `${amount} by others`,
+  `vs ${period}`;
+- a sentence starting with a **two-letter word**: "On this pace you end with
+  ${amount} left." had been on the dashboard through two translation audits
+  because "On" is a capital and *one* lowercase letter;
+- a sentence handed **straight to a function**: `setNotice("That wishlist item
+  no longer exists.")`, and two on the account screen telling somebody who has
+  just changed their password about it in a language they may not read.
+
+Twenty-nine keys in five languages. The five rules now run over the whole tree
+and come back empty.
+
+### Less on the screen
+
+- **Two empty states that were whole cards.** "vs July 2026 / No data / Nothing
+  recorded before this" was a card whose entire content was the absence of a
+  comparison. "Last 8 months" was a caption under a sparkline that needs two
+  points to be a line. Neither is rendered now. The dashboard is 156px shorter
+  on a first month.
+- **The same sentence twice.** The health card and the forecast chart both
+  stated the projected end of the period. The chart's copy is gone — it was the
+  untranslated one.
+- **The period selector is gone from the three tabs the period does not
+  govern.** A category is a category in August and in December; so is a
+  currency; so is the dark-mode switch.
+- **The Scenario Lab taught itself twice** on the one screen a new reader
+  actually meets. The paragraph now appears only where the empty state is not.
+
+### The harness reported success on a run that died
+
+Everything ran inside a `try` whose only companion was a `finally`, so when a
+single un-doubled backslash threw inside an evaluated block the run unwound
+past every remaining check and printed "0/0 checks passed" with an exit code of
+zero. It now catches, says so, and refuses to exit 0 on a run that stopped
+early. The join check also no longer samples at a flat 40ms, which occasionally
+caught two points and failed a correct animation.
+
+**58 browser checks, 818 unit tests, 82 against PostgreSQL.**
 
 ## 4.2.0 — 2026-08-30 — The refinement pass
 

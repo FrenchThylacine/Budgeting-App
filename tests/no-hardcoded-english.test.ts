@@ -66,9 +66,92 @@ export function isProse(line: string): boolean {
  * case slip past — the scanner was fixed and its test was not.
  */
 export function templateEnglish(line: string): string[] {
-  return [...line.matchAll(/`([^`$]*[A-Z][a-z]{2,}[^`]*)`/g)]
+  /*
+   * `[a-z]+`, not `[a-z]{2,}`.
+   *
+   * The prefix before the first interpolation cannot contain a `$`, so the
+   * capitalised word this rule looks for has to appear in that prefix — and
+   * requiring three letters meant a sentence opening with a two-letter word
+   * did not have one. `` `On this pace you end ${amount} over budget.` `` sat
+   * on the dashboard, in English, through two translation audits for exactly
+   * that reason: "On" is a capital and one lowercase letter.
+   */
+  return [...line.matchAll(/`([^`$]*[A-Z][a-z]+[^`]*)`/g)]
     .map((match) => match[1].replace(/\$\{[^}]*\}/g, "…").trim())
     .filter((text) => /^[A-Z][A-Za-z0-9 ,.'’!?%()·…-]{3,}$/.test(text));
+}
+
+/**
+ * Three more shapes, each of which hid something through the audit before this
+ * one. They are separate exported functions for the same reason `isProse` is:
+ * the tests below run the rules themselves rather than copies of them.
+ */
+
+/**
+ * A string given to an object property.
+ *
+ * `{ label: t("stats.burnRate"), detail: "of monthly budget" }` — half of one
+ * line translated and half of it not. The attribute rule above only sees
+ * `name="value"` in JSX, and every `StatRow`, `Figure` and chart in this
+ * application is configured with objects.
+ */
+export function propertyEnglish(line: string): string[] {
+  const pattern =
+    /\b(label|detail|title|description|placeholder|message|hint|emptyMessage|caption|ariaLabel|alt|footer|subtitle|note)\s*:\s*"([A-Za-z][A-Za-z0-9 ,.'’!?%()-]{6,})"/g;
+  return [...line.matchAll(pattern)]
+    .map((match) => match[2])
+    .filter((text) => /[A-Za-z]{3,}\s+[A-Za-z]{2,}/.test(text));
+}
+
+/**
+ * JSX text with a value in the middle of it, all on one line.
+ *
+ * `<span>Last {count} {mode}s</span>` — a sentence, an interpolation and a
+ * plural formed by gluing an "s" onto an enum. The `>text<` rule cannot see it
+ * because of the braces, and the prose-on-its-own-line rule cannot see it
+ * because it is not on its own line.
+ */
+export function jsxWithHoles(line: string): string[] {
+  // Any number of holes, not one: "Last {count} {mode}s" has two, and a
+  // pattern that allowed a single interpolation read straight past it.
+  return [...line.matchAll(/>((?:[^<>{}]|\{[^{}]*\})*\{[^{}]*\}(?:[^<>{}]|\{[^{}]*\})*)</g)]
+    .map((match) => match[1].replace(/\{[^}]*\}/g, "…").trim())
+    .filter((text) => /[A-Za-z]{3,}/.test(text) && /^[A-Z…]/.test(text) && !/[=;()]/.test(text));
+}
+
+/**
+ * A template literal that *opens* with its interpolation.
+ *
+ * `` `${amount} by others` `` and `` `vs ${period}` `` are sentences too, and
+ * `templateEnglish` cannot see them: the capitalised word it looks for has to
+ * come before the first `$`, and here there is nothing before it. What gives
+ * these away instead is an English function word standing on its own between
+ * the holes.
+ */
+const FUNCTION_WORDS = /(^|\s)(vs|of|per|and|or|in|on|to|from|with|at|by|for|the|an?)\s/;
+
+export function templateGlue(line: string): string[] {
+  return [...line.matchAll(/`([^`]*\$\{[^`]*)`/g)]
+    .map((match) => match[1].replace(/\$\{[^}]*\}/g, "…").trim())
+    .filter(
+      (text) =>
+        FUNCTION_WORDS.test(` ${text} `) && /[A-Za-z]{2,}/.test(text) && !/[<>=;/]/.test(text) && !text.includes("--"),
+    );
+}
+
+/**
+ * An English sentence handed straight to a function.
+ *
+ * `setNotice("That wishlist item no longer exists.")`,
+ * `window.prompt("Name this snapshot of your current budget:")` — not an
+ * attribute, not a property, not JSX text, and not a template. Four of them
+ * were live, two of them on the account screen, where a reader who has just
+ * changed their password is told about it in a language they may not read.
+ */
+export function argumentEnglish(line: string): string[] {
+  return [...line.matchAll(/\(\s*"([A-Z][A-Za-z0-9 ,.'’!?%()-]{8,})"/g)]
+    .map((match) => match[1])
+    .filter((text) => /[A-Za-z]{3,}\s+[A-Za-z]{2,}/.test(text));
 }
 
 interface Finding {
@@ -130,6 +213,10 @@ function scan(): Finding[] {
          * JSX-text rule because it is an expression.
          */
         for (const literal of templateEnglish(line)) push(literal);
+        for (const text of propertyEnglish(line)) push(text);
+        for (const text of jsxWithHoles(line)) push(text);
+        for (const text of templateGlue(line)) push(text);
+        for (const text of argumentEnglish(line)) push(text);
 
         const previous = index > 0 ? lines[index - 1].trim() : "";
         // Interpolations are removed first: a sentence with a value in the
@@ -176,9 +263,46 @@ describe("the components carry no English of their own", () => {
     // A digit at the end used to stop the match dead.
     expect(literal("ariaLabel={`Budget health ${score} out of 100`}")).toEqual(["Budget health … out of 100"]);
 
+    // A sentence opening with a two-letter word. The prefix before the first
+    // interpolation is the only place this rule can find a capitalised word,
+    // and demanding three letters of it meant this one had none — which is
+    // how it stayed on the dashboard in English through two audits.
+    expect(literal("`On this pace you end with ${money(left)} left.`")).toEqual([
+      "On this pace you end with … left.",
+    ]);
+
     // Not a template literal of code, a path, or a class list.
     expect(literal("className={`card ${active ? \"is-active\" : \"\"}`}")).toEqual([]);
     expect(literal("`/craft/fleet/${craft.id}.png`")).toEqual([]);
+  });
+
+  it("catches the three shapes that survived the last audit", () => {
+    /*
+     * Every one of these was live in the application when this test was
+     * written, and every one of them had been read past by the rules above.
+     * Eighteen strings in five components — dialogs, captions, notices — and
+     * the suite was reporting the interface fully translated.
+     */
+    expect(propertyEnglish('  detail: "of monthly budget",')).toEqual(["of monthly budget"]);
+    expect(propertyEnglish('  label: t("stats.burnRate"),')).toEqual([]);
+    // A class name or an id is not prose, and neither is one word.
+    expect(propertyEnglish('  title: "Dashboard",')).toEqual([]);
+
+    expect(jsxWithHoles("<span>Last {recentBars.length} {mode}s</span>")).toEqual(["Last … …s"]);
+    expect(jsxWithHoles('<span>{t("stats.spentPeriod", { period })}</span>')).toEqual([]);
+
+    expect(templateGlue("`${money(total)} by others`")).toEqual(["… by others"]);
+    expect(templateGlue("`vs ${comparison.previousLabel}`")).toEqual(["vs …"]);
+    // Code, paths and class lists still say nothing.
+    expect(templateGlue("`translate3d(${x}px, ${y}px, 0)`")).toEqual([]);
+    expect(templateGlue("`/craft/fleet/${craft.id}.png`")).toEqual([]);
+
+    expect(argumentEnglish('setNotice("That wishlist item no longer exists.");')).toEqual([
+      "That wishlist item no longer exists.",
+    ]);
+    // A key, an identifier and a one-word label all stay quiet.
+    expect(argumentEnglish('t("spending.wishlistItemGone")')).toEqual([]);
+    expect(argumentEnglish('querySelector("Dashboard")')).toEqual([]);
   });
 
   it("catches a sentence on its own line, which the first rules cannot see", () => {
