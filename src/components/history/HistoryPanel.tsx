@@ -94,7 +94,7 @@ export const HistoryPanel: React.FC = () => {
           >
             <ShieldAlert size={16} style={{ color: "var(--warning-text)", flexShrink: 0 }} />
             <span>
-              {historicalEditCount} change{historicalEditCount !== 1 ? "s" : ""} rewrote a closed period.
+              {t("history.rewroteClosed", { count: historicalEditCount })}
             </span>
             <button
               className="btn btn-ghost btn-sm"

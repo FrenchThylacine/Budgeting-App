@@ -607,7 +607,7 @@ export const AnalyticsPanel: React.FC = () => {
                 )}
                 {overCap.length > 0 && (
                   <span className="text-caption" style={{ color: "var(--danger-text)", fontWeight: 600 }}>
-                    {overCap.length} categor{overCap.length === 1 ? "y is" : "ies are"} over cap
+                    {t("stats.categoriesOverCap", { count: overCap.length })}
                   </span>
                 )}
               </>

@@ -3739,3 +3739,8 @@ label:has(> input[type="radio"]) {
 
 .mark-legend-item[data-funding="other"] .funding-glyph { color: var(--funding-other-text); }
 .mark-legend-item[data-funding="outside"] .funding-glyph { color: var(--funding-outside-text); }
+
+/* The wishlist's one remaining summary figure. A line, not a card: it used to
+   sit in a container with two other numbers that the filter chips above it
+   already printed. */
+.wishlist-total { margin: 12px 2px 0; }

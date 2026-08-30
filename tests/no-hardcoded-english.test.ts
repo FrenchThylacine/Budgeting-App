@@ -53,7 +53,9 @@ const EXEMPT_FILES = [/IconPicker/];
  */
 export function isProse(line: string): boolean {
   return (
-    /^[A-Z][^<>=;(){}[\]]*[A-Za-z.!?”"…']$/.test(line) &&
+    // A leading `…` is an interpolation the caller has already elided: a
+    // sentence that opens with a value is still a sentence.
+    /^[A-Z…·][^<>=;(){}[\]]*[A-Za-z.!?”"…']$/.test(line) &&
     /[A-Za-z]{3,}\s+[A-Za-z]{2,}/.test(line)
   );
 }
@@ -224,7 +226,23 @@ function scan(): Finding[] {
         // made an earlier version of this rule blind to the one case it was
         // written for.
         const bare = trimmed.replace(/\{[^}]*\}/g, "…");
-        if (previous.endsWith(">") && !previous.endsWith("/>") && isProse(bare)) push(bare);
+        /*
+         * `}` as well as `>`.
+         *
+         * The rule used to require the previous line to end with an opening
+         * tag, so prose that followed a JSX *expression* was invisible to it:
+         *
+         *     {" "}
+         *     · converted from {n} currencies
+         *
+         * Four more strings were sitting in that gap, every one of them
+         * forming its plural by hand in English — "categor{y is/ies are}",
+         * "{count} change{s}" — which is broken in all five languages the
+         * moment the count is not one, and in four of them even when it is.
+         */
+        if ((previous.endsWith(">") || previous.endsWith("}")) && !previous.endsWith("/>") && isProse(bare)) {
+          push(bare);
+        }
       });
   }
   return findings;
@@ -324,6 +342,10 @@ describe("the components carry no English of their own", () => {
 
     // And it does not fire on the ordinary case of an expression on its own
     // line, which is most of what sits between two tags.
+    // Prose that opens with a value, which is what follows a `{" "}`.
+    expect(isProse(strip("· converted from {n} currencies"))).toBe(true);
+    expect(isProse(strip("{count} changes rewrote a closed period."))).toBe(true);
+
     expect(isProse(strip('{t("icons.noMatch", { query })}'))).toBe(false);
     expect(isProse(strip("{heldChildren.current}"))).toBe(false);
     expect(isProse(strip("<Icon size={14} />"))).toBe(false);
