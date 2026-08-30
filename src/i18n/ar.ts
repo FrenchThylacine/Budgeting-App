@@ -1406,4 +1406,7 @@ export const ar: Dictionary = {
   "dashboard.topCategories": "أعلى الفئات",
   "activity.appearance": "اللون والأيقونة",
   "activity.otherPrices": "أسعار أخرى",
+  "sync.retry": "إعادة",
+  "report.colYourShare": "حصتك",
+  "currencies.liveRates": "الأسعار المباشرة",
 };

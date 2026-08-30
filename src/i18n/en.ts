@@ -1366,4 +1366,7 @@ export const en = {
   "dashboard.topCategories": "Top categories",
   "activity.appearance": "Colour and icon",
   "activity.otherPrices": "Other prices",
+  "sync.retry": "Retry",
+  "report.colYourShare": "Your share",
+  "currencies.liveRates": "Live rates",
 } as const;

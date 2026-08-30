@@ -9,12 +9,97 @@ with one small fix gets a patch rather than a new minor.
 
 | Version | What it was |
 | --- | --- |
+| **4.2.0** | The refinement pass: currency semantics, the funding ambiguity, a cadence vocabulary, an aerobatic routine, half the pixels |
 | **4.0.0** | The V4 pass: minimalism, the whole aircraft fleet, a real 3D loading sequence, funding correctness |
 | **3.2.0** | One identity, five languages, no special categories |
 | **3.0.0**–**3.1.0** | The financial model: who paid, real payment cycles, the wallet as a treasury |
 | **2.0.0**–**2.1.0** | Accounts, Excel import, dedicated editors, scenarios, swipe, the first identity |
 | **1.0.0**–**1.1.0** | The first working budget: activities, spending, wishlist, reports |
 | **0.1.0**–**0.2.0** | Before it was an application |
+
+## 4.2.0 — 2026-08-30 — The refinement pass
+
+### The two "≈" lines answered each other's question
+
+Under a **record**, the useful equivalent is the *display* currency — the one
+every total on the page is already in. Under an **aggregate**, it is the
+optional *second* currency, for somebody who earns in one and budgets in
+another.
+
+One function did both, keyed on the second currency. So a 150 000 LBP taxi in a
+euro budget printed **"≈ $1.47"**: a currency the reader never asked about for
+that figure, and one that nothing beside it was in. They are two functions now,
+with two names, and the components that use them are called `Money` and `Total`.
+
+The check that used to guard this asserted only that the *setting stored* —
+which is exactly how the swap survived it. The new one asserts the negative:
+choosing a second currency must not move a record onto it.
+
+### The statistic was right and the page still read wrong
+
+"Share of the yearly total" already listed only the activities you pay for,
+against the total you pay. But the funding split beside it ended every column
+with "· 43.0% of the total" — and on a column headed PAID BY OTHER, that reads
+exactly like the statistic that must exclude it. **Two statistics, one word,
+two different wholes.**
+
+The three percentages became one measured bar with a glyph in each segment, and
+the two wholes are named once each: "of all activity cost, whoever pays" and
+"of what you pay for". Fixing the arithmetic would have changed nothing,
+because the arithmetic was not what was wrong.
+
+### A vocabulary for how often, instead of six ways of saying it
+
+Six phrasings of "every month", all of them words — and on every recurring
+transaction row, the stored enum value itself, capitalised by a CSS rule.
+
+Seven cadences are named once now, each with a shape, a tone from a three-hue
+palette and a word. The families carry most of the meaning: something on a
+calendar the application knows, something counted by how often you turn up, or
+something that happened once. The silhouettes differ rather than the details,
+because at fourteen pixels two calendars are one calendar.
+
+An activity row was three stacked lines under its name. It is one, and about a
+third shorter.
+
+### The escorts fly a routine
+
+One circle at a constant rate reads as machinery however three-dimensional it
+is. Three incommensurate harmonics ride on the ring — the plane rolls, the
+track climbs, the radius breathes — at periods of 1, 1/1.7 and 1/2.3 of a
+circuit, with the two jets phased apart so they weave rather than mirror.
+
+And the smoke comes out of the back of the aeroplane. The emitter had no
+heading at all through the roll-out, so for the whole of the join it left from
+a point beside the aircraft. Measured off the sprite's own transform against
+the nearest pixel of its own colour: **0px**. It still *looked* detached where
+it was not — three pixels wide under a three-pixel blur — so the newest
+quarter-second is drawn denser. The departure now grows out of the hold rather
+than switching on.
+
+### Less on screen at once
+
+- **The statistics page was 5,103 pixels**; it opens at 1,794. Five of its
+  seven sections are one press from open, and the heading *is* the control,
+  because a chevron beside it is a target for a mouse and not for a thumb.
+- **The dashboard: 1,865 → 1,332.** Its trend chart is now absent rather than
+  an empty card, when there are fewer than two months to trend.
+- **The activity editor: twenty-one fields in view to eight.** It showed five
+  price fields at once, of which exactly one is ever read — four empty boxes
+  beside the one that matters is not a form, it is a quiz. The price shown is
+  the one the cost model reads; colour and icon moved behind a disclosure.
+- Every wallet ledger row read "Train tickets · Train tickets".
+
+### Found on the way
+
+- **"Spending through 2,026"** — every numeric placeholder went through
+  `Intl.NumberFormat`. A placeholder named `year` is a label now.
+- **A 17px Retry** in the offline banner: the one control somebody reaches for
+  when their work is not saving.
+- **Four phone widths nobody had checked** — 360, 375, 412, 430. A layout that
+  survives the ends can break in the middle.
+- Nineteen more untranslated strings, and the **unused-key test** the plan has
+  claimed since the translation pass, which found eight orphans immediately.
 
 ## 4.0.0 — 2026-08-30 — Less of everything, and a fleet
 

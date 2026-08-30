@@ -1330,4 +1330,7 @@ export const fr: Dictionary = {
   "dashboard.topCategories": "Principales catégories",
   "activity.appearance": "Couleur et icône",
   "activity.otherPrices": "Autres prix",
+  "sync.retry": "Réessayer",
+  "report.colYourShare": "Votre part",
+  "currencies.liveRates": "Taux en direct",
 };

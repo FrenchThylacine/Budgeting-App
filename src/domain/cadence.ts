@@ -66,8 +66,6 @@ export const CADENCE_META: Record<Cadence, CadenceMeta> = {
   oneOff: { id: "oneOff", icon: "Dot", labelKey: "cadence.oneOff", tone: "var(--cadence-once)" },
 };
 
-export const CADENCES = Object.values(CADENCE_META);
-
 /**
  * The cadence of an activity.
  *

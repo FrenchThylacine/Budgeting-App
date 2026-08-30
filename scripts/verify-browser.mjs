@@ -849,7 +849,8 @@ try {
   });
 
   await check("closing the pair resets the mode, ready for the next one", async () => {
-    await page.click('.sheet-footer .btn-primary');
+    // The answer is inline now, not a sheet: its own dismiss button clears it.
+    await page.click('.exchange-result-actions button:last-child');
     await sleep(300);
     const after = await page.evaluate(`
       return { sheet: !!document.querySelector('[data-exchange-result]'),
@@ -1157,7 +1158,14 @@ try {
    * and no target may be smaller than a fingertip. Both were real defects here
    * before they were checks.
    */
-  for (const width of [390, 320]) {
+  /*
+   * Every width the brief names, not two.
+   *
+   * 320 and 390 were the floor and the common case; 360, 375, 412 and 430 are
+   * the four most common Android and iPhone widths between them, and a layout
+   * that survives the ends can still break in the middle.
+   */
+  for (const width of [320, 360, 375, 390, 412, 430]) {
     await check(`no horizontal overflow and no target under 24px at ${width}px`, async () => {
       await page.resize(width, 780);
       const problems = [];

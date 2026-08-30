@@ -1322,4 +1322,7 @@ export const es: Dictionary = {
   "dashboard.topCategories": "Principales categorías",
   "activity.appearance": "Color e icono",
   "activity.otherPrices": "Otros precios",
+  "sync.retry": "Reintentar",
+  "report.colYourShare": "Tu parte",
+  "currencies.liveRates": "Tipos en directo",
 };
