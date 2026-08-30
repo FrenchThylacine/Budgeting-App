@@ -3896,3 +3896,18 @@ label:has(> input[type="radio"]) {
   background: none;
   cursor: pointer;
 }
+
+/* A deferred decision: a mark and a line, not a notice. */
+.wallet-deferred { display: flex; align-items: center; gap: 4px; margin: 10px 0 0; }
+.wallet-deferred-text {
+  border: 0;
+  background: none;
+  padding: 4px 2px;
+  min-height: 26px;
+  font: inherit;
+  font-size: 0.8rem;
+  color: var(--warning-text);
+  cursor: pointer;
+  text-align: left;
+}
+.wallet-deferred-text:hover { text-decoration: underline; }

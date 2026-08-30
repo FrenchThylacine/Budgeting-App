@@ -690,7 +690,22 @@ export class SnapshotRepository {
           item.bought === true,
           item.inWishlist === true,
           item.priority,
-          item.dateAdded,
+          /*
+           * Defaulted, not trusted.
+           *
+           * `date_added` is NOT NULL, and this was the one field on the row
+           * passed through raw while every neighbour is coerced. A single
+           * wishlist item without it — from an import, an older client, or any
+           * path that does not go through `addWishlistItem` — made the whole
+           * snapshot write fail, which the client reports as "Offline: this
+           * device only". The server was reachable and refusing, and the
+           * account silently stopped saving *anything*.
+           *
+           * An item that exists was added at some point. Refusing somebody's
+           * entire budget because we cannot say exactly when is out of all
+           * proportion to the fact being missed.
+           */
+          item.dateAdded ?? new Date().toISOString(),
           item.datePurchased ?? null,
           item.notes ?? null,
           item.active === true,
@@ -734,14 +749,33 @@ export class SnapshotRepository {
         params: [
           entry.id,
           yearId,
-          entry.month,
+          /*
+           * The same defence as `date_added` above, for the same reason.
+           *
+           * `month` is NOT NULL, and an entry without one failed the entire
+           * snapshot write — every activity, every transaction, the settings —
+           * which the interface reports as "Offline — this device only". One
+           * malformed row should cost that row's precision, not an account's
+           * ability to save anything at all.
+           *
+           * The date it happened is the best answer when the field is
+           * absent. A wallet movement always belongs to some month; the only
+           * question is whether we were told which.
+           *
+           * Every other NOT NULL column on this row is coerced below for the
+           * same reason. Patching them one at a time as each one surfaced was
+           * how this was found — three columns, three failed writes — and the
+           * point is that no single missing field should be able to stop an
+           * account saving.
+           */
+          entry.month ?? (entry.date ? Number(entry.date.slice(5, 7)) : 1),
           entry.date ?? null,
-          entry.amount,
-          entry.currency,
-          entry.source,
-          entry.type,
+          Number.isFinite(entry.amount) ? entry.amount : 0,
+          entry.currency ?? "EUR",
+          entry.source ?? "",
+          entry.type ?? "adjustment",
           entry.note ?? null,
-          entry.createdAt,
+          entry.createdAt ?? new Date().toISOString(),
         ],
       });
     }

@@ -1042,6 +1042,7 @@ export const en = {
   "stats.rolloverDetail": "accumulated month-end rollovers",
   "stats.spentPeriod": "Spent · {period}",
   "legend.title": "What the symbols mean",
+  "wallet.leftoverDeferred": "{amount} of budget is still undecided this month",
   "settings.statusColours": "Status colours",
   "settings.statusColoursHint": "Used for the figure on a row, the segments of a bar and the report. The text shade is derived from your colour so it stays readable.",
   "settings.resetColour": "Use the theme's",

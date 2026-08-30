@@ -546,7 +546,7 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
       get,
       (snapshot) => {
         currentYear(snapshot).wishlistItems.push({
-          ...normalizeWishlistPatch(item),
+          ...withRequiredWishlistFields(normalizeWishlistPatch(item)),
           id: item.id ?? id("wish"),
           dateAdded: item.dateAdded ?? new Date().toISOString(),
         });
@@ -567,7 +567,7 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
         Object.assign(item, patch);
         if (patch.bought === true && !item.datePurchased) item.datePurchased = new Date().toISOString();
         if (patch.bought === false) item.datePurchased = undefined;
-        Object.assign(item, normalizeWishlistPatch(item));
+        Object.assign(item, withRequiredWishlistFields(normalizeWishlistPatch(item)));
       },
       "wishlist",
       storedText("audit.wishlistUpdated"),
@@ -1450,6 +1450,19 @@ function normalizeWishlistPatch<T extends Partial<WishlistItem>>(item: T): T {
   const actualPrice = item.actualPrice ?? null;
   const effectiveValue = item.active && item.inWishlist && !item.bought && actualPrice != null ? actualPrice : 0;
   return { ...item, actualPrice, effectiveValue };
+}
+
+/**
+ * Fields the database will not accept as null, guaranteed on the way in.
+ *
+ * `dateAdded` backs a NOT NULL column, and an item without one does not fail
+ * by itself — it fails the whole snapshot write, which the interface then
+ * reports as being offline. Both ends are defended: the server defaults it too.
+ * This end is the one that keeps the value honest, because here we still know
+ * whether the item is new.
+ */
+function withRequiredWishlistFields<T extends Partial<WishlistItem>>(item: T): T {
+  return item.dateAdded ? item : { ...item, dateAdded: new Date().toISOString() };
 }
 
 /**

@@ -975,6 +975,7 @@ export const fr: Dictionary = {
   "stats.rolloverDetail": "reports de fin de mois cumulés",
   "stats.spentPeriod": "Dépensé · {period}",
   "legend.title": "Ce que signifient les symboles",
+  "wallet.leftoverDeferred": "{amount} de budget reste à décider ce mois-ci",
   "settings.statusColours": "Couleurs des états",
   "settings.statusColoursHint": "Utilisées pour le montant d'une ligne, les segments d'une barre et le rapport. La nuance du texte est dérivée de votre couleur pour rester lisible.",
   "settings.resetColour": "Utiliser celle du thème",

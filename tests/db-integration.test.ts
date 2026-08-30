@@ -464,6 +464,49 @@ describeDb("PostgreSQL integration", () => {
     expect(restored.weekdays).toBeUndefined();
   });
 
+  it("saves a wishlist item that has no dateAdded rather than rejecting the whole budget", async () => {
+    /*
+     * The bug this exists for cost an entire account's persistence.
+     *
+     * `date_added` is NOT NULL and was the one column on the row passed
+     * through raw while every neighbour is coerced. One item without it — from
+     * an import, an older client, or any path that does not go through
+     * `addWishlistItem` — made the *snapshot* write fail, and the interface
+     * reported that as "Offline — this device only". The server was reachable
+     * and refusing, and nothing had saved for the whole session.
+     */
+    const snapshot = (await repo.loadSnapshot("active"))!;
+    const year = Object.values(snapshot.years)[0];
+    year.wishlistItems.push({
+      id: "wish-undated",
+      name: "Item with no date",
+      categoryId: snapshot.categories[0].id,
+      actualPrice: 10,
+      effectiveValue: 10,
+      currency: "EUR",
+      bought: false,
+      inWishlist: true,
+      priority: "low",
+      active: true,
+      notes: "",
+      // Deliberately absent, which is the whole point.
+      dateAdded: undefined as unknown as string,
+    });
+
+    await repo.saveSnapshot(snapshot, "active");
+    const reloaded = (await repo.loadSnapshot("active"))!;
+    const saved = Object.values(reloaded.years)
+      .flatMap((record) => record.wishlistItems)
+      .find((item) => item.id === "wish-undated");
+
+    expect(saved, "the item was not saved").toBeDefined();
+    // Defaulted rather than invented from nothing: it has to be a real date.
+    expect(saved!.dateAdded).toBeTruthy();
+    expect(Number.isFinite(Date.parse(saved!.dateAdded))).toBe(true);
+    // And the rest of the budget survived the write.
+    expect(Object.values(reloaded.years)[0].wishlistItems.length).toBeGreaterThan(0);
+  });
+
   it("round-trips wishlist links and the wishlist↔spending relationship", async () => {
     const snapshot = (await repo.loadSnapshot("active"))!;
     const year = Object.values(snapshot.years)[0];

@@ -90,6 +90,31 @@ const SETTINGS_FIELDS: Record<string, SettingsFieldCheck> = {
   // `null` clears the second currency, which is a legal thing to want; every
   // other value has to be a currency this application knows.
   secondaryCurrency: (value) => value === null || isCurrency(value),
+  /*
+   * The reader's own status colours, and the month they last deferred the
+   * leftover-budget question in.
+   *
+   * Both are settings the client writes, so both belong here — the whole
+   * snapshot goes through `PUT`, which does not consult this table, but a
+   * field the granular route would reject is a field that has quietly stopped
+   * being a setting.
+   *
+   * Colours are checked as six-digit hex rather than "some string": this value
+   * reaches a stylesheet, and the one thing that must never arrive there is
+   * arbitrary text.
+   */
+  statusColours: (value) =>
+    value != null &&
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    Object.entries(value as Record<string, unknown>).every(
+      ([kind, colour]) =>
+        ["personal", "other", "outside"].includes(kind) &&
+        typeof colour === "string" &&
+        /^#[0-9a-fA-F]{6}$/.test(colour),
+    ),
+  // "YYYY-MM", the month the deferral was given for.
+  leftoverDeferredFor: (value) => typeof value === "string" && /^\d{4}-(0[1-9]|1[0-2])$/.test(value),
   language: (value) => typeof value === "string" && LANGUAGE_CODES.has(value),
   appearance: isOneOf(APPEARANCES),
   themePreset: isOneOf(THEME_IDS),

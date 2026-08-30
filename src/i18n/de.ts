@@ -967,6 +967,7 @@ export const de: Dictionary = {
   "stats.rolloverDetail": "aufgelaufene Monatsend-Überträge",
   "stats.spentPeriod": "Ausgegeben · {period}",
   "legend.title": "Was die Symbole bedeuten",
+  "wallet.leftoverDeferred": "{amount} Budget ist diesen Monat noch offen",
   "settings.statusColours": "Statusfarben",
   "settings.statusColoursHint": "Für den Betrag in einer Zeile, die Segmente eines Balkens und den Bericht. Der Textton wird aus deiner Farbe abgeleitet und bleibt lesbar.",
   "settings.resetColour": "Die des Themes verwenden",

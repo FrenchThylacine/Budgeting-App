@@ -192,6 +192,15 @@ export interface Settings {
    */
   statusColours?: Partial<Record<"personal" | "other" | "outside", string>>;
   /**
+   * The month in which the reader said "decide later" about leftover budget.
+   *
+   * A month key rather than a boolean: deferring is an answer about *this*
+   * month's leftover, and next month's is a new question. It used to be
+   * component state, so the banner came back on every reload — which is the
+   * opposite of remembering a decision.
+   */
+  leftoverDeferredFor?: string;
+  /**
    * The interface language, as a BCP 47 tag ("en", "fr", "pt-BR").
    *
    * Absent means "follow the browser", which is what every budget written

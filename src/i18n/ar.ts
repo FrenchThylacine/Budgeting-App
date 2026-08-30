@@ -999,6 +999,7 @@ export const ar: Dictionary = {
   "stats.rolloverDetail": "مبالغ مُرحّلة متراكمة في نهاية الشهر",
   "stats.spentPeriod": "أُنفق · {period}",
   "legend.title": "ماذا تعني الرموز",
+  "wallet.leftoverDeferred": "لا يزال {amount} من الميزانية دون قرار هذا الشهر",
   "settings.statusColours": "ألوان الحالات",
   "settings.statusColoursHint": "تُستخدم لمبلغ الصف وشرائح الشريط والتقرير. تُشتق درجة النص من لونك ليبقى مقروءًا.",
   "settings.resetColour": "استخدام لون السمة",
