@@ -290,7 +290,7 @@ export const AnalyticsPanel: React.FC = () => {
       )}
 
       {/* ── Overview ───────────────────────────────────────────────────────── */}
-      <Section title={`Overview · ${currentPeriodLabel}`}>
+      <Section title={`${t("stats.overview")} · ${currentPeriodLabel}`}>
         <div className="card" style={{ padding: 20, display: "grid", gap: 20, minWidth: 0 }}>
           <div
             style={{
@@ -406,15 +406,10 @@ export const AnalyticsPanel: React.FC = () => {
       </Section>
 
       {/* ── Spending ───────────────────────────────────────────────────────── */}
-      <Section title={t("nav.spending")}>
+      <Section title={t("nav.spending")} collapsible>
         <div style={{ display: "grid", gap: 16, minWidth: 0 }}>
           <ChartCard
             title={mode === "week" ? t("stats.weeklyTrend") : t("stats.spendingThrough", { year: settings.selectedYear })}
-            subtitle={
-              mode === "week"
-                ? t("stats.weeksHint")
-                : t("stats.monthsHint")
-            }
           >
             {trendBars.length === 0 || trendBars.every((bar) => bar.value == null) ? (
               <ChartPlaceholder height={180} message={t("stats.noSpendingRecordedYetFor")} />
@@ -469,7 +464,7 @@ export const AnalyticsPanel: React.FC = () => {
       </Section>
 
       {/* ── Budget ─────────────────────────────────────────────────────────── */}
-      <Section title={t("settings.budget")}>
+      <Section title={t("settings.budget")} collapsible defaultOpen={false}>
         <div style={{ display: "grid", gap: 16, minWidth: 0 }}>
           <ChartCard
             title={t("stats.budgetVsActual")}
@@ -575,7 +570,7 @@ export const AnalyticsPanel: React.FC = () => {
       </Section>
 
       {/* ── Categories ─────────────────────────────────────────────────────── */}
-      <Section title={t("nav.categories")}>
+      <Section title={t("nav.categories")} collapsible defaultOpen={false}>
         <div style={{ display: "grid", gap: 16, minWidth: 0 }}>
           <ChartCard
             title={t("dashboard.whereTheMoneyWent")}
@@ -634,7 +629,7 @@ export const AnalyticsPanel: React.FC = () => {
       </Section>
 
       {/* ── Recurring ──────────────────────────────────────────────────────── */}
-      <Section title={t("report.recurring")}>
+      <Section title={t("report.recurring")} collapsible defaultOpen={false}>
         <div style={{ display: "grid", gap: 16, minWidth: 0 }}>
           <ChartCard
             title={t("stats.committedVsDiscretionary")}
@@ -701,7 +696,7 @@ export const AnalyticsPanel: React.FC = () => {
       </Section>
 
       {/* ── Activities ─────────────────────────────────────────────────────── */}
-      <Section title={t("stats.activityCost")}>
+      <Section title={t("stats.activityCost")} collapsible defaultOpen={false}>
         <div style={{ display: "grid", gap: 16, minWidth: 0 }}>
           {activityCosts.items.length === 0 ? (
             <EmptyState title={t("stats.noActivities")} description={t("stats.noActivitiesBody")} />
@@ -709,7 +704,7 @@ export const AnalyticsPanel: React.FC = () => {
             <>
               <ChartCard
                 title={t("stats.activityShare")}
-                subtitle={`${money(activityCosts.yearly.personal)} ${t("common.perYear")}`}
+                subtitle={`${money(activityCosts.yearly.personal)} ${t("common.perYear")} · ${t("stats.ofWhatYouPay")}`}
                 note={
                   activityCosts.externallyFundedCount > 0
                     ? t("stats.notYours", { count: activityCosts.externallyFundedCount })
@@ -743,7 +738,7 @@ export const AnalyticsPanel: React.FC = () => {
                 )}
               </ChartCard>
 
-              <ChartCard title={t("stats.fundingSplit")} subtitle={t("funding.gross.hint")}>
+              <ChartCard title={t("stats.fundingSplit")} subtitle={t("stats.ofAllActivityCost")}>
                 {/* Three slices, never two: "paid by others" and "outside
                     budget" behave identically against the budget and answer
                     different questions, so collapsing them here would destroy
@@ -762,19 +757,20 @@ export const AnalyticsPanel: React.FC = () => {
                   size={200}
                   emptyMessage={t("stats.noActivitiesBody")}
                 />
+                {/* The donut's own legend already carries every percentage.
+                    Repeating them here as "· 43.0% of the total" restated the
+                    chart directly under it — and said "the total" about a
+                    whole that the chart two cards above uses a different one
+                    for, which is the ambiguity that made a reader believe
+                    money somebody else pays had got into their own share. */}
                 <StatRow
                   columns={150}
-                  items={FUNDING_KINDS.map((kind) => {
-                    const share = fundingShares(activityCosts.yearly)[kind];
-                    return {
-                      label: `${FUNDING_META[kind].glyph} ${t(`funding.${kind}.short`)}`,
-                      value: money(activityCosts.yearly[kind]),
-                      detail: `${money(activityCosts.monthly[kind])} ${t("common.perMonth")}${
-                        share != null ? ` · ${t("stats.shareOfTotal", { percent: `${share.toFixed(1)}%` })}` : ""
-                      }`,
-                      tone: kind === "personal" ? undefined : ("warning" as const),
-                    };
-                  })}
+                  items={FUNDING_KINDS.map((kind) => ({
+                    label: `${FUNDING_META[kind].glyph} ${t(`funding.${kind}.short`)}`,
+                    value: money(activityCosts.yearly[kind]),
+                    detail: `${money(activityCosts.monthly[kind])} ${t("common.perMonth")}`,
+                    tone: kind === "personal" ? undefined : ("warning" as const),
+                  }))}
                 />
               </ChartCard>
 
@@ -816,7 +812,7 @@ export const AnalyticsPanel: React.FC = () => {
       </Section>
 
       {/* ── History ────────────────────────────────────────────────────────── */}
-      <Section title={t("nav.history")}>
+      <Section title={t("nav.history")} collapsible defaultOpen={false}>
         <div style={{ display: "grid", gap: 16, minWidth: 0 }}>
           <ChartCard
             title={t("stats.periodComparison")}

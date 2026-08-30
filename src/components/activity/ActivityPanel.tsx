@@ -17,6 +17,9 @@ import {
 import { currencyOptionsFor, formatMoney, numberLocale } from "../../domain/currency";
 import { SwipeRow } from "../ui/SwipeRow";
 import { RowMenu } from "../ui/RowMenu";
+import { CadenceMark } from "../ui/CadenceMark";
+import { activityCadence } from "../../domain/cadence";
+import { Total } from "../ui/Money";
 import { gesturesFor } from "../../domain/gestures";
 import { AdvancedFields, EditorSheet } from "../ui/EditorSheet";
 import { monthName } from "../../domain/dates";
@@ -113,6 +116,27 @@ export const ActivityPanel: React.FC = () => {
     snapshot.categories.find((category) => category.id === id)?.name ?? t("common.uncategorised");
 
   const patch = (changes: Partial<ActivityDraft>) => setForm((current) => ({ ...current, ...changes }));
+
+  /**
+   * Which price field the chosen cost model actually reads.
+   *
+   * The editor showed all five at once — monthly, per session, per purchase,
+   * yearly and a fallback estimate — of which exactly one is ever used. Four
+   * empty boxes beside the one that matters is not a form, it is a quiz. The
+   * rest are still there, one press behind, because `auto` genuinely can read
+   * whichever is filled in.
+   */
+  const relevantPrice = (field: "pricePerMonth" | "pricePerSession" | "pricePerPurchase" | "yearlyEstimate"): boolean => {
+    const model = form.costModel ?? "auto";
+    if (model === "fixed") return field === "pricePerMonth";
+    if (model === "perSession" || model === "sessionPack" || model === "schedule") return field === "pricePerSession";
+    if (model === "fixedYearly") return field === "yearlyEstimate";
+    // `auto` follows the recurrence type, which is what it is documented to do.
+    if (form.recurrenceType === "yearly") return field === "yearlyEstimate";
+    if (form.recurrenceType === "session") return field === "pricePerSession";
+    if (form.recurrenceType === "purchase") return field === "pricePerPurchase";
+    return field === "pricePerMonth";
+  };
 
   const begin = (activity: Activity | null) => {
     setEditing(activity);
@@ -374,14 +398,10 @@ export const ActivityPanel: React.FC = () => {
       >
         {!mutable && <div className="historical-banner">{t("common.readOnly")}</div>}
 
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 160px), 1fr))",
-            gap: 8,
-            marginBottom: 14,
-          }}
-        >
+        {/* Search across the top, the two selects sharing the row beneath.
+            `auto-fit` with a 160px floor gave three stacked full-width rows on
+            a phone — three rows of chrome before the first activity. */}
+        <div className="filter-bar">
           <input
             className="input"
             type="search"
@@ -418,7 +438,7 @@ export const ActivityPanel: React.FC = () => {
         {open && (
           <EditorSheet
             title={editing ? editing.name || t("activities.edit") : t("activities.new")}
-            subtitle={editing ? "Changes apply from the selected period onward." : undefined}
+            subtitle={editing ? t("activities.editSubtitle") : undefined}
             onClose={() => {
               setOpen(false);
               setEditing(null);
@@ -477,9 +497,6 @@ export const ActivityPanel: React.FC = () => {
                   ))}
                 </select>
               </Field>
-              <Field label={t("activity.colour")} span group>
-                <ColorPicker value={form.color || undefined} onChange={(color) => patch({ color: color ?? "" })} />
-              </Field>
             </FieldGroup>
 
             {/* Who pays.
@@ -494,7 +511,11 @@ export const ActivityPanel: React.FC = () => {
                 label={t("funding.label")}
                 name="funding"
                 span={form.fundingSource !== "other"}
-                hint={t(`funding.${form.fundingSource}.hint`)}
+                /* The hint explains what the choice *does* to the budget,
+                   which is only worth saying for the two that do something
+                   unexpected. "Counts against your budget" under the default
+                   is a sentence explaining the absence of a surprise. */
+                hint={form.fundingSource === "personal" ? undefined : t(`funding.${form.fundingSource}.hint`)}
               >
                 <select
                   className="select"
@@ -523,25 +544,6 @@ export const ActivityPanel: React.FC = () => {
               )}
             </FieldGroup>
 
-            {/* The same icon controls the wishlist uses, from the same module:
-                a library icon and a live preview in view, an image link and a
-                site to take the icon from one tap behind. Activities used to
-                have the library and nothing else. */}
-            <MarkFields
-              source={{ icon: form.icon, iconUrl: form.iconUrl, sourceUrl: form.iconSourceUrl }}
-              accent={draftAccent || "var(--accent)"}
-              fallback={<Circle size={20} color={draftAccent || "var(--accent)"} />}
-              sourceLabel={t("activity.iconFromAWebsite")}
-              sourcePlaceholder="navigraph.com"
-              sourceHint={t("activity.theDeveloperPublisherOrClub")}
-              onChange={(next) =>
-                patch({
-                  ...(next.icon !== undefined ? { icon: next.icon } : {}),
-                  ...(next.iconUrl !== undefined ? { iconUrl: next.iconUrl } : {}),
-                  ...(next.sourceUrl !== undefined ? { iconSourceUrl: next.sourceUrl } : {}),
-                })
-              }
-            />
 
             <FieldGroup title={t("activities.groupRecurrence")}>
               <Field label={t("activity.recurrenceType")}>
@@ -740,64 +742,134 @@ export const ActivityPanel: React.FC = () => {
             )}
 
             <FieldGroup title={t("activities.groupPrices")}>
+              {relevantPrice("pricePerMonth") && (
               <Field label={t("activity.monthlyCost")} name="pricePerMonth" emphasised={form.costModel === "fixed"}>
-                <input
-                  className="input"
-                  type="number"
-                  step="any"
-                  placeholder="—"
-                  value={form.pricePerMonth}
-                  onChange={(event) => patch({ pricePerMonth: event.target.value })}
-                />
-              </Field>
+                  <input
+                    className="input"
+                    type="number"
+                    step="any"
+                    placeholder="—"
+                    value={form.pricePerMonth}
+                    onChange={(event) => patch({ pricePerMonth: event.target.value })}
+                  />
+                </Field>
+              )}
+              {relevantPrice("pricePerSession") && (
               <Field
-                label={t("activity.sessionCost")}
-                emphasised={form.costModel === "perSession" || form.costModel === "schedule" || form.costModel === "sessionPack"}
-              >
-                <input
-                  className="input"
-                  type="number"
-                  step="any"
-                  placeholder="—"
-                  value={form.pricePerSession}
-                  onChange={(event) => patch({ pricePerSession: event.target.value })}
-                />
-              </Field>
+                  label={t("activity.sessionCost")}
+                  emphasised={form.costModel === "perSession" || form.costModel === "schedule" || form.costModel === "sessionPack"}
+                >
+                  <input
+                    className="input"
+                    type="number"
+                    step="any"
+                    placeholder="—"
+                    value={form.pricePerSession}
+                    onChange={(event) => patch({ pricePerSession: event.target.value })}
+                  />
+                </Field>
+              )}
+              {relevantPrice("pricePerPurchase") && (
               <Field label={t("activity.purchaseCost")} emphasised={form.recurrenceType === "purchase"}>
-                <input
-                  className="input"
-                  type="number"
-                  step="any"
-                  placeholder="—"
-                  value={form.pricePerPurchase}
-                  onChange={(event) => patch({ pricePerPurchase: event.target.value })}
-                />
-              </Field>
+                  <input
+                    className="input"
+                    type="number"
+                    step="any"
+                    placeholder="—"
+                    value={form.pricePerPurchase}
+                    onChange={(event) => patch({ pricePerPurchase: event.target.value })}
+                  />
+                </Field>
+              )}
+              {relevantPrice("yearlyEstimate") && (
               <Field
-                label={t("activity.yearlyEstimate")}
-                emphasised={form.recurrenceType === "yearly" || form.costModel === "fixedYearly"}
-                hint={form.costModel === "fixedYearly" ? "The same field as the yearly charge above." : undefined}
-              >
-                <input
-                  className="input"
-                  type="number"
-                  step="any"
-                  placeholder="—"
-                  value={form.yearlyEstimate}
-                  onChange={(event) => patch({ yearlyEstimate: event.target.value })}
-                />
-              </Field>
-              <Field label={t("activity.estimatedCost")} hint={t("activity.fallbackUsedByTheAutomatic")}>
-                <input
-                  className="input"
-                  type="number"
-                  step="any"
-                  placeholder="—"
-                  value={form.estimatedCost}
-                  onChange={(event) => patch({ estimatedCost: event.target.value })}
-                />
-              </Field>
+                  label={t("activity.yearlyEstimate")}
+                  emphasised={form.recurrenceType === "yearly" || form.costModel === "fixedYearly"}
+                  hint={form.costModel === "fixedYearly" ? t("activity.sameAsYearlyCharge") : undefined}
+                >
+                  <input
+                    className="input"
+                    type="number"
+                    step="any"
+                    placeholder="—"
+                    value={form.yearlyEstimate}
+                    onChange={(event) => patch({ yearlyEstimate: event.target.value })}
+                  />
+                </Field>
+              )}
             </FieldGroup>
+
+            {/* The prices this model does not read, and the fallback the
+                automatic model uses when none of them is filled in. */}
+            <AdvancedFields label={t("activity.otherPrices")}>
+              <FieldGroup title={t("activity.otherPrices")}>
+                {!relevantPrice("pricePerMonth") && (
+              <Field label={t("activity.monthlyCost")} name="pricePerMonth" emphasised={form.costModel === "fixed"}>
+                    <input
+                      className="input"
+                      type="number"
+                      step="any"
+                      placeholder="—"
+                      value={form.pricePerMonth}
+                      onChange={(event) => patch({ pricePerMonth: event.target.value })}
+                    />
+                  </Field>
+                )}
+                {!relevantPrice("pricePerSession") && (
+              <Field
+                    label={t("activity.sessionCost")}
+                    emphasised={form.costModel === "perSession" || form.costModel === "schedule" || form.costModel === "sessionPack"}
+                  >
+                    <input
+                      className="input"
+                      type="number"
+                      step="any"
+                      placeholder="—"
+                      value={form.pricePerSession}
+                      onChange={(event) => patch({ pricePerSession: event.target.value })}
+                    />
+                  </Field>
+                )}
+                {!relevantPrice("pricePerPurchase") && (
+              <Field label={t("activity.purchaseCost")} emphasised={form.recurrenceType === "purchase"}>
+                    <input
+                      className="input"
+                      type="number"
+                      step="any"
+                      placeholder="—"
+                      value={form.pricePerPurchase}
+                      onChange={(event) => patch({ pricePerPurchase: event.target.value })}
+                    />
+                  </Field>
+                )}
+                {!relevantPrice("yearlyEstimate") && (
+              <Field
+                    label={t("activity.yearlyEstimate")}
+                    emphasised={form.recurrenceType === "yearly" || form.costModel === "fixedYearly"}
+                    hint={form.costModel === "fixedYearly" ? t("activity.sameAsYearlyCharge") : undefined}
+                  >
+                    <input
+                      className="input"
+                      type="number"
+                      step="any"
+                      placeholder="—"
+                      value={form.yearlyEstimate}
+                      onChange={(event) => patch({ yearlyEstimate: event.target.value })}
+                    />
+                  </Field>
+                )}
+              <Field label={t("activity.estimatedCost")} hint={t("activity.fallbackUsedByTheAutomatic")}>
+                  <input
+                    className="input"
+                    type="number"
+                    step="any"
+                    placeholder="—"
+                    value={form.estimatedCost}
+                    onChange={(event) => patch({ estimatedCost: event.target.value })}
+                  />
+                </Field>
+              </FieldGroup>
+            </AdvancedFields>
 
             <div
               aria-live="polite"
@@ -863,6 +935,38 @@ export const ActivityPanel: React.FC = () => {
                 </Field>
               )}
             </FieldGroup>
+
+            {/* How it looks, put away.
+
+                Colour and icon opened the editor — eleven swatches and an
+                icon library, above the question of what the thing costs. They
+                are worth having and they are never the reason somebody opened
+                this sheet. */}
+            <AdvancedFields label={t("activity.appearance")}>
+              <FieldGroup title={t("activity.appearance")}>
+                <Field label={t("activity.colour")} span group>
+                  <ColorPicker value={form.color || undefined} onChange={(color) => patch({ color: color ?? "" })} />
+                </Field>
+              </FieldGroup>
+              {/* The same icon controls the wishlist uses, from the same
+                  module: a library icon and a live preview in view, an image
+                  link and a site to take the icon from one tap behind. */}
+              <MarkFields
+                source={{ icon: form.icon, iconUrl: form.iconUrl, sourceUrl: form.iconSourceUrl }}
+                accent={draftAccent || "var(--accent)"}
+                fallback={<Circle size={20} color={draftAccent || "var(--accent)"} />}
+                sourceLabel={t("activity.iconFromAWebsite")}
+                sourcePlaceholder="navigraph.com"
+                sourceHint={t("activity.theDeveloperPublisherOrClub")}
+                onChange={(next) =>
+                  patch({
+                    ...(next.icon !== undefined ? { icon: next.icon } : {}),
+                    ...(next.iconUrl !== undefined ? { iconUrl: next.iconUrl } : {}),
+                    ...(next.sourceUrl !== undefined ? { iconSourceUrl: next.sourceUrl } : {}),
+                  })
+                }
+              />
+            </AdvancedFields>
 
             <AdvancedFields label={t("activity.seasonNotesAndVisibility")}>
             <FieldGroup title={t("activities.groupDetails")}>
@@ -1025,43 +1129,63 @@ export const ActivityPanel: React.FC = () => {
                         </span>
                       )}
                     </div>
-                    <div className="text-footnote" style={{ letterSpacing: "0.02em", textTransform: "none" }}>
-                      {describeActivity(activity, year, month, t, monthNames())}
-                    </div>
-                    <div className="text-caption" style={{ marginTop: 2 }}>
-                      {categoryName(activity.categoryId)}
+                    {/* One meta line, not three.
+                        It was: the cadence sentence, then the category, then
+                        what falls due — three stacked lines under every name,
+                        for facts that fit on one. The cadence is a shape, the
+                        category is a word, and the due state keeps its own
+                        colour because it is the only part that changes with
+                        the month. */}
+                    <div className="activity-meta">
+                      <CadenceMark cadence={activityCadence(activity)} />
+                      <span className="activity-meta-category">{categoryName(activity.categoryId)}</span>
+                      {describeActivity(activity, year, month, t, monthNames()) && (
+                        <span className="activity-meta-detail">
+                          {describeActivity(activity, year, month, t, monthNames())}
+                        </span>
+                      )}
                       {/* The seasonal tag, only when it is not the default:
                           "normal" on every row is a column of the same word. */}
-                      {activity.seasonalTag && activity.seasonalTag !== "normal"
-                        ? ` · ${activity.seasonalTag}`
-                        : ""}
-                    </div>
-                    {/* What this month actually requires from this activity —
-                        which for eleven months of a yearly subscription is
-                        nothing, and for an activity with no known date is
-                        neither nothing nor a guess. */}
-                    {due && (
-                      <div className="activity-due" data-status={due.status}>
-                        <CalendarClock size={12} aria-hidden="true" />
-                        <span>
-                          {due.status === "unknown"
-                            ? t("activities.dateUnknown")
-                            : due.status === "not-due"
-                              ? t("activities.notDueThisMonth")
-                              : due.datesKnown && due.dueDates.length > 0
-                                ? `${baseMoney(due.dueBase)} · ${t("activities.dueOn", {
-                                    date: formatDate(due.dueDates[0], { day: "numeric", month: "short" }),
-                                  })}`
-                                : `${baseMoney(due.dueBase)} · ${t("activities.dueThisMonth")}`}
-                        </span>
-                        {due.status === "unknown" && due.unknownReason && (
-                          <span title={t(due.unknownReason)} className="activity-due-why">
-                            <HelpCircle size={12} aria-hidden="true" />
-                            <span className="sr-only">{t(due.unknownReason)}</span>
+                      {activity.seasonalTag && activity.seasonalTag !== "normal" && (
+                        <span className="activity-meta-detail">{activity.seasonalTag}</span>
+                      )}
+                      {/* What this month actually requires from this activity —
+                          which for eleven months of a yearly subscription is
+                          nothing, and for an activity with no known date is
+                          neither nothing nor a guess. */}
+                      {due && (
+                        <span
+                          className="activity-due"
+                          data-status={due.status}
+                          title={due.status === "not-due" ? t("activities.notDueThisMonth") : undefined}
+                        >
+                          <CalendarClock size={12} aria-hidden="true" />
+                          {/* "Nothing due this month" was a column of the same
+                              five words down a list where most rows are not due
+                              in most months. What is worth reading is the row
+                              that *is* — so the quiet case keeps its glyph, its
+                              tooltip and its accessible name, and gives up its
+                              line. */}
+                          <span className={due.status === "not-due" ? "sr-only" : undefined}>
+                            {due.status === "unknown"
+                              ? t("activities.dateUnknown")
+                              : due.status === "not-due"
+                                ? t("activities.notDueThisMonth")
+                                : due.datesKnown && due.dueDates.length > 0
+                                  ? `${baseMoney(due.dueBase)} · ${t("activities.dueOn", {
+                                      date: formatDate(due.dueDates[0], { day: "numeric", month: "short" }),
+                                    })}`
+                                  : `${baseMoney(due.dueBase)} · ${t("activities.dueThisMonth")}`}
                           </span>
-                        )}
-                      </div>
-                    )}
+                          {due.status === "unknown" && due.unknownReason && (
+                            <span title={t(due.unknownReason)} className="activity-due-why">
+                              <HelpCircle size={12} aria-hidden="true" />
+                              <span className="sr-only">{t(due.unknownReason)}</span>
+                            </span>
+                          )}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
 
@@ -1190,6 +1314,37 @@ const ActivitySummary: React.FC<{
     <section className="activity-summary" aria-label={t("activities.summaryTitle")}>
       <h2 className="text-title activity-summary-title">{t("activities.summaryTitle")}</h2>
 
+      {/* Who pays for it, drawn.
+          A length is read in less time than three percentages are, and it can
+          only mean one thing — where "43.0% of the total" on a column headed
+          PAID BY OTHER read, to the person who asked for this pass, exactly
+          like the personal-share statistic it is not. */}
+      {summary.yearly.gross > 0 && (
+        <div
+          className="funding-bar"
+          role="img"
+          aria-label={FUNDING_KINDS.map(
+            (kind) =>
+              `${t(`funding.${kind}.short`)} ${shares[kind] != null ? `${shares[kind]!.toFixed(0)}%` : "0%"}`,
+          ).join(", ")}
+        >
+          {FUNDING_KINDS.filter((kind) => (shares[kind] ?? 0) > 0).map((kind) => (
+            <span
+              key={kind}
+              className="funding-bar-part"
+              data-funding={kind}
+              style={{ width: `${shares[kind]}%` }}
+              title={`${t(`funding.${kind}.short`)} · ${shares[kind]!.toFixed(1)}%`}
+            >
+              {/* The glyph rides inside its own segment, so the split survives
+                  a greyscale screenshot and a colour-blind reader. */}
+              <span aria-hidden="true">{FUNDING_META[kind].glyph}</span>
+              {(shares[kind] ?? 0) >= 12 && <span className="funding-bar-value">{shares[kind]!.toFixed(0)}%</span>}
+            </span>
+          ))}
+        </div>
+      )}
+
       <div className="activity-summary-grid">
         {/* The captions carry data now, not explanation. "Every active
             activity, whoever pays" and "the payments that actually fall due
@@ -1200,12 +1355,18 @@ const ActivitySummary: React.FC<{
           <div className="text-footnote" title={t("activities.totalCostHint")}>
             {t("activities.totalCost")}
           </div>
-          <div className="money activity-summary-value">{money(summary.monthly.gross)}</div>
+          <div className="money activity-summary-value"><Total amount={summary.monthly.gross} /></div>
           <div className="text-caption">
             {money(summary.yearly.gross)} {t("common.perYear")}
           </div>
         </div>
 
+        {/* The percentages moved into the bar above.
+            Each column used to end "· 43.0% of the total", which raised the
+            question the bar answers at a glance and left it ambiguous besides:
+            two different statistics on this page said "of the total" and meant
+            two different wholes. The bar is the split; the columns are the
+            money. */}
         {FUNDING_KINDS.map((kind) => (
           <div key={kind} className="activity-summary-figure" data-funding={kind}>
             <div className="text-footnote">
@@ -1217,7 +1378,6 @@ const ActivitySummary: React.FC<{
             <div className="money activity-summary-value">{money(summary.monthly[kind])}</div>
             <div className="text-caption">
               {money(summary.yearly[kind])} {t("common.perYear")}
-              {shares[kind] != null ? ` · ${t("stats.shareOfTotal", { percent: `${shares[kind]!.toFixed(1)}%` })}` : ""}
             </div>
           </div>
         ))}
@@ -1228,7 +1388,7 @@ const ActivitySummary: React.FC<{
           <div className="text-footnote" title={t("activities.requiredThisMonthHint")}>
             {t("activities.requiredThisMonth", { month: monthLabel })}
           </div>
-          <div className="money activity-summary-value">{money(required.personal)}</div>
+          <div className="money activity-summary-value"><Total amount={required.personal} /></div>
           <div className="text-caption">
             {required.gross !== required.personal
               ? `${money(required.gross)} ${t("funding.gross").toLowerCase()}`
@@ -1315,11 +1475,20 @@ function describeActivity(activity: Activity, year: number, month: number, t: Tr
           cycle,
         });
   }
-  if (model === "fixedYearly") return t("activity.summaryYearly");
-  if (model === "fixed") return t("activity.summaryFixed");
-  return t("activity.summaryAuto", {
-    recurrence: t(`recurrence.${activity.recurrenceType}`),
-    interval: activity.recurrenceInterval,
+  /*
+   * Nothing, where the mark beside it has already said it.
+   *
+   * "billed once a year" next to a yearly icon, "fixed monthly" next to a
+   * monthly one, "Monthly · every 1" next to either — the same fact twice, on
+   * every row of the list. What survives is only what the shape cannot carry:
+   * a count, a schedule, a payment cycle, an interval that is not one.
+   */
+  if (model === "fixedYearly" || model === "fixed") return "";
+  const interval = activity.recurrenceInterval;
+  if (!interval || interval === 1) return "";
+  return t("activity.summaryEvery", {
+    interval,
+    recurrence: t(`recurrence.${activity.recurrenceType}`).toLowerCase(),
   });
 }
 

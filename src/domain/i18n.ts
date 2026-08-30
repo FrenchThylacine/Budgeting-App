@@ -201,7 +201,18 @@ function interpolate(template: string, params: TranslateParams | undefined, loca
   return template.replace(/\{(\w+)\}/g, (match, name: string) => {
     const value = params[name];
     if (value == null) return match;
-    return typeof value === "number" ? formatNumber(value, locale) : String(value);
+    if (typeof value !== "number") return String(value);
+    /*
+     * A year is a label, not a quantity.
+     *
+     * Every other number here wants its locale's grouping — 1 234,56 — and
+     * this one does not: the statistics page was headed "Spending through
+     * 2,026". Keyed on the placeholder's *name* rather than on its magnitude,
+     * because 2026 is not distinguishable from a sum of money by looking at
+     * it, and a rule about what a value *is* belongs with its name.
+     */
+    const isYear = name === "year" || /Year$/.test(name);
+    return formatNumber(value, locale, isYear ? { useGrouping: false } : {});
   });
 }
 

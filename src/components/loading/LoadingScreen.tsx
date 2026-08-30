@@ -84,10 +84,10 @@ import { AIRCRAFT_IDS, DEFAULT_AIRCRAFT, ESCORT_AIRCRAFT, aircraftFor } from "..
  * circles for as long as it takes, a fast one circles briefly and then leaves.
  */
 
-/** Radius of the orbit, in scene pixels. */
+/** Radius of the display, in scene pixels. */
 const ORBIT_R = 178;
 /**
- * How far the orbital plane is tipped out of the screen.
+ * How far the display's plane is tipped out of the screen.
  *
  * 0° would be a flat disc seen face-on (the escorts would never pass in front
  * or behind); 90° would be edge-on (they would never pass above or below, and
@@ -98,9 +98,9 @@ const ORBIT_R = 178;
 const ORBIT_TILT = (56 * Math.PI) / 180;
 /** Camera distance for the perspective divide. Smaller is a wider lens. */
 const CAMERA_D = 540;
-/** One revolution. Slow enough to read as a turn rather than a spin. */
+/** One circuit. Slow enough to read as a manoeuvre rather than a spin. */
 const ORBIT_MS = 3000;
-/** Long enough that the orbit is seen at all before it is broken off. */
+/** Long enough that the routine is seen at all before it is broken off. */
 const MIN_ORBIT_MS = 700;
 const JOIN_MS = 950;
 const SETTLE_MS = 420;
@@ -134,7 +134,7 @@ const mixAngle = (from: number, to: number, t: number) => {
   return from + delta * t;
 };
 
-/** A point on the orbit, in scene space, before projection. */
+/** A point in the scene, before projection. */
 interface Point3 {
   x: number;
   y: number;
@@ -142,20 +142,49 @@ interface Point3 {
 }
 
 /**
- * The circle, in the tilted plane.
+ * The routine
+ * ===========
  *
- * Spanned by a horizontal axis and one tipped out of the screen, so θ = 0 is
- * level and to the right, θ = 90° is below and in front, θ = 180° is level and
- * to the left, θ = 270° is above and behind.
+ * A circle in a tilted plane was already three-dimensional — the escorts
+ * genuinely passed above, below, in front of and behind the lead — but it was
+ * *one* circle, traversed at a constant rate, and a constant rate around a
+ * fixed ring reads as machinery. Aeroplanes do not hold a perfect circle;
+ * that is the whole difficulty of formation flying.
+ *
+ * So the ring is perturbed. Three harmonics ride on top of it:
+ *
+ *  - a **roll** of the whole plane, which tips the circuit one way and then
+ *    the other, so successive passes are not the same pass;
+ *  - a **climb** on its own period, which lifts and drops the track through
+ *    the vertical — the "over the top, under the belly" the brief asks for;
+ *  - a **breathing radius**, which pulls the aircraft in close to the lead and
+ *    lets it swing wide again.
+ *
+ * The three periods are deliberately incommensurate — 1, 1/1.7 and 1/2.3 of a
+ * circuit — so the path never repeats inside the few seconds anybody watches,
+ * and the two escorts are given different phases so they weave rather than
+ * mirror. It costs three sines per aircraft per frame.
  */
-function orbitPoint(theta: number): Point3 {
-  const radians = (theta * Math.PI) / 180;
-  const cos = Math.cos(radians);
-  const sin = Math.sin(radians);
+function orbitPoint(theta: number, seat: number): Point3 {
+  const a = (theta * Math.PI) / 180;
+  // The escorts' own phase offsets: half a circuit apart on the ring, and a
+  // different corner of each harmonic, so their tracks cross rather than
+  // reflect.
+  const phase = seat * 2.4;
+
+  // The plane rolls about the direction of flight.
+  const tilt = ORBIT_TILT + Math.sin(a * 1.7 + phase) * 0.42;
+  // And the whole track rides up and down through the vertical.
+  const climb = Math.sin(a * 2.3 + phase * 1.6) * 0.34;
+  // The radius breathes: in tight, then wide again.
+  const radius = ORBIT_R * (1 + Math.sin(a * 1.3 + phase * 0.8) * 0.17);
+
+  const cos = Math.cos(a);
+  const sin = Math.sin(a);
   return {
-    x: ORBIT_R * cos,
-    y: ORBIT_R * sin * Math.sin(ORBIT_TILT),
-    z: ORBIT_R * sin * Math.cos(ORBIT_TILT),
+    x: radius * cos,
+    y: radius * (sin * Math.sin(tilt) + climb),
+    z: radius * sin * Math.cos(tilt),
   };
 }
 
@@ -173,10 +202,43 @@ function project(point: Point3): Projected {
 }
 
 /** Where the projected path is going, in screen degrees. */
-function headingAt(theta: number): number {
-  const here = project(orbitPoint(theta));
-  const next = project(orbitPoint(theta + 3));
+function headingAt(theta: number, seat: number): number {
+  const here = project(orbitPoint(theta, seat));
+  const next = project(orbitPoint(theta + 3, seat));
   return (Math.atan2(next.y - here.y, next.x - here.x) * 180) / Math.PI;
+}
+
+/**
+ * The Alpha Jet is drawn 64px long, nose-right, centred on the point the script
+ * positions. Its tailpipe sits a little behind the centre — 0.44 of the length,
+ * measured off the artwork rather than guessed, which is where the exhaust
+ * actually is once the drawing's transparent margin is taken off.
+ */
+const ESCORT_LENGTH = 64;
+const TAILPIPE = ESCORT_LENGTH * 0.44;
+
+/**
+ * Where the smoke comes out.
+ *
+ * Scene coordinates in, scene coordinates out, and the heading is the one the
+ * sprite is actually rotated by — which is the *screen* heading, because that
+ * is what a CSS `rotate` applies. The two spaces cancel: the sprite is drawn at
+ * `scene × scale` and rotated in screen space, so a screen-space offset of
+ * `TAILPIPE × scale` is a scene-space offset of exactly `TAILPIPE`.
+ *
+ * It used to be a bare `x - 26` in the join and formation phases — no heading
+ * at all — so for the whole of the roll-out, while the aeroplane was still
+ * turning, the smoke came out of a point beside it rather than out of the back
+ * of it. That is the "not quite from the exhaust" this fixes.
+ */
+function tailpipe(point: Point3, headingDegrees: number, index: number) {
+  const radians = (headingDegrees * Math.PI) / 180;
+  return {
+    x: point.x - Math.cos(radians) * TAILPIPE,
+    y: point.y - Math.sin(radians) * TAILPIPE,
+    z: point.z,
+    index,
+  };
 }
 
 /**
@@ -279,6 +341,15 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({ ready, onFinished,
 
     /** Three ribbons: two orbiting, one that joins late. */
     const trails: Puff[][] = [[], [], []];
+    /**
+     * Where each tailpipe was last frame.
+     *
+     * At the fast end of the routine an escort covers thirty or forty scene
+     * pixels between frames, and one puff per frame leaves the ribbon starting
+     * a visible gap behind the aeroplane that is drawing it. The gap is filled
+     * by walking from the previous tailpipe to this one.
+     */
+    const lastTail: (Puff | null)[] = [null, null, null];
     let frame = 0;
     let last = performance.now();
     const start = last;
@@ -342,7 +413,8 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({ ready, onFinished,
      * the canvas *under* the lead aircraft and a run with z > 0 on the one over
      * it, so a ribbon laid down behind the lead stays behind it.
      */
-    const drawTrail = (trail: Puff[], colour: readonly number[], alpha: number, spread: number) => {
+    const drawTrail = (trail: Puff[], colour: readonly number[], alpha: number, spread: number, youngerThan = Infinity) => {
+      if (youngerThan !== Infinity) trail = trail.filter((puff) => puff.age <= youngerThan);
       if (trail.length < 3) return;
       let runStart = 0;
       for (let index = 1; index <= trail.length; index++) {
@@ -375,7 +447,7 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({ ready, onFinished,
            * a square root, because a plume spreads quickly at first and then
            * slows. Linear growth gives a wedge, which reads as a banner.
            */
-          const half = (2.2 + 26 * Math.sqrt(life) * spread) * scale;
+          const half = (3.4 + 26 * Math.sqrt(life) * spread) * scale;
           // Two frequencies, both slow: one long undulation and one shorter
           // ripple on top of it. A single sine reads as a sine.
           const wander =
@@ -430,9 +502,9 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({ ready, onFinished,
         const theta = (elapsed / ORBIT_MS) * 360;
         for (let index = 0; index < 2; index++) {
           const angle = theta + index * 180;
-          const point = orbitPoint(angle);
+          const point = orbitPoint(angle, index);
           const projected = project(point);
-          const heading = headingAt(angle);
+          const heading = headingAt(angle, index);
           const node = escortRefs.current[index];
           if (node) {
             node.style.transform =
@@ -443,20 +515,13 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({ ready, onFinished,
             // contrast, the way distance actually works.
             node.style.opacity = (0.72 + 0.28 * ((point.z + ORBIT_R) / (2 * ORBIT_R))).toFixed(3);
           }
-          // The tailpipe, in scene space: a little way back along the heading.
-          const radians = (heading * Math.PI) / 180;
-          emit.push({
-            x: point.x - Math.cos(radians) * 26,
-            y: point.y - Math.sin(radians) * 26,
-            z: point.z,
-            index,
-          });
+          emit.push(tailpipe(point, heading, index));
         }
         if (readyRef.current && elapsed >= MIN_ORBIT_MS) {
           breakOff = now;
           released = [0, 1].map((index) => {
             const angle = theta + index * 180;
-            return { projected: project(orbitPoint(angle)), heading: headingAt(angle) };
+            return { projected: project(orbitPoint(angle, index)), heading: headingAt(angle, index) };
           });
           setPhaseOnce("join");
         }
@@ -478,7 +543,12 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({ ready, onFinished,
               node.style.zIndex = "1";
               node.style.opacity = "1";
             }
-            emit.push({ x: x - 26, y, z: mix(from.projected.z, 0, t), index });
+            // The same heading the sprite is rotated by, interpolated with
+            // it — so the exhaust stays at the back of the aeroplane through
+            // the whole roll-out rather than only once it is level.
+            emit.push(
+              tailpipe({ x, y, z: mix(from.projected.z, 0, t) }, mixAngle(from.heading, 0, t), index),
+            );
           }
           // The third slides in from behind and below, arriving as the other
           // two settle: a wingman joining, not an object fading in.
@@ -489,23 +559,42 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({ ready, onFinished,
               `translate3d(${mix(SLOTS[1].x - 210, SLOTS[1].x, arrival).toFixed(2)}px, ` +
               `${mix(SLOTS[1].y + 96, SLOTS[1].y, arrival).toFixed(2)}px, 0)`;
           }
-          if (arrival > 0) emit.push({ x: mix(SLOTS[1].x - 210, SLOTS[1].x, arrival) - 26, y: mix(SLOTS[1].y + 96, SLOTS[1].y, arrival), z: 0, index: 2 });
+          if (arrival > 0) {
+            emit.push(
+              tailpipe(
+                { x: mix(SLOTS[1].x - 210, SLOTS[1].x, arrival), y: mix(SLOTS[1].y + 96, SLOTS[1].y, arrival), z: 0 },
+                0,
+                2,
+              ),
+            );
+          }
         } else {
           // Locked into the slots from here on; the scene moves as one body.
           for (let index = 0; index < 3; index++) {
             const slot = SLOTS[index === 0 ? 0 : index === 1 ? 2 : 1];
             const node = escortRefs.current[index];
             if (node) node.style.transform = `translate3d(${slot.x}px, ${slot.y}px, 0)`;
-            emit.push({ x: slot.x - 26, y: slot.y, z: 0, index });
+            emit.push(tailpipe({ x: slot.x, y: slot.y, z: 0 }, 0, index));
           }
 
           if (since < JOIN_MS + SETTLE_MS) {
             setPhaseOnce("settle");
+            /*
+             * The hold is not a pause, it is a run-up.
+             *
+             * The formation used to sit at cruise for 420ms and then leave at
+             * a stroke, which is what made the departure read as a state
+             * change rather than as the end of a manoeuvre. The airspeed now
+             * builds through the hold — a quarter of the way to the burners —
+             * so the ribbons are already stretching before anything moves.
+             */
+            speed = mix(CRUISE, DEPART_SPEED, 0.25 * easeIn(clamp01((since - JOIN_MS) / SETTLE_MS)));
           } else {
             const departed = since - JOIN_MS - SETTLE_MS;
             setPhaseOnce("depart");
             const t = clamp01(departed / DEPART_MS);
-            speed = mix(CRUISE, DEPART_SPEED, easeIn(t));
+            // Picks up exactly where the hold left it.
+            speed = mix(mix(CRUISE, DEPART_SPEED, 0.25), DEPART_SPEED, easeIn(t));
             const scene = sceneRef.current;
             const root = rootRef.current;
             if (scene) scene.style.transform = `translate3d(${(easeIn(t) * 165).toFixed(2)}vw, 0, 0)`;
@@ -524,13 +613,27 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({ ready, onFinished,
       advect(dt, speed);
       emitClock += dt;
       for (const point of emit) {
-        trails[point.index].push({
-          x: point.x,
-          y: point.y,
-          z: point.z,
-          age: 0,
-          seed: emitClock * 2.6 + point.index * 5.3,
-        });
+        const previous = lastTail[point.index];
+        const seed = emitClock * 2.6 + point.index * 5.3;
+        // Fill the gap the aircraft's own speed opens between frames, so the
+        // ribbon starts at the exhaust rather than a few pixels behind it.
+        if (previous) {
+          const gap = Math.hypot(point.x - previous.x, point.y - previous.y);
+          const steps = Math.min(6, Math.floor(gap / 12));
+          for (let step = 1; step <= steps; step++) {
+            const k = step / (steps + 1);
+            trails[point.index].push({
+              x: mix(previous.x, point.x, k),
+              y: mix(previous.y, point.y, k),
+              z: mix(previous.z, point.z, k),
+              age: dt * (1 - k),
+              seed,
+            });
+          }
+        }
+        const puff: Puff = { x: point.x, y: point.y, z: point.z, age: 0, seed };
+        trails[point.index].push(puff);
+        lastTail[point.index] = puff;
       }
 
       back?.clearRect(-CANVAS_W / 2, -CANVAS_H / 2, CANVAS_W, CANVAS_H);
@@ -543,6 +646,17 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({ ready, onFinished,
         const colour = SLOTS[index === 0 ? 0 : index === 1 ? 2 : 1].smoke;
         drawTrail(trails[index], colour, 0.13, 1);
         drawTrail(trails[index], colour, 0.26, 0.52);
+        /*
+         * A dense core over the newest quarter-second.
+         *
+         * The ribbon is correct at the head — the emitter puts the first puff
+         * within four pixels of the tailpipe, measured — but at that age it is
+         * three pixels wide under a three-pixel blur, so the first sixty
+         * pixels of it are effectively invisible and the smoke *looks* as
+         * though it starts somewhere behind the aeroplane. This is the part
+         * that is still hot.
+         */
+        drawTrail(trails[index], colour, 0.5, 0.24, 0.28);
       }
 
       frame = requestAnimationFrame(tick);

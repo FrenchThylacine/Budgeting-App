@@ -285,7 +285,7 @@ export const ScenarioLab: React.FC = () => {
                       variant="primary"
                       size="sm"
                       disabled={!mutable || covered === 0}
-                      title={covered === 0 ? "None of this season's activities still exist" : undefined}
+                      title={covered === 0 ? t("scenario.seasonActivitiesGone") : undefined}
                       onClick={() => {
                         if (
                           window.confirm(

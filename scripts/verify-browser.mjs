@@ -98,12 +98,84 @@ try {
    */
   const depth = new Set();
   let bands = null;
+  /*
+   * Two more things recorded on the way past, both of which the last pass
+   * asserted in prose and neither of which anything measured:
+   *
+   *  - how far each escort's own smoke starts from its tailpipe, so "the
+   *    smoke comes out of the back of the aeroplane" is a number;
+   *  - how far the track wanders from a circle, so "an aerobatic routine, not
+   *    a ring" is one too.
+   */
+  let emitterGap = null;
+  const radii = [];
   const deadline = Date.now() + 20000;
   while (Date.now() < deadline) {
     const frame = await page.evaluate(`
       const screen = document.querySelector('.boot-screen');
       const phase = screen?.className.match(/boot-phase-(\\w+)/)?.[1] ?? 'gone';
       const layers = [...document.querySelectorAll('.boot-escort')].map((e) => e.style.zIndex).filter(Boolean);
+
+      /*
+       * The tailpipe, from the transform the sprite is actually drawn with,
+       * against the newest smoke of the matching colour. Both are read off the
+       * page — the transform string and the canvas pixels — so this measures
+       * what is on screen rather than what the script intended.
+       */
+      let gap = null;
+      const track = [];
+      const escorts = [...document.querySelectorAll('.boot-escort')].slice(0, 2);
+      const canvases = [...document.querySelectorAll('.boot-smoke')];
+      if (phase === 'orbit' && escorts.length === 2 && canvases.length === 2) {
+        const dpr = canvases[0].width / 1180;
+        const columns = canvases.map((c) => c.getContext('2d').getImageData(0, 0, c.width, c.height));
+        // One read per canvas per sample, shared by both escorts.
+        const HUES = [(r, g, b) => b > r + 30, (r, g, b) => r > b + 30];
+        const gaps = [];
+        for (const [seat, escort] of escorts.entries()) {
+          /* Every backslash is doubled below. This whole block is a JS
+             template literal, so a single backslash-d degrades to a plain d
+             and a single backslash-paren to a capture group before the browser
+             ever sees the regex. The file header warns about exactly this; it
+             caught the project out once before and it has just done it again.
+             (And no backticks in here either — they would end the literal.) */
+          const m = /translate3d\\(([-\\d.]+)px, ([-\\d.]+)px[^)]*\\)\\s*rotate\\(([-\\d.]+)deg\\)\\s*scale\\(([\\d.]+)\\)/.exec(escort.style.transform ?? '');
+          if (!m) continue;
+          const [cx, cy, deg, scale] = [Number(m[1]), Number(m[2]), Number(m[3]), Number(m[4])];
+          track.push(Math.hypot(cx, cy));
+          const rad = (deg * Math.PI) / 180;
+          const tx = cx - Math.cos(rad) * 28.16 * scale;
+          const ty = cy - Math.sin(rad) * 28.16 * scale;
+          /*
+           * A window around the tailpipe, not the whole canvas.
+           *
+           * Scanning both 2360×1240 backing stores per sample took long enough
+           * that the sequence finished during the first one, and the check
+           * reported "never caught the escorts mid-routine" — a measurement
+           * slow enough to miss what it measures.
+           */
+          const WINDOW = 70;
+          const px0 = Math.max(0, Math.round((tx + 590 - WINDOW) * dpr));
+          const px1 = Math.min(columns[0].width - 1, Math.round((tx + 590 + WINDOW) * dpr));
+          const py0 = Math.max(0, Math.round((ty + 310 - WINDOW) * dpr));
+          const py1 = Math.min(columns[0].height - 1, Math.round((ty + 310 + WINDOW) * dpr));
+          let best = Infinity;
+          for (const image of columns) {
+            const data = image.data;
+            for (let y = py0; y <= py1; y += 2) {
+              for (let x = px0; x <= px1; x += 2) {
+                const p = (y * image.width + x) * 4;
+                if (data[p + 3] < 60) continue;
+                if (!HUES[seat](data[p], data[p + 1], data[p + 2])) continue;
+                const d = Math.hypot(x / dpr - 590 - tx, y / dpr - 310 - ty);
+                if (d < best) best = d;
+              }
+            }
+          }
+          if (Number.isFinite(best)) gaps.push(Math.round(best));
+        }
+        if (gaps.length) gap = Math.max(...gaps);
+      }
       let bands = null;
       if (phase === 'settle' || phase === 'depart') {
         const canvases = [...document.querySelectorAll('.boot-smoke')];
@@ -133,10 +205,12 @@ try {
           bands = runs.filter((r) => r.to - r.from >= 4);
         }
       }
-      return { phase, layers, bands };
+      return { phase, layers, bands, gap, track };
     `);
     if (phases.at(-1) !== frame.phase) phases.push(frame.phase);
     for (const layer of frame.layers) depth.add(layer);
+    if (frame.gap != null) emitterGap = emitterGap == null ? frame.gap : Math.min(emitterGap, frame.gap);
+    for (const radius of frame.track ?? []) radii.push(radius);
     // The three ribbons nearest the slots, once all three are laid down.
     if (frame.bands) {
       const near = frame.bands.filter((band) => band.from >= -80 && band.to <= 80);
@@ -165,6 +239,31 @@ try {
     assert(depth.has("1"), "no escort was ever drawn behind the lead aircraft");
     assert(depth.has("3"), "no escort was ever drawn in front of the lead aircraft");
     return "behind and in front";
+  });
+
+  await check("the smoke comes out of the back of the aeroplane", () => {
+    /*
+     * Measured from the sprite's own transform to the nearest pixel of its own
+     * colour. The emitter used to be a bare `x - 26` with no heading at all
+     * for the whole of the roll-out, so the exhaust sat beside the aircraft
+     * rather than behind it — and the ribbon's head was thin enough under the
+     * blur that it looked detached even where it was not.
+     */
+    assert(emitterGap != null, "never caught the escorts mid-routine");
+    assert(emitterGap <= 26, `the smoke starts ${emitterGap}px from the tailpipe`);
+    return `${emitterGap}px from the tailpipe`;
+  });
+
+  await check("the escorts fly a routine, not a ring", () => {
+    // A circle has one radius. This one breathes, rolls and climbs, so the
+    // distance from the lead has to vary by a real margin over a circuit.
+    // The orbit is elastic: a warm load breaks it off at the 700ms floor, so
+    // the sample count is small and the *variation* is the assertion.
+    assert(radii.length >= 8, `only ${radii.length} samples of the track`);
+    const min = Math.min(...radii);
+    const max = Math.max(...radii);
+    assert(max - min > 40, `the track varies by only ${Math.round(max - min)}px — that is a ring`);
+    return `${Math.round(min)}–${Math.round(max)}px from the lead`;
   });
 
   await check("the formation leaves a tricolour: blue, white, red", () => {
@@ -651,29 +750,6 @@ try {
     return "back to today";
   });
 
-  // ── The second currency ────────────────────────────────────────────────────
-  group("Second currency");
-
-  await check("is off until it is chosen", async () => {
-    await openTab(page, "spending");
-    const pairs = await page.evaluate("document.querySelectorAll('.money-secondary').length");
-    equal(pairs, 0, "second-currency lines before it is enabled");
-    return "no second line";
-  });
-
-  await check("appears under an amount in another currency, and never under one already in it", async () => {
-    await openTab(page, "settings");
-    await page.click('.settings-group:nth-child(2)');
-    await sleep(200);
-    await page.waitFor("!!document.querySelector('[data-setting=secondaryCurrency]')");
-    await page.setValue("[data-setting=secondaryCurrency]", "USD");
-    await sleep(400);
-    const stored = await page.evaluate("document.querySelector('[data-setting=secondaryCurrency]').value");
-    equal(stored, "USD", "the stored second currency");
-    return "USD";
-  });
-
-
   // ── Exchange rates ────────────────────────────────────────────────────────
   group("Exchange rates");
 
@@ -948,6 +1024,101 @@ try {
     assert(after >= before, "the reset destroyed ledger rows instead of balancing them");
     return `zeroed, ${after} ledger rows kept`;
   });
+
+  // ── The second currency ────────────────────────────────────────────────────
+  group("Second currency");
+
+  /*
+   * Two equivalents, two questions.
+   *
+   * Under a **record** — a transaction in a currency of its own — the useful
+   * equivalent is the *display* currency, the one every total on the page is
+   * already in. Under an **aggregate**, it is the optional *second* currency,
+   * for somebody who earns in one and budgets in another.
+   *
+   * One function answered both, keyed on the second currency, so a Lebanese
+   * taxi in a euro budget printed "≈ $1.47" — a currency nothing beside it was
+   * in. The check that used to live here only asserted that the setting
+   * stored, which is why the swap survived it.
+   */
+  await check("records one in a currency that is not the display currency", async () => {
+    // 150 000 LBP, the specification's own example, so the two equivalents
+    // below have a real record to disagree about. Recorded *here* rather than
+    // with the rest of the budget: the wallet's balances are asserted against
+    // an exact figure, and one more transaction changes it.
+    await openTab(page, "spending");
+    await page.click('[data-action="add-spending"]');
+    await page.waitFor(`!!document.querySelector('${field("amount")}')`);
+    await page.setValue(field("amount"), "150000");
+    await page.setValue(field("note"), "Taxi");
+    await page.setValue(field("currency"), "LBP");
+    await sleep(150);
+    await page.click(".sheet-footer .btn-primary");
+    await sleep(700);
+    const shown = await page.evaluate(`
+      const row = [...document.querySelectorAll('.item-row')].find((n) => /Taxi/.test(n.textContent ?? ''));
+      return row ? row.querySelector('.money-pair, .item-amount, strong')?.textContent?.trim() ?? row.textContent.trim().slice(0, 60) : null;
+    `);
+    assert(shown, "the foreign transaction is not in the list");
+    return shown.replace(/\s+/g, " ").slice(0, 60);
+  });
+
+  await check("a record in another currency is placed in the display currency", async () => {
+    await openTab(page, "spending");
+    const line = await page.evaluate(`
+      const pair = [...document.querySelectorAll('.money-pair')]
+        .find((el) => /LBP|L\\.L\\./.test(el.textContent ?? ''));
+      if (!pair) return null;
+      return {
+        primary: pair.firstElementChild?.textContent?.trim() ?? '',
+        secondary: pair.querySelector('.money-secondary')?.textContent?.replace(/\\s+/g, ' ').trim() ?? '',
+      };
+    `);
+    assert(line, "no foreign-currency transaction on screen to place");
+    assert(/150/.test(line.primary), `the original is not the primary figure: ${line.primary}`);
+    assert(/€|EUR/.test(line.secondary), `the equivalent is not in the display currency: ${line.secondary}`);
+    return `${line.primary} ${line.secondary}`;
+  });
+
+  await check("the second currency is off until it is chosen", async () => {
+    const totals = await page.evaluate(
+      "document.querySelectorAll('.funding-split-value .money-secondary').length",
+    );
+    equal(totals, 0, "aggregate second-currency lines before one is chosen");
+    return "no second line on the totals";
+  });
+
+  await check("choosing one puts it under the totals, and only the totals", async () => {
+    await openTab(page, "settings");
+    await page.click('.settings-group:nth-child(2)');
+    await sleep(200);
+    await page.waitFor("!!document.querySelector('[data-setting=secondaryCurrency]')");
+    await page.setValue("[data-setting=secondaryCurrency]", "USD");
+    await sleep(400);
+    equal(
+      await page.evaluate("document.querySelector('[data-setting=secondaryCurrency]').value"),
+      "USD",
+      "the stored second currency",
+    );
+
+    await openTab(page, "spending");
+    const state = await page.evaluate(`
+      const total = document.querySelector('.funding-split-value .money-secondary')?.textContent ?? '';
+      const record = [...document.querySelectorAll('.money-pair')]
+        .find((el) => /LBP|L\\.L\\./.test(el.textContent ?? ''))
+        ?.querySelector('.money-secondary')?.textContent ?? '';
+      return { total: total.replace(/\\s+/g, ' ').trim(), record: record.replace(/\\s+/g, ' ').trim() };
+    `);
+    assert(/\$|USD/.test(state.total), `the total does not carry the second currency: ${state.total}`);
+    // And the record did **not** move to it.
+    assert(
+      state.record === "" || /€|EUR/.test(state.record),
+      `the second currency reached a record: ${state.record}`,
+    );
+    return `total ${state.total} · record ${state.record}`;
+  });
+
+
 
   // ── The report ────────────────────────────────────────────────────────────
   group("Report");

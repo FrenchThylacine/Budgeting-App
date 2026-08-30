@@ -68,7 +68,7 @@ export function isProse(line: string): boolean {
 export function templateEnglish(line: string): string[] {
   return [...line.matchAll(/`([^`$]*[A-Z][a-z]{2,}[^`]*)`/g)]
     .map((match) => match[1].replace(/\$\{[^}]*\}/g, "…").trim())
-    .filter((text) => /^[A-Z][A-Za-z0-9 ,.'’!?%()…-]{3,}$/.test(text));
+    .filter((text) => /^[A-Z][A-Za-z0-9 ,.'’!?%()·…-]{3,}$/.test(text));
 }
 
 interface Finding {
@@ -107,8 +107,10 @@ function scan(): Finding[] {
           push(match[2]);
         }
         // The shape almost every one of them actually took: a ternary picking
-        // between two English words rather than between two keys.
-        for (const match of line.matchAll(/[?:]\s*"([A-Z][a-z]{2,}(?: [A-Za-z]+)*)"/g)) push(match[1]);
+        // between two English words rather than between two keys — and its
+        // cousin, a `||` fallback at the end of a chain, which is where
+        // `|| "Transaction"` sat on every swipeable row.
+        for (const match of line.matchAll(/(?:[?:]|\|\||\?\?)\s*"([A-Z][a-z]{2,}(?: [A-Za-z']+)*[.!?]?)"/g)) push(match[1]);
 
         /*
          * A sentence on its own line, between an opening and a closing tag.

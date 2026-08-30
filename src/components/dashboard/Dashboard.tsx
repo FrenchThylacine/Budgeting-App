@@ -41,6 +41,7 @@ import {
 } from "lucide-react";
 import { EditorSheet } from "../ui/EditorSheet";
 import { useTranslation } from "../../i18n/useTranslation";
+import type { Translator } from "../../domain/i18n";
 import { storedText } from "../../domain/storedText";
 import { FUNDING_META } from "../../domain/funding";
 import {
@@ -90,19 +91,21 @@ function healthSummary(
   score: number,
   projectedRemaining: number | null,
   money: (value: number | null | undefined) => string,
+  t: Translator,
 ): string {
-  const lead =
+  const lead = t(
     score >= 85
-      ? "Comfortably inside your limits."
+      ? "health.leadComfortable"
       : score >= 70
-      ? "On track, with room to absorb a surprise."
-      : score >= 50
-      ? "Workable, but the margin is thin."
-      : "Spending is outrunning the plan.";
-  if (projectedRemaining == null) return `${lead} Scored on budget pace, caps, trend and how much is committed.`;
+        ? "health.leadOnTrack"
+        : score >= 50
+          ? "health.leadThin"
+          : "health.leadOverrunning",
+  );
+  if (projectedRemaining == null) return lead;
   return projectedRemaining < 0
-    ? `${lead} At this pace the period ends ${money(Math.abs(projectedRemaining))} over budget.`
-    : `${lead} At this pace the period ends with ${money(projectedRemaining)} unspent.`;
+    ? `${lead} ${t("health.endsOver", { amount: money(Math.abs(projectedRemaining)) })}`
+    : `${lead} ${t("health.endsUnspent", { amount: money(projectedRemaining) })}`;
 }
 
 const Figure: React.FC<{
@@ -184,6 +187,8 @@ export const Dashboard: React.FC<{ onNavigate?: (tab: "spending" | "activities" 
         : monthlyTrendBars(calculation.monthlyTrend, mode === "year" ? -1 : settings.selectedMonth),
     [mode, calculation.weeklyTrend, calculation.monthlyTrend, settings.selectedWeek, settings.selectedMonth],
   );
+  /** Two months is the floor for a trend; below it there is nothing to draw. */
+  const hasTrend = trendBars.filter((bar) => bar.value != null).length >= 2;
 
   const budgetReference: ChartReferenceLine[] =
     mode !== "week" && calculation.monthlyBudgetBase > 0
@@ -362,7 +367,7 @@ export const Dashboard: React.FC<{ onNavigate?: (tab: "spending" | "activities" 
                         not a score with no explanation attached to it. */}
                     {health.score != null && (
                       <p className="text-note" style={{ margin: 0 }}>
-                        {healthSummary(health.score, pacing?.projectedRemaining ?? null, money)}
+                        {healthSummary(health.score, pacing?.projectedRemaining ?? null, money, t)}
                       </p>
                     )}
 
@@ -508,18 +513,18 @@ export const Dashboard: React.FC<{ onNavigate?: (tab: "spending" | "activities" 
     ),
     charts: (
       <>
-        {/* Trend and forecast. */}
-        <div className="dashboard-row">
-          <Card>
-            <CardBody>
-              {/* A chart, only when there is a shape to see.
-                  One bar and eleven question marks is a chart whose whole
-                  content is "we have no history", and it took a third of the
-                  first screen to say it. Two months is the floor for a trend;
-                  below that the empty state says the same thing in a line. */}
-              {trendBars.filter((bar) => bar.value != null).length < 2 ? (
-                <EmptyState title={t("dashboard.noSpendingData")} description={t("dashboard.recordTransactionsToSeeThe")} />
-              ) : (
+        {/* Trend and forecast.
+
+            The trend needs two months to be a trend. Below that it is not
+            shown *at all* rather than shown as an empty card with a sentence
+            in the middle: a card whose whole content is "we have no history"
+            is a card that has no reason to exist, and the forecast beside it
+            takes the width instead. It used to draw one bar and eleven
+            question marks, which took a third of the first screen. */}
+        <div className={`dashboard-row${hasTrend ? "" : " dashboard-row-single"}`}>
+          {hasTrend && (
+            <Card>
+              <CardBody>
                 <BarChart
                   title={t(mode === "week" ? "dashboard.trendWeekly" : "dashboard.trendMonthly")}
                   bars={trendBars.map((bar) => ({ label: bar.label, value: bar.value, highlight: bar.highlight }))}
@@ -528,9 +533,9 @@ export const Dashboard: React.FC<{ onNavigate?: (tab: "spending" | "activities" 
                   formatValue={(v) => money(v)}
                   formatTick={compactNumber}
                 />
-              )}
-            </CardBody>
-          </Card>
+              </CardBody>
+            </Card>
+          )}
 
           <Card>
             <CardBody>
@@ -575,13 +580,13 @@ export const Dashboard: React.FC<{ onNavigate?: (tab: "spending" | "activities" 
         {/* Everything below is reference rather than answer: it explains figures
             already stated above. Collapsed by default on a phone, where it is
             several screens of scrolling past the part people came for. */}
-        <Disclosure title={t("report.detail")}>
+        <Disclosure title={t("report.detail")} defaultOpen={false}>
         <div className="dashboard-row">
           <Card>
             <CardBody>
               <HorizontalBarChart
                 title={t("dashboard.whereTheMoneyWent")}
-                description={`Top categories · ${periodLabel(settings, language)}`}
+                description={`${t("dashboard.topCategories")} · ${periodLabel(settings, language)}`}
                 rows={categoryRows}
                 formatValue={(v) => money(v)}
                 emptyMessage={t("dashboard.addTransactionsToSeeYour")}
@@ -697,7 +702,7 @@ export const Dashboard: React.FC<{ onNavigate?: (tab: "spending" | "activities" 
     ),
     savings: (
       <>
-        <Disclosure title={t("dashboard.savingsAndWallet")}>
+        <Disclosure title={t("dashboard.savingsAndWallet")} defaultOpen={false}>
           <Card>
             <CardBody>
               <div style={{ display: "grid", gap: 14 }}>

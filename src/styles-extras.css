@@ -2311,6 +2311,9 @@ label:has(> input[type="radio"]) {
 
 .activity-due[data-status="due"] { color: var(--text-secondary); font-weight: var(--weight-medium); }
 .activity-due[data-status="unknown"] { color: var(--warning-text); }
+/* Not due this month is the quiet case: the glyph says "we know when, and it
+   is not now", and it should not compete with the row that *is* due. */
+.activity-due[data-status="not-due"] { opacity: 0.5; cursor: help; }
 .activity-due-why { display: inline-flex; align-items: center; cursor: help; }
 
 /* The row's Deactivate control keeps its word on a wide screen and drops to
@@ -3469,3 +3472,186 @@ label:has(> input[type="radio"]) {
 /* ── V4: the health card fills its own card ───────────────────────────────── */
 .health-card { display: grid; }
 .health-card-body { height: 100%; display: grid; align-content: center; }
+
+/* ── V4.2: the funding split, as a length ─────────────────────────────────────
+   Three percentages in three captions became one bar. Each segment carries its
+   glyph and, where there is room, its own figure — so the split reads without
+   colour, and the "of the total" phrasing that made two different statistics
+   look like one is gone from both. */
+.funding-bar {
+  display: flex;
+  gap: 2px;
+  height: 22px;
+  margin: 2px 0 14px;
+  border-radius: var(--radius-full);
+  overflow: hidden;
+}
+
+.funding-bar-part {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-width: 22px;
+  font-size: var(--text-footnote);
+  font-weight: var(--weight-medium);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: var(--accent-contrast);
+}
+
+.funding-bar-part[data-funding="personal"] { background: var(--funding-personal); }
+.funding-bar-part[data-funding="other"] { background: var(--funding-other); }
+.funding-bar-part[data-funding="outside"] { background: var(--funding-outside); }
+
+/* The two lighter fills need dark type on them; the accent is dark enough to
+   take white in light mode and is itself light in dark mode, where the
+   contrast token flips with it. */
+.funding-bar-part[data-funding="outside"] { color: #3B2503; }
+
+.funding-bar-value { opacity: 0.92; }
+
+@media (max-width: 520px) {
+  .funding-bar { height: 18px; }
+  .funding-bar-value { display: none; }
+}
+
+/* ── V4.2: the cadence vocabulary ─────────────────────────────────────────────
+   How often something costs money, as a shape with a tone and a word. The mark
+   is the shape alone for a dense row — the word stays in the accessible name
+   and the tooltip — and the chip carries the word where there is room to teach
+   it. */
+.cadence-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  flex: 0 0 auto;
+  border-radius: var(--radius-sm);
+  vertical-align: -5px;
+}
+
+.cadence-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px 2px 6px;
+  border-radius: var(--radius-full);
+  font-size: var(--text-footnote);
+  font-weight: var(--weight-medium);
+  white-space: nowrap;
+}
+
+.cadence-mark[data-cadence="monthly"],
+.cadence-mark[data-cadence="yearly"],
+.cadence-mark[data-cadence="weekly"],
+.cadence-mark[data-cadence="scheduled"],
+.cadence-chip[data-cadence="monthly"],
+.cadence-chip[data-cadence="yearly"],
+.cadence-chip[data-cadence="weekly"],
+.cadence-chip[data-cadence="scheduled"] {
+  color: var(--cadence-recurring);
+  background: var(--cadence-recurring-soft);
+}
+
+.cadence-mark[data-cadence="session"],
+.cadence-mark[data-cadence="pack"],
+.cadence-chip[data-cadence="session"],
+.cadence-chip[data-cadence="pack"] {
+  color: var(--cadence-counted);
+  background: var(--cadence-counted-soft);
+}
+
+.cadence-mark[data-cadence="oneOff"],
+.cadence-chip[data-cadence="oneOff"] {
+  color: var(--cadence-once);
+  background: var(--cadence-once-soft);
+}
+
+/* The detail after the word — "every 10 sessions", "renews 15 Sept" — is the
+   variable part and reads quieter than the cadence it qualifies. */
+.cadence-detail { opacity: 0.75; font-weight: var(--weight-regular); }
+
+.activity-cadence-line {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  min-width: 0;
+}
+.activity-cadence-line > span { min-width: 0; overflow-wrap: anywhere; }
+
+/* ── V4.2: one meta line under an activity's name ─────────────────────────── */
+.activity-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 3px;
+  font-size: var(--text-footnote);
+  color: var(--text-secondary);
+  min-width: 0;
+}
+
+.activity-meta-category { font-weight: var(--weight-medium); }
+
+/* The variable parts, quieter than the category they qualify, and separated
+   by a dot rather than by another line. */
+.activity-meta-detail { color: var(--text-tertiary); }
+.activity-meta-detail::before { content: "·"; margin-inline-end: 8px; }
+
+.activity-meta .activity-due { margin: 0; }
+
+/* ── V4.2: a section that puts itself away ────────────────────────────────── */
+.section-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  /* A fingertip. The heading alone measured 21px, which the harness's
+     small-target sweep is right to refuse. */
+  min-height: 32px;
+  padding: 4px 2px;
+  margin-inline-start: -2px;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  text-align: start;
+  min-width: 0;
+}
+
+.section-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: var(--radius-sm); }
+.section-toggle .section-title { margin: 0; }
+
+.section-chevron {
+  flex: 0 0 auto;
+  color: var(--text-tertiary);
+  transition: transform var(--duration-fast) var(--ease-out);
+  transform: rotate(-90deg);
+}
+.section-collapsible.is-open .section-chevron { transform: rotate(0deg); }
+
+/* A closed section is a heading, so it should not also be a gap. */
+.section-collapsible:not(.is-open) .section-head { margin-bottom: 0; }
+
+/* A row with one card in it is a row of one card, not a card and a hole. */
+.dashboard-row-single { grid-template-columns: minmax(0, 1fr); }
+
+/* ── V4.2: a filter bar that does not become three rows on a phone ────────── */
+.filter-bar {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 160px), 1fr));
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+@media (max-width: 700px) {
+  .filter-bar {
+    grid-template-columns: 1fr 1fr;
+  }
+  /* The search field is the one people use; it keeps the width. */
+  .filter-bar > :first-child { grid-column: 1 / -1; }
+}

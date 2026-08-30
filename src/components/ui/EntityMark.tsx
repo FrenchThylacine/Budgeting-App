@@ -279,7 +279,6 @@ export const MarkFields: React.FC<MarkFieldsProps> = ({
           label={t("mark.fromTheLibrary")}
           span
           group
-          hint={t("mark.searchableGroupedAndAlwaysAvailable")}
         >
           <IconPicker
             value={source.icon || undefined}

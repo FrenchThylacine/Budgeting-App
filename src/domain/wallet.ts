@@ -44,6 +44,7 @@ import { normalizeAmount } from "./currency";
 import { activityMonthCost } from "./activityBudget";
 import { monthName } from "./dates";
 import { activityFundingKind, isPersonallyFunded } from "./funding";
+import { storedText } from "./storedText";
 import type {
   BudgetSnapshot,
   CurrencyCode,
@@ -233,8 +234,14 @@ export function walletState(snapshot: BudgetSnapshot): WalletState {
     movements.push({
       id: `spend-${entry.id}`,
       date: entry.date,
-      label: entry.note?.trim() || "Spending",
-      note: entry.note ?? "",
+      /*
+       * The note *is* the label for a transaction, so it must not also be the
+       * note — every ledger row read "Train tickets / 22 Aug · Train tickets".
+       * A row with no note keeps a stored key rather than an English word, so
+       * it reads in whatever language it is looked at in.
+       */
+      label: entry.note?.trim() || storedText("wallet.spendingMovement"),
+      note: "",
       direction: "out",
       amountBase: Math.abs(amount),
       amountNative: Math.abs(entry.amount),

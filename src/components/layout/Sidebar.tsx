@@ -402,10 +402,10 @@ const CustomRangeReport: React.FC<{
           >
             <p className="text-callout" style={{ margin: 0 }}>
               {!valid
-                ? "The end date must not be before the start date."
+                ? t("reports.rangeBackwards")
                 : entryCount === 0
-                  ? "No transactions fall in this range. The report will say so rather than showing zeroes."
-                  : `${entryCount} transaction${entryCount === 1 ? "" : "s"}.`}
+                  ? t("reports.rangeEmpty")
+                  : t("dashboard.transactionCount", { count: entryCount })}
             </p>
           </Field>
         </FieldGroup>
