@@ -156,6 +156,23 @@ export function argumentEnglish(line: string): string[] {
     .filter((text) => /[A-Za-z]{3,}\s+[A-Za-z]{2,}/.test(text));
 }
 
+/**
+ * A label sitting after a self-closing tag.
+ *
+ * `<Archive size={14} /> Archive` — the commonest shape a button takes in this
+ * codebase, an icon and a word, and the `>text<` rule could not see it because
+ * there is no closing `<` on the line. Eleven of them were live, on the
+ * Categories, Scenarios, Wishlist and dashboard screens: Cancel, Restore,
+ * Archive, Apply, Edit, Duplicate, Delete, Current, Buy. Every one of those
+ * words already had a translated key; the components simply were not asking
+ * for them.
+ */
+export function labelAfterIcon(line: string): string[] {
+  return [...line.matchAll(/\/>\s*([A-Z][A-Za-z][A-Za-z ,.'’!?%-]{1,})\s*(?:<|$)/g)].map((match) =>
+    match[1].trim(),
+  );
+}
+
 interface Finding {
   file: string;
   line: number;
@@ -219,6 +236,7 @@ function scan(): Finding[] {
         for (const text of jsxWithHoles(line)) push(text);
         for (const text of templateGlue(line)) push(text);
         for (const text of argumentEnglish(line)) push(text);
+        for (const text of labelAfterIcon(line)) push(text);
 
         const previous = index > 0 ? lines[index - 1].trim() : "";
         // Interpolations are removed first: a sentence with a value in the
@@ -321,6 +339,10 @@ describe("the components carry no English of their own", () => {
     // A key, an identifier and a one-word label all stay quiet.
     expect(argumentEnglish('t("spending.wishlistItemGone")')).toEqual([]);
     expect(argumentEnglish('querySelector("Dashboard")')).toEqual([]);
+
+    expect(labelAfterIcon("<Archive size={14} /> Archive")).toEqual(["Archive"]);
+    expect(labelAfterIcon('<X size={14} /> {t("common.cancel")}')).toEqual([]);
+    expect(labelAfterIcon("<Icon /> {label}")).toEqual([]);
   });
 
   it("catches a sentence on its own line, which the first rules cannot see", () => {

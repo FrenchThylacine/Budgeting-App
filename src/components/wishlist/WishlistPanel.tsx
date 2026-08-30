@@ -111,7 +111,7 @@ const EditForm: React.FC<EditFormProps> = ({ title, categories, currencies, draf
       footer={
         <>
           <Button type="button" variant="ghost" onClick={onCancel}>
-            <X size={14} /> Cancel
+            <X size={14} /> {t("common.cancel")}
           </Button>
           <Button type="submit" variant="primary" form="wishlist-editor-form" disabled={!valid}>
             <Check size={14} /> {submitLabel}
@@ -991,7 +991,7 @@ export const WishlistPanel: React.FC = () => {
                   <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
                     {!item.bought ? (
                       <Button size="sm" variant="secondary" onClick={() => startPurchase(item)}>
-                        <ShoppingBag size={14} /> Buy
+                        <ShoppingBag size={14} /> {t("wishlist.buy")}
                       </Button>
                     ) : (
                       <Button

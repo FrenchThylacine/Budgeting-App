@@ -207,7 +207,7 @@ const CategoryForm: React.FC<CategoryFormProps> = ({
       {!hideActions && (
       <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
         <Button type="button" variant="ghost" size="sm" onClick={onCancel}>
-          <X size={14} /> Cancel
+          <X size={14} /> {t("common.cancel")}
         </Button>
         <Button
           type="submit"
@@ -394,7 +394,7 @@ export const CategoryManager: React.FC = () => {
                 aria-label={t("categories.restoreCategory")}
                 title={t("categories.restore")}
               >
-                <RotateCcw size={14} /> Restore
+                <RotateCcw size={14} /> {t("categories.restore")}
               </Button>
             ) : (
               <Button
@@ -402,10 +402,10 @@ export const CategoryManager: React.FC = () => {
                 variant="ghost"
                 onClick={() => archiveCategory(cat.id)}
                 aria-label={t("categories.archiveCategory")}
-                title={t("categories.archive")}
+                title={t("categories.archiveHint")}
                 style={{ color: "var(--text-secondary)" }}
               >
-                <Archive size={14} /> Archive
+                <Archive size={14} /> {t("categories.archive")}
               </Button>
             )}
           </div>
@@ -517,8 +517,14 @@ export const CategoryManager: React.FC = () => {
           borderRadius: "var(--radius-sm)",
         }}
       >
-        {t("categories.transactionsAreNeverRewrittenBy")} <strong>{t("categories.monthlyCap")}</strong>
-        {t("categories.areReadLiveByBudget")}
+        {/* One sentence, one key.
+
+            This was three fragments concatenated around a bolded noun, and the
+            join did not agree with itself: "the **monthly cap** are read live
+            … so changing **them**". The archiving half of it moved onto the
+            Archive button, where somebody about to archive something will
+            actually meet it, and the rest is half the length. */}
+        {t("categories.editingNote")}
       </div>
     </div>
   );
