@@ -75,7 +75,6 @@ export const es: Dictionary = {
     "Opcional. Quién paga: «papá», «el club», «el trabajo». Texto libre, sin nada que configurar antes.",
   "funding.gross": "Coste total",
   "funding.gross.hint": "Todo, pague quien pague.",
-  "funding.notCharged": "No se carga a tu presupuesto",
   "funding.splitTitle": "Quién ha pagado",
 
   "dashboard.upcoming": "Próximos",
@@ -261,17 +260,14 @@ export const es: Dictionary = {
   "wallet.resetConfirmAction": "Poner a cero",
   "wallet.resetDone": "El saldo de la cartera ya es cero.",
   "wallet.resetAlreadyZero": "El saldo de la cartera ya está a cero.",
-
-  "wallet.subtitle": "Tu dinero real: lo que entró, lo que salió y lo que queda.",
   "wallet.walletBalance": "Saldo de la cartera",
   "wallet.walletBalanceHint": "El dinero que realmente tienes.",
   "wallet.budgetRemaining": "Presupuesto restante",
-  "wallet.budgetRemainingHint": "Dinero del presupuesto aún disponible. No caduca al acabar el mes.",
+  "wallet.budgetRemainingHint": "Sigue disponible; no caduca.",
   "wallet.personalBalance": "Saldo personal",
   "wallet.personalBalanceHint": "Dinero fuera de tu presupuesto.",
   "wallet.plannedBudget": "Previsto para {month}",
-  "wallet.plannedBudgetHint":
-    "Lo que exigen las actividades de este mes, redondeado a la centena superior. Es una previsión, no dinero que tengas: registra la aportación cuando llegue de verdad.",
+  "wallet.plannedBudgetHint": "Un plan, no dinero que tengas.",
   "wallet.requirement": "Las actividades necesitan {amount}",
   "wallet.addAllocation": "Añadir dinero al presupuesto",
   "wallet.addAllocationTitle": "Añadir dinero al presupuesto",
@@ -296,8 +292,7 @@ export const es: Dictionary = {
   "wallet.transferred": "Pasado a personal",
   "wallet.remaining": "Restante",
   "wallet.leftoverTitle": "Te quedan {amount} del presupuesto",
-  "wallet.leftoverBody":
-    "Ese dinero sigue disponible hasta que decidas: no se borra nada ni se reinicia nada. Puedes pasarlo a tu saldo personal o conservarlo como presupuesto para el mes siguiente.",
+  "wallet.leftoverBody": "Nada se borra y nada se reinicia.",
   "wallet.leftoverTransfer": "Pasarlo al saldo personal",
   "wallet.leftoverKeep": "Conservarlo como presupuesto",
   "wallet.leftoverLater": "Decidir más tarde",

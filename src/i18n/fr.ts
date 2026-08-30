@@ -82,7 +82,6 @@ export const fr: Dictionary = {
     "Facultatif. Qui paie : « Papa », « le club », « le travail ». Texte libre, rien à configurer d'abord.",
   "funding.gross": "Coût total",
   "funding.gross.hint": "Tout, quel que soit le payeur.",
-  "funding.notCharged": "Non imputé à votre budget",
   "funding.splitTitle": "Qui a payé",
 
   "dashboard.upcoming": "À venir",
@@ -269,17 +268,14 @@ export const fr: Dictionary = {
   "wallet.resetConfirmAction": "Remettre à zéro",
   "wallet.resetDone": "Le solde du portefeuille est maintenant à zéro.",
   "wallet.resetAlreadyZero": "Le solde du portefeuille est déjà à zéro.",
-
-  "wallet.subtitle": "Votre argent réel : ce qui est entré, ce qui est sorti, ce qu'il reste.",
   "wallet.walletBalance": "Solde du portefeuille",
   "wallet.walletBalanceHint": "L'argent dont vous disposez réellement.",
   "wallet.budgetRemaining": "Budget restant",
-  "wallet.budgetRemainingHint": "Argent du budget encore disponible. Il n'expire pas à la fin du mois.",
+  "wallet.budgetRemainingHint": "Toujours disponible ; n'expire pas.",
   "wallet.personalBalance": "Solde personnel",
   "wallet.personalBalanceHint": "Argent en dehors de votre budget.",
   "wallet.plannedBudget": "Prévu pour {month}",
-  "wallet.plannedBudgetHint":
-    "Ce que les activités de ce mois exigent, arrondi à la centaine supérieure. Une prévision, pas de l'argent que vous avez — enregistrez l'apport quand il arrive vraiment.",
+  "wallet.plannedBudgetHint": "Un plan, pas de l'argent que vous avez.",
   "wallet.requirement": "Les activités demandent {amount}",
   "wallet.addAllocation": "Ajouter de l'argent au budget",
   "wallet.addAllocationTitle": "Ajouter de l'argent au budget",
@@ -304,8 +300,7 @@ export const fr: Dictionary = {
   "wallet.transferred": "Transféré au personnel",
   "wallet.remaining": "Restant",
   "wallet.leftoverTitle": "Il vous reste {amount} de votre budget",
-  "wallet.leftoverBody":
-    "Cet argent reste disponible jusqu'à ce que vous décidiez : rien n'est supprimé, rien n'est remis à zéro. Vous pouvez le verser sur votre solde personnel, ou le conserver comme argent de budget pour le mois suivant.",
+  "wallet.leftoverBody": "Rien n'est supprimé, rien n'est réinitialisé.",
   "wallet.leftoverTransfer": "Le verser au solde personnel",
   "wallet.leftoverKeep": "Le garder comme budget",
   "wallet.leftoverLater": "Décider plus tard",

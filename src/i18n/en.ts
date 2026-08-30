@@ -205,7 +205,6 @@ export const en = {
   "funding.fundedBy.hint": "Optional. Who pays — “Dad”, “the club”, “work”. Free text; nothing to set up first.",
   "funding.gross": "Total cost",
   "funding.gross.hint": "Everything, whoever pays for it.",
-  "funding.notCharged": "Not charged to your budget",
   "funding.splitTitle": "Who paid",
 
   // ── Dashboard ─────────────────────────────────────────────────────────────
@@ -467,16 +466,14 @@ export const en = {
   "wallet.resetAlreadyZero": "The wallet balance is already zero.",
 
   // ── Reports ───────────────────────────────────────────────────────────────
-  "wallet.subtitle": "Your real money: what came in, what went out, and what is left.",
   "wallet.walletBalance": "Wallet balance",
   "wallet.walletBalanceHint": "Actual money you have.",
   "wallet.budgetRemaining": "Remaining budget",
-  "wallet.budgetRemainingHint": "Budget money still available. It does not expire at the end of the month.",
+  "wallet.budgetRemainingHint": "Still available; it does not expire.",
   "wallet.personalBalance": "Personal balance",
   "wallet.personalBalanceHint": "Money outside your budget.",
   "wallet.plannedBudget": "Planned for {month}",
-  "wallet.plannedBudgetHint":
-    "What this month's activities require, rounded up to the next hundred. A plan, not money you have — record the allocation when it actually arrives.",
+  "wallet.plannedBudgetHint": "A plan, not money you have.",
   "wallet.requirement": "Activities require {amount}",
   "wallet.addAllocation": "Add budget money",
   "wallet.addAllocationTitle": "Add money to the budget",
@@ -501,8 +498,7 @@ export const en = {
   "wallet.transferred": "Moved to personal",
   "wallet.remaining": "Remaining",
   "wallet.leftoverTitle": "You have {amount} left from your budget",
-  "wallet.leftoverBody":
-    "It stays available until you decide what to do with it — nothing is deleted and nothing resets. You can move it to your personal balance, or leave it as budget money for next month.",
+  "wallet.leftoverBody": "Nothing is deleted and nothing resets.",
   "wallet.leftoverTransfer": "Move it to personal balance",
   "wallet.leftoverKeep": "Keep it as budget money",
   "wallet.leftoverLater": "Decide later",

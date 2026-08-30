@@ -63,7 +63,7 @@ interface Draft {
 }
 
 export const SpendingPanel: React.FC = () => {
-  const { t } = useTranslation();
+  const { t, formatDate } = useTranslation();
   const snapshot = useBudgetStore((s) => s.snapshot);
   const add = useBudgetStore((s) => s.addSpendingEntry);
   const update = useBudgetStore((s) => s.updateSpendingEntry);
@@ -621,7 +621,7 @@ export const SpendingPanel: React.FC = () => {
             </div>
             <div className="money funding-split-value">{formatDualMoney(split.otherFunded, snapshot.settings)}</div>
             <div className="text-caption">
-              {t("common.transactions", { count: split.otherFundedCount })} · {t("funding.notCharged")}
+              {t("common.transactions", { count: split.otherFundedCount })}
             </div>
           </div>
           <div data-funding="outside">
@@ -633,7 +633,7 @@ export const SpendingPanel: React.FC = () => {
               {formatDualMoney(split.outsideBudget, snapshot.settings)}
             </div>
             <div className="text-caption">
-              {t("common.transactions", { count: split.outsideBudgetCount })} · {t("funding.notCharged")}
+              {t("common.transactions", { count: split.outsideBudgetCount })}
             </div>
           </div>
           <div>
@@ -733,7 +733,10 @@ export const SpendingPanel: React.FC = () => {
                     )}
                   </div>
                   <div className="text-footnote">
-                    {entry.date}
+                    {/* The reader's own date format. It was the stored ISO
+                        string — sortable, unambiguous, and not how anybody
+                        writes a date. */}
+                    {formatDate(entry.date, { day: "numeric", month: "short" })}
                     {entry.note ? <span className="user-text"> · {entry.note}</span> : ""}
                   </div>
                 </div>

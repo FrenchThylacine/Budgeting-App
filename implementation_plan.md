@@ -6,7 +6,7 @@ This is the active engineering tracker. A checkbox is ticked only after implemen
 
 **Version:** 4.0.0. See `CHANGELOG.md` for what each version was.
 
-**Verification state.** **789 unit tests across 44 files, all passing** (82 database integration tests skipped without `TEST_DATABASE_URL`), TypeScript clean for **both** targets — the frontend project and the server's, which compiles `src/domain` without a DOM library — and **`scripts/verify-browser.mjs` driving a real Chrome on a brand-new account each run: 48 checks, all passing.** Nothing from 2026-08-17 onward is verified in production.
+**Verification state.** **872 tests across 46 files, all passing** — 790 unit and 82 against a real PostgreSQL 17 database. TypeScript clean for **both** targets: the frontend project and the server's, which compiles `src/domain` with no DOM library and caught a defect the frontend build is structurally blind to. **`scripts/verify-browser.mjs` drives a real Chrome on a brand-new account each run: 48 checks, all passing.** Both bundles build clean. Nothing from 2026-08-17 onward is verified in production.
 
 ## How this session verified things
 

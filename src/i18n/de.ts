@@ -75,7 +75,6 @@ export const de: Dictionary = {
     "Optional. Wer bezahlt: „Papa“, „der Verein“, „die Arbeit“. Freier Text, nichts vorher einzurichten.",
   "funding.gross": "Gesamtkosten",
   "funding.gross.hint": "Alles, unabhängig davon, wer zahlt.",
-  "funding.notCharged": "Nicht deinem Budget belastet",
   "funding.splitTitle": "Wer bezahlt hat",
 
   "dashboard.upcoming": "Anstehend",
@@ -261,17 +260,14 @@ export const de: Dictionary = {
   "wallet.resetConfirmAction": "Auf null setzen",
   "wallet.resetDone": "Der Stand der Geldbörse ist jetzt null.",
   "wallet.resetAlreadyZero": "Der Stand der Geldbörse ist bereits null.",
-
-  "wallet.subtitle": "Dein echtes Geld: was hereinkam, was hinausging und was übrig ist.",
   "wallet.walletBalance": "Kontostand der Geldbörse",
   "wallet.walletBalanceHint": "Das Geld, das du tatsächlich hast.",
   "wallet.budgetRemaining": "Verbleibendes Budget",
-  "wallet.budgetRemainingHint": "Noch verfügbares Budgetgeld. Es verfällt zum Monatsende nicht.",
+  "wallet.budgetRemainingHint": "Weiterhin verfügbar; verfällt nicht.",
   "wallet.personalBalance": "Privates Guthaben",
   "wallet.personalBalanceHint": "Geld außerhalb deines Budgets.",
   "wallet.plannedBudget": "Geplant für {month}",
-  "wallet.plannedBudgetHint":
-    "Was die Aktivitäten dieses Monats erfordern, aufgerundet auf den nächsten Hunderter. Eine Planung, kein vorhandenes Geld — trage die Zuweisung ein, wenn sie wirklich eintrifft.",
+  "wallet.plannedBudgetHint": "Ein Plan, kein vorhandenes Geld.",
   "wallet.requirement": "Aktivitäten benötigen {amount}",
   "wallet.addAllocation": "Budgetgeld hinzufügen",
   "wallet.addAllocationTitle": "Geld zum Budget hinzufügen",
@@ -296,8 +292,7 @@ export const de: Dictionary = {
   "wallet.transferred": "Ins Private übertragen",
   "wallet.remaining": "Verbleibend",
   "wallet.leftoverTitle": "Dir bleiben {amount} aus deinem Budget",
-  "wallet.leftoverBody":
-    "Das Geld bleibt verfügbar, bis du entscheidest — nichts wird gelöscht und nichts zurückgesetzt. Du kannst es auf dein privates Guthaben übertragen oder als Budgetgeld für den nächsten Monat behalten.",
+  "wallet.leftoverBody": "Nichts wird gelöscht, nichts zurückgesetzt.",
   "wallet.leftoverTransfer": "Auf privates Guthaben übertragen",
   "wallet.leftoverKeep": "Als Budgetgeld behalten",
   "wallet.leftoverLater": "Später entscheiden",

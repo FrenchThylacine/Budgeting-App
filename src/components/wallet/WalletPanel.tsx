@@ -139,7 +139,6 @@ export const WalletPanel: React.FC = () => {
           </div>
         }
       >
-        <p className="text-note" style={{ margin: "0 0 14px" }}>{t("wallet.subtitle")}</p>
 
         {!mutable && <div className="historical-banner">{t("common.readOnly")}</div>}
 
@@ -382,7 +381,14 @@ const MovementRow: React.FC<{
       <div style={{ minWidth: 0, flex: "1 1 auto" }}>
         <div className="text-callout wallet-row-title">
           {resolveStoredText(movement.label, t)}
-          <Badge tone={TYPE_TONE[movement.kind]}>{t(TYPE_LABEL[movement.kind])}</Badge>
+          {/* The badge names the *exception*, not the rule.
+              "Budget spending" sat on every outgoing row — a column of the
+              same two words down the whole ledger, beside a red minus figure
+              that had already said it. The rows that are not ordinary budget
+              spending are the ones worth marking. */}
+          {movement.kind !== "spending" && (
+            <Badge tone={TYPE_TONE[movement.kind]}>{t(TYPE_LABEL[movement.kind])}</Badge>
+          )}
         </div>
         <div className="text-footnote">
           {formatDate(movement.date, { day: "numeric", month: "short", year: "numeric" })}

@@ -97,7 +97,6 @@ export const ar: Dictionary = {
   "funding.fundedBy.hint": "اختياري. من يدفع: «أبي»، «النادي»، «العمل». نص حر، ولا شيء تُعدّه مسبقًا.",
   "funding.gross": "التكلفة الإجمالية",
   "funding.gross.hint": "كل شيء، أيًّا كان الدافع.",
-  "funding.notCharged": "غير محتسب على ميزانيتك",
   "funding.splitTitle": "من دفع",
 
   "dashboard.upcoming": "القادم",
@@ -295,17 +294,14 @@ export const ar: Dictionary = {
   "wallet.resetConfirmAction": "تصفير",
   "wallet.resetDone": "أصبح رصيد المحفظة صفرًا.",
   "wallet.resetAlreadyZero": "رصيد المحفظة صفر بالفعل.",
-
-  "wallet.subtitle": "أموالك الحقيقية: ما دخل، وما خرج، وما تبقّى.",
   "wallet.walletBalance": "رصيد المحفظة",
   "wallet.walletBalanceHint": "المال الذي تملكه فعلًا.",
   "wallet.budgetRemaining": "الميزانية المتبقية",
-  "wallet.budgetRemainingHint": "مال الميزانية المتاح بعد. لا ينتهي بانتهاء الشهر.",
+  "wallet.budgetRemainingHint": "لا يزال متاحًا؛ لا ينتهي.",
   "wallet.personalBalance": "الرصيد الشخصي",
   "wallet.personalBalanceHint": "مال خارج ميزانيتك.",
   "wallet.plannedBudget": "المخطَّط لـ {month}",
-  "wallet.plannedBudgetHint":
-    "ما تتطلّبه أنشطة هذا الشهر، مقرَّبًا إلى المئة الأعلى. هذا تخطيط لا مال في يدك — سجّل الإضافة حين تصل فعلًا.",
+  "wallet.plannedBudgetHint": "خطة، وليست مالًا لديك.",
   "wallet.requirement": "الأنشطة تتطلّب {amount}",
   "wallet.addAllocation": "إضافة مال إلى الميزانية",
   "wallet.addAllocationTitle": "إضافة مال إلى الميزانية",
@@ -330,8 +326,7 @@ export const ar: Dictionary = {
   "wallet.transferred": "حُوِّل إلى الشخصي",
   "wallet.remaining": "المتبقي",
   "wallet.leftoverTitle": "تبقّى لك {amount} من ميزانيتك",
-  "wallet.leftoverBody":
-    "يبقى هذا المال متاحًا حتى تقرّر: لا شيء يُحذف ولا شيء يُصفَّر. يمكنك تحويله إلى رصيدك الشخصي أو إبقاؤه مال ميزانية للشهر التالي.",
+  "wallet.leftoverBody": "لا يُحذف شيء ولا يُعاد ضبط شيء.",
   "wallet.leftoverTransfer": "حوّله إلى الرصيد الشخصي",
   "wallet.leftoverKeep": "أبقِه مال ميزانية",
   "wallet.leftoverLater": "أقرّر لاحقًا",
