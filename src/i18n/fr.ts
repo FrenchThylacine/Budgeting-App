@@ -1125,7 +1125,7 @@ export const fr: Dictionary = {
   "dashboard.recordHint": "Une seule dépense suffit à démarrer la tendance, la répartition par catégorie et le score de santé pour {period}.",
   "tutorial.later": "Décider plus tard",
   "tutorial.skipTask": "Passer cette étape",
-  "tutorial.reminder": "Vous avez remis la visite guidée à plus tard. Elle reste disponible quand vous voudrez.",
+  "tutorial.reminder": "La visite guidée reste disponible.",
   "tutorial.resume": "Reprendre la visite",
   "tutorial.task.pin-currency": "Épinglez une devise que vous utilisez vraiment — cherchez-la, puis épinglez-la.",
   "tutorial.task.pin-currency.done": "Épinglée. Seules les devises épinglées apparaissent dans les listes.",

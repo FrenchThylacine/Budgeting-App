@@ -1117,7 +1117,7 @@ export const de: Dictionary = {
   "dashboard.recordHint": "Eine einzige Ausgabe genügt, um Trend, Kategorieaufteilung und Gesundheitswert für {period} zu starten.",
   "tutorial.later": "Später entscheiden",
   "tutorial.skipTask": "Diesen Schritt überspringen",
-  "tutorial.reminder": "Sie haben die Tour aufgeschoben. Sie steht weiterhin bereit, wann immer Sie mögen.",
+  "tutorial.reminder": "Die Tour steht weiterhin bereit.",
   "tutorial.resume": "Tour fortsetzen",
   "tutorial.task.pin-currency": "Pinnen Sie eine Währung an, die Sie wirklich nutzen — suchen und anpinnen.",
   "tutorial.task.pin-currency.done": "Angepinnt. Nur angepinnte Währungen erscheinen in den Auswahllisten.",

@@ -1117,7 +1117,7 @@ export const es: Dictionary = {
   "dashboard.recordHint": "Con un solo gasto basta para iniciar la tendencia, el reparto por categoría y la puntuación de salud de {period}.",
   "tutorial.later": "Decidir más tarde",
   "tutorial.skipTask": "Saltar este paso",
-  "tutorial.reminder": "Has dejado la visita guiada para más tarde. Sigue disponible cuando quieras.",
+  "tutorial.reminder": "La visita guiada sigue disponible.",
   "tutorial.resume": "Retomar la visita",
   "tutorial.task.pin-currency": "Fija una moneda que realmente uses: búscala y fíjala.",
   "tutorial.task.pin-currency.done": "Fijada. Solo las monedas fijadas aparecen en los desplegables.",

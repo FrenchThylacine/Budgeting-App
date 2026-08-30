@@ -1149,7 +1149,7 @@ export const ar: Dictionary = {
   "dashboard.recordHint": "مصروف واحد يكفي لبدء الاتجاه وتوزيع الفئات ومؤشر الصحة لـ{period}.",
   "tutorial.later": "أقرّر لاحقًا",
   "tutorial.skipTask": "تخطّي هذه الخطوة",
-  "tutorial.reminder": "أجّلت الجولة الإرشادية. وهي متاحة متى شئت.",
+  "tutorial.reminder": "الجولة الإرشادية لا تزال متاحة.",
   "tutorial.resume": "استئناف الجولة",
   "tutorial.task.pin-currency": "ثبّت عملة تستخدمها فعلًا — ابحث عنها ثم ثبّتها.",
   "tutorial.task.pin-currency.done": "تم التثبيت. لا تظهر في القوائم إلا العملات المثبَّتة.",

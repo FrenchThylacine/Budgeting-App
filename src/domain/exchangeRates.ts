@@ -13,6 +13,20 @@ import type { CurrencyCode, ExchangeRates } from "./types";
  *    around the app cannot hammer the provider;
  *  - a rate is only accepted when finite and strictly positive, because a
  *    zero or negative rate would silently corrupt every converted figure.
+ *
+ * ─── When a refresh actually happens ─────────────────────────────────────────
+ *
+ * The behaviour a user sees is "the rates are up to date when I open the app".
+ * That is not a clock they have to know about, and the schedule below is not
+ * one either — it is an *upper* bound on how often the provider is asked.
+ *
+ * A refresh is due when **any** of three things is true: nothing has ever been
+ * fetched, the stored set is older than `RATE_MAX_AGE_MS`, or a new daily
+ * publication has happened since it was fetched. The age rule is what makes
+ * opening the app enough; the publication rule is what makes two devices agree
+ * on which day's rates they are holding. Neither is presented to the user,
+ * because "your rates update at noon UTC" is a rule about the provider's
+ * release process, not a thing anybody wants to plan around.
  */
 
 const PROVIDER_URL = "https://open.er-api.com/v6/latest/EUR";
@@ -25,10 +39,13 @@ export const RATE_MAX_AGE_MS = 6 * 60 * 60 * 1000;
  * The daily publication moment: 12:00 UTC.
  *
  * The provider publishes once a day, so a rate set is "the rates for today"
- * from that moment. Refreshing on a rolling age alone means two devices in
- * different time zones can hold different "current" rates for the same day and
- * quietly disagree about every converted figure; anchoring to a fixed instant
+ * from that moment. This is the *second* of the two triggers, not the main
+ * one: refreshing on a rolling age alone means two devices in different time
+ * zones can hold different "current" rates for the same day and quietly
+ * disagree about every converted figure, and anchoring to a fixed instant
  * makes "have I got today's rates" a question with one answer everywhere.
+ * On its own it would leave an app opened at 11:00 UTC holding yesterday's
+ * numbers, which is why the age rule exists alongside it.
  */
 export const RATE_REFRESH_HOUR_UTC = 12;
 

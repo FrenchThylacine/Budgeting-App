@@ -85,7 +85,7 @@ export const en = {
   "activity.perMonthUnit": "per month",
   "tutorial.later": "Decide later",
   "tutorial.skipTask": "Skip this step",
-  "tutorial.reminder": "You put the guided tour off. It is still here whenever you want it.",
+  "tutorial.reminder": "The guided tour is still here.",
   "tutorial.resume": "Resume the tour",
   "tutorial.task.pin-currency": "Pin a currency you actually use — search for it, then pin it.",
   "tutorial.task.pin-currency.done": "Pinned. Only pinned currencies appear in the dropdowns.",

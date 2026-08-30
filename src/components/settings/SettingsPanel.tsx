@@ -575,6 +575,7 @@ const AccountGroup: React.FC = () => {
             <Button
               variant="secondary"
               size="sm"
+              data-action="replay-tutorial"
               onClick={() => {
                 // Clearing both marks is what makes the tour run from the
                 // start rather than resuming where it was abandoned, and the

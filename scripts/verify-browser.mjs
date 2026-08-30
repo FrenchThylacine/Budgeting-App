@@ -247,23 +247,121 @@ try {
     return heading;
   });
 
-  await check("the tour can be dismissed and stays dismissed", async () => {
+  /*
+   * The tour teaches by asking, and remembers a "later".
+   *
+   * Both halves are checked here because both were claimed and neither had
+   * ever been driven: that a task step really refuses to advance until the
+   * work is done, and that "Decide later" leaves a resumable reminder rather
+   * than either nagging or forgetting.
+   */
+  await check("a task step will not advance until the task is actually done", async () => {
+    for (let i = 0; i < 3; i++) {
+      await page.click(".tutorial-card .btn-primary");
+      await sleep(600);
+    }
+    const state = await page.evaluate(`
+      const card = document.querySelector('.tutorial-card');
+      return {
+        step: card?.querySelector('.tutorial-progress')?.textContent ?? '',
+        hasTask: !!card?.querySelector('.tutorial-task'),
+        locked: !!card?.querySelector('.btn-primary')?.disabled,
+        escape: !!card?.querySelector('.tutorial-task button, .tutorial-foot-nav .btn-ghost'),
+      };
+    `);
+    assert(state.hasTask, "three steps in and no step asks for anything");
+    assert(state.locked, "the task step advances without the task being done");
+    assert(state.escape, "a locked step with no way past it is a trap");
+    return "locked, with a way past";
+  });
+
+  await check('"Decide later" is remembered, and is resumable', async () => {
     await page.evaluate(`
-      const skip = Array.from(document.querySelectorAll('.tutorial-foot button'))
-        .find((button) => button.classList.contains('btn-ghost'));
-      (skip ?? document.querySelector('.tutorial-head button')).click();
+      const later = [...document.querySelectorAll('.tutorial-card .tutorial-foot-leave button')].at(-1);
+      if (!later) throw new Error('no later button');
+      later.click();
       return true;
     `);
-    await sleep(400);
-    const gone = await page.evaluate("!document.querySelector('.tutorial-card')");
-    assert(gone, "the tour is still on screen after Skip");
-    return "skipped";
+    await sleep(600);
+    assert(await page.evaluate("!document.querySelector('.tutorial-card')"), "the card stayed open");
+    const reminder = await page.evaluate(
+      "document.querySelector('.tutorial-reminder')?.innerText.replace(/\\n/g, ' · ') ?? ''",
+    );
+    assert(reminder.length > 0, "postponing left no reminder");
+    // And it survives a reload without the tour reopening by itself.
+    await page.goto(BASE);
+    await waitForApp(page);
+    await sleep(1200);
+    const after = await page.evaluate(`
+      return { card: !!document.querySelector('.tutorial-card'), reminder: !!document.querySelector('.tutorial-reminder') };
+    `);
+    assert(!after.card, "the tour reopened by itself after being postponed");
+    assert(after.reminder, "the reminder did not survive a reload");
+    return reminder.slice(0, 60);
+  });
+
+  await check("dismissing the reminder ends it for good", async () => {
+    await page.evaluate(`
+      const close = document.querySelector('.tutorial-reminder .btn-icon');
+      if (!close) throw new Error('no dismiss button');
+      close.click();
+      return true;
+    `);
+    await sleep(500);
+    await page.goto(BASE);
+    await waitForApp(page);
+    await sleep(1200);
+    const after = await page.evaluate(`
+      return { card: !!document.querySelector('.tutorial-card'), reminder: !!document.querySelector('.tutorial-reminder') };
+    `);
+    assert(!after.reminder, "the dismissed reminder came back");
+    assert(!after.card, "the tour reopened after the reminder was dismissed");
+    return "gone, and stays gone";
+  });
+
+  /*
+   * Skip is not Later, and the difference is the whole point of having two.
+   *
+   * Later leaves a reminder (checked above). Skip is a refusal: the tour ends,
+   * nothing reappears, and no reminder strip is left behind. The tour is
+   * restarted from Settings to test it, which also exercises the replay
+   * button — the only route back once somebody has said no.
+   */
+  await check("Skip refuses the tour outright, and leaves no reminder", async () => {
+    await openTab(page, "settings");
+    await page.click('.settings-group:nth-child(5)');
+    await sleep(300);
+    await page.evaluate(`
+      const replay = document.querySelector('[data-action="replay-tutorial"]');
+      if (!replay) throw new Error('no replay button in Settings');
+      replay.click();
+      return true;
+    `);
+    await page.waitFor("!!document.querySelector('.tutorial-card')", { timeoutMs: 6000, label: "the replayed tour" });
+    await page.evaluate(`
+      const skip = document.querySelector('.tutorial-foot-leave button');
+      if (!skip) throw new Error('no skip button');
+      skip.click();
+      return true;
+    `);
+    await sleep(500);
+    const after = await page.evaluate(`
+      return { card: !!document.querySelector('.tutorial-card'), reminder: !!document.querySelector('.tutorial-reminder') };
+    `);
+    assert(!after.card, "the tour is still on screen after Skip");
+    assert(!after.reminder, "Skip left a reminder, which is what Later is for");
+    return "refused, no reminder";
   });
 
   // ── Themes ─────────────────────────────────────────────────────────────────
   group("Themes");
 
   await openTab(page, "settings");
+  // Settings remembers which group is open, and the checks above leave it on
+  // Account. Selecting the group explicitly means these checks do not depend
+  // on what ran before them.
+  await page.click('.settings-group:nth-child(1)');
+  await sleep(250);
 
   await check("every preset applies, and paints the page it claims to", async () => {
     const observed = [];
@@ -325,6 +423,9 @@ try {
 
   // ── The aircraft preference ────────────────────────────────────────────────
   group("Aircraft");
+
+  await page.click('.settings-group:nth-child(1)');
+  await sleep(250);
 
   await check("three aircraft fly the loading screen, each its own drawing", async () => {
     const sources = await page.evaluate(

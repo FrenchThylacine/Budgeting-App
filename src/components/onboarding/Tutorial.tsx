@@ -41,6 +41,16 @@ import { Button } from "../ui/Button";
  *  - **Decide later** defers it: nothing reopens by itself, and a single quiet
  *    reminder appears in the shell, resumable at the step it was left on.
  *
+ * "Later" is offered on **every** step, not only the first. It used to be the
+ * first card's alone, on the reasoning that somebody four steps in who leaves
+ * means Skip — which had it backwards. Four steps in is exactly when there is
+ * a place worth coming back to, and the only exit on offer was the one that
+ * throws that place away.
+ *
+ * Closing the card — the × or Escape — is *later*, not Skip. A close button
+ * means "not now"; ending the offer for good is a decision, and decisions get
+ * a labelled button.
+ *
  * Reduced motion is honoured by not adding the animation at all, and the
  * notification step asks the browser for real — it is the only step with an
  * action, and pressing its button is the user gesture every browser requires.
@@ -85,7 +95,7 @@ export const Tutorial: React.FC<{
   }, [step, onNavigate]);
 
   // Focus lands on the card so the keyboard can drive the tour immediately,
-  // and Escape leaves it the same way Skip does.
+  // and Escape leaves it the same way the × does: postponed, not refused.
   useEffect(() => {
     cardRef.current?.focus();
   }, [index]);
@@ -94,7 +104,7 @@ export const Tutorial: React.FC<{
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
         event.preventDefault();
-        skip();
+        later();
       }
     };
     document.addEventListener("keydown", onKeyDown);
@@ -156,7 +166,7 @@ export const Tutorial: React.FC<{
           <span className="text-footnote tutorial-progress">
             {t("tutorial.progress", { current: index + 1, total: TUTORIAL_STEPS.length })}
           </span>
-          <button type="button" className="btn btn-ghost btn-sm btn-icon" onClick={skip} aria-label={t("tutorial.skip")}>
+          <button type="button" className="btn btn-ghost btn-sm btn-icon" onClick={later} aria-label={t("tutorial.later")}>
             <X size={16} />
           </button>
         </header>
@@ -218,13 +228,9 @@ export const Tutorial: React.FC<{
             <Button variant="ghost" size="sm" onClick={skip}>
               {t("tutorial.skip")}
             </Button>
-            {/* Offered on the first card only. Later on, the reader is already
-                in the middle of it and "later" is what Skip means. */}
-            {index === 0 && (
-              <Button variant="ghost" size="sm" onClick={later}>
-                {t("tutorial.later")}
-              </Button>
-            )}
+            <Button variant="ghost" size="sm" onClick={later}>
+              {t("tutorial.later")}
+            </Button>
           </div>
           <div className="tutorial-foot-nav">
             <Button variant="secondary" size="sm" disabled={index === 0} onClick={() => setIndex((n) => n - 1)}>
