@@ -709,7 +709,7 @@ export const AnalyticsPanel: React.FC = () => {
             <>
               <ChartCard
                 title={t("stats.activityShare")}
-                subtitle={`${money(activityCosts.yearly.personal)} ${t("common.perYear")}`}
+                subtitle={`${money(activityCosts.yearly.personal)} ${t("common.perYear")} · ${t("stats.ofWhatYouPay")}`}
                 note={
                   activityCosts.externallyFundedCount > 0
                     ? t("stats.notYours", { count: activityCosts.externallyFundedCount })
@@ -743,7 +743,7 @@ export const AnalyticsPanel: React.FC = () => {
                 )}
               </ChartCard>
 
-              <ChartCard title={t("stats.fundingSplit")} subtitle={t("funding.gross.hint")}>
+              <ChartCard title={t("stats.fundingSplit")} subtitle={t("stats.ofAllActivityCost")}>
                 {/* Three slices, never two: "paid by others" and "outside
                     budget" behave identically against the budget and answer
                     different questions, so collapsing them here would destroy
@@ -762,19 +762,20 @@ export const AnalyticsPanel: React.FC = () => {
                   size={200}
                   emptyMessage={t("stats.noActivitiesBody")}
                 />
+                {/* The donut's own legend already carries every percentage.
+                    Repeating them here as "· 43.0% of the total" restated the
+                    chart directly under it — and said "the total" about a
+                    whole that the chart two cards above uses a different one
+                    for, which is the ambiguity that made a reader believe
+                    money somebody else pays had got into their own share. */}
                 <StatRow
                   columns={150}
-                  items={FUNDING_KINDS.map((kind) => {
-                    const share = fundingShares(activityCosts.yearly)[kind];
-                    return {
-                      label: `${FUNDING_META[kind].glyph} ${t(`funding.${kind}.short`)}`,
-                      value: money(activityCosts.yearly[kind]),
-                      detail: `${money(activityCosts.monthly[kind])} ${t("common.perMonth")}${
-                        share != null ? ` · ${t("stats.shareOfTotal", { percent: `${share.toFixed(1)}%` })}` : ""
-                      }`,
-                      tone: kind === "personal" ? undefined : ("warning" as const),
-                    };
-                  })}
+                  items={FUNDING_KINDS.map((kind) => ({
+                    label: `${FUNDING_META[kind].glyph} ${t(`funding.${kind}.short`)}`,
+                    value: money(activityCosts.yearly[kind]),
+                    detail: `${money(activityCosts.monthly[kind])} ${t("common.perMonth")}`,
+                    tone: kind === "personal" ? undefined : ("warning" as const),
+                  }))}
                 />
               </ChartCard>
 

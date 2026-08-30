@@ -297,31 +297,85 @@ export function formatMoney(
 }
 
 /**
- * The second line under an amount, or null when there should not be one.
+ * Equivalents: two questions, two functions
+ * =========================================
  *
- * Null in four cases, and each of them matters:
+ * An "≈" line under a figure answers one of two entirely different questions,
+ * and the application had one function doing both — which meant it answered
+ * the wrong one everywhere.
  *
- *  - no second currency is configured — the feature is off by default;
- *  - the amount is *already* in the second currency, so an "≈" line would
- *    restate it;
+ *  1. **"What is this record worth in my money?"** A taxi cost 150 000 LBP.
+ *     The reader's budget is in euros. The equivalent that helps is
+ *     **≈ €1.35** — the *display* currency, the one every total on the screen
+ *     is already in. This is `displayEquivalent`, and it is on by default
+ *     because it is not a preference: it is the difference between a number
+ *     and a number you can place.
+ *
+ *  2. **"What is this total worth in the other currency I think in?"**
+ *     Somebody who earns in dollars and budgets in euros wants the wallet's
+ *     €2,400 to also read **≈ $2,790**. That is `secondaryEquivalent`, it
+ *     applies to *aggregates* rather than to records, and it is off until
+ *     somebody chooses a second currency.
+ *
+ * One function served both, keyed on `settings.secondaryCurrency` — so a
+ * Lebanese taxi in a euro budget with the second currency set to dollars
+ * printed "≈ $1.47", converting a record the reader never asked about into a
+ * currency no total on the page was in. The two are now named separately, and
+ * the names are the documentation.
+ *
+ * Both return null rather than guessing. Null in four cases, each of which
+ * matters:
+ *
+ *  - the amount is already in the target, so an "≈" line would restate it;
  *  - there is no amount;
- *  - **no rate connects the two.** A fabricated equivalent under a real
- *    transaction is worse than no equivalent at all: "≈ €1.35" reads as a fact,
- *    and `rateToBase` falls back to 1:1 to keep the interface rendering. This
- *    is the caller that must not accept that fallback.
+ *  - (for the second currency) none is configured — the feature is off;
+ *  - **no rate connects the pair.** A fabricated equivalent under a real
+ *    figure is worse than none at all: "≈ €1.35" reads as a fact, and
+ *    `rateToBase` falls back to 1:1 to keep the interface rendering. These are
+ *    the callers that must not accept that fallback.
  */
-export function secondaryAmount(
+function equivalent(
+  amount: number | null | undefined,
+  currency: CurrencyCode,
+  target: CurrencyCode | undefined,
+  rates: ExchangeRates,
+): { amount: number; currency: CurrencyCode } | null {
+  if (!target || target === currency) return null;
+  if (amount == null || !Number.isFinite(amount)) return null;
+  if (!canConvert(currency, target, rates)) return null;
+  const converted = convertAmount(amount, currency, target, rates);
+  if (converted == null || !Number.isFinite(converted)) return null;
+  return { amount: converted, currency: target };
+}
+
+/**
+ * What one recorded amount is worth in the **display** currency.
+ *
+ * For a transaction, a wallet movement, an activity's price — anything
+ * recorded in a currency of its own. Not a preference: the reader chose the
+ * display currency, and every total on the screen is already in it.
+ */
+export function displayEquivalent(
+  amount: number | null | undefined,
+  currency: CurrencyCode,
+  settings: Pick<Settings, "baseCurrency" | "exchangeRates">,
+): { amount: number; currency: CurrencyCode } | null {
+  return equivalent(amount, currency, settings.baseCurrency, settings.exchangeRates);
+}
+
+/**
+ * What an **aggregate** is worth in the optional second currency.
+ *
+ * For a wallet balance, a monthly activity total, a period's spending — the
+ * figures somebody who thinks in two currencies wants to read twice. Off
+ * until a second currency is chosen.
+ */
+export function secondaryEquivalent(
   amount: number | null | undefined,
   currency: CurrencyCode,
   settings: Pick<Settings, "secondaryCurrency" | "exchangeRates">,
 ): { amount: number; currency: CurrencyCode } | null {
-  const target = settings.secondaryCurrency;
-  if (!target || target === currency) return null;
-  if (amount == null || !Number.isFinite(amount)) return null;
-  if (!canConvert(currency, target, settings.exchangeRates)) return null;
-  const converted = convertAmount(amount, currency, target, settings.exchangeRates);
-  if (converted == null || !Number.isFinite(converted)) return null;
-  return { amount: converted, currency: target };
+  return equivalent(amount, currency, settings.secondaryCurrency, settings.exchangeRates);
 }
 
 /**

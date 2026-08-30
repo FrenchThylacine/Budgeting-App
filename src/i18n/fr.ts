@@ -119,8 +119,7 @@ export const fr: Dictionary = {
   "activities.requiredThisMonthHint": "Les paiements réellement dus ce mois-ci.",
   "activities.unscheduled_one": "{count} activité n'a pas de date de paiement connue",
   "activities.unscheduled_other": "{count} activités n'ont pas de date de paiement connue",
-  "activities.unscheduledBody":
-    "Leurs estimations mensuelles et annuelles sont affichées, mais elles ne peuvent être rattachées à aucun mois. Ajoutez une date de renouvellement ou de début et elles apparaîtront dans « Nécessaire en {month} ».",
+  "activities.unscheduledBody": "Ajoutez une date de renouvellement ou de début et elles apparaîtront dans « {month} ».",
   "activities.dueThisMonth": "Dû ce mois-ci",
   "activities.notDueThisMonth": "Rien à payer ce mois-ci",
   "activities.dueOn": "Dû le {date}",
@@ -180,9 +179,7 @@ export const fr: Dictionary = {
   "stats.notYours_other": "{count} que vous ne payez pas",
   "stats.fundingSplit": "Qui finance vos activités",
   "stats.grossCost": "Coût brut",
-  "stats.grossCostHint": "Tout, quel que soit le payeur.",
   "stats.budgetRelevant": "Votre budget",
-  "stats.shareOfTotal": "{percent} du total",
   "stats.noActivities": "Aucune activité active",
   "stats.noActivitiesBody": "Ajoutez une activité pour voir la répartition de vos coûts récurrents.",
 
@@ -379,12 +376,6 @@ export const fr: Dictionary = {
   "tutorial.doneBody": "Les réglages contiennent un bouton pour la relancer quand vous voulez.",
 
   "a11y.editActivity": "Modifier {name}",
-  "a11y.deleteActivity": "Supprimer {name}",
-  "a11y.duplicateActivity": "Dupliquer {name}",
-  "a11y.deactivateActivity": "Désactiver {name}",
-  "a11y.reactivateActivity": "Réactiver {name}",
-  "a11y.moveUp": "Monter {name}",
-  "a11y.moveDown": "Descendre {name}",
   "a11y.editTransaction": "Modifier la transaction",
   "a11y.deleteTransaction": "Supprimer la transaction",
   "a11y.closeEditor": "Fermer l'éditeur",
@@ -1317,4 +1308,6 @@ export const fr: Dictionary = {
   "auth.error.passwordMismatch": "Les deux mots de passe ne correspondent pas.",
   "health.outOf100": "sur 100",
   "a11y.budgetHealth": "Santé du budget {score} sur 100",
+  "stats.ofAllActivityCost": "Sur le coût total des activités, quel que soit le payeur",
+  "stats.ofWhatYouPay": "Sur ce que vous payez",
 };

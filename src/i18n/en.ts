@@ -244,8 +244,7 @@ export const en = {
   "activities.requiredThisMonthHint": "The payments that actually fall due this month.",
   "activities.unscheduled_one": "{count} activity has no known payment date",
   "activities.unscheduled_other": "{count} activities have no known payment date",
-  "activities.unscheduledBody":
-    "Their monthly and yearly estimates are shown, but they cannot be assigned to a month. Add a renewal or start date and they will appear in “Required in {month}”.",
+  "activities.unscheduledBody": "Add a renewal or start date and they will appear in “{month}”.",
   "activities.dueThisMonth": "Due this month",
   "activities.notDueThisMonth": "Nothing due this month",
   "activities.dueOn": "Due {date}",
@@ -306,9 +305,7 @@ export const en = {
   "stats.notYours_other": "{count} not yours to pay",
   "stats.fundingSplit": "Who funds your activities",
   "stats.grossCost": "Gross cost",
-  "stats.grossCostHint": "Everything, whoever pays.",
   "stats.budgetRelevant": "Your budget",
-  "stats.shareOfTotal": "{percent} of the total",
   "stats.noActivities": "No active activities",
   "stats.noActivitiesBody": "Add an activity to see how your recurring costs divide up.",
 
@@ -1169,12 +1166,6 @@ export const en = {
 
   // ── Accessibility labels ──────────────────────────────────────────────────
   "a11y.editActivity": "Edit {name}",
-  "a11y.deleteActivity": "Delete {name}",
-  "a11y.duplicateActivity": "Duplicate {name}",
-  "a11y.deactivateActivity": "Deactivate {name}",
-  "a11y.reactivateActivity": "Reactivate {name}",
-  "a11y.moveUp": "Move {name} up",
-  "a11y.moveDown": "Move {name} down",
   "a11y.editTransaction": "Edit transaction",
   "a11y.deleteTransaction": "Delete transaction",
   "a11y.closeEditor": "Close editor",
@@ -1353,4 +1344,6 @@ export const en = {
   "auth.error.passwordMismatch": "The two passwords do not match.",
   "health.outOf100": "out of 100",
   "a11y.budgetHealth": "Budget health {score} out of 100",
+  "stats.ofAllActivityCost": "Of all activity cost, whoever pays",
+  "stats.ofWhatYouPay": "Of what you pay for",
 } as const;

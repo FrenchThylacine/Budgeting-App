@@ -112,8 +112,7 @@ export const de: Dictionary = {
   "activities.requiredThisMonthHint": "Die Zahlungen, die in diesem Monat wirklich fällig werden.",
   "activities.unscheduled_one": "{count} Aktivität hat kein bekanntes Zahlungsdatum",
   "activities.unscheduled_other": "{count} Aktivitäten haben kein bekanntes Zahlungsdatum",
-  "activities.unscheduledBody":
-    "Ihre Monats- und Jahresschätzungen werden angezeigt, sie lassen sich aber keinem Monat zuordnen. Trage ein Verlängerungs- oder Startdatum ein, dann erscheinen sie unter „Benötigt im {month}“.",
+  "activities.unscheduledBody": "Fügen Sie ein Verlängerungs- oder Startdatum hinzu, dann erscheinen sie in „{month}“.",
   "activities.dueThisMonth": "Diesen Monat fällig",
   "activities.notDueThisMonth": "Diesen Monat nichts fällig",
   "activities.dueOn": "Fällig am {date}",
@@ -173,9 +172,7 @@ export const de: Dictionary = {
   "stats.notYours_other": "{count} zahlen andere",
   "stats.fundingSplit": "Wer deine Aktivitäten finanziert",
   "stats.grossCost": "Bruttokosten",
-  "stats.grossCostHint": "Alles, unabhängig vom Zahler.",
   "stats.budgetRelevant": "Dein Budget",
-  "stats.shareOfTotal": "{percent} der Summe",
   "stats.noActivities": "Keine aktiven Aktivitäten",
   "stats.noActivitiesBody": "Füge eine Aktivität hinzu, um die Aufteilung deiner laufenden Kosten zu sehen.",
 
@@ -371,12 +368,6 @@ export const de: Dictionary = {
   "tutorial.doneBody": "In den Einstellungen gibt es eine Schaltfläche, um sie erneut zu starten.",
 
   "a11y.editActivity": "{name} bearbeiten",
-  "a11y.deleteActivity": "{name} löschen",
-  "a11y.duplicateActivity": "{name} duplizieren",
-  "a11y.deactivateActivity": "{name} deaktivieren",
-  "a11y.reactivateActivity": "{name} reaktivieren",
-  "a11y.moveUp": "{name} nach oben",
-  "a11y.moveDown": "{name} nach unten",
   "a11y.editTransaction": "Buchung bearbeiten",
   "a11y.deleteTransaction": "Buchung löschen",
   "a11y.closeEditor": "Editor schließen",
@@ -1309,4 +1300,6 @@ export const de: Dictionary = {
   "auth.error.passwordMismatch": "Die beiden Passwörter stimmen nicht überein.",
   "health.outOf100": "von 100",
   "a11y.budgetHealth": "Budget-Gesundheit {score} von 100",
+  "stats.ofAllActivityCost": "Von den gesamten Aktivitätskosten, wer auch zahlt",
+  "stats.ofWhatYouPay": "Von dem, was Sie zahlen",
 };

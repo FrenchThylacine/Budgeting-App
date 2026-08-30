@@ -651,29 +651,6 @@ try {
     return "back to today";
   });
 
-  // ── The second currency ────────────────────────────────────────────────────
-  group("Second currency");
-
-  await check("is off until it is chosen", async () => {
-    await openTab(page, "spending");
-    const pairs = await page.evaluate("document.querySelectorAll('.money-secondary').length");
-    equal(pairs, 0, "second-currency lines before it is enabled");
-    return "no second line";
-  });
-
-  await check("appears under an amount in another currency, and never under one already in it", async () => {
-    await openTab(page, "settings");
-    await page.click('.settings-group:nth-child(2)');
-    await sleep(200);
-    await page.waitFor("!!document.querySelector('[data-setting=secondaryCurrency]')");
-    await page.setValue("[data-setting=secondaryCurrency]", "USD");
-    await sleep(400);
-    const stored = await page.evaluate("document.querySelector('[data-setting=secondaryCurrency]').value");
-    equal(stored, "USD", "the stored second currency");
-    return "USD";
-  });
-
-
   // ── Exchange rates ────────────────────────────────────────────────────────
   group("Exchange rates");
 
@@ -948,6 +925,101 @@ try {
     assert(after >= before, "the reset destroyed ledger rows instead of balancing them");
     return `zeroed, ${after} ledger rows kept`;
   });
+
+  // ── The second currency ────────────────────────────────────────────────────
+  group("Second currency");
+
+  /*
+   * Two equivalents, two questions.
+   *
+   * Under a **record** — a transaction in a currency of its own — the useful
+   * equivalent is the *display* currency, the one every total on the page is
+   * already in. Under an **aggregate**, it is the optional *second* currency,
+   * for somebody who earns in one and budgets in another.
+   *
+   * One function answered both, keyed on the second currency, so a Lebanese
+   * taxi in a euro budget printed "≈ $1.47" — a currency nothing beside it was
+   * in. The check that used to live here only asserted that the setting
+   * stored, which is why the swap survived it.
+   */
+  await check("records one in a currency that is not the display currency", async () => {
+    // 150 000 LBP, the specification's own example, so the two equivalents
+    // below have a real record to disagree about. Recorded *here* rather than
+    // with the rest of the budget: the wallet's balances are asserted against
+    // an exact figure, and one more transaction changes it.
+    await openTab(page, "spending");
+    await page.click('[data-action="add-spending"]');
+    await page.waitFor(`!!document.querySelector('${field("amount")}')`);
+    await page.setValue(field("amount"), "150000");
+    await page.setValue(field("note"), "Taxi");
+    await page.setValue(field("currency"), "LBP");
+    await sleep(150);
+    await page.click(".sheet-footer .btn-primary");
+    await sleep(700);
+    const shown = await page.evaluate(`
+      const row = [...document.querySelectorAll('.item-row')].find((n) => /Taxi/.test(n.textContent ?? ''));
+      return row ? row.querySelector('.money-pair, .item-amount, strong')?.textContent?.trim() ?? row.textContent.trim().slice(0, 60) : null;
+    `);
+    assert(shown, "the foreign transaction is not in the list");
+    return shown.replace(/\s+/g, " ").slice(0, 60);
+  });
+
+  await check("a record in another currency is placed in the display currency", async () => {
+    await openTab(page, "spending");
+    const line = await page.evaluate(`
+      const pair = [...document.querySelectorAll('.money-pair')]
+        .find((el) => /LBP|L\\.L\\./.test(el.textContent ?? ''));
+      if (!pair) return null;
+      return {
+        primary: pair.firstElementChild?.textContent?.trim() ?? '',
+        secondary: pair.querySelector('.money-secondary')?.textContent?.replace(/\\s+/g, ' ').trim() ?? '',
+      };
+    `);
+    assert(line, "no foreign-currency transaction on screen to place");
+    assert(/150/.test(line.primary), `the original is not the primary figure: ${line.primary}`);
+    assert(/€|EUR/.test(line.secondary), `the equivalent is not in the display currency: ${line.secondary}`);
+    return `${line.primary} ${line.secondary}`;
+  });
+
+  await check("the second currency is off until it is chosen", async () => {
+    const totals = await page.evaluate(
+      "document.querySelectorAll('.funding-split-value .money-secondary').length",
+    );
+    equal(totals, 0, "aggregate second-currency lines before one is chosen");
+    return "no second line on the totals";
+  });
+
+  await check("choosing one puts it under the totals, and only the totals", async () => {
+    await openTab(page, "settings");
+    await page.click('.settings-group:nth-child(2)');
+    await sleep(200);
+    await page.waitFor("!!document.querySelector('[data-setting=secondaryCurrency]')");
+    await page.setValue("[data-setting=secondaryCurrency]", "USD");
+    await sleep(400);
+    equal(
+      await page.evaluate("document.querySelector('[data-setting=secondaryCurrency]').value"),
+      "USD",
+      "the stored second currency",
+    );
+
+    await openTab(page, "spending");
+    const state = await page.evaluate(`
+      const total = document.querySelector('.funding-split-value .money-secondary')?.textContent ?? '';
+      const record = [...document.querySelectorAll('.money-pair')]
+        .find((el) => /LBP|L\\.L\\./.test(el.textContent ?? ''))
+        ?.querySelector('.money-secondary')?.textContent ?? '';
+      return { total: total.replace(/\\s+/g, ' ').trim(), record: record.replace(/\\s+/g, ' ').trim() };
+    `);
+    assert(/\$|USD/.test(state.total), `the total does not carry the second currency: ${state.total}`);
+    // And the record did **not** move to it.
+    assert(
+      state.record === "" || /€|EUR/.test(state.record),
+      `the second currency reached a record: ${state.record}`,
+    );
+    return `total ${state.total} · record ${state.record}`;
+  });
+
+
 
   // ── The report ────────────────────────────────────────────────────────────
   group("Report");

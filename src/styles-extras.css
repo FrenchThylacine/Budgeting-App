@@ -3469,3 +3469,46 @@ label:has(> input[type="radio"]) {
 /* ── V4: the health card fills its own card ───────────────────────────────── */
 .health-card { display: grid; }
 .health-card-body { height: 100%; display: grid; align-content: center; }
+
+/* ── V4.2: the funding split, as a length ─────────────────────────────────────
+   Three percentages in three captions became one bar. Each segment carries its
+   glyph and, where there is room, its own figure — so the split reads without
+   colour, and the "of the total" phrasing that made two different statistics
+   look like one is gone from both. */
+.funding-bar {
+  display: flex;
+  gap: 2px;
+  height: 22px;
+  margin: 2px 0 14px;
+  border-radius: var(--radius-full);
+  overflow: hidden;
+}
+
+.funding-bar-part {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-width: 22px;
+  font-size: var(--text-footnote);
+  font-weight: var(--weight-medium);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: var(--accent-contrast);
+}
+
+.funding-bar-part[data-funding="personal"] { background: var(--funding-personal); }
+.funding-bar-part[data-funding="other"] { background: var(--funding-other); }
+.funding-bar-part[data-funding="outside"] { background: var(--funding-outside); }
+
+/* The two lighter fills need dark type on them; the accent is dark enough to
+   take white in light mode and is itself light in dark mode, where the
+   contrast token flips with it. */
+.funding-bar-part[data-funding="outside"] { color: #3B2503; }
+
+.funding-bar-value { opacity: 0.92; }
+
+@media (max-width: 520px) {
+  .funding-bar { height: 18px; }
+  .funding-bar-value { display: none; }
+}

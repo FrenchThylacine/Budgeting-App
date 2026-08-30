@@ -17,6 +17,7 @@ import {
 import { currencyOptionsFor, formatMoney, numberLocale } from "../../domain/currency";
 import { SwipeRow } from "../ui/SwipeRow";
 import { RowMenu } from "../ui/RowMenu";
+import { Total } from "../ui/Money";
 import { gesturesFor } from "../../domain/gestures";
 import { AdvancedFields, EditorSheet } from "../ui/EditorSheet";
 import { monthName } from "../../domain/dates";
@@ -1190,6 +1191,37 @@ const ActivitySummary: React.FC<{
     <section className="activity-summary" aria-label={t("activities.summaryTitle")}>
       <h2 className="text-title activity-summary-title">{t("activities.summaryTitle")}</h2>
 
+      {/* Who pays for it, drawn.
+          A length is read in less time than three percentages are, and it can
+          only mean one thing — where "43.0% of the total" on a column headed
+          PAID BY OTHER read, to the person who asked for this pass, exactly
+          like the personal-share statistic it is not. */}
+      {summary.yearly.gross > 0 && (
+        <div
+          className="funding-bar"
+          role="img"
+          aria-label={FUNDING_KINDS.map(
+            (kind) =>
+              `${t(`funding.${kind}.short`)} ${shares[kind] != null ? `${shares[kind]!.toFixed(0)}%` : "0%"}`,
+          ).join(", ")}
+        >
+          {FUNDING_KINDS.filter((kind) => (shares[kind] ?? 0) > 0).map((kind) => (
+            <span
+              key={kind}
+              className="funding-bar-part"
+              data-funding={kind}
+              style={{ width: `${shares[kind]}%` }}
+              title={`${t(`funding.${kind}.short`)} · ${shares[kind]!.toFixed(1)}%`}
+            >
+              {/* The glyph rides inside its own segment, so the split survives
+                  a greyscale screenshot and a colour-blind reader. */}
+              <span aria-hidden="true">{FUNDING_META[kind].glyph}</span>
+              {(shares[kind] ?? 0) >= 12 && <span className="funding-bar-value">{shares[kind]!.toFixed(0)}%</span>}
+            </span>
+          ))}
+        </div>
+      )}
+
       <div className="activity-summary-grid">
         {/* The captions carry data now, not explanation. "Every active
             activity, whoever pays" and "the payments that actually fall due
@@ -1200,12 +1232,18 @@ const ActivitySummary: React.FC<{
           <div className="text-footnote" title={t("activities.totalCostHint")}>
             {t("activities.totalCost")}
           </div>
-          <div className="money activity-summary-value">{money(summary.monthly.gross)}</div>
+          <div className="money activity-summary-value"><Total amount={summary.monthly.gross} /></div>
           <div className="text-caption">
             {money(summary.yearly.gross)} {t("common.perYear")}
           </div>
         </div>
 
+        {/* The percentages moved into the bar above.
+            Each column used to end "· 43.0% of the total", which raised the
+            question the bar answers at a glance and left it ambiguous besides:
+            two different statistics on this page said "of the total" and meant
+            two different wholes. The bar is the split; the columns are the
+            money. */}
         {FUNDING_KINDS.map((kind) => (
           <div key={kind} className="activity-summary-figure" data-funding={kind}>
             <div className="text-footnote">
@@ -1217,7 +1255,6 @@ const ActivitySummary: React.FC<{
             <div className="money activity-summary-value">{money(summary.monthly[kind])}</div>
             <div className="text-caption">
               {money(summary.yearly[kind])} {t("common.perYear")}
-              {shares[kind] != null ? ` · ${t("stats.shareOfTotal", { percent: `${shares[kind]!.toFixed(1)}%` })}` : ""}
             </div>
           </div>
         ))}
@@ -1228,7 +1265,7 @@ const ActivitySummary: React.FC<{
           <div className="text-footnote" title={t("activities.requiredThisMonthHint")}>
             {t("activities.requiredThisMonth", { month: monthLabel })}
           </div>
-          <div className="money activity-summary-value">{money(required.personal)}</div>
+          <div className="money activity-summary-value"><Total amount={required.personal} /></div>
           <div className="text-caption">
             {required.gross !== required.personal
               ? `${money(required.gross)} ${t("funding.gross").toLowerCase()}`

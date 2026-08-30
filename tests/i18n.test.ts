@@ -142,8 +142,11 @@ describe("placeholders", () => {
 
   it("formats a numeric placeholder for the active locale", () => {
     // French groups with a narrow space and uses a comma for the decimal.
-    const french = createTranslator("fr")("stats.shareOfTotal", { percent: "12,5 %" });
-    expect(french).toContain("12,5 %");
+    // `stats.shareOfTotal` used to carry this; it was deleted when the three
+    // funding percentages became a bar, so the check moved to a key that is
+    // still asked for.
+    const french = createTranslator("fr")("dashboard.vsPrevious", { delta: "+12,5 %" });
+    expect(french).toContain("+12,5 %");
   });
 
   it("leaves an unknown placeholder visible rather than printing 'undefined'", () => {

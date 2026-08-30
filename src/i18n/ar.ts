@@ -137,8 +137,7 @@ export const ar: Dictionary = {
   "activities.unscheduled_few": "{count} أنشطة بلا تاريخ دفع معروف",
   "activities.unscheduled_many": "{count} نشاطًا بلا تاريخ دفع معروف",
   "activities.unscheduled_other": "{count} نشاط بلا تاريخ دفع معروف",
-  "activities.unscheduledBody":
-    "تُعرض تقديراتها الشهرية والسنوية، لكن لا يمكن نسبتها إلى شهر بعينه. أضف تاريخ تجديد أو بداية لتظهر ضمن «المطلوب في {month}».",
+  "activities.unscheduledBody": "أضف تاريخ تجديد أو بدء وستظهر في «{month}».",
   "activities.dueThisMonth": "مستحق هذا الشهر",
   "activities.notDueThisMonth": "لا شيء مستحق هذا الشهر",
   "activities.dueOn": "مستحق في {date}",
@@ -204,9 +203,7 @@ export const ar: Dictionary = {
   "stats.notYours_other": "{count} لا تدفعها أنت",
   "stats.fundingSplit": "من يموّل أنشطتك",
   "stats.grossCost": "التكلفة الإجمالية",
-  "stats.grossCostHint": "كل شيء، أيًّا كان الدافع.",
   "stats.budgetRelevant": "ميزانيتك",
-  "stats.shareOfTotal": "{percent} من الإجمالي",
   "stats.noActivities": "لا أنشطة فعّالة",
   "stats.noActivitiesBody": "أضف نشاطًا لترى كيف تتوزّع تكاليفك المتكررة.",
 
@@ -403,12 +400,6 @@ export const ar: Dictionary = {
   "tutorial.doneBody": "في الإعدادات زرّ لإعادتها متى شئت.",
 
   "a11y.editActivity": "تعديل {name}",
-  "a11y.deleteActivity": "حذف {name}",
-  "a11y.duplicateActivity": "تكرار {name}",
-  "a11y.deactivateActivity": "تعطيل {name}",
-  "a11y.reactivateActivity": "إعادة تفعيل {name}",
-  "a11y.moveUp": "تحريك {name} لأعلى",
-  "a11y.moveDown": "تحريك {name} لأسفل",
   "a11y.editTransaction": "تعديل المعاملة",
   "a11y.deleteTransaction": "حذف المعاملة",
   "a11y.closeEditor": "إغلاق المحرّر",
@@ -1393,4 +1384,6 @@ export const ar: Dictionary = {
   "auth.error.passwordMismatch": "كلمتا المرور غير متطابقتين.",
   "health.outOf100": "من 100",
   "a11y.budgetHealth": "صحة الميزانية {score} من 100",
+  "stats.ofAllActivityCost": "من إجمالي تكلفة الأنشطة، أيًّا كان الدافع",
+  "stats.ofWhatYouPay": "مما تدفعه أنت",
 };

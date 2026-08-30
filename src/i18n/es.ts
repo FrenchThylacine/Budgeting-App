@@ -112,8 +112,7 @@ export const es: Dictionary = {
   "activities.requiredThisMonthHint": "Los pagos que vencen realmente este mes.",
   "activities.unscheduled_one": "{count} actividad no tiene fecha de pago conocida",
   "activities.unscheduled_other": "{count} actividades no tienen fecha de pago conocida",
-  "activities.unscheduledBody":
-    "Se muestran sus estimaciones mensuales y anuales, pero no pueden asignarse a un mes. Añade una fecha de renovación o de inicio y aparecerán en «Necesario en {month}».",
+  "activities.unscheduledBody": "Añade una fecha de renovación o de inicio y aparecerán en «{month}».",
   "activities.dueThisMonth": "Vence este mes",
   "activities.notDueThisMonth": "Nada vence este mes",
   "activities.dueOn": "Vence el {date}",
@@ -173,9 +172,7 @@ export const es: Dictionary = {
   "stats.notYours_other": "{count} que no pagas tú",
   "stats.fundingSplit": "Quién financia tus actividades",
   "stats.grossCost": "Coste bruto",
-  "stats.grossCostHint": "Todo, pague quien pague.",
   "stats.budgetRelevant": "Tu presupuesto",
-  "stats.shareOfTotal": "{percent} del total",
   "stats.noActivities": "Sin actividades activas",
   "stats.noActivitiesBody": "Añade una actividad para ver cómo se reparten tus costes recurrentes.",
 
@@ -371,12 +368,6 @@ export const es: Dictionary = {
   "tutorial.doneBody": "En Ajustes hay un botón para repetirlo cuando quieras.",
 
   "a11y.editActivity": "Editar {name}",
-  "a11y.deleteActivity": "Eliminar {name}",
-  "a11y.duplicateActivity": "Duplicar {name}",
-  "a11y.deactivateActivity": "Desactivar {name}",
-  "a11y.reactivateActivity": "Reactivar {name}",
-  "a11y.moveUp": "Subir {name}",
-  "a11y.moveDown": "Bajar {name}",
   "a11y.editTransaction": "Editar transacción",
   "a11y.deleteTransaction": "Eliminar transacción",
   "a11y.closeEditor": "Cerrar el editor",
@@ -1309,4 +1300,6 @@ export const es: Dictionary = {
   "auth.error.passwordMismatch": "Las dos contraseñas no coinciden.",
   "health.outOf100": "sobre 100",
   "a11y.budgetHealth": "Salud del presupuesto {score} sobre 100",
+  "stats.ofAllActivityCost": "Del coste total de actividades, pague quien pague",
+  "stats.ofWhatYouPay": "De lo que pagas tú",
 };

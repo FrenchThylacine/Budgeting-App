@@ -19,6 +19,7 @@ import { EditorSheet } from "../ui/EditorSheet";
 import { EmptyState } from "../ui/EmptyState";
 import { Field, FieldGroup } from "../ui/Field";
 import { Section } from "../ui/Section";
+import { Total } from "../ui/Money";
 import { resolveStoredText } from "../../domain/storedText";
 
 /**
@@ -156,19 +157,19 @@ export const WalletPanel: React.FC = () => {
             <div className="text-footnote">
               <WalletIcon size={13} aria-hidden="true" /> {t("wallet.walletBalance")}
             </div>
-            <div className="money wallet-balance-value">{money(wallet.walletBalance)}</div>
+            <div className="money wallet-balance-value"><Total amount={wallet.walletBalance} /></div>
             <div className="text-caption">{t("wallet.walletBalanceHint")}</div>
           </div>
 
           <div className="wallet-balance" data-tone="budget">
             <div className="text-footnote">{t("wallet.budgetRemaining")}</div>
-            <div className="money wallet-balance-value">{money(wallet.budgetRemaining)}</div>
+            <div className="money wallet-balance-value"><Total amount={wallet.budgetRemaining} /></div>
             <div className="text-caption">{t("wallet.budgetRemainingHint")}</div>
           </div>
 
           <div className="wallet-balance" data-tone="personal">
             <div className="text-footnote">{t("wallet.personalBalance")}</div>
-            <div className="money wallet-balance-value">{money(wallet.personalBalance)}</div>
+            <div className="money wallet-balance-value"><Total amount={wallet.personalBalance} /></div>
             <div className="text-caption">{t("wallet.personalBalanceHint")}</div>
           </div>
         </div>

@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { Pencil, Plus, ShoppingBag, Trash2, X } from "lucide-react";
 import { currencyOptionsFor, formatMoney } from "../../domain/currency";
-import { Money } from "../ui/Money";
+import { Money, Total } from "../ui/Money";
 import { monthFromDateInput, todayDateInput, weekFromDateInput, weekYear } from "../../domain/dates";
 import { selectedIsoWeekYear } from "../../domain/periods";
 import {
@@ -433,7 +433,7 @@ export const SpendingPanel: React.FC = () => {
                 onChange={(e) => setDraft({ ...draft, amount: e.target.value })}
               />
             </Field>
-            <Field label={t("spending.currency")}>
+            <Field label={t("spending.currency")} name="currency">
               <select
                 className="select"
                 value={draft.currency}
@@ -611,7 +611,7 @@ export const SpendingPanel: React.FC = () => {
               <span aria-hidden="true" className="funding-glyph">{FUNDING_META.personal.glyph}</span>{" "}
               {t("funding.personal.short")}
             </div>
-            <div className="money funding-split-value">{formatDualMoney(split.personal, snapshot.settings)}</div>
+            <div className="money funding-split-value"><Total amount={split.personal} /></div>
             <div className="text-caption">{t("common.transactions", { count: split.personalCount })}</div>
           </div>
           <div data-funding="other">
