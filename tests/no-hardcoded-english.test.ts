@@ -139,6 +139,21 @@ export function templateGlue(line: string): string[] {
     );
 }
 
+/**
+ * An English sentence handed straight to a function.
+ *
+ * `setNotice("That wishlist item no longer exists.")`,
+ * `window.prompt("Name this snapshot of your current budget:")` — not an
+ * attribute, not a property, not JSX text, and not a template. Four of them
+ * were live, two of them on the account screen, where a reader who has just
+ * changed their password is told about it in a language they may not read.
+ */
+export function argumentEnglish(line: string): string[] {
+  return [...line.matchAll(/\(\s*"([A-Z][A-Za-z0-9 ,.'’!?%()-]{8,})"/g)]
+    .map((match) => match[1])
+    .filter((text) => /[A-Za-z]{3,}\s+[A-Za-z]{2,}/.test(text));
+}
+
 interface Finding {
   file: string;
   line: number;
@@ -201,6 +216,7 @@ function scan(): Finding[] {
         for (const text of propertyEnglish(line)) push(text);
         for (const text of jsxWithHoles(line)) push(text);
         for (const text of templateGlue(line)) push(text);
+        for (const text of argumentEnglish(line)) push(text);
 
         const previous = index > 0 ? lines[index - 1].trim() : "";
         // Interpolations are removed first: a sentence with a value in the
@@ -280,6 +296,13 @@ describe("the components carry no English of their own", () => {
     // Code, paths and class lists still say nothing.
     expect(templateGlue("`translate3d(${x}px, ${y}px, 0)`")).toEqual([]);
     expect(templateGlue("`/craft/fleet/${craft.id}.png`")).toEqual([]);
+
+    expect(argumentEnglish('setNotice("That wishlist item no longer exists.");')).toEqual([
+      "That wishlist item no longer exists.",
+    ]);
+    // A key, an identifier and a one-word label all stay quiet.
+    expect(argumentEnglish('t("spending.wishlistItemGone")')).toEqual([]);
+    expect(argumentEnglish('querySelector("Dashboard")')).toEqual([]);
   });
 
   it("catches a sentence on its own line, which the first rules cannot see", () => {

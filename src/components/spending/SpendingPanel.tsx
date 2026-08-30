@@ -259,7 +259,7 @@ export const SpendingPanel: React.FC = () => {
       return false;
     }
     if (result.status === "not-found") {
-      setNotice("That wishlist item no longer exists.");
+      setNotice(t("spending.wishlistItemGone"));
       return false;
     }
     setNotice(null);

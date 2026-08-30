@@ -56,14 +56,14 @@ export const AccountSettings: React.FC = () => {
     if (mode === "password") {
       if (mismatch || newPassword.length === 0) return;
       if (await changePassword(currentPassword, newPassword)) {
-        setDone("Password changed. Other devices have been signed out.");
+        setDone(t("account.passwordChangedSignedOut"));
         close();
       }
       return;
     }
     if (mode === "email") {
       if (await changeEmail(currentPassword, email)) {
-        setDone("Email address updated.");
+        setDone(t("account.emailUpdated"));
         close();
       }
     }
