@@ -91,7 +91,7 @@ export const ReportPanel: React.FC = () => {
           report,
           (value) => formatMoney(value, snapshot.settings.baseCurrency, snapshot.settings.currencyDisplayMode),
           t,
-          { screen: true },
+          { screen: true, statusColours: snapshot.settings.statusColours },
         );
         if (!cancelled) setHtml(document);
       } catch {

@@ -3881,3 +3881,18 @@ label:has(> input[type="radio"]) {
   .report-actions { width: 100%; }
   .report-actions .btn { flex: 1 1 auto; }
 }
+
+/* ── Status colours in Settings ───────────────────────────────────────────────
+   Three swatches, not a palette editor. */
+.status-colour-row { display: flex; gap: 20px; flex-wrap: wrap; }
+.status-colour-field { display: grid; gap: 6px; }
+.status-colour-controls { display: flex; align-items: center; gap: 8px; }
+.status-colour-controls input[type="color"] {
+  width: 44px;
+  height: 32px;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: none;
+  cursor: pointer;
+}

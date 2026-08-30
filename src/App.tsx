@@ -100,6 +100,7 @@ import { TabTransition } from "./components/ui/TabTransition";
 import { Tricolour } from "./components/ui/Tricolour";
 import { LoadingScreen, recallBootAircraft, rememberBootAircraft } from "./components/loading/LoadingScreen";
 import { applyTheme, clearTheme, resolveAppearance, themeFor } from "./domain/theme";
+import { sanitiseStatusColours, statusColourVariables } from "./domain/statusColours";
 import { shouldAutoStartTutorial } from "./domain/tutorial";
 import { useTranslation } from "./i18n/useTranslation";
 import { resolveStoredText } from "./domain/storedText";
@@ -302,6 +303,26 @@ export default function App() {
       clearTheme(root);
     };
   }, [themePreset, appearance, darkModeSetting, systemDark]);
+
+  /*
+   * The reader's own status colours, over whatever the theme said.
+   *
+   * A separate effect from the theme's, and it must run *after* it: `applyTheme`
+   * writes the theme's whole palette, so setting these inside it would put the
+   * order of two effects in charge of which palette wins. Written here, they
+   * are re-applied whenever either the theme or the choice changes, and cleared
+   * kind by kind so switching one back to the theme's does not clear the other
+   * two.
+   */
+  const statusColours = snapshot.settings.statusColours;
+  useEffect(() => {
+    const root = document.documentElement;
+    const variables = statusColourVariables(sanitiseStatusColours(statusColours));
+    for (const [name, value] of Object.entries(variables)) root.style.setProperty(name, value);
+    return () => {
+      for (const name of Object.keys(variables)) root.style.removeProperty(name);
+    };
+  }, [statusColours, themePreset, appearance, darkModeSetting, systemDark]);
 
   /*
    * The loading screen runs before the snapshot exists, so it cannot read the

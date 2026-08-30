@@ -46,6 +46,7 @@ async function openPeriodReport(snapshot: BudgetSnapshot, scope: ReportScope, t:
     report,
     (value) => formatMoney(value, snapshot.settings.baseCurrency, snapshot.settings.currencyDisplayMode),
     t,
+    { statusColours: snapshot.settings.statusColours },
   );
 
   const win = window.open("", "_blank", "noopener,noreferrer,width=1024,height=768");

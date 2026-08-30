@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   ArrowRight,
   Bell,
@@ -14,6 +14,8 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { trackedCurrencies } from "../../domain/currency";
+import { FUNDING_KINDS, type FundingKind } from "../../domain/funding";
+import { isHexColour } from "../../domain/statusColours";
 import { formatDateTime } from "../../domain/dates";
 import { LANGUAGES, findLanguage, searchLanguages } from "../../domain/languages";
 import { resolveLanguage } from "../../domain/i18n";
@@ -186,6 +188,24 @@ const GeneralSettings: React.FC = () => {
             </div>
           </div>
           {theme.darkOnly && <p className="text-note settings-note">{t("settings.themeDarkOnly")}</p>}
+        </div>
+      </Section>
+
+      {/* Who-paid, in the reader's own colours.
+
+          Three swatches rather than a palette editor: these are the states the
+          application actually uses colour to say, and every other colour in it
+          belongs to the theme. The text shade is derived rather than chosen —
+          a reader picking a pale yellow should get readable pale-yellow text,
+          not an invisible label and a support question. */}
+      <Section title={t("settings.statusColours")}>
+        <div className="card card-body settings-card">
+          <div className="status-colour-row">
+            {FUNDING_KINDS.map((kind) => (
+              <StatusColourField key={kind} kind={kind} />
+            ))}
+          </div>
+          <p className="text-note settings-note">{t("settings.statusColoursHint")}</p>
         </div>
       </Section>
 
@@ -823,6 +843,55 @@ const NotificationSettings: React.FC = () => {
                 : status.state === "declined"
                   ? t("notifications.declined")
                   : "")}
+      </div>
+    </div>
+  );
+};
+
+
+/**
+ * One status colour.
+ *
+ * The input needs a concrete hex to show, and an unchosen kind has none —
+ * its colour is whatever the active theme defines. So the swatch reads the
+ * *computed* value off the page rather than this file keeping a second copy of
+ * every theme's palette, which is how a palette and its copy stop agreeing.
+ */
+const StatusColourField: React.FC<{ kind: FundingKind }> = ({ kind }) => {
+  const { t } = useTranslation();
+  const settings = useBudgetStore((state) => state.snapshot.settings);
+  const update = useBudgetStore((state) => state.updateSettings);
+  const chosen = settings.statusColours?.[kind];
+  const [themeValue, setThemeValue] = useState("#000000");
+
+  useEffect(() => {
+    if (chosen) return;
+    const raw = getComputedStyle(document.documentElement).getPropertyValue(`--funding-${kind}`).trim();
+    if (isHexColour(raw)) setThemeValue(raw);
+  }, [kind, chosen, settings.themePreset, settings.darkMode, settings.appearance]);
+
+  const set = (value: string | undefined) => {
+    const next: Partial<Record<FundingKind, string>> = { ...(settings.statusColours ?? {}) };
+    if (value) next[kind] = value;
+    else delete next[kind];
+    update({ statusColours: next });
+  };
+
+  return (
+    <div className="status-colour-field">
+      <span className="text-footnote">{t(`funding.${kind}.short`)}</span>
+      <div className="status-colour-controls">
+        <input
+          type="color"
+          aria-label={t(`funding.${kind}.short`)}
+          value={chosen ?? themeValue}
+          onChange={(event) => set(event.target.value)}
+        />
+        {chosen && (
+          <Button variant="ghost" size="sm" onClick={() => set(undefined)}>
+            {t("settings.resetColour")}
+          </Button>
+        )}
       </div>
     </div>
   );

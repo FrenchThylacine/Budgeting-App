@@ -1,6 +1,7 @@
 import type { BudgetSnapshot, Settings } from "./types";
 import { activityBudgetSummary, type FundingTotals } from "./activityBudget";
 import { FUNDING_KINDS, FUNDING_META, type FundingKind } from "./funding";
+import { sanitiseStatusColours, type StatusColours } from "./statusColours";
 import { createTranslator, formatDate, formatNumber, formatPercent, monthNames, type Translator } from "./i18n";
 import { calculateYear, normalizeEntry } from "./calculations";
 import { formatMoney } from "./currency";
@@ -546,6 +547,16 @@ export interface ReportHtmlOptions {
    * untouched either way — what comes out of the printer is the same document.
    */
   screen?: boolean;
+  /**
+   * The reader's own status colours, if they have chosen any.
+   *
+   * A printed page has no CSS variables, so these are merged over the default
+   * ink table below rather than being emitted as custom properties. The
+   * defaults are chosen to stay three distinguishable *greys* on a monochrome
+   * printer; a reader who picks their own accepts that trade, which is why the
+   * glyphs and the written labels are on every row either way.
+   */
+  statusColours?: StatusColours;
 }
 
 export function reportHtml(
@@ -554,6 +565,8 @@ export function reportHtml(
   t: Translator = createTranslator("en"),
   options: ReportHtmlOptions = {},
 ): string {
+  const chosen = sanitiseStatusColours(options.statusColours);
+  const ink: Record<FundingKind, string> = { ...FUNDING_COLOUR, ...chosen };
   const maxMonthly = Math.max(...report.monthly.map((m) => m.value ?? 0), 1);
   const maxCategory = Math.max(...report.categories.map((c) => c.total), 1);
   const maxActivity = Math.max(...report.activities.lines.map((line) => line.yearly), 1);
@@ -613,7 +626,7 @@ export function reportHtml(
           .filter((line) => (line.amount ?? 0) > 0)
           .map((line) => {
             const share = ((line.amount ?? 0) / gross) * 100;
-            const colour = FUNDING_COLOUR[line.kind];
+            const colour = ink[line.kind];
             return `<div class="split-part" style="width:${share}%;background:${colour};border-color:${colour}">
               <span class="split-label">${escapeHtml(line.glyph)} ${escapeHtml(percent(share))}</span>
             </div>`;
@@ -624,7 +637,7 @@ export function reportHtml(
   const fundingRows = report.funding.lines
     .map(
       (line) => `<tr>
-        <td><span class="glyph" style="color:${FUNDING_COLOUR[line.kind]}" aria-hidden="true">${escapeHtml(
+        <td><span class="glyph" style="color:${ink[line.kind]}" aria-hidden="true">${escapeHtml(
           line.glyph,
         )}</span>${escapeHtml(line.label)}</td>
         <td class="num">${line.amount != null ? escapeHtml(moneyFormatter(line.amount)) : "—"}</td>
@@ -637,7 +650,7 @@ export function reportHtml(
   const activityRows = report.activities.lines
     .map((line) => {
       const width = Math.max(1, (line.yearly / maxActivity) * 100);
-      const colour = FUNDING_COLOUR[line.funding];
+      const colour = ink[line.funding];
       return `<tr>
         <td>
           <span class="glyph" style="color:${colour}" aria-hidden="true">${escapeHtml(line.glyph)}</span>${escapeHtml(
@@ -722,7 +735,7 @@ export function reportHtml(
       )}</div></div>
       ${FUNDING_KINDS.map(
         (kind) => `<div class="card"><div class="card-label"><span class="glyph" style="color:${
-          FUNDING_COLOUR[kind]
+          ink[kind]
         }">${FUNDING_META[kind].glyph}</span>${escapeHtml(t(`funding.${kind}.short`))}</div><div class="card-value">${escapeHtml(
           moneyFormatter(report.activities.monthly[kind === "personal" ? "personal" : kind === "other" ? "other" : "outside"]),
         )}</div><div class="card-detail">${escapeHtml(
@@ -1051,7 +1064,7 @@ export function reportHtml(
   <p class="legend">
     ${FUNDING_KINDS.map(
       (kind) =>
-        `<span><span class="glyph" style="color:${FUNDING_COLOUR[kind]}">${FUNDING_META[kind].glyph}</span>${escapeHtml(
+        `<span><span class="glyph" style="color:${ink[kind]}">${FUNDING_META[kind].glyph}</span>${escapeHtml(
           t(`funding.${kind}`),
         )}</span>`,
     ).join("")}

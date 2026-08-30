@@ -184,6 +184,14 @@ export interface Settings {
    */
   secondaryCurrency?: CurrencyCode;
   /**
+   * The reader's own colours for the three funding states.
+   *
+   * Only the kinds they actually changed; an absent kind is the theme's. Fills
+   * rather than text colours — see `domain/statusColours.ts`, which derives a
+   * readable foreground from whatever is chosen.
+   */
+  statusColours?: Partial<Record<"personal" | "other" | "outside", string>>;
+  /**
    * The interface language, as a BCP 47 tag ("en", "fr", "pt-BR").
    *
    * Absent means "follow the browser", which is what every budget written
