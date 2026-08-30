@@ -3716,3 +3716,26 @@ label:has(> input[type="radio"]) {
   .exchange-result { gap: 10px; }
   .exchange-result-actions { margin-inline-start: 0; }
 }
+
+/* ── The contextual legend ────────────────────────────────────────────────────
+   Quiet enough to skip and close enough to read. It sits under a list rather
+   than above it: a reader who does not need it never has to pass it, and a
+   reader who does is already looking at the marks it explains. */
+.mark-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin: 10px 2px 0;
+  font-size: 0.72rem;
+  line-height: 1.5;
+  color: var(--text-tertiary);
+}
+
+.mark-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.mark-legend-item[data-funding="other"] .funding-glyph { color: var(--funding-other-text); }
+.mark-legend-item[data-funding="outside"] .funding-glyph { color: var(--funding-outside-text); }

@@ -160,7 +160,6 @@ export const fr: Dictionary = {
   "spending.activity": "Activité",
   "spending.activityHint": "Seules les activités de la catégorie choisie sont proposées.",
   "spending.activityNone": "Aucune activité",
-  "spending.activityEmpty": "Aucune activité dans cette catégorie pour l'instant.",
   "spending.activityCleared": "Cette activité n'appartient pas à la catégorie choisie : la sélection a été effacée.",
   "spending.activityFundingHint":
     "« {name} » est habituellement {funding}. Vous pouvez tout de même le changer pour cette transaction.",
@@ -977,6 +976,7 @@ export const fr: Dictionary = {
   "dashboard.moreInNextDays": "{count} de plus dans les {days} prochains jours",
   "stats.rolloverDetail": "reports de fin de mois cumulés",
   "stats.spentPeriod": "Dépensé · {period}",
+  "legend.title": "Ce que signifient les symboles",
   "stats.ofMonthlyBudget": "du budget mensuel",
   "stats.deltaVsPrevious": "{arrow} {amount} vs {period}",
   "stats.ariaRecent": "Dépenses sur les {count} derniers {period}",

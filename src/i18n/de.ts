@@ -153,7 +153,6 @@ export const de: Dictionary = {
   "spending.activity": "Aktivität",
   "spending.activityHint": "Es werden nur Aktivitäten der gewählten Kategorie angeboten.",
   "spending.activityNone": "Keine Aktivität",
-  "spending.activityEmpty": "In dieser Kategorie gibt es noch keine Aktivitäten.",
   "spending.activityCleared": "Diese Aktivität gehört nicht zur gewählten Kategorie und wurde entfernt.",
   "spending.activityFundingHint":
     "„{name}“ ist normalerweise {funding}. Für diese Buchung kannst du es trotzdem ändern.",
@@ -969,6 +968,7 @@ export const de: Dictionary = {
   "dashboard.moreInNextDays": "{count} weitere in den nächsten {days} Tagen",
   "stats.rolloverDetail": "aufgelaufene Monatsend-Überträge",
   "stats.spentPeriod": "Ausgegeben · {period}",
+  "legend.title": "Was die Symbole bedeuten",
   "stats.ofMonthlyBudget": "des Monatsbudgets",
   "stats.deltaVsPrevious": "{arrow} {amount} ggü. {period}",
   "stats.ariaRecent": "Ausgaben der letzten {count} {period}",

@@ -71,6 +71,7 @@ import { EmptyState } from "../ui/EmptyState";
 import { Field, FieldGroup } from "../ui/Field";
 import { Section } from "../ui/Section";
 import { FundingMark } from "../ui/FundingMark";
+import { MarkLegend } from "../ui/MarkLegend";
 import { activityBudgetSummary, fundingShares, type ActivityMonthCost } from "../../domain/activityBudget";
 import { FUNDING_KINDS, FUNDING_META, FUNDING_SOURCES, activityFundingKind, fundedByName, type FundingKind } from "../../domain/funding";
 import { useTranslation } from "../../i18n/useTranslation";
@@ -1272,6 +1273,12 @@ export const ActivityPanel: React.FC = () => {
               </SwipeRow>
             );
           })}
+          {/* Only the marks this list actually uses. A reader whose activities
+              are all their own, all monthly, sees no legend at all. */}
+          <MarkLegend
+            funding={visibleActivities.map(activityFundingKind)}
+            cadences={visibleActivities.map(activityCadence)}
+          />
         </div>
       )}
     </div>
