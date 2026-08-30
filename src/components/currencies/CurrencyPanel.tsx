@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeftRight, Check, Pin, PinOff, Plus, RefreshCw, Search, TriangleAlert, X } from "lucide-react";
+import { ArrowLeftRight, ArrowRight, Check, Pin, PinOff, Plus, RefreshCw, Search, TriangleAlert, X } from "lucide-react";
 import { useBudgetStore } from "../../store/budgetStore";
 import {
   ALL_CURRENCY_CODES,
@@ -299,6 +299,15 @@ export const CurrencyPanel: React.FC = () => {
           })}
         </div>
 
+        {/* The answer, under the cards that were tapped for it. */}
+        {pair && (
+          <ExchangeResult
+            pair={pair}
+            onClose={() => setPair(null)}
+            onReverse={() => setPair({ from: pair.to, to: pair.from })}
+          />
+        )}
+
         {!exchangeMode && (
           <p className="text-caption" style={{ marginTop: 10 }}>
             {t("currencies.doubleTapHint")}
@@ -312,8 +321,11 @@ export const CurrencyPanel: React.FC = () => {
         )}
       </Section>
 
-      {/* Rates live here now, not in a Settings category of their own. */}
-      <Section title={t("currencies.exchangeMode")}>
+      {/* Rates live here now, not in a Settings category of their own — and
+          under their own name: this section was also called "Exchange rate
+          mode", which is the button at the top of the page and a different
+          thing entirely. */}
+      <Section title={t("currencies.liveRates")}>
         <div className="card card-body" style={{ display: "grid", gap: 12, maxWidth: 640 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
             <Button variant="secondary" size="sm" onClick={() => void refresh()} disabled={busy}>
@@ -378,14 +390,6 @@ export const CurrencyPanel: React.FC = () => {
         </div>
       </Section>
 
-      {pair && (
-        <ExchangeResult
-          pair={pair}
-          onClose={() => setPair(null)}
-          onReverse={() => setPair({ from: pair.to, to: pair.from })}
-        />
-      )}
-
       {unpinTarget && (
         <UnpinDialog code={unpinTarget} onCancel={() => setUnpinTarget(null)} onConfirm={() => unpin(unpinTarget)} />
       )}
@@ -413,37 +417,55 @@ export const CurrencyPanel: React.FC = () => {
  * reciprocal is shown underneath rather than instead, and a Reverse button
  * swaps them without leaving the dialog.
  */
+/**
+ * The answer, in place.
+ *
+ * This was a full-screen sheet: a title, a subtitle, a three-row definition
+ * list of direction, freshness and provider, and two footer buttons — to say
+ * "1 EUR = 1.17 USD". Picking two currencies is a two-tap question and it
+ * deserves a two-line answer, in the page you asked it in, next to the cards
+ * you tapped.
+ *
+ * What survives is the rate, its inverse, and one button each to swap the
+ * direction and to clear the pair. The freshness appears only when it is
+ * *not* current, because "these rates are current" is the state a reader
+ * assumes and does not need told.
+ */
 const ExchangeResult: React.FC<{
   pair: { from: CurrencyCode; to: CurrencyCode };
   onClose: () => void;
   onReverse: () => void;
 }> = ({ pair, onClose, onReverse }) => {
-  const { t, formatDate } = useTranslation();
+  const { t } = useTranslation();
   const settings = useBudgetStore((state) => state.snapshot.settings);
   const rates = settings.exchangeRates;
   const rate = crossRate(pair.from, pair.to, rates);
   const inverse = crossRate(pair.to, pair.from, rates);
   const freshness = rateFreshness(rates);
 
+  // Escape clears the pair, the same as the × — a mode you cannot leave with
+  // the keyboard is a mode you are stuck in.
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [onClose]);
+
   return (
-    <EditorSheet
-      title={t("currencies.exchangeDirection", { from: pair.from, to: pair.to })}
-      subtitle={`${currencyName(pair.from)} → ${currencyName(pair.to)}`}
-      onClose={onClose}
-      footer={
-        <>
-          <Button type="button" variant="ghost" onClick={onReverse}>
-            <ArrowLeftRight size={14} /> {t("currencies.exchangeDirection", { from: pair.to, to: pair.from })}
-          </Button>
-          <Button type="button" variant="primary" onClick={onClose}>
-            {t("common.done")}
-          </Button>
-        </>
-      }
-    >
-      <div className="exchange-result" data-exchange-result={`${pair.from}-${pair.to}`}>
+    <div className="exchange-result" data-exchange-result={`${pair.from}-${pair.to}`} role="status">
+      <div className="exchange-result-pair">
+        <span aria-hidden="true">{CURRENCY_SYMBOLS[pair.from]}</span> {pair.from}
+        <ArrowRight size={14} aria-hidden="true" />
+        <span aria-hidden="true">{CURRENCY_SYMBOLS[pair.to]}</span> {pair.to}
+      </div>
+
+      <div className="exchange-result-rates">
         {rate == null ? (
-          <p className="text-body">{t("currencies.exchangeUnknown", { from: pair.from, to: pair.to })}</p>
+          <p className="text-body" style={{ margin: 0 }}>
+            {t("currencies.exchangeUnknown", { from: pair.from, to: pair.to })}
+          </p>
         ) : (
           <>
             <p className="exchange-result-primary money">
@@ -456,32 +478,20 @@ const ExchangeResult: React.FC<{
             )}
           </>
         )}
-
-        <dl className="exchange-result-meta">
-          <div>
-            <dt className="text-footnote">{t("currencies.exchangeDirection", { from: pair.from, to: pair.to })}</dt>
-            <dd>
-              {CURRENCY_SYMBOLS[pair.from]} {pair.from} → {CURRENCY_SYMBOLS[pair.to]} {pair.to}
-            </dd>
-          </div>
-          <div>
-            <dt className="text-footnote">{t("currencies.ratesUpdated", { when: "" }).trim()}</dt>
-            <dd>
-              {freshness.updatedAt
-                ? formatDate(freshness.updatedAt, { dateStyle: "medium", timeStyle: "short" } as Intl.DateTimeFormatOptions)
-                : t("currencies.ratesNever")}
-            </dd>
-          </div>
-          <div>
-            <dt className="text-footnote">{t("currencies.ratesSource", { source: "" }).replace(/[:：]\s*$/, "")}</dt>
-            <dd>{rates.ratesSource ?? t("common.unknown")}</dd>
-          </div>
-        </dl>
-
         {freshness.state === "stale" && <p className="text-caption">{t("currencies.ratesStale")}</p>}
         {freshness.state === "failed" && <p className="text-caption">{t("currencies.ratesFailed")}</p>}
       </div>
-    </EditorSheet>
+
+      <div className="exchange-result-actions">
+        <Button type="button" variant="ghost" size="sm" icon onClick={onReverse}
+          aria-label={t("currencies.exchangeDirection", { from: pair.to, to: pair.from })}>
+          <ArrowLeftRight size={15} />
+        </Button>
+        <Button type="button" variant="ghost" size="sm" icon onClick={onClose} aria-label={t("common.dismiss")}>
+          <X size={15} />
+        </Button>
+      </div>
+    </div>
   );
 };
 

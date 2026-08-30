@@ -849,7 +849,8 @@ try {
   });
 
   await check("closing the pair resets the mode, ready for the next one", async () => {
-    await page.click('.sheet-footer .btn-primary');
+    // The answer is inline now, not a sheet: its own dismiss button clears it.
+    await page.click('.exchange-result-actions button:last-child');
     await sleep(300);
     const after = await page.evaluate(`
       return { sheet: !!document.querySelector('[data-exchange-result]'),

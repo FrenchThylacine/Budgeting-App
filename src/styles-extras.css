@@ -3655,3 +3655,40 @@ label:has(> input[type="radio"]) {
   /* The search field is the one people use; it keeps the width. */
   .filter-bar > :first-child { grid-column: 1 / -1; }
 }
+
+/* ── V4.2: the exchange answer, in place ──────────────────────────────────────
+   It was a full-screen sheet with a title, a subtitle, a three-row definition
+   list and two footer buttons, to say "1 EUR = 1.17 USD". A two-tap question
+   gets a two-line answer, next to the cards that were tapped. */
+.exchange-result {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+  padding: 12px 14px;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--warning);
+  background: var(--warning-soft);
+}
+
+.exchange-result-pair {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--text-footnote);
+  font-weight: var(--weight-semibold);
+  letter-spacing: 0.04em;
+  color: var(--warning-text);
+  white-space: nowrap;
+}
+
+.exchange-result-rates { flex: 1 1 220px; min-width: 0; }
+.exchange-result-primary { margin: 0; font-size: 1.125rem; font-weight: var(--weight-semibold); }
+.exchange-result-inverse { margin: 2px 0 0; }
+.exchange-result-actions { display: flex; gap: 4px; margin-inline-start: auto; }
+
+@media (max-width: 520px) {
+  .exchange-result { gap: 10px; }
+  .exchange-result-actions { margin-inline-start: 0; }
+}

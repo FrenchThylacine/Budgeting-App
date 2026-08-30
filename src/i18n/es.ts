@@ -1324,4 +1324,5 @@ export const es: Dictionary = {
   "activity.otherPrices": "Otros precios",
   "sync.retry": "Reintentar",
   "report.colYourShare": "Tu parte",
+  "currencies.liveRates": "Tipos en directo",
 };

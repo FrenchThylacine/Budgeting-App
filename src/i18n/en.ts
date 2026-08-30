@@ -1368,4 +1368,5 @@ export const en = {
   "activity.otherPrices": "Other prices",
   "sync.retry": "Retry",
   "report.colYourShare": "Your share",
+  "currencies.liveRates": "Live rates",
 } as const;

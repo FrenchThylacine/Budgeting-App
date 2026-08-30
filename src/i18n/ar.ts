@@ -1408,4 +1408,5 @@ export const ar: Dictionary = {
   "activity.otherPrices": "أسعار أخرى",
   "sync.retry": "إعادة",
   "report.colYourShare": "حصتك",
+  "currencies.liveRates": "الأسعار المباشرة",
 };
