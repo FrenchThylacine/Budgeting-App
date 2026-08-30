@@ -89,6 +89,7 @@ something had slipped through the previous one:
 - [x] **The dashboard: 1,865 → 1,332px**, and its trend chart is absent rather than an empty card when there is nothing to trend.
 - [x] **The activity editor: twenty-one fields in view to eight.** The price shown is the one the chosen cost model actually reads; colour and icon moved behind a disclosure. Nothing was removed.
 - [x] **Three stacked filter rows on a phone became two.**
+- [x] **Exchange rate mode answers in place.** Picking two currencies opened a full-screen sheet — a title, a subtitle, a three-row definition list and two footer buttons — to say "1 EUR = 1.17 USD". The rate, its inverse and two buttons now appear under the cards that were tapped, and Escape clears the pair.
 - [x] Every wallet ledger row read "Train tickets · Train tickets"; the planning card no longer says "€0.00 · a plan, not money you have".
 
 ### Correctness and accessibility found on the way
