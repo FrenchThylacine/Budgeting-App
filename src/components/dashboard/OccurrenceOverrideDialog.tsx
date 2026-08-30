@@ -221,7 +221,7 @@ export const OccurrenceOverrideDialog: React.FC<OccurrenceOverrideDialogProps> =
         <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 18 }}>
           <button className="btn btn-secondary" onClick={onCancel}>{t("common.cancel")}</button>
           <button className="btn btn-primary" onClick={apply}>
-            <CalendarX2 size={15} /> Apply
+            <CalendarX2 size={15} /> {t("common.apply")}
           </button>
         </div>
       </div>

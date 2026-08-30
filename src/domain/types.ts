@@ -23,7 +23,6 @@ export type RoundingRule = "none" | "nearest-1" | "nearest-5" | "nearest-10" | "
  * a single legal value, which made an invariant look like a preference —
  * `isMonthClosed`/`isWeekClosed` decide it, and nothing reads a setting.
  */
-export type NanPolicy = "closed-periods-only";
 export type PeriodMode = "month" | "week" | "year";
 export type RecurrenceType =
   | "none"

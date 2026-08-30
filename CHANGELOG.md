@@ -9,6 +9,7 @@ with one small fix gets a patch rather than a new minor.
 
 | Version | What it was |
 | --- | --- |
+| **4.4.0** | The correction pass: the aeroplane was not where the arithmetic put it, a choreographed routine, and a legend instead of a paragraph |
 | **4.3.0** | The audit pass: a rejoin that is a curve, one visual vocabulary, and twenty-three sentences nobody had translated |
 | **4.2.0** | The refinement pass: currency semantics, the funding ambiguity, a cadence vocabulary, an aerobatic routine, half the pixels |
 | **4.0.0** | The V4 pass: minimalism, the whole aircraft fleet, a real 3D loading sequence, funding correctness |
@@ -17,6 +18,136 @@ with one small fix gets a patch rather than a new minor.
 | **2.0.0**–**2.1.0** | Accounts, Excel import, dedicated editors, scenarios, swipe, the first identity |
 | **1.0.0**–**1.1.0** | The first working budget: activities, spending, wishlist, reports |
 | **0.1.0**–**0.2.0** | Before it was an application |
+
+## 4.4.0 — 2026-08-30 — The correction pass
+
+### The aeroplane was not where the arithmetic put it
+
+Three passes of "the smoke looks detached from the jets", and the smoke was
+never the problem.
+
+The escort artwork is a child of a zero-sized box that was supposed to centre
+it. A grid item that overflows a zero-height area is aligned to the **start** of
+that area, not its centre — so the image's top-left corner sat on the transform
+origin and every Alpha Jet was drawn about forty pixels from the point all the
+arithmetic used. And because the parent's `rotate` turns that offset with the
+heading, the aeroplane also swung around its own flight path as it manoeuvred,
+which is a fair part of why the motion never read as flying.
+
+The CSS carried a comment asserting the opposite, and asserting that adding a
+half-size translate would break it. Both halves were wrong; `offsetTop`
+measured 0 on the page.
+
+It survived three audits because every check compared numbers the script had
+produced against other numbers the script had produced. A harness check now
+compares the drawn artwork's centre with the origin the script positions.
+
+### Choreography, not complexity
+
+Four versions of the routine failed before this one, and each was *more*
+mathematically elaborate than the last:
+
+- **The six-turn corkscrew is gone.** It looped each jet 124px sideways every
+  0.8s, and where a route flew near-vertical the frame it was applied in
+  collapsed and the path tied a knot — the jet flew a tight loop and came out
+  the way it went in.
+- **Eight authored waypoints per jet**, evenly spaced on purpose. The route
+  they replaced closed with a 46px leg between two 280px legs, and because the
+  path is walked by arc length the aircraft *slowed down* there too, so both
+  jets flew a visible curl at the same point on every pass.
+- **Centripetal Catmull-Rom**, provably free of the cusps and overshoot that
+  uniform parameterisation puts at a tight corner.
+- **Walked by arc length at a speed that trades height for airspeed**,
+  `v ∝ √(1 + drop/H)`. That is the whole of the momentum: the acceleration is a
+  consequence of the path rather than an effect applied to it.
+- **The rejoin is a cubic in scene coordinates.** It used to interpolate a
+  *projected* position while the smoke draw re-applies perspective, so at
+  break-off the ribbon was projected twice — ninety pixels between the aircraft
+  and the smoke it had just laid. And a quadratic could hairpin. The second
+  control point now sits left of the slot, so the curve arrives on the
+  formation heading however it left the routine.
+- **One pass is always seen.** The routine was 5.2s long with a 1.5s floor, so
+  unless the load was slow nobody ever saw more than its first quarter.
+
+Measured: 69–421px of track variation, 0px from the tailpipe to the smoke, 0px
+between the sprite and its origin, the third jet in from −691px over 606px
+flown, and a median frame of 8.3ms with nothing over 20ms.
+
+The smoke gained the physics that was asked for: turbulence that *grows* with
+age rather than being present at the nozzle, a per-puff bulk so the plume is
+lumpy rather than a ribbon, and a gradient along each run so it fades as it
+dissipates instead of being as solid where it is dying as where it is hot.
+
+### A legend instead of a paragraph
+
+`MarkLegend` lists only the symbols actually present in the data below it — a
+month with no shared costs shows no funding glyph, a list of one-off purchases
+shows no calendar — and renders nothing at all when everything on screen is
+ordinary. `personal` is never listed: a key entry for "this is normal" is the
+kind of completeness that makes a legend worth skipping.
+
+Two contextual controls went with it. The transaction editor showed the funding
+hint under every option including the default one, and rendered a *disabled*
+activity selector with a sentence explaining why it was disabled — on every
+transaction a new account records.
+
+### Thirty-two sentences in English, and the sweep that should have come first
+
+V4.3 added four rules to the hardcoded-English scanner and reported the
+interface fully translated. This pass found three more blind spots, one screen
+at a time, before doing the thing that should have been done first: a single
+broad sweep for anything in a `.tsx` file that reads as an English sentence,
+outside comments, keys, class lists, styles and paths.
+
+The three shapes, each with live strings in it:
+
+- **Prose following a JSX expression.** The multi-line rule required the
+  previous line to end with an opening *tag*, so a sentence after a `{" "}` was
+  invisible. Four strings, every one forming its plural by hand in English —
+  `categor{y is / ies are}`, `{count} change{s}` — which is broken in the four
+  other languages whatever the count.
+- **A label after a self-closing tag**: `<Archive size={14} /> Archive`. An
+  icon and a word is the commonest shape a button takes here, and the `>text<`
+  rule cannot see it. Eleven of them: Cancel, Restore, Archive, Apply, Edit,
+  Duplicate, Delete, Current, Buy — every one with a translated key already in
+  the dictionary, unused.
+- **Everything the sweep found that the rules still missed**: six hints in the
+  activity editor's renewal-date field, two chart empty-state defaults, the
+  category manager's submit labels, the scenario diff's "not set / enabled /
+  disabled", the statistics' "previous period has no records", the transaction
+  editor's subtitle, the sidebar's date-range note, two icon-field hints, and
+  "OVER CAP" on the analytics bars — which had its own translated key sitting
+  unused three lines above it.
+
+Verified by driving all eleven tabs in French and walking the DOM for English:
+none left.
+
+### Two screens that explained themselves twice
+
+The Categories tab carried "the **monthly cap** are read live … so changing
+**them**" — a singular noun with a plural verb and pronoun, which is what
+happens when one sentence is assembled from three dictionary fragments
+concatenated around a bolded noun. One key and one sentence now, half the
+length, with the archiving half moved onto the Archive button where somebody
+about to archive something will meet it.
+
+The Wishlist carried a card of three facts, two of which the filter chips six
+inches above already printed: "Active items: 0" under a chip reading "Active
+(0)". The total is the only thing there the chips cannot show, so it is the
+only thing left — and it is a line rather than a card.
+
+### Four exports nothing was reading
+
+A dead-export sweep across every project in the repository, which matters
+because the first version of it looked only at `src/` and confidently proposed
+deleting a constant the server imports. `NanPolicy`, a union with one member
+annotating nothing; `expiryFromNow` and `MINUTE_MS`; and `NeonSql`, which was
+exported and never applied — and when it was finally applied to the one
+function it was written for, the build rejected every call site, because the
+callers pass `SqlDriver`. `query` is typed with the real contract now instead
+of `any`.
+
+**59 browser checks, 900 tests across 49 files, 82 of them against PostgreSQL.**
 
 ## 4.3.0 — 2026-08-30 — The audit pass
 

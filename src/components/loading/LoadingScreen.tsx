@@ -14,15 +14,25 @@ import { AIRCRAFT_IDS, DEFAULT_AIRCRAFT, ESCORT_AIRCRAFT, aircraftFor } from "..
  * and the whole formation accelerates away to the right, taking the loading
  * screen with it and leaving the application behind.
  *
- * ─── The orbit is in three dimensions, not two ───────────────────────────────
+ * ─── The routine is choreographed, not generated ────────────────────────────
  *
- * The first version flew an ellipse in the screen plane. Two aeroplanes going
- * round a flat racetrack: they passed left and right of the lead and changed
- * size a little, and the whole thing read as two stickers on a turntable.
+ * Four versions of this failed before the one that is here, and they failed in
+ * a way worth recording, because each was *more* correct than the last and none
+ * of them looked like flying. An ellipse in the screen plane. A circle in a
+ * tilted plane. That circle with three incommensurate harmonics on it. Authored
+ * waypoints with a six-turn corkscrew laid over them. Every one was genuinely
+ * three-dimensional; every one read as machinery, and the last read as
+ * machinery having a seizure.
  *
- * This one puts the circle in a **plane tilted 56° out of the screen**. The
- * escort's position is a real 3D point, and the three things that make depth
- * legible are all derived from its z:
+ * The lesson is that **complexity is not choreography**. A display pilot flies
+ * a small number of large, deliberate shapes. So the routes here are eight
+ * waypoints apiece that say what the manoeuvre is in words first — high and
+ * behind, diving under the belly, forward and near, rising across the nose,
+ * over the top, away behind — and the aircraft is walked along them by arc
+ * length at a speed that trades height for airspeed. Nothing is perturbed and
+ * nothing is random.
+ *
+ * The three things that make the depth legible are all derived from z:
  *
  *  - **Perspective.** `scale = D / (D − z)` — nearer is bigger, and the growth
  *    is hyperbolic rather than linear, which is what an eye reads as distance
@@ -35,8 +45,8 @@ import { AIRCRAFT_IDS, DEFAULT_AIRCRAFT, ESCORT_AIRCRAFT, aircraftFor } from "..
  *
  * The heading is the tangent of the *projected* path, computed by sampling the
  * curve a moment ahead, so the aeroplane points where it is actually going on
- * screen. An orbiting aircraft that does not do this looks like a spinning
- * sticker no matter how good the projection is.
+ * screen. An aircraft that does not do this looks like a spinning sticker no
+ * matter how good the projection is.
  *
  * ─── The smoke is advected, not drawn behind the aircraft ────────────────────
  *
@@ -87,9 +97,17 @@ import { AIRCRAFT_IDS, DEFAULT_AIRCRAFT, ESCORT_AIRCRAFT, aircraftFor } from "..
 /** Camera distance for the perspective divide. Smaller is a wider lens. */
 const CAMERA_D = 620;
 /** One pass down the routine. Slow enough to read as flying, not spinning. */
-const ROUTE_MS = 5200;
-/** Long enough that the routine is seen at all before it is broken off. */
-const MIN_ORBIT_MS = 1500;
+const ROUTE_MS = 3200;
+/**
+ * The floor on the routine, and it is deliberately *equal* to one pass.
+ *
+ * It used to be 1500ms against a 5200ms routine, which meant that unless the
+ * application was slow to load nobody ever saw more than the first quarter of
+ * the choreography — the descent, and then the break-off. A manoeuvre shown a
+ * quarter at a time is not a manoeuvre. The whole pass now always plays, and
+ * the elasticity is in the *number* of passes rather than in how much of one.
+ */
+const MIN_ORBIT_MS = ROUTE_MS;
 const JOIN_MS = 1500;
 const SETTLE_MS = 520;
 const DEPART_MS = 820;
@@ -116,11 +134,6 @@ const easeOut = (t: number) => 1 - Math.pow(1 - t, 3);
 const easeIn = (t: number) => t * t * t * t;
 const clamp01 = (value: number) => (value < 0 ? 0 : value > 1 ? 1 : value);
 const mix = (from: number, to: number, t: number) => from + (to - from) * t;
-/** Shortest way round, so a heading never unwinds the long way. */
-const mixAngle = (from: number, to: number, t: number) => {
-  const delta = ((to - from + 540) % 360) - 180;
-  return from + delta * t;
-};
 
 /** A point in the scene, before projection. x right, y down, z toward you. */
 interface Point3 {
@@ -133,141 +146,207 @@ interface Point3 {
  * The routine
  * ===========
  *
- * This was a circle in a tilted plane, then a circle with three harmonics laid
- * over it. Both were genuinely three-dimensional and both still read as
- * machinery, for a reason no amount of perturbation fixes: a closed ring
- * traversed at a steady rate is a ring, and an eye recognises one immediately.
+ * Three versions of this failed in the same way and it is worth naming, because
+ * the failure is not obvious from the code: **a path can be correct in three
+ * dimensions and still not read as flying.**
  *
- * The reference is the ATHOS A350 display — an A350 with the Patrouille de
- * France around it — and the thing that actually reads in a photograph of it
- * is not an orbit at all. It is **two enormous corkscrews**: a soloist on each
- * side carving a great helical arc right across the frame, passing in front of
- * the lead and away behind it, leaving a fat curling rope of smoke that wraps
- * the whole picture. The formation sits small and tight underneath.
+ * It was a circle in a tilted plane. Then a circle with three harmonics on it.
+ * Then authored waypoints with a *six-turn* corkscrew laid over them — which,
+ * across a pass, meant each jet looped a hundred and twenty pixels sideways
+ * every eight hundred milliseconds. Every one of those was genuinely
+ * three-dimensional. All three read as machinery, and the third read as
+ * machinery having a seizure, because no aeroplane changes direction that
+ * often. Complexity is not choreography.
  *
- * So the path is **authored**, not derived. Each escort has a route of six
- * waypoints laid out across the scene — high and behind, diving under, forward
- * across the nose, climbing away right, over the top, sweeping back — and a
- * Catmull-Rom spline runs through them. Choreography is a thing somebody
- * decides; it is not something that falls out of a sine.
+ * What this one is instead:
  *
- * The two consequences that matter:
+ *  1. **Eight authored waypoints per jet**, and they spell out the manoeuvre in
+ *     words before they are numbers. Blue: high and behind, a diagonal descent,
+ *     *under* the lead, forward and near, rising in front, over the top, away
+ *     behind. Red: the opposite corner, climbing, crossing *behind*, diving
+ *     below, crossing in front, climbing back. The two are out of phase, so
+ *     they cross rather than mirror.
+ *  2. **A centripetal Catmull-Rom** through them. Uniform Catmull-Rom — what
+ *     this used before — overshoots and can cusp where waypoints bunch, which
+ *     is a velocity discontinuity: exactly the "impossible instant turn" the
+ *     eye catches. The centripetal parameterisation is provably free of both.
+ *  3. **Walked by arc length, not by parameter.** Sampling a spline at a
+ *     constant rate in `u` makes the aircraft sprint through wide arcs and
+ *     crawl through tight ones — the opposite of what an aeroplane does. The
+ *     table below inverts the curve so the jet travels at a controlled speed.
+ *  4. **And that speed is not constant.** It is an energy trade: the jet gains
+ *     speed as it descends and gives it back as it climbs, `v ∝ √(1 + drop/H)`.
+ *     That is one line of arithmetic and it is the whole of the momentum the
+ *     brief asks for — the acceleration and deceleration are smooth because
+ *     they are a consequence of the path rather than an effect applied to it.
+ *  5. **One slow roll**, two turns across the pass at a radius of twenty-six.
+ *     That is what makes the smoke a rope rather than a wire — it is the thing
+ *     the reference photograph actually shows — and at one roll every 1.6
+ *     seconds it is a barrel roll, not a wobble.
  *
- *  - the track is **big**. It leaves the aircraft far behind on both sides,
- *    which is what makes the smoke a sweeping arc rather than a halo;
- *  - the speed **varies**, because the spline is walked at a constant rate in
- *    parameter space while the waypoints are unevenly spaced. The jet
- *    accelerates down the long legs and eases through the tight corners, which
- *    is what an aeroplane does and a metronome does not.
+ * And the routine is now **shorter than the minimum time it is shown for**, so
+ * the whole manoeuvre is always seen at least once. It used to be 5.2s long
+ * with a 1.5s floor: nobody who was not on a cold load ever saw more than the
+ * first quarter of the choreography, which is a large part of why it never read
+ * as one.
  */
-type Route = readonly Point3[];
+type Waypoint = Point3;
 
 /**
- * Blue: high and behind, dives under, forward across the nose, climbs away to
- * the right, over the top, sweeps back in behind.
+ * Blue: high and behind, diving diagonally under the lead, forward and near,
+ * rising across the nose, over the top, and away behind.
+ *
+ * The gaps between these are 202–285 scene pixels, and that evenness is not
+ * decoration. A waypoint close to its neighbour is a tight corner, and because
+ * the route is walked by arc length the aircraft also *slows down* there — so a
+ * short leg reads as a little curl with the jet crawling round it. The route
+ * this replaced closed with a 46-pixel leg, and both jets flew a visible knot
+ * at the same point on every pass.
  */
-const ROUTE_A: Route = [
-  { x: -340, y: -150, z: -170 },
-  { x: -150, y: 55, z: 130 },
-  { x: 130, y: 185, z: 165 },
-  { x: 330, y: 25, z: -60 },
-  { x: 190, y: -190, z: -175 },
-  { x: -130, y: -150, z: -70 },
+const WAYPOINTS_A: readonly Waypoint[] = [
+  { x: -300, y: -175, z: -210 },
+  { x: -110, y: -30, z: -70 },
+  { x: 30, y: 140, z: 70 },
+  { x: 235, y: 105, z: 195 },
+  { x: 330, y: -55, z: 115 },
+  { x: 175, y: -195, z: -35 },
+  { x: -75, y: -205, z: -170 },
 ];
 
 /**
- * Red: the same idea, entered from the other side and half a pass out of step,
- * so the two cross rather than mirror.
+ * Red: the same manoeuvre turned through half a circle — so where blue goes
+ * under, red goes over, and where blue crosses in front, red crosses behind.
+ *
+ * Derived rather than authored a second time, for two reasons. The spacing is
+ * what keeps the curve free of knots, and a rotation preserves it exactly. And
+ * the two are never on screen as a mirrored pair: they are more than a third of
+ * a pass out of step, so what the eye sees is two aircraft crossing.
  */
-const ROUTE_B: Route = [
-  { x: 340, y: 160, z: -150 },
-  { x: 130, y: -70, z: 140 },
-  { x: -170, y: -195, z: 155 },
-  { x: -330, y: -15, z: -70 },
-  { x: -190, y: 175, z: -170 },
-  { x: 150, y: 140, z: -60 },
-];
+const WAYPOINTS_B: readonly Waypoint[] = WAYPOINTS_A.map((point) => ({
+  x: -point.x,
+  y: -point.y,
+  z: point.z,
+}));
 
-const ROUTES: readonly Route[] = [ROUTE_A, ROUTE_B];
+/** Samples used to build the arc-length and timing tables. */
+const TABLE_N = 720;
 
 /**
- * Catmull-Rom through the waypoints, wrapped into a loop.
+ * A route, prepared once at module load.
  *
- * Chosen over a Bézier because it *passes through* its control points: the
- * waypoints above are the choreography, and a curve that merely approximates
- * them is a different display. `u` is the position along the whole route, in
- * turns.
+ * `time[i]` is the fraction of the pass elapsed on arrival at sample `i`, so
+ * looking up a position is a search in a monotone array rather than an integral
+ * evaluated every frame for every aircraft.
  */
-/**
- * How wide the corkscrew is, and how many turns it makes in one pass.
- *
- * The sweeping arc alone was smooth, and the thing that reads in a photograph
- * of this display is not a smooth arc — it is a *rope*: the soloist rolls
- * continuously as it travels, so the smoke it leaves is a helix. Six turns
- * across a pass is enough to be unmistakable and few enough that each loop is
- * still separately visible.
- */
-const CORKSCREW_R = 62;
-const CORKSCREW_TURNS = 6;
-
-/** The spline alone, before the roll is added. */
-function splinePoint(route: Route, u: number): Point3 {
-  const n = route.length;
-  const scaled = ((u % 1) + 1) % 1 * n;
-  const i = Math.floor(scaled);
-  const t = scaled - i;
-  const p0 = route[(i - 1 + n) % n];
-  const p1 = route[i % n];
-  const p2 = route[(i + 1) % n];
-  const p3 = route[(i + 2) % n];
-
-  const t2 = t * t;
-  const t3 = t2 * t;
-  const axis = (a: number, b: number, c: number, d: number) =>
-    0.5 * (2 * b + (-a + c) * t + (2 * a - 5 * b + 4 * c - d) * t2 + (-a + 3 * b - 3 * c + d) * t3);
-
-  return {
-    x: axis(p0.x, p1.x, p2.x, p3.x),
-    y: axis(p0.y, p1.y, p2.y, p3.y),
-    z: axis(p0.z, p1.z, p2.z, p3.z),
-  };
+interface PreparedRoute {
+  waypoints: readonly Waypoint[];
+  /** Cumulative normalised time, 0 at the first sample and 1 at the last. */
+  time: Float64Array;
 }
 
 /**
- * The route, with the roll on it.
+ * Centripetal Catmull-Rom through four points.
  *
- * The offset is applied in the plane perpendicular to travel, which is what
- * makes it a helix rather than a wobble: the aircraft is always going *along*
- * the rope, never across it. The radius eases to nothing at the corners, where
- * a full-width roll would fight the turn.
+ * The knot spacing is `|Δp|^0.5` rather than uniform. That single exponent is
+ * what removes the overshoot and the cusps: with uniform knots a tight corner
+ * makes the curve loop outside its own control points, and the aircraft flies a
+ * little hook that no aeroplane could.
  */
-function routePoint(route: Route, u: number): Point3 {
-  const centre = splinePoint(route, u);
-  const ahead = splinePoint(route, u + 0.01);
-  const dx = ahead.x - centre.x;
-  const dy = ahead.y - centre.y;
-  const dz = ahead.z - centre.z;
-  const length = Math.hypot(dx, dy, dz) || 1;
+function catmullRom(p0: Point3, p1: Point3, p2: Point3, p3: Point3, t: number): Point3 {
+  const knot = (a: Point3, b: Point3) => Math.sqrt(Math.hypot(b.x - a.x, b.y - a.y, b.z - a.z)) || 1e-4;
+  const t0 = 0;
+  const t1 = t0 + knot(p0, p1);
+  const t2 = t1 + knot(p1, p2);
+  const t3 = t2 + knot(p2, p3);
+  const at = t1 + (t2 - t1) * t;
 
-  // Two vectors across the direction of travel. The first is the horizontal
-  // normal; the second completes the frame. Degenerate only if the aircraft
-  // were flying exactly along the y axis, which no waypoint asks for.
-  const nx = -dy / length;
-  const ny = dx / length;
-  const bx = ny * (dz / length);
-  const by = -nx * (dz / length);
-  const bz = (nx * (dy / length) - ny * (dx / length));
-
-  const angle = u * CORKSCREW_TURNS * Math.PI * 2;
-  const radius = CORKSCREW_R;
-  const c = Math.cos(angle) * radius;
-  const sn = Math.sin(angle) * radius;
-
-  return {
-    x: centre.x + nx * c + bx * sn,
-    y: centre.y + ny * c + by * sn,
-    z: centre.z + bz * sn,
+  const lerp = (a: Point3, b: Point3, ta: number, tb: number, x: number): Point3 => {
+    const k = (tb - x) / (tb - ta);
+    const j = (x - ta) / (tb - ta);
+    return { x: a.x * k + b.x * j, y: a.y * k + b.y * j, z: a.z * k + b.z * j };
   };
+
+  const a1 = lerp(p0, p1, t0, t1, at);
+  const a2 = lerp(p1, p2, t1, t2, at);
+  const a3 = lerp(p2, p3, t2, t3, at);
+  const b1 = lerp(a1, a2, t0, t2, at);
+  const b2 = lerp(a2, a3, t1, t3, at);
+  return lerp(b1, b2, t1, t2, at);
+}
+
+/** The bare spline, closed into a loop. `u` is the position in turns. */
+function splinePoint(waypoints: readonly Waypoint[], u: number): Point3 {
+  const n = waypoints.length;
+  const scaled = ((((u % 1) + 1) % 1) * n);
+  const i = Math.floor(scaled);
+  return catmullRom(
+    waypoints[(i - 1 + n) % n],
+    waypoints[i % n],
+    waypoints[(i + 1) % n],
+    waypoints[(i + 2) % n],
+    scaled - i,
+  );
+}
+
+/**
+ * Build the timing table: how much of the pass has elapsed at each sample.
+ *
+ * Each short segment takes `distance / speed`, and the speed is the energy
+ * trade described above — faster low, slower high. Accumulated and normalised,
+ * that inverts into "where is the aircraft at this fraction of the pass",
+ * which is what the loop actually asks.
+ */
+function prepare(waypoints: readonly Waypoint[]): PreparedRoute {
+  const points: Point3[] = [];
+  for (let i = 0; i <= TABLE_N; i++) points.push(splinePoint(waypoints, i / TABLE_N));
+
+  let low = Infinity;
+  let high = -Infinity;
+  for (const point of points) {
+    if (point.y < low) low = point.y;
+    if (point.y > high) high = point.y;
+  }
+  const drop = Math.max(1, high - low);
+
+  const time = new Float64Array(TABLE_N + 1);
+  let total = 0;
+  for (let i = 1; i <= TABLE_N; i++) {
+    const a = points[i - 1];
+    const b = points[i];
+    const distance = Math.hypot(b.x - a.x, b.y - a.y, b.z - a.z);
+    // Height at the middle of the segment, as a fraction of the total drop.
+    const fallen = ((a.y + b.y) / 2 - low) / drop;
+    const speed = Math.sqrt(1 + 1.1 * fallen);
+    total += distance / speed;
+    time[i] = total;
+  }
+  for (let i = 0; i <= TABLE_N; i++) time[i] /= total;
+  return { waypoints, time };
+}
+
+const ROUTE_A = prepare(WAYPOINTS_A);
+const ROUTE_B = prepare(WAYPOINTS_B);
+const ROUTES: readonly PreparedRoute[] = [ROUTE_A, ROUTE_B];
+
+/**
+ * Where the aircraft is at `tau` of the pass — the inverse of the table.
+ *
+ * A binary search and one linear interpolation. `tau` wraps, so the routine
+ * loops for as long as the application takes to load.
+ */
+function routePoint(route: PreparedRoute, tau: number): Point3 {
+  const wrapped = ((tau % 1) + 1) % 1;
+  const time = route.time;
+  let lo = 0;
+  let hi = time.length - 1;
+  while (hi - lo > 1) {
+    const mid = (lo + hi) >> 1;
+    if (time[mid] <= wrapped) lo = mid;
+    else hi = mid;
+  }
+  const span = time[hi] - time[lo] || 1;
+  const within = (wrapped - time[lo]) / span;
+  return splinePoint(route.waypoints, (lo + within) / TABLE_N);
 }
 
 interface Projected {
@@ -308,21 +387,23 @@ interface Attitude {
   pitch: number;
 }
 
-function attitudeAt(route: Route, u: number): Attitude {
-  const step = 0.004;
-  const back = project(routePoint(route, u - step));
-  const here = project(routePoint(route, u));
-  const ahead = project(routePoint(route, u + step));
+function attitudeAt(route: PreparedRoute, tau: number): Attitude {
+  // A step in *time*, not in parameter, so the sample either side is the same
+  // distance away however fast the aircraft happens to be going.
+  const step = 0.006;
+  const back = project(routePoint(route, tau - step));
+  const here = project(routePoint(route, tau));
+  const ahead = project(routePoint(route, tau + step));
 
   const heading = (Math.atan2(ahead.y - here.y, ahead.x - here.x) * 180) / Math.PI;
   const previous = (Math.atan2(here.y - back.y, here.x - back.x) * 180) / Math.PI;
   // Signed change in heading over one step, shortest way round.
   const turn = ((heading - previous + 540) % 360) - 180;
-  // A hard turn narrows the span to about half. Clamped, because the spline's
-  // corners can be sharp and a sprite folded to nothing reads as a glitch.
+  // A hard turn narrows the span to about half. Clamped, because a sprite
+  // folded to nothing reads as a glitch.
   const bank = 1 - Math.min(0.55, Math.abs(turn) / 26);
 
-  const depth = routePoint(route, u + step).z - routePoint(route, u - step).z;
+  const depth = routePoint(route, tau + step).z - routePoint(route, tau - step).z;
   // Same idea along the fuselage: the more of the motion is toward or away
   // from the camera, the more the length is foreshortened.
   const pitch = 1 - Math.min(0.35, Math.abs(depth) / 46);
@@ -331,84 +412,144 @@ function attitudeAt(route: Route, u: number): Attitude {
 }
 
 /**
- * A rejoin is a curve, not a chord
- * ================================
+ * A rejoin is a curve, in the same space as the routine
+ * =====================================================
  *
- * An aeroplane leaving a manoeuvre to take up station does not cut across the
- * sky in a straight line to its slot: it carries on along the heading it is
- * already on, and *bends* onto the formation. Interpolating position linearly
- * gave the opposite — the nose pointing one way while the aircraft slid
- * another, which is the sticker problem again, this time in the join.
+ * Two things were wrong with the rejoin and both were invisible in the code.
  *
- * So each rejoin is a quadratic Bézier whose control point sits ahead of the
- * release point along the heading the aircraft was already flying. The tangent
- * of that curve then gives the heading for free, and its rate of change gives
- * the bank, exactly as `attitudeAt` does for the routes.
+ * **It ran in screen space.** The release point was a *projected* position, and
+ * the curve interpolated that to the slot — while the smoke draw multiplies
+ * every puff by the perspective of its own `z`. So at the instant of break-off
+ * the ribbon was projected twice: at a scale of 1.3 and three hundred pixels
+ * out, that put ninety pixels between the aircraft and the smoke it had just
+ * laid. This is the seam the brief keeps seeing, and no offset fixes it,
+ * because the offset was never the problem.
+ *
+ * **It was a quadratic, so it could hairpin.** One control point ahead of the
+ * release heading means an aircraft heading *away* from its slot flies out and
+ * comes straight back down its own track — a triangle with a corner in it, and
+ * a corner is an infinite acceleration.
+ *
+ * So the rejoin is now a **cubic in scene coordinates**, with the second
+ * control point placed to the left of the slot. That fixes the *arrival*
+ * direction: the curve reaches the slot flying to the right, on the formation's
+ * heading, whatever heading it left the routine on. An aircraft that has to
+ * turn round flies a smooth U rather than a hairpin, which is what a rejoin
+ * from the wrong side actually looks like, and every frame of it is projected
+ * by the same `spriteAt` the routine uses.
  */
-interface Flat {
-  x: number;
-  y: number;
-}
-
-function bezier(from: Flat, control: Flat, to: Flat, t: number): Flat {
+function bezier3(p0: Point3, p1: Point3, p2: Point3, p3: Point3, t: number): Point3 {
   const k = 1 - t;
+  const a = k * k * k;
+  const b = 3 * k * k * t;
+  const c = 3 * k * t * t;
+  const d = t * t * t;
   return {
-    x: k * k * from.x + 2 * k * t * control.x + t * t * to.x,
-    y: k * k * from.y + 2 * k * t * control.y + t * t * to.y,
+    x: a * p0.x + b * p1.x + c * p2.x + d * p3.x,
+    y: a * p0.y + b * p1.y + c * p2.y + d * p3.y,
+    z: a * p0.z + b * p1.z + c * p2.z + d * p3.z,
   };
 }
 
-/** The heading of that curve at `t`, in degrees, from its derivative. */
-function bezierHeading(from: Flat, control: Flat, to: Flat, t: number): number {
-  const dx = 2 * (1 - t) * (control.x - from.x) + 2 * t * (to.x - control.x);
-  const dy = 2 * (1 - t) * (control.y - from.y) + 2 * t * (to.y - control.y);
-  return (Math.atan2(dy, dx) * 180) / Math.PI;
+/**
+ * The attitude on a rejoin curve, read exactly as it is on the routine: from
+ * the tangent of the *projected* path, so a curve that is mostly a change of
+ * depth still turns the aircraft the way the shape moves on screen.
+ */
+function bezierAttitude(p0: Point3, p1: Point3, p2: Point3, p3: Point3, t: number): Attitude {
+  const step = 0.02;
+  const back = project(bezier3(p0, p1, p2, p3, Math.max(0, t - step)));
+  const here = project(bezier3(p0, p1, p2, p3, t));
+  const ahead = project(bezier3(p0, p1, p2, p3, Math.min(1, t + step)));
+  const heading = (Math.atan2(ahead.y - here.y, ahead.x - here.x) * 180) / Math.PI;
+  const previous = (Math.atan2(here.y - back.y, here.x - back.x) * 180) / Math.PI;
+  const turn = ((heading - previous + 540) % 360) - 180;
+  return {
+    heading,
+    bank: 1 - Math.min(0.5, Math.abs(turn) / 30),
+    pitch: 1 - Math.min(0.3, Math.abs(ahead.z - back.z) / 60),
+  };
 }
 
-/** How far ahead of the release point the rejoin curve reaches before bending. */
-const REJOIN_LEAD = 190;
+/** How far the curve carries the aircraft's momentum before it starts to bend. */
+const REJOIN_LEAD = 210;
+/** And how far to the left of the slot it is straightened onto the formation. */
+const REJOIN_APPROACH = 260;
 
 /**
- * Where the third jet comes from.
- *
- * Off the bottom-left corner, well outside the frame, on a curve that brings it
- * up and across into the slot. It used to start 210px to the left of its slot
- * and slide over in a straight line at a fixed attitude, which is not a join —
- * it is an object appearing near the formation and then being next to it.
+ * Where the third jet comes from: off the bottom-left corner, well outside the
+ * frame and a little way behind the formation in depth, so it arrives *through*
+ * the scene rather than across it.
  */
-const THIRD_ENTRY: Flat = { x: -900, y: 300 };
-const THIRD_CONTROL: Flat = { x: -420, y: 330 };
+const THIRD_ENTRY: Point3 = { x: -860, y: 300, z: -140 };
+const THIRD_CONTROL: Point3 = { x: -520, y: 250, z: -60 };
 
 /**
- * The Alpha Jet is drawn 64px long, nose-right, centred on the point the script
- * positions. Its tailpipe sits a little behind the centre — 0.44 of the length,
- * measured off the artwork rather than guessed, which is where the exhaust
- * actually is once the drawing's transparent margin is taken off.
+ * One transform chain, drawn once and emitted from once
+ * =====================================================
+ *
+ * The brief's complaint is that the smoke looks detached from the aircraft, and
+ * the answer is not a better offset — it is that there should only be one
+ * chain. Every phase used to build its own `transform` string and then, near
+ * it, call `tailpipe()` with what it hoped were the same values. That is two
+ * derivations of one fact, and the two had already drifted:
+ *
+ *   the sprite is drawn `rotate(h) scale(s) scaleX(pitch)`, so `scaleX`
+ *   compresses it **along its own nose-to-tail axis** — and the emitter never
+ *   applied `pitch` at all. On a jet crossing the camera at pitch 0.65 and
+ *   scale 1.4 the drawn exhaust sat about fourteen pixels ahead of the point
+ *   the smoke was coming from. Measured at the tailpipe the gap was zero; the
+ *   tailpipe was in the wrong place.
+ *
+ * So this function is the chain, and it is the only one: position → rotation →
+ * scale and depth → tailpipe → emitter. Both outputs come from the same four
+ * numbers, and nothing else in the file is allowed to compute either half.
  */
 const ESCORT_LENGTH = 64;
+/**
+ * How far behind centre the exhaust sits, as a fraction of the drawn length —
+ * measured off the artwork rather than guessed, which is where it actually is
+ * once the drawing's transparent margin is taken off.
+ */
 const TAILPIPE = ESCORT_LENGTH * 0.44;
 
-/**
- * Where the smoke comes out.
- *
- * Scene coordinates in, scene coordinates out, and the heading is the one the
- * sprite is actually rotated by — which is the *screen* heading, because that
- * is what a CSS `rotate` applies. The two spaces cancel: the sprite is drawn at
- * `scene × scale` and rotated in screen space, so a screen-space offset of
- * `TAILPIPE × scale` is a scene-space offset of exactly `TAILPIPE`.
- *
- * It used to be a bare `x - 26` in the join and formation phases — no heading
- * at all — so for the whole of the roll-out, while the aeroplane was still
- * turning, the smoke came out of a point beside it rather than out of the back
- * of it. That is the "not quite from the exhaust" this fixes.
- */
-function tailpipe(point: Point3, headingDegrees: number, index: number) {
-  const radians = (headingDegrees * Math.PI) / 180;
+interface Sprite {
+  /** What the element is drawn with. */
+  transform: string;
+  /** The exhaust, in scene coordinates, ready to emit from. */
+  emitter: Point3;
+}
+
+function spriteAt(
+  point: Point3,
+  heading: number,
+  options: { scale?: number; bank?: number; pitch?: number } = {},
+): Sprite {
+  const projected = project(point);
+  const scale = options.scale ?? projected.scale;
+  const bank = options.bank ?? 1;
+  const pitch = options.pitch ?? 1;
+  const radians = (heading * Math.PI) / 180;
+
+  /*
+   * Scene space and screen space cancel exactly here, which is why the emitter
+   * can be expressed in scene coordinates at all: the sprite is drawn at
+   * `scene × scale` and rotated in screen space, so a screen offset of
+   * `TAILPIPE × pitch × scale` along the heading is a scene offset of
+   * `TAILPIPE × pitch`. The puff then carries this point's own `z`, so when it
+   * is drawn it is divided by the same perspective the aircraft was.
+   */
+  const reach = TAILPIPE * pitch;
   return {
-    x: point.x - Math.cos(radians) * TAILPIPE,
-    y: point.y - Math.sin(radians) * TAILPIPE,
-    z: point.z,
-    index,
+    transform:
+      `translate3d(${projected.x.toFixed(2)}px, ${projected.y.toFixed(2)}px, 0) ` +
+      `rotate(${heading.toFixed(2)}deg) scale(${scale.toFixed(3)}) ` +
+      `scaleX(${pitch.toFixed(3)}) scaleY(${bank.toFixed(3)})`,
+    emitter: {
+      x: point.x - Math.cos(radians) * reach,
+      y: point.y - Math.sin(radians) * reach,
+      z: point.z,
+    },
   };
 }
 
@@ -526,8 +667,15 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({ ready, onFinished,
     const start = last;
     /** When the orbit was broken off. Null while it is still turning. */
     let breakOff: number | null = null;
-    /** Each escort's projected state when it broke off, for the interpolation. */
-    let released: { projected: Projected; heading: number }[] = [];
+    /**
+     * Each escort's *scene* state when it broke off.
+     *
+     * The scene point and the direction it was travelling in, not the projected
+     * position: the rejoin is flown in the same space as the routine, so the
+     * perspective is continuous across the seam and the smoke is not projected
+     * twice.
+     */
+    let released: { point: Point3; tangent: Point3 }[] = [];
     let current: Phase = "orbit";
     /*
      * A clock the wander is sampled against.
@@ -562,10 +710,29 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({ ready, onFinished,
           puff.age += dt;
           if (puff.age > PUFF_LIFE) continue;
           puff.x -= speed * dt;
-          // Smoke rises and spreads a little as it decays, and wanders on the
-          // disturbed air behind the aircraft. Deterministic — `Math.random`
-          // here would make the ribbon shimmer instead of drift.
-          puff.y += Math.sin(puff.age * 2.3 + puff.seed) * 5.5 * dt;
+          /*
+           * Turbulence, and it *grows*.
+           *
+           * Straight out of the nozzle the smoke is still a coherent jet
+           * moving faster than the air around it; it is only once it has slowed
+           * to the air's speed that it starts to roll over and curl. So the
+           * disturbance is scaled by `curl`, which is nothing at the exhaust
+           * and everything by the time the puff is a second old — which is why
+           * the ribbon is a clean line where it leaves the aircraft and a
+           * billowing rope by the time it reaches the edge of the frame.
+           *
+           * Two frequencies on each axis and all of it deterministic, seeded
+           * per puff: `Math.random` here would make the ribbon shimmer from
+           * frame to frame instead of drift.
+           */
+          const curl = Math.min(1, puff.age / 0.9);
+          puff.x += Math.sin(puff.age * 1.7 + puff.seed * 1.3) * 8 * curl * dt;
+          puff.y +=
+            (Math.sin(puff.age * 2.3 + puff.seed) * 5.5 +
+              Math.cos(puff.age * 3.1 + puff.seed * 2.1) * 7.5 * curl -
+              // And it rises, slowly, once it is no longer being driven.
+              5 * curl) *
+            dt;
           trail[write++] = puff;
         }
         trail.length = write;
@@ -651,7 +818,16 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({ ready, onFinished,
            * the part that has not had time to spread yet, and it is the part
            * that has to read as attached to the aeroplane.
            */
-          const half = (5.5 + 34 * Math.sqrt(life) * spread) * scale;
+          /*
+           * And the plume is lumpy. A single smooth profile is a ribbon; real
+           * smoke has fatter and thinner passages along it, because it did not
+           * all leave the aircraft into the same air. `bulk` is a slow function
+           * of the puff's own seed, so the lumps travel *with* the smoke rather
+           * than flickering along it, and it only takes effect as the puff
+           * ages — at the nozzle there is nothing to be lumpy yet.
+           */
+          const bulk = 1 + 0.42 * Math.sin(puff.seed * 0.9) * Math.sqrt(life);
+          const half = (5.5 + 34 * Math.sqrt(life) * spread * bulk) * scale;
           // Two frequencies, both slow: one long undulation and one shorter
           // ripple on top of it. A single sine reads as a sine.
           const wander =
@@ -687,7 +863,32 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({ ready, onFinished,
         context.lineTo(lower[0][0], lower[0][1]);
         edge(lower);
         context.closePath();
-        context.fillStyle = `rgba(${colour[0]}, ${colour[1]}, ${colour[2]}, ${alpha})`;
+        /*
+         * The ribbon fades along its own length rather than all at once.
+         *
+         * Every pass used to be one flat alpha, so a plume was as solid where
+         * it was dissipating as it was at the nozzle — which is what made the
+         * trails read as painted stripes. A linear gradient from the oldest
+         * puff in this run to the newest is an approximation on a curved
+         * ribbon and an entirely convincing one, for the price of one gradient
+         * per pass instead of one fill per puff.
+         */
+        const oldest = run[0];
+        const newest = run[run.length - 1];
+        const from = project(oldest);
+        const to = project(newest);
+        const fade = context.createLinearGradient(
+          oldest.x * from.scale,
+          oldest.y * from.scale,
+          newest.x * to.scale,
+          newest.y * to.scale,
+        );
+        const tint = `${colour[0]}, ${colour[1]}, ${colour[2]}`;
+        // How faded this run's own ends are, from the ages at each end.
+        const dim = (age: number) => alpha * (1 - 0.5 * clamp01(age / PUFF_LIFE));
+        fade.addColorStop(0, `rgba(${tint}, ${dim(oldest.age).toFixed(4)})`);
+        fade.addColorStop(1, `rgba(${tint}, ${dim(newest.age).toFixed(4)})`);
+        context.fillStyle = fade;
         context.fill();
       }
     };
@@ -712,26 +913,31 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({ ready, onFinished,
           const route = ROUTES[index];
           const at = u + index * 0.37;
           const point = routePoint(route, at);
-          const projected = project(point);
           const attitude = attitudeAt(route, at);
+          const sprite = spriteAt(point, attitude.heading, { bank: attitude.bank, pitch: attitude.pitch });
           const node = escortRefs.current[index];
           if (node) {
-            node.style.transform =
-              `translate3d(${projected.x.toFixed(2)}px, ${projected.y.toFixed(2)}px, 0) ` +
-              `rotate(${attitude.heading.toFixed(2)}deg) scale(${projected.scale.toFixed(3)}) ` +
-              `scaleX(${attitude.pitch.toFixed(3)}) scaleY(${attitude.bank.toFixed(3)})`;
+            node.style.transform = sprite.transform;
             node.style.zIndex = point.z >= 0 ? "3" : "1";
             // Aerial perspective: the far half of the pass loses a little
             // contrast, the way distance actually works.
             node.style.opacity = (0.68 + 0.32 * clamp01((point.z + 190) / 380)).toFixed(3);
           }
-          emit.push(tailpipe(point, attitude.heading, index));
+          emit.push({ ...sprite.emitter, index });
         }
         if (readyRef.current && elapsed >= MIN_ORBIT_MS) {
           breakOff = now;
           released = [0, 1].map((index) => {
             const at = u + index * 0.37;
-            return { projected: project(routePoint(ROUTES[index], at)), heading: attitudeAt(ROUTES[index], at).heading };
+            const point = routePoint(ROUTES[index], at);
+            // The direction of travel, from the route either side of here.
+            const back = routePoint(ROUTES[index], at - 0.006);
+            const ahead = routePoint(ROUTES[index], at + 0.006);
+            const dx = ahead.x - back.x;
+            const dy = ahead.y - back.y;
+            const dz = ahead.z - back.z;
+            const length = Math.hypot(dx, dy, dz) || 1;
+            return { point, tangent: { x: dx / length, y: dy / length, z: dz / length } };
           });
           setPhaseOnce("join");
         }
@@ -743,36 +949,33 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({ ready, onFinished,
           for (let index = 0; index < 2; index++) {
             const from = released[index];
             const slot = SLOTS[index === 0 ? 0 : 2];
-            // Carry on along the release heading, then bend onto the slot.
-            const radians = (from.heading * Math.PI) / 180;
-            const control = {
-              x: from.projected.x + Math.cos(radians) * REJOIN_LEAD,
-              y: from.projected.y + Math.sin(radians) * REJOIN_LEAD,
+            /*
+             * Four points, all in scene coordinates: where it was, where its
+             * momentum carries it, where the formation is approached from, and
+             * the slot. The third of those is what makes the arrival level —
+             * the curve reaches the slot flying right, on the formation's
+             * heading, however it left the routine.
+             */
+            const p1: Point3 = {
+              x: from.point.x + from.tangent.x * REJOIN_LEAD,
+              y: from.point.y + from.tangent.y * REJOIN_LEAD,
+              z: from.point.z + from.tangent.z * REJOIN_LEAD,
             };
-            const here = bezier(from.projected, control, slot, t);
-            const heading = bezierHeading(from.projected, control, slot, t);
-            // Bank out of the turn as the curve straightens: the rate of turn
-            // is largest at the start of the rejoin and nothing at the slot.
-            const ahead = bezierHeading(from.projected, control, slot, Math.min(1, t + 0.05));
-            const turn = ((ahead - heading + 540) % 360) - 180;
-            const bank = 1 - Math.min(0.45, Math.abs(turn) / 30);
-            // The last quarter of the rejoin levels the nose onto the
-            // formation heading, so arriving in the slot is the end of a turn
-            // rather than a jump to zero degrees on the next frame.
-            const settled = mixAngle(heading, 0, easeOut(clamp01((t - 0.75) / 0.25)));
+            const p2: Point3 = { x: slot.x - REJOIN_APPROACH, y: slot.y, z: 0 };
+            const p3: Point3 = { x: slot.x, y: slot.y, z: 0 };
+            const here = bezier3(from.point, p1, p2, p3, t);
+            const attitude = bezierAttitude(from.point, p1, p2, p3, t);
+            const sprite = spriteAt(here, attitude.heading, {
+              bank: attitude.bank,
+              pitch: attitude.pitch,
+            });
             const node = escortRefs.current[index];
             if (node) {
-              node.style.transform =
-                `translate3d(${here.x.toFixed(2)}px, ${here.y.toFixed(2)}px, 0) ` +
-                `rotate(${settled.toFixed(2)}deg) scale(${mix(from.projected.scale, 1, t).toFixed(3)}) ` +
-                `scaleY(${bank.toFixed(3)})`;
-              node.style.zIndex = "1";
+              node.style.transform = sprite.transform;
+              node.style.zIndex = here.z >= 0 ? "3" : "1";
               node.style.opacity = "1";
             }
-            // The same heading the sprite is rotated by — so the exhaust stays
-            // at the back of the aeroplane through the whole roll-out rather
-            // than only once it is level.
-            emit.push(tailpipe({ ...here, z: mix(from.projected.z, 0, t) }, settled, index));
+            emit.push({ ...sprite.emitter, index });
           }
 
           /*
@@ -785,28 +988,30 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({ ready, onFinished,
           const third = escortRefs.current[2];
           const slot = SLOTS[1];
           const arrival = easeOut(clamp01(since / (JOIN_MS * 0.94)));
-          const here = bezier(THIRD_ENTRY, THIRD_CONTROL, slot, arrival);
-          const heading = bezierHeading(THIRD_ENTRY, THIRD_CONTROL, slot, arrival);
-          const ahead = bezierHeading(THIRD_ENTRY, THIRD_CONTROL, slot, Math.min(1, arrival + 0.05));
-          const turn = ((ahead - heading + 540) % 360) - 180;
-          const settled = mixAngle(heading, 0, easeOut(clamp01((arrival - 0.7) / 0.3)));
+          const approach: Point3 = { x: slot.x - REJOIN_APPROACH, y: slot.y, z: 0 };
+          const target: Point3 = { x: slot.x, y: slot.y, z: 0 };
+          const here = bezier3(THIRD_ENTRY, THIRD_CONTROL, approach, target, arrival);
+          const attitude = bezierAttitude(THIRD_ENTRY, THIRD_CONTROL, approach, target, arrival);
+          const entering = spriteAt(here, attitude.heading, {
+            bank: attitude.bank,
+            pitch: attitude.pitch,
+          });
           if (third) {
-            third.style.transform =
-              `translate3d(${here.x.toFixed(2)}px, ${here.y.toFixed(2)}px, 0) ` +
-              `rotate(${settled.toFixed(2)}deg) ` +
-              `scaleY(${(1 - Math.min(0.45, Math.abs(turn) / 30)).toFixed(3)})`;
+            third.style.transform = entering.transform;
+            third.style.zIndex = here.z >= 0 ? "3" : "1";
             // Inline, so the fade is tied to the distance flown rather than to
             // a CSS delay that knows nothing about where the aircraft is.
             third.style.opacity = clamp01(arrival / 0.18).toFixed(3);
           }
-          emit.push(tailpipe({ ...here, z: 0 }, settled, 2));
+          emit.push({ ...entering.emitter, index: 2 });
         } else {
           // Locked into the slots from here on; the scene moves as one body.
           for (let index = 0; index < 3; index++) {
             const slot = SLOTS[index === 0 ? 0 : index === 1 ? 2 : 1];
+            const sprite = spriteAt({ x: slot.x, y: slot.y, z: 0 }, 0);
             const node = escortRefs.current[index];
-            if (node) node.style.transform = `translate3d(${slot.x}px, ${slot.y}px, 0)`;
-            emit.push(tailpipe({ x: slot.x, y: slot.y, z: 0 }, 0, index));
+            if (node) node.style.transform = sprite.transform;
+            emit.push({ ...sprite.emitter, index });
           }
 
           if (since < JOIN_MS + SETTLE_MS) {
@@ -885,7 +1090,7 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({ ready, onFinished,
          * two plumes of smoke. The tricolour is meant to be three of the same
          * material, so the white one is laid down thinner.
          */
-        const ink = index === 2 ? 0.62 : 1;
+        const ink = index === 2 ? 0.85 : 1;
         // Four passes, widest and faintest first: a plume has an outside that
         // is nearly air and an inside that is nearly paint, and one polygon
         // cannot be both.

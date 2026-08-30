@@ -30,6 +30,7 @@ import { Section } from "../ui/Section";
 import { EditorSheet } from "../ui/EditorSheet";
 import { SwipeRow } from "../ui/SwipeRow";
 import { FundingMark } from "../ui/FundingMark";
+import { MarkLegend } from "../ui/MarkLegend";
 import { gesturesFor } from "../../domain/gestures";
 import type { SwipeActionId } from "../../domain/types";
 
@@ -409,7 +410,7 @@ export const SpendingPanel: React.FC = () => {
         {mutable && open && (
           <EditorSheet
             title={editing ? t("spending.edit") : t("spending.new")}
-            subtitle={editing ? "Recorded on " + editing.date : undefined}
+            subtitle={editing ? t("spending.recordedOn", { date: editing.date }) : undefined}
             onClose={reset}
             footer={
               <>
@@ -480,7 +481,10 @@ export const SpendingPanel: React.FC = () => {
               // The consequence of the choice, said where the choice is made.
               // Marking a transaction as someone else's changes the remaining
               // budget the moment it is saved, and that has to be predictable.
-              hint={t(`funding.${fundingKind(draft.source)}.hint`)}
+              // Only when it is not the default. "Counts against your budget"
+              // under the option every transaction already has is a sentence
+              // that teaches nothing and is on the screen every time.
+              hint={fundingKind(draft.source) === "personal" ? undefined : t(`funding.${fundingKind(draft.source)}.hint`)}
             >
               <select
                 className="select"
@@ -536,13 +540,18 @@ export const SpendingPanel: React.FC = () => {
                   ))}
                 </select>
               </Field>
+            ) : activityOptions.length === 0 ? (
+              /* No activities in this category, so no selector. It used to be
+                 rendered disabled with a sentence explaining why it was
+                 disabled — a control that cannot be used and a line of text
+                 apologising for it, on every transaction a new account
+                 records. */
+              null
             ) : (
               <Field
                 label={t("spending.activity")}
                 hint={
-                  activityOptions.length === 0
-                    ? t("spending.activityEmpty")
-                    : selectedActivity && activityFundingKind(selectedActivity) !== fundingKind(draft.source)
+                  selectedActivity && activityFundingKind(selectedActivity) !== fundingKind(draft.source)
                       ? t("spending.activityFundingHint", {
                           name: selectedActivity.name,
                           funding: t(`funding.${activityFundingKind(selectedActivity)}.short`).toLowerCase(),
@@ -553,7 +562,6 @@ export const SpendingPanel: React.FC = () => {
                 <select
                   className="select"
                   value={draft.activityId}
-                  disabled={activityOptions.length === 0}
                   onChange={(e) => {
                     const activityId = e.target.value;
                     const activity = activityId ? activityById.get(activityId) : undefined;
@@ -768,6 +776,15 @@ export const SpendingPanel: React.FC = () => {
               </SwipeRow>
             );
           })}
+          {/* A key to the marks on this list and no others. It renders nothing
+              at all when every transaction is an ordinary one-off paid for by
+              the reader, which is the case it has to get right. */}
+          <MarkLegend
+            funding={entries.map(entryFundingKind)}
+            cadences={entries
+              .filter((entry) => entry.recurrenceType && entry.recurrenceType !== "none")
+              .map(entryCadence)}
+          />
         </div>
       )}
     </div>

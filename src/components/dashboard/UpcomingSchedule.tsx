@@ -150,7 +150,7 @@ export const UpcomingSchedule: React.FC<UpcomingScheduleProps> = ({ snapshot, mo
           <summary>
             <CalendarPlus size={14} aria-hidden="true" />
             <span>
-              {undated.length} recurring {undated.length === 1 ? "activity has" : "activities have"} no date set
+              {t("upcoming.undatedRecurring", { count: undated.length })}
             </span>
           </summary>
           <p className="text-note upcoming-note">

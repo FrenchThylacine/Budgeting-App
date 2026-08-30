@@ -71,6 +71,7 @@ import { EmptyState } from "../ui/EmptyState";
 import { Field, FieldGroup } from "../ui/Field";
 import { Section } from "../ui/Section";
 import { FundingMark } from "../ui/FundingMark";
+import { MarkLegend } from "../ui/MarkLegend";
 import { activityBudgetSummary, fundingShares, type ActivityMonthCost } from "../../domain/activityBudget";
 import { FUNDING_KINDS, FUNDING_META, FUNDING_SOURCES, activityFundingKind, fundedByName, type FundingKind } from "../../domain/funding";
 import { useTranslation } from "../../i18n/useTranslation";
@@ -305,20 +306,20 @@ export const ActivityPanel: React.FC = () => {
     // saying nothing.
     if (form.costModel === "fixedYearly") {
       return parsed
-        ? "The charge repeats on this day every year. Change it and every future date follows."
-        : "Set the day this renews. Without it, the yearly charge cannot be placed on a calendar at all — and the app will not invent a date for it.";
+        ? t("activity.yearlyDateSet")
+        : t("activity.yearlyDateMissing");
     }
     if (form.costModel === "sessionPack") {
       return parsed
-        ? "The payment cycle counts from this date. Change it and every future payment follows."
-        : "Set the date of the next payment. Without it, the payments cannot be placed on a calendar and the app will not invent dates for them.";
+        ? t("activity.packDateSet")
+        : t("activity.packDateMissing");
     }
-    if (!parsed) return "Optional. Leave empty to let the schedule decide the next date.";
+    if (!parsed) return t("activity.dateOptional");
     const today = new Date();
     if (parsed < new Date(today.getFullYear(), today.getMonth(), today.getDate())) {
-      return "This date has passed, so it is ignored and the schedule decides again. Set the next one, or clear it.";
+      return t("activity.datePassed");
     }
-    return "Overrides the next date in the upcoming timeline. It never changes what the activity costs.";
+    return t("activity.dateOverrides");
   })();
 
   /**
@@ -1272,6 +1273,12 @@ export const ActivityPanel: React.FC = () => {
               </SwipeRow>
             );
           })}
+          {/* Only the marks this list actually uses. A reader whose activities
+              are all their own, all monthly, sees no legend at all. */}
+          <MarkLegend
+            funding={visibleActivities.map(activityFundingKind)}
+            cadences={visibleActivities.map(activityCadence)}
+          />
         </div>
       )}
     </div>

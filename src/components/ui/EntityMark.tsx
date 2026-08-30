@@ -314,7 +314,7 @@ export const MarkFields: React.FC<MarkFieldsProps> = ({
             iconUrlError ? (
               <span style={{ color: "var(--danger-text)" }}>{t("wishlist.enterAValidWebAddress")}</span>
             ) : (
-              "A direct link to an image. It beats both the library icon and the site icon below. If it ever fails to load, the next one in the list is used instead of a broken image."
+              t("mark.imageLinkHint")
             )
           }
         >

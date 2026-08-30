@@ -263,7 +263,7 @@ export const AnalyticsPanel: React.FC = () => {
       color: entry.category?.color ?? "#64748B",
       caption,
       marker: entry.cap != null && entry.cap > 0 ? { value: entry.cap, label: t("stats.monthlyCap") } : undefined,
-      badge: entry.overCap ? "OVER CAP" : undefined,
+      badge: entry.overCap ? t("dashboard.overCap") : undefined,
       badgeTone: entry.overCap ? "danger" : "neutral",
     };
   });
@@ -607,7 +607,7 @@ export const AnalyticsPanel: React.FC = () => {
                 )}
                 {overCap.length > 0 && (
                   <span className="text-caption" style={{ color: "var(--danger-text)", fontWeight: 600 }}>
-                    {overCap.length} categor{overCap.length === 1 ? "y is" : "ies are"} over cap
+                    {t("stats.categoriesOverCap", { count: overCap.length })}
                   </span>
                 )}
               </>
@@ -849,8 +849,8 @@ export const AnalyticsPanel: React.FC = () => {
                     comparison.deltaPct != null
                       ? t("stats.vsPrevious", { change: `${comparison.deltaPct > 0 ? "+" : ""}${comparison.deltaPct.toFixed(1)}%`, period: t(`period.${mode}`) })
                       : comparison.previousTotal == null
-                      ? "previous period has no records"
-                      : "current period has no records",
+                      ? t("stats.previousHasNoRecords")
+                      : t("stats.currentHasNoRecords"),
                   tone: comparison.deltaAbs == null ? undefined : comparison.deltaAbs > 0 ? "negative" : "positive",
                 },
                 {

@@ -396,7 +396,7 @@ const CustomRangeReport: React.FC<{
             group
             hint={
               valid
-                ? "Your budget is set per month, so a range has no budget figure to measure against — the report says so rather than prorating one."
+                ? t("report.rangeHasNoBudget")
                 : undefined
             }
           >

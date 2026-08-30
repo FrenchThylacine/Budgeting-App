@@ -34,9 +34,4 @@ export const SESSION_TTL_DAYS = 30;
 /** Reset links are short-lived: they arrive by email, which is not a secure channel. */
 export const RESET_TTL_MINUTES = 30;
 
-export function expiryFromNow(milliseconds: number, now = new Date()): Date {
-  return new Date(now.getTime() + milliseconds);
-}
-
 export const DAY_MS = 24 * 60 * 60 * 1000;
-export const MINUTE_MS = 60 * 1000;

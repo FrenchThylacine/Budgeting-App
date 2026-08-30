@@ -177,10 +177,10 @@ export const ScenarioLab: React.FC = () => {
                       {active ? t("scenarios.alreadyApplied") : t("scenarios.applyChanges", { count: changes.length })}
                     </Button>
                     <Button variant="ghost" size="sm" disabled={!mutable} onClick={() => setEditing(preset)}>
-                      <Pencil size={14} /> Edit
+                      <Pencil size={14} /> {t("common.edit")}
                     </Button>
                     <Button variant="ghost" size="sm" disabled={!mutable} onClick={() => duplicate(preset.id)}>
-                      <Copy size={14} /> Duplicate
+                      <Copy size={14} /> {t("common.duplicate")}
                     </Button>
                     {confirmDelete === preset.id ? (
                       <span className="scenario-confirm">
@@ -206,7 +206,7 @@ export const ScenarioLab: React.FC = () => {
                         disabled={!mutable}
                         onClick={() => setConfirmDelete(preset.id)}
                       >
-                        <Trash2 size={14} /> Delete
+                        <Trash2 size={14} /> {t("common.delete")}
                       </Button>
                     )}
                   </footer>
@@ -270,7 +270,7 @@ export const ScenarioLab: React.FC = () => {
                     </div>
                     {active && (
                       <span className="scenario-badge" title={t("scenario.thisSeasonIsCurrentlySelected")}>
-                        <Check size={12} aria-hidden="true" /> Current
+                        <Check size={12} aria-hidden="true" /> {t("scenario.currentBadge")}
                       </span>
                     )}
                   </header>
@@ -334,7 +334,7 @@ export const ScenarioLab: React.FC = () => {
                         disabled={!mutable}
                         onClick={() => setConfirmSeason(season.id)}
                       >
-                        <Trash2 size={14} /> Delete
+                        <Trash2 size={14} /> {t("common.delete")}
                       </Button>
                     )}
                   </footer>

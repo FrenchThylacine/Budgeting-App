@@ -44,7 +44,7 @@ export const DonutChart: React.FC<DonutChartProps> = ({
   size = 200,
   thickness = 22,
   footer,
-  emptyMessage = "No spending recorded for this period.",
+  emptyMessage,
   ...naming
 }) => {
   const { t } = useTranslation();
@@ -52,7 +52,7 @@ export const DonutChart: React.FC<DonutChartProps> = ({
   const drawable = segments.filter((segment) => segment.value > 0);
   const total = drawable.reduce((sum, segment) => sum + segment.value, 0);
 
-  if (total <= 0) return <ChartPlaceholder height={size} message={emptyMessage} />;
+  if (total <= 0) return <ChartPlaceholder height={size} message={emptyMessage ?? t("report.noSpending")} />;
 
   const legend: LegendItem[] = drawable.map((segment) => ({
     id: segment.id,

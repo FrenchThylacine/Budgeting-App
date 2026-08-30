@@ -111,7 +111,7 @@ const EditForm: React.FC<EditFormProps> = ({ title, categories, currencies, draf
       footer={
         <>
           <Button type="button" variant="ghost" onClick={onCancel}>
-            <X size={14} /> Cancel
+            <X size={14} /> {t("common.cancel")}
           </Button>
           <Button type="submit" variant="primary" form="wishlist-editor-form" disabled={!valid}>
             <Check size={14} /> {submitLabel}
@@ -198,7 +198,7 @@ const EditForm: React.FC<EditFormProps> = ({ title, categories, currencies, draf
             urlError ? (
               <span style={{ color: "var(--danger-text)" }}>{t("wishlist.enterAValidWebAddress")}</span>
             ) : (
-              "The shop this is bought from. Opened by the link on the card."
+              t("wishlist.sellerLinkHint")
             )
           }
         >
@@ -991,7 +991,7 @@ export const WishlistPanel: React.FC = () => {
                   <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
                     {!item.bought ? (
                       <Button size="sm" variant="secondary" onClick={() => startPurchase(item)}>
-                        <ShoppingBag size={14} /> Buy
+                        <ShoppingBag size={14} /> {t("wishlist.buy")}
                       </Button>
                     ) : (
                       <Button
@@ -1048,30 +1048,25 @@ export const WishlistPanel: React.FC = () => {
         </div>
       )}
 
-      {/* Summary footer */}
-      {allItems.length > 0 && (
-        <div className="card card-body" style={{ display: "flex", gap: 24, flexWrap: "wrap", fontSize: 13 }}>
-          <div>
-            <span style={{ color: "var(--text-secondary)" }}>{t("wishlist.activeItems")} </span>
-            <strong>{activeItems.length}</strong>
-          </div>
-          {activeTotal > 0 && (
-            <div>
-              <span style={{ color: "var(--text-secondary)" }}>{t("wishlist.activeTotal")} </span>
-              <strong>{formatDualMoney(activeTotal, settings)}</strong>
-              {activeIsMixedCurrency && (
-                <span className="text-caption" style={{ color: "var(--text-tertiary)" }}>
-                  {" "}
-                  · converted from {new Set(activeItems.map((item) => item.currency)).size} currencies
-                </span>
-              )}
-            </div>
+      {/* What the list is worth — and nothing the tabs above already say.
+
+          This was a card carrying three facts, two of which were printed
+          verbatim on the filter chips six inches above it: "Active items: 0"
+          under a chip reading "Active (0)", and "Bought: 0" under "Bought (0)".
+          The total is the only thing here the chips cannot show, so it is the
+          only thing left, and the card is gone with the duplication — a figure
+          does not need a container of its own. */}
+      {activeTotal > 0 && (
+        <p className="text-note wishlist-total">
+          <span>{t("wishlist.activeTotal")} </span>
+          <strong>{formatDualMoney(activeTotal, settings)}</strong>
+          {activeIsMixedCurrency && (
+            <span className="text-caption" style={{ color: "var(--text-tertiary)" }}>
+              {" · "}
+              {t("wishlist.convertedFrom", { count: new Set(activeItems.map((item) => item.currency)).size })}
+            </span>
           )}
-          <div>
-            <span style={{ color: "var(--text-secondary)" }}>{t("wishlist.bought")} </span>
-            <strong>{boughtItems.length}</strong>
-          </div>
-        </div>
+        </p>
       )}
     </div>
   );
