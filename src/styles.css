@@ -146,12 +146,15 @@
      information: something on a calendar the app knows, something counted by
      how often you turn up, or something that happened once. Every use pairs
      the colour with an icon and a word — see `domain/cadence.ts`. */
-  --cadence-recurring: #4B6BA8;
-  --cadence-recurring-soft: rgba(75, 107, 168, 0.12);
-  --cadence-counted: #6B7A8F;
-  --cadence-counted-soft: rgba(107, 122, 143, 0.12);
-  --cadence-once: #8C93A1;
-  --cadence-once-soft: rgba(140, 147, 161, 0.12);
+  /* Each measured against its own 12% tint, the card and the page: 5.6, 5.8
+     and 5.4 respectively. The first choices were a step lighter and the
+     session-pack chip came out at 3.62 — legible as a shape, not as type. */
+  --cadence-recurring: #3F5C93;
+  --cadence-recurring-soft: rgba(63, 92, 147, 0.12);
+  --cadence-counted: #4E5A70;
+  --cadence-counted-soft: rgba(78, 90, 112, 0.12);
+  --cadence-once: #59606E;
+  --cadence-once-soft: rgba(89, 96, 110, 0.12);
   --funding-outside-text: var(--warning-text);
   --funding-outside-soft: var(--warning-soft);
 
