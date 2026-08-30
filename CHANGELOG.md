@@ -91,6 +91,51 @@ hint under every option including the default one, and rendered a *disabled*
 activity selector with a sentence explaining why it was disabled — on every
 transaction a new account records.
 
+### Thirty-two sentences in English, and the sweep that should have come first
+
+V4.3 added four rules to the hardcoded-English scanner and reported the
+interface fully translated. This pass found three more blind spots, one screen
+at a time, before doing the thing that should have been done first: a single
+broad sweep for anything in a `.tsx` file that reads as an English sentence,
+outside comments, keys, class lists, styles and paths.
+
+The three shapes, each with live strings in it:
+
+- **Prose following a JSX expression.** The multi-line rule required the
+  previous line to end with an opening *tag*, so a sentence after a `{" "}` was
+  invisible. Four strings, every one forming its plural by hand in English —
+  `categor{y is / ies are}`, `{count} change{s}` — which is broken in the four
+  other languages whatever the count.
+- **A label after a self-closing tag**: `<Archive size={14} /> Archive`. An
+  icon and a word is the commonest shape a button takes here, and the `>text<`
+  rule cannot see it. Eleven of them: Cancel, Restore, Archive, Apply, Edit,
+  Duplicate, Delete, Current, Buy — every one with a translated key already in
+  the dictionary, unused.
+- **Everything the sweep found that the rules still missed**: six hints in the
+  activity editor's renewal-date field, two chart empty-state defaults, the
+  category manager's submit labels, the scenario diff's "not set / enabled /
+  disabled", the statistics' "previous period has no records", the transaction
+  editor's subtitle, the sidebar's date-range note, two icon-field hints, and
+  "OVER CAP" on the analytics bars — which had its own translated key sitting
+  unused three lines above it.
+
+Verified by driving all eleven tabs in French and walking the DOM for English:
+none left.
+
+### Two screens that explained themselves twice
+
+The Categories tab carried "the **monthly cap** are read live … so changing
+**them**" — a singular noun with a plural verb and pronoun, which is what
+happens when one sentence is assembled from three dictionary fragments
+concatenated around a bolded noun. One key and one sentence now, half the
+length, with the archiving half moved onto the Archive button where somebody
+about to archive something will meet it.
+
+The Wishlist carried a card of three facts, two of which the filter chips six
+inches above already printed: "Active items: 0" under a chip reading "Active
+(0)". The total is the only thing there the chips cannot show, so it is the
+only thing left — and it is a line rather than a card.
+
 ### Four exports nothing was reading
 
 A dead-export sweep across every project in the repository, which matters

@@ -174,6 +174,33 @@ something had slipped through the previous one:
       specification's own worked example is a test: Gym €600 and Tennis €300
       against Navigraph €140 gives 66.7% and 33.3% of €900.
 
+### Translation
+
+- [x] **Three more scanner blind spots, and a broad sweep after them.** Prose
+      following a JSX expression; a label after a self-closing tag
+      (`<Archive size={14} /> Archive`, the commonest shape a button takes
+      here); and then everything a maximal sweep found that the rules still
+      missed. **Thirty-two user-facing strings**, forty-one keys in five
+      languages.
+- [x] Eleven of them were buttons whose translated keys were already in the
+      dictionary and simply not being asked for.
+- [x] Four formed their plurals by hand in English —
+      `categor{y is / ies are}` — which is wrong in the other four languages
+      whatever the count, on an application that has had `Intl.PluralRules`
+      since V3.
+- [x] **Verified by driving all eleven tabs in French** and walking the DOM for
+      English text nodes: none left.
+
+### Text and duplication
+
+- [x] **The Categories note was three dictionary fragments** concatenated
+      around a bolded noun, and the join disagreed with itself: "the monthly
+      cap *are* read live … changing *them*". One key, one sentence, half the
+      length; the archiving half moved onto the Archive button.
+- [x] **The Wishlist footer repeated the filter chips above it** — "Active
+      items: 0" under a chip reading "Active (0)". Only the total remains, as a
+      line rather than a card.
+
 ### Dead code
 
 - [x] `NanPolicy`, `expiryFromNow`, `MINUTE_MS` and `NeonSql` removed; `query`
