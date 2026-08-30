@@ -2,13 +2,42 @@
 
 This is the active engineering tracker. A checkbox is ticked only after implementation **and** the relevant verification have both succeeded. "The code exists" is never sufficient.
 
-**Last updated:** 2026-08-30 (V4.2) — the refinement pass: the two "≈" lines untangled, the funding ambiguity that made a correct statistic read as a wrong one, a visual vocabulary for how often money moves, an aerobatic routine with smoke that starts at the exhaust, and a broad reduction in what is on screen at once.
+**Last updated:** 2026-08-30 (V4.3) — the audit pass: a rejoin that is a curve rather than a chord, a third jet that flies in from outside the frame, one component per visual mark, and twenty-three user-facing sentences that five separate translation audits had reported as translated.
 
-**Version:** 4.2.0. See `CHANGELOG.md` for what each version was.
+**Version:** 4.3.0. See `CHANGELOG.md` for what each version was.
 
-**Verification state.** **890 tests across 48 files, all passing** — 808 unit and 82 against a real PostgreSQL 17 database. TypeScript clean for **both** targets. **`scripts/verify-browser.mjs` drives a real Chrome on a brand-new account each run: 57 checks, all passing**, including six phone widths, two themes, and measurements of the loading animation rather than assertions about it. Both bundles build clean. Nothing from 2026-08-17 onward is verified in production.
+**Verification state.** **900 tests across 49 files, all passing** — 818 unit and 82 against a real PostgreSQL 17 database. TypeScript clean for **both** targets. **`scripts/verify-browser.mjs` drives a real Chrome on a brand-new account each run: 58 checks, all passing**, including six phone widths, two themes, and measurements of the loading animation rather than assertions about it. Both bundles build clean. Nothing from 2026-08-17 onward is verified in production.
 
 ## How this session verified things
+
+**V4.3, 2026-08-30.** One lesson, and it is the opposite of the last pass's:
+*the measurement was right and the picture was still wrong.*
+
+- The smoke emitter measured 0–3px from the tailpipe across twenty-one samples
+  of both escorts, and the smoke still looked detached. Reading the *alpha* at
+  the head rather than the *distance* found it: 53 out of 255, which the canvas
+  blur erased against a dark sky. The number that mattered was not the one
+  being measured.
+- The orbit passed every check it had and read as machinery, which is why the
+  routes are authored waypoints now and not a parametric ring.
+- The translation suite asserted, correctly, that every key the source asks for
+  exists and that every language covers the whole key set. Twenty-three
+  sentences never reached a key at all. A scanner is only as good as the shapes
+  it knows, and it knew four of nine.
+
+So the additions to the method this pass:
+
+- **Freeze the frame.** `requestAnimationFrame = () => 0` from the harness
+  stops the routine where it is, and a screenshot taken afterwards shows the
+  same instant the measurement read. Every earlier "the smoke is detached"
+  screenshot was a frame taken 100–300ms after the numbers it was compared to.
+- **A guard that cannot pass by dying.** The browser harness ran inside a `try`
+  with only a `finally`, so a fault in the harness itself printed "0/0 checks
+  passed" and exited 0. It now reports the fault and refuses to exit 0 on a run
+  that stopped early.
+- **A scanner is a set of shapes, and the set was short.** Five rules now, each
+  with the live string that motivated it recorded in its own test.
+
 
 **V4.2, 2026-08-30.** The lesson of this pass, three times over: *the claim
 was true and the reader was still right.*
@@ -53,6 +82,77 @@ something had slipped through the previous one:
 - **Then a fifth, and a sixth**, on the second pass: "8.86" with a full stop in a French sentence otherwise full of commas, and "tous les 5 semaines" — an article glued in front of a noun whose gender the sentence could not know.
 - **Contrast is measured, not eyeballed.** The themes are data, so `tests/theme-contrast.test.ts` walks every preset in both appearances and asserts every text token against every surface. Thirty assertions, and a theme that fails one fails the build.
 - **Translation completeness is a test, not a claim.** `tests/i18n.test.ts` asserts both directions: every key the source asks for exists in English, and every language marked *translated* covers the whole English key set. 1,054 keys × 5 languages.
+
+## Completed — 2026-08-30 (V4.3)
+
+### The aviation sequence
+
+- [x] **The rejoin is a curve.** Both escorts leave the routine along the
+      heading they were released on and bend onto the formation — a quadratic
+      Bézier whose control point sits ahead of the release point. Heading comes
+      from the curve's tangent, bank from its rate of turn, and the last
+      quarter levels the wings so arriving in the slot is the end of a turn.
+- [x] **The third jet joins.** It enters from 900px out, off the frame, on its
+      own curve, banked, nose on the path, trailing smoke the whole way.
+      Measured by the harness: **in from −883px, 806px flown**. It used to
+      slide in from 210px left of its slot at a fixed attitude with no smoke.
+- [x] **The smoke's head is visible.** Measured at the canvas backing store,
+      the newest puff was coming out at alpha 53/255 and the blur erased it;
+      the core pass is denser and reaches further back in age, the blur is two
+      pixels rather than three, and the head now measures **243**. White is
+      laid down at 0.62 of the others' ink, because at equal alpha it read as a
+      searchlight beside two plumes of smoke.
+- [x] **Verified by freezing the animation and screenshotting the frozen
+      frame**, not by reading a screenshot taken after the measurement.
+
+### One vocabulary, one component
+
+- [x] **`FundingMark`**, in three variants, replaces three hand-written copies
+      of the same three glyphs — the transaction row's badge, the activity
+      row's badge, and the dashboard's chip.
+- [x] **`tests/one-vocabulary.test.ts`** asserts each mark has exactly one
+      rendering, that the three funding glyphs and the seven cadence
+      silhouettes are distinct, and that the cadences share three tones.
+
+### Twenty-three sentences that were never translated
+
+- [x] **Five scanner rules, not one.** A string given to an object property; JSX
+      text with a value in the middle of it on one line; a template literal
+      opening with its interpolation; a sentence starting with a two-letter
+      word; a sentence handed straight to a function. Each has its own test
+      carrying the live string that motivated it.
+- [x] **Twenty-nine keys in five languages**, and the five rules now run over
+      the whole tree and come back empty.
+- [x] `Last {count} {mode}s` formed its plural by gluing an "s" onto the raw
+      enum, so every one of the five languages read "Last 8 months".
+
+### Less on the screen
+
+- [x] **Two empty states that were whole cards** are no longer rendered: the
+      period comparison with nothing to compare against, and a sparkline
+      caption under a line that needs two points. The dashboard is **156px
+      shorter** on a first month.
+- [x] **The same projection was stated twice** on the dashboard, once in the
+      health card and once under the forecast chart. The chart's copy — the
+      untranslated one — is gone.
+- [x] **The period selector is not rendered on Categories, Currencies or
+      Settings.** Everything else on the shell reads the selected week, month
+      or year; those three do not.
+- [x] **The Scenario Lab taught itself twice** on an empty tab. The paragraph
+      appears only where the empty state is not.
+
+### The harness
+
+- [x] **A run that dies no longer reports success.** It used to unwind past
+      every remaining check and print "0/0 checks passed" with exit code 0 —
+      which is exactly what happened when a single un-doubled backslash was
+      added to an evaluated block.
+- [x] **The join check no longer flakes.** It samples without a delay during
+      the join and measures the widest separation seen rather than the first
+      and last points.
+- [x] **The specification's own worked example is a test**: Gym €600 and Tennis
+      €300 personal against Navigraph €140 paid by somebody else gives 66.7%
+      and 33.3% of €900.
 
 ## Completed — 2026-08-30 (V4.2)
 
@@ -772,7 +872,7 @@ Each of these is one of the specification's own examples, checked rather than as
 - [ ] `xlsx@0.18.5` carries two high-severity advisories (prototype pollution, ReDoS) with no fix on the npm registry — SheetJS publishes fixed versions only from its own CDN. It is loaded on demand, only when the user chooses a file they supplied themselves, and never runs on the server. Moving to the CDN tarball would put a non-registry URL in the lockfile, which is its own deployment risk. Documented rather than silently accepted.
 - [ ] No component or end-to-end tests beyond `tests/editor-typing.test.tsx`. Panels are verified by hand in the browser. The two mistakes that have cost the most time on this project were both measurement errors of exactly that kind.
 - [ ] The first paint still costs ~234 kB gzipped across four chunks. The split means a *repeat* visit after a deploy costs 94 kB, but a cold first load is unchanged. The wishlist and activity panels are not code-split, because they are primary tabs.
-- [ ] `HorizontalBarChart` reserves a fixed minimum height, so a category breakdown with one row leaves a tall empty card.
+- ~~`HorizontalBarChart` reserves a fixed minimum height~~ → it does not, and has not since the chart library pass: the height is `rows.length * ROW_HEIGHT` with no floor, and the empty case is a 120px placeholder rather than a full-height card. Recorded here because the entry outlived the code it described.
 
 ## Discovered issues — closed 2026-08-22
 
