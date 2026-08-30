@@ -290,7 +290,7 @@ export const AnalyticsPanel: React.FC = () => {
       )}
 
       {/* ── Overview ───────────────────────────────────────────────────────── */}
-      <Section title={`Overview · ${currentPeriodLabel}`}>
+      <Section title={`${t("stats.overview")} · ${currentPeriodLabel}`}>
         <div className="card" style={{ padding: 20, display: "grid", gap: 20, minWidth: 0 }}>
           <div
             style={{
@@ -406,15 +406,10 @@ export const AnalyticsPanel: React.FC = () => {
       </Section>
 
       {/* ── Spending ───────────────────────────────────────────────────────── */}
-      <Section title={t("nav.spending")}>
+      <Section title={t("nav.spending")} collapsible>
         <div style={{ display: "grid", gap: 16, minWidth: 0 }}>
           <ChartCard
             title={mode === "week" ? t("stats.weeklyTrend") : t("stats.spendingThrough", { year: settings.selectedYear })}
-            subtitle={
-              mode === "week"
-                ? t("stats.weeksHint")
-                : t("stats.monthsHint")
-            }
           >
             {trendBars.length === 0 || trendBars.every((bar) => bar.value == null) ? (
               <ChartPlaceholder height={180} message={t("stats.noSpendingRecordedYetFor")} />
@@ -469,7 +464,7 @@ export const AnalyticsPanel: React.FC = () => {
       </Section>
 
       {/* ── Budget ─────────────────────────────────────────────────────────── */}
-      <Section title={t("settings.budget")}>
+      <Section title={t("settings.budget")} collapsible defaultOpen={false}>
         <div style={{ display: "grid", gap: 16, minWidth: 0 }}>
           <ChartCard
             title={t("stats.budgetVsActual")}
@@ -575,7 +570,7 @@ export const AnalyticsPanel: React.FC = () => {
       </Section>
 
       {/* ── Categories ─────────────────────────────────────────────────────── */}
-      <Section title={t("nav.categories")}>
+      <Section title={t("nav.categories")} collapsible defaultOpen={false}>
         <div style={{ display: "grid", gap: 16, minWidth: 0 }}>
           <ChartCard
             title={t("dashboard.whereTheMoneyWent")}
@@ -634,7 +629,7 @@ export const AnalyticsPanel: React.FC = () => {
       </Section>
 
       {/* ── Recurring ──────────────────────────────────────────────────────── */}
-      <Section title={t("report.recurring")}>
+      <Section title={t("report.recurring")} collapsible defaultOpen={false}>
         <div style={{ display: "grid", gap: 16, minWidth: 0 }}>
           <ChartCard
             title={t("stats.committedVsDiscretionary")}
@@ -701,7 +696,7 @@ export const AnalyticsPanel: React.FC = () => {
       </Section>
 
       {/* ── Activities ─────────────────────────────────────────────────────── */}
-      <Section title={t("stats.activityCost")}>
+      <Section title={t("stats.activityCost")} collapsible defaultOpen={false}>
         <div style={{ display: "grid", gap: 16, minWidth: 0 }}>
           {activityCosts.items.length === 0 ? (
             <EmptyState title={t("stats.noActivities")} description={t("stats.noActivitiesBody")} />
@@ -817,7 +812,7 @@ export const AnalyticsPanel: React.FC = () => {
       </Section>
 
       {/* ── History ────────────────────────────────────────────────────────── */}
-      <Section title={t("nav.history")}>
+      <Section title={t("nav.history")} collapsible defaultOpen={false}>
         <div style={{ display: "grid", gap: 16, minWidth: 0 }}>
           <ChartCard
             title={t("stats.periodComparison")}

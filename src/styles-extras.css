@@ -3603,3 +3603,55 @@ label:has(> input[type="radio"]) {
 .activity-meta-detail::before { content: "·"; margin-inline-end: 8px; }
 
 .activity-meta .activity-due { margin: 0; }
+
+/* ── V4.2: a section that puts itself away ────────────────────────────────── */
+.section-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  /* A fingertip. The heading alone measured 21px, which the harness's
+     small-target sweep is right to refuse. */
+  min-height: 32px;
+  padding: 4px 2px;
+  margin-inline-start: -2px;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  text-align: start;
+  min-width: 0;
+}
+
+.section-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: var(--radius-sm); }
+.section-toggle .section-title { margin: 0; }
+
+.section-chevron {
+  flex: 0 0 auto;
+  color: var(--text-tertiary);
+  transition: transform var(--duration-fast) var(--ease-out);
+  transform: rotate(-90deg);
+}
+.section-collapsible.is-open .section-chevron { transform: rotate(0deg); }
+
+/* A closed section is a heading, so it should not also be a gap. */
+.section-collapsible:not(.is-open) .section-head { margin-bottom: 0; }
+
+/* A row with one card in it is a row of one card, not a card and a hole. */
+.dashboard-row-single { grid-template-columns: minmax(0, 1fr); }
+
+/* ── V4.2: a filter bar that does not become three rows on a phone ────────── */
+.filter-bar {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 160px), 1fr));
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+@media (max-width: 700px) {
+  .filter-bar {
+    grid-template-columns: 1fr 1fr;
+  }
+  /* The search field is the one people use; it keeps the width. */
+  .filter-bar > :first-child { grid-column: 1 / -1; }
+}

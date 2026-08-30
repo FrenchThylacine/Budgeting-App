@@ -377,14 +377,10 @@ export const ActivityPanel: React.FC = () => {
       >
         {!mutable && <div className="historical-banner">{t("common.readOnly")}</div>}
 
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 160px), 1fr))",
-            gap: 8,
-            marginBottom: 14,
-          }}
-        >
+        {/* Search across the top, the two selects sharing the row beneath.
+            `auto-fit` with a 160px floor gave three stacked full-width rows on
+            a phone — three rows of chrome before the first activity. */}
+        <div className="filter-bar">
           <input
             className="input"
             type="search"

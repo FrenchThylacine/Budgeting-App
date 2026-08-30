@@ -68,7 +68,7 @@ export function isProse(line: string): boolean {
 export function templateEnglish(line: string): string[] {
   return [...line.matchAll(/`([^`$]*[A-Z][a-z]{2,}[^`]*)`/g)]
     .map((match) => match[1].replace(/\$\{[^}]*\}/g, "…").trim())
-    .filter((text) => /^[A-Z][A-Za-z0-9 ,.'’!?%()…-]{3,}$/.test(text));
+    .filter((text) => /^[A-Z][A-Za-z0-9 ,.'’!?%()·…-]{3,}$/.test(text));
 }
 
 interface Finding {

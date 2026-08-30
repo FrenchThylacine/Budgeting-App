@@ -325,3 +325,22 @@ describe("the dictionaries themselves", () => {
     }
   });
 });
+
+describe("a year is a label, not a quantity", () => {
+  it("does not group the digits of a year", () => {
+    /*
+     * The statistics page was headed "Spending through 2,026" — every numeric
+     * placeholder went through `Intl.NumberFormat`, which is right for money
+     * and wrong for a date. Keyed on the placeholder's *name*, because 2026
+     * and 2026 euros are not distinguishable by looking at the number.
+     */
+    expect(translate({ k: "Spending through {year}" }, "en", "k", { year: 2026 })).toBe("Spending through 2026");
+    expect(translate({ k: "Semaine {week} de {weekYear}" }, "fr", "k", { week: 33, weekYear: 2026 })).toBe(
+      "Semaine 33 de 2026",
+    );
+  });
+
+  it("still groups everything else", () => {
+    expect(translate({ k: "{count} things" }, "en", "k", { count: 12345 })).toBe("12,345 things");
+  });
+});
