@@ -939,7 +939,7 @@ export function reportHtml(
             <th>${escapeHtml(t("report.colActivity"))}</th><th class="num">${escapeHtml(
               t("report.colPerMonth"),
             )}</th><th class="num">${escapeHtml(t("report.colPerYear"))}</th>
-            <th class="num">${escapeHtml(t("report.colShare"))}</th><th class="num">${escapeHtml(
+            <th class="num">${escapeHtml(t("report.colYourShare"))}</th><th class="num">${escapeHtml(
               t("report.colDueIn", { month: report.activities.monthLabel }),
             )}</th><th></th>
           </tr></thead>

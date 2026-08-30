@@ -1157,7 +1157,14 @@ try {
    * and no target may be smaller than a fingertip. Both were real defects here
    * before they were checks.
    */
-  for (const width of [390, 320]) {
+  /*
+   * Every width the brief names, not two.
+   *
+   * 320 and 390 were the floor and the common case; 360, 375, 412 and 430 are
+   * the four most common Android and iPhone widths between them, and a layout
+   * that survives the ends can still break in the middle.
+   */
+  for (const width of [320, 360, 375, 390, 412, 430]) {
     await check(`no horizontal overflow and no target under 24px at ${width}px`, async () => {
       await page.resize(width, 780);
       const problems = [];

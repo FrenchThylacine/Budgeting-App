@@ -1322,4 +1322,6 @@ export const de: Dictionary = {
   "dashboard.topCategories": "Top-Kategorien",
   "activity.appearance": "Farbe und Symbol",
   "activity.otherPrices": "Weitere Preise",
+  "sync.retry": "Erneut",
+  "report.colYourShare": "Ihr Anteil",
 };

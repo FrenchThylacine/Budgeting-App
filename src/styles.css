@@ -1051,8 +1051,13 @@ strong {
 .sync-status-action {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 4px;
-  padding: 2px 8px;
+  /* A fingertip. It was 2px of padding on 11px type — about 17px tall, which
+     is a target you aim at rather than hit, on the one control somebody
+     reaches for when their work is not saving. */
+  min-height: 24px;
+  padding: 4px 10px;
   border: none;
   border-radius: var(--radius-full);
   background: rgba(0, 0, 0, 0.06);

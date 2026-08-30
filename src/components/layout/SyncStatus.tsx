@@ -80,7 +80,7 @@ export const SyncStatus: React.FC = () => {
           disabled={busy}
           aria-label={t("sync.retrySynchronization")}
         >
-          <RefreshCw size={12} /> Retry
+          <RefreshCw size={12} /> {t("sync.retry")}
         </button>
       )}
       <span className="sr-only" role="status">
