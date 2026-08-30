@@ -2,13 +2,46 @@
 
 This is the active engineering tracker. A checkbox is ticked only after implementation **and** the relevant verification have both succeeded. "The code exists" is never sufficient.
 
-**Last updated:** 2026-08-30 (V4.3) — the audit pass: a rejoin that is a curve rather than a chord, a third jet that flies in from outside the frame, one component per visual mark, and twenty-three user-facing sentences that five separate translation audits had reported as translated.
+**Last updated:** 2026-08-30 (V4.4) — the correction pass: the aeroplane was being drawn forty pixels from the point every calculation used, the routine is choreographed rather than generated, and the visual vocabulary has a key instead of a paragraph.
 
-**Version:** 4.3.0. See `CHANGELOG.md` for what each version was.
+**Version:** 4.4.0. See `CHANGELOG.md` for what each version was.
 
-**Verification state.** **900 tests across 49 files, all passing** — 818 unit and 82 against a real PostgreSQL 17 database. TypeScript clean for **both** targets. **`scripts/verify-browser.mjs` drives a real Chrome on a brand-new account each run: 58 checks, all passing**, including six phone widths, two themes, and measurements of the loading animation rather than assertions about it. Both bundles build clean. Nothing from 2026-08-17 onward is verified in production.
+**Verification state.** **900 tests across 49 files, all passing** — 818 unit and 82 against a real PostgreSQL 17.5 database. TypeScript clean for **both** targets. **`scripts/verify-browser.mjs` drives a real Chrome on a brand-new account each run: 59 checks, all passing**, including six phone widths, two themes, and measurements of the loading animation rather than assertions about it. Both bundles build clean. Nothing from 2026-08-17 onward is verified in production.
 
 ## How this session verified things
+
+**V4.4, 2026-08-30.** The whole pass is one lesson, learned expensively:
+*every check compared numbers the script produced against other numbers the
+script produced.*
+
+Three consecutive passes tried to fix "the smoke looks detached from the
+aircraft". Each time the emitter was measured against the sprite's transform
+and came back at 0–3px, and each time the picture still showed a gap. The
+measurement was right and it was measuring the wrong pair of things: the smoke
+was at the exhaust the arithmetic named, and the *aeroplane* was not there. The
+artwork's top-left corner sat on the transform origin, so the drawn aircraft
+was forty pixels away from every position the maths computed — and none of the
+instrumentation could see it, because none of it ever looked at a pixel and a
+DOM origin in the same breath.
+
+What actually found it: drawing the computed emitter **into the canvas** as a
+crosshair and looking at the frame. The cross was on the ribbon's head, exactly
+where it should be, and the aeroplane was somewhere else entirely.
+
+Three additions to the method:
+
+- **Freeze, then draw, then shoot.** Overriding `requestAnimationFrame` does
+  not stop the frame that is already scheduled, so the first version of the
+  crosshair was wiped before the screenshot. Wait for the last frame, then draw.
+- **A check that crosses the boundary.** "The artwork is drawn where the
+  arithmetic puts it" compares `getBoundingClientRect` on the image with the
+  origin the script positions. It is the only check in the suite that compares
+  the script's intention with the browser's layout, and it is the only one that
+  could have caught this.
+- **Sweep every project, not `src/`.** The first dead-export sweep confidently
+  proposed deleting `FLEET_IDS`; the server imports it, and only the server
+  build knew.
+
 
 **V4.3, 2026-08-30.** One lesson, and it is the opposite of the last pass's:
 *the measurement was right and the picture was still wrong.*
@@ -82,6 +115,70 @@ something had slipped through the previous one:
 - **Then a fifth, and a sixth**, on the second pass: "8.86" with a full stop in a French sentence otherwise full of commas, and "tous les 5 semaines" — an article glued in front of a noun whose gender the sentence could not know.
 - **Contrast is measured, not eyeballed.** The themes are data, so `tests/theme-contrast.test.ts` walks every preset in both appearances and asserts every text token against every surface. Thirty assertions, and a theme that fails one fails the build.
 - **Translation completeness is a test, not a claim.** `tests/i18n.test.ts` asserts both directions: every key the source asks for exists in English, and every language marked *translated* covers the whole English key set. 1,054 keys × 5 languages.
+
+## Completed — 2026-08-30 (V4.4)
+
+### The loading sequence
+
+- [x] **The escort artwork is centred on the point that positions it.** It was
+      not: a grid item overflowing a zero-height area aligns to the start of
+      it, so the image's top-left corner sat on the transform origin and every
+      Alpha Jet was drawn ~40px from the position all the arithmetic used. The
+      rotate turned that offset with the heading, so the aeroplane also swung
+      around its own flight path. **Measured: 0px**, by a harness check that
+      compares the drawn box with the script's origin.
+- [x] **The six-turn corkscrew is gone.** It looped each jet 124px sideways
+      every 0.8s and tied a knot in the path wherever a route flew near
+      vertical, because the frame it was applied in collapsed there.
+- [x] **Eight authored waypoints per jet, evenly spaced** (203–284px legs). The
+      route they replaced closed with a 46px leg, where the aircraft both
+      turned hardest and — being walked by arc length — moved slowest.
+- [x] **Centripetal Catmull-Rom**, which cannot cusp or overshoot at a corner.
+- [x] **Speed trades height for airspeed**, `v ∝ √(1 + drop/H)`: the momentum
+      is a consequence of the path rather than an effect applied to it.
+- [x] **The rejoin is a cubic in scene coordinates.** It used to interpolate a
+      *projected* position while the smoke draw re-applies perspective — the
+      ribbon was projected twice at break-off, putting ~90px between the
+      aircraft and the smoke it had just laid — and a quadratic could hairpin.
+      The second control point sits left of the slot, so the curve arrives on
+      the formation heading whatever heading it left the routine on.
+- [x] **One complete pass is always seen.** 3.2s routine, 3.2s floor. It was a
+      5.2s routine with a 1.5s floor.
+- [x] **Smoke turbulence grows with age** rather than being present at the
+      nozzle; each puff has its own bulk, so the plume is lumpy; and each run
+      is drawn with a gradient, so it fades as it dissipates.
+- [x] **Measured**: 69–421px of track variation, 0px tailpipe-to-smoke, third
+      jet in from −691px over 606px flown, median frame **8.3ms**, nothing over
+      20ms.
+
+### The visual vocabulary
+
+- [x] **`MarkLegend`** — a key to the marks *on this screen*, taken from the
+      data in view. Renders nothing when everything on screen is ordinary, and
+      never lists `personal`.
+- [x] The transaction editor no longer shows the funding hint for the default
+      kind, and no longer renders a disabled activity selector with a sentence
+      explaining why it is disabled.
+
+### Verified, not rebuilt
+
+- [x] **Period selector** — popover above everything behind it, the historical
+      banner cannot steal its press, one press returns to the current period,
+      and the transition still runs left to right. Four harness checks.
+- [x] **Currency semantics** — a record is placed in the *display* currency
+      (`L.L. 150 000 ≈ € 1,44`) and only aggregates carry the second currency.
+      Four harness checks, and choosing a second currency must not move a
+      record onto it.
+- [x] **The funding statistic** — paid-by-other is excluded from the personal
+      share and still visible in the gross and funding views. The
+      specification's own worked example is a test: Gym €600 and Tennis €300
+      against Navigraph €140 gives 66.7% and 33.3% of €900.
+
+### Dead code
+
+- [x] `NanPolicy`, `expiryFromNow`, `MINUTE_MS` and `NeonSql` removed; `query`
+      is typed with `SqlDriver`, the contract its callers actually pass, rather
+      than `any`. Swept across every project in the repository.
 
 ## Completed — 2026-08-30 (V4.3)
 
