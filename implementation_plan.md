@@ -858,6 +858,7 @@ Each of these is one of the specification's own examples, checked rather than as
 
 ## Actions needed from the repository owner
 
+- [ ] **Authorise Vercel for pull requests from the fork.** This is now the concrete blocker rather than a general one: PR #33's Vercel check fails with *"Authorization required to deploy"* and links to `vercel.com/git/authorize?team=FrenchThylacine&slug=french-thylacine`. The deployment is a GitHub-app authorisation on the `french-thylacine` Vercel team, so nobody but the account holder can grant it. The repository's own CI — typecheck, tests and build — passes on the same commit.
 - [ ] **Deploy.** Everything from 2026-08-17 onward is committed and unverified in production. Migrations `011`, `012` and `013` will run on first boot; all are additive `ADD COLUMN IF NOT EXISTS` and were tested against a database that already had data in the pre-migration shape.
 - [ ] `RESEND_API_KEY` and a verified sender domain, for password-reset email. Everything else works without it, and `forgot-password` deliberately answers the same either way.
 - [ ] Decide whether preview deployments should be allowed to call the API (`CORS_ALLOW_VERCEL_PREVIEWS`).
