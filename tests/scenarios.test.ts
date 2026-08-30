@@ -30,8 +30,10 @@ function preset(partial: Partial<ScenarioPreset> = {}): ScenarioPreset {
 describe("scenarioDiff", () => {
   it("reports a changed budget with both values", () => {
     const changes = scenarioDiff(base(), preset({ monthlyBudget: 400 }));
+    // A key rather than a word: the preview is read in the interface's
+    // language, and this module has no translator.
     expect(changes).toEqual([
-      { kind: "budget", label: "Monthly budget", before: 500, after: 400 },
+      { kind: "budget", labelKey: "scenario.monthlyBudget", before: 500, after: 400 },
     ]);
   });
 
@@ -70,7 +72,7 @@ describe("scenarioDiff", () => {
      */
     const changes = scenarioDiff(base(), preset({ pilotIncludedInBudget: false }));
     expect(changes).toEqual([]);
-    expect(changes.some((change) => /piloting/i.test(change.label))).toBe(false);
+    expect(changes.some((change) => /piloting/i.test(change.label ?? change.labelKey ?? ""))).toBe(false);
   });
 
   it("reports each cap against its category, with its colour", () => {
@@ -104,7 +106,7 @@ describe("scenarioDiff", () => {
     // Silently dropping it would leave the user wondering why the scenario
     // does less than it says.
     expect(changes).toHaveLength(1);
-    expect(changes[0].label).toMatch(/no longer exists/);
+    expect(changes[0].labelKey).toBe("scenario.missingCategory");
     expect(changes[0].categoryId).toBe("cat-deleted");
   });
 

@@ -426,7 +426,9 @@ This used to be a private component inside the wishlist panel, which is why acti
 
 ### The application mark
 
-The identity is the A350 fin artwork supplied by the owner, mastered at `assets/brand/air-france-fin.jpg` and derived into every size by `scripts/build-icons.mjs`. It is referenced from exactly one constant, `FIN_ASSET_PATH` in `ui/FinMark.tsx`, so replacing it is editing one string.
+The identity is the Budget OS badge supplied by the owner — a Concorde over a euro sign under a tricolour band — mastered at `assets/brand/app-icon-source.jpg` and derived into every size by `scripts/build-icons.mjs`. It is referenced from exactly one constant, `APP_MARK_PATH` in `ui/AppMark.tsx`, so replacing it is editing one string.
+
+The three aircraft (`assets/brand/{concorde,a350,alphajet}-source.jpg`) are cut off their sky by the same script, turned nose-right, and derived twice: as full-colour artwork for the loading sequence and as flat white silhouettes for the tab transition. `domain/aircraft.ts` is the single list; a component asks for a length in pixels and the aspect ratio comes from the asset, so nothing reflows as an image decodes.
 
 Two framings, deliberately. The home-screen icons keep the artwork's own margin, which a launcher needs. The tab icons and the in-app mark are cropped to the fin's measured bounding box, because at 16px — or at the 30px the sidebar renders — the artwork's margin spends a quarter of the tile on empty navy. Each small size is rendered from the 1024px original rather than downsampled twice, which is what turns a fin into a smudge. The crop stays square; the fin is never squashed.
 

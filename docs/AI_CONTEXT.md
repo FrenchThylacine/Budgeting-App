@@ -278,33 +278,41 @@ There was a setting for this once (`ignoreNonBudgetSpending`, default *off*), wh
 
 ---
 
-# Piloting Category
+# No category is special
 
-Piloting is intentionally treated differently.
+**This supersedes the "Piloting Category" rule in `CODEX_MASTER_GUIDE.md`**, at the
+owner's explicit direction: *"Do not create special logic for piloting.
+Piloting is simply another activity which can be paid by me, someone else or
+outside the budget."*
 
-It remains a normal expense category.
+For a period, that rule was implemented. `piloting` was a value of
+`BudgetCategory.bucket`, and it carried powers no other category had:
 
-However—
+- `calculateYear` reported a separate `pilotingBudget`, and
+  `settings.pilotIncludedInBudget` decided whether it joined the total;
+- `summarizeMonth` split every period into `generalTotal` and `pilotingTotal`;
+- `categoryBreakdown` subtracted it from the denominator and gave it a `null`
+  share, which is the only reason the category shares needed a footnote
+  explaining why they did not add up to 100%;
+- `monthlyBudgetPlan` excluded its activities unless the setting said otherwise;
+- scenarios carried a `pilotIncludedInBudget` boolean;
+- the Spending editor kept an `isPiloting` flag in step with the category.
 
-it should not distort standard category distribution.
+All of it is gone. **Whether an activity or a transaction costs this budget
+anything is decided by its funding classification** — `personal`, `other`,
+`outside` — which is a property every activity and every transaction has, and
+which answers the same question generically. Every category now takes a share of
+the same total.
 
-Example
+What remains, deliberately:
 
-Normal budget analysis should compare:
-
-Food
-
-Housing
-
-Transport
-
-Entertainment
-
-etc.
-
-Piloting should be excluded from percentage share calculations unless explicitly requested.
-
-This behaviour is intentional.
+- `BudgetBucket` still contains `"piloting"` and `SpendingEntry.isPiloting` and
+  `Settings.pilotIncludedInBudget` are still declared, marked deprecated.
+  Records in the wild carry those values and must round-trip unchanged. Nothing
+  reads them. **Do not read them.**
+- The `bucket` field is no longer asked for in the category editor. It was a
+  required four-way choice whose only behaviour was the one described above, so
+  it had become a question nobody could answer without reading the source.
 
 ---
 

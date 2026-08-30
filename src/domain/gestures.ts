@@ -46,19 +46,27 @@ export const AVAILABLE_ACTIONS: Record<GestureSurface, SwipeActionId[]> = {
   wishlist: ["none", "buy", "edit", "delete"],
   // `deactivate` and `archive` are deliberately both offered: switching an
   // activity off is a financial act — it stops counting toward the budget —
-  // and hiding it is a presentation one. See ACTION_LABELS below.
+  // and hiding it is a presentation one. See ACTION_LABEL_KEYS below.
   activities: ["none", "deactivate", "archive", "edit", "duplicate", "delete"],
   spending: ["none", "edit", "delete"],
 };
 
-export const ACTION_LABELS: Record<SwipeActionId, string> = {
-  none: "Nothing",
-  delete: "Delete",
-  archive: "Hide from lists",
-  deactivate: "Deactivate / reactivate",
-  buy: "Buy",
-  edit: "Edit",
-  duplicate: "Duplicate",
+/**
+ * Translation keys rather than English.
+ *
+ * These labels are printed in Settings and on the revealed swipe buttons, so a
+ * French interface used to offer "Hide from lists" beside "Masquer". The
+ * component resolves them; this module stays a leaf with no dependency on the
+ * translation layer.
+ */
+export const ACTION_LABEL_KEYS: Record<SwipeActionId, string> = {
+  none: "gesture.none",
+  delete: "gesture.delete",
+  archive: "gesture.archive",
+  deactivate: "gesture.deactivate",
+  buy: "gesture.buy",
+  edit: "gesture.edit",
+  duplicate: "gesture.duplicate",
 };
 
 /**
@@ -68,9 +76,9 @@ export const ACTION_LABELS: Record<SwipeActionId, string> = {
  * because "Hide" and "Deactivate" are one keystroke apart in a list and
  * worlds apart in what they do to the budget.
  */
-export const ACTION_DESCRIPTIONS: Partial<Record<SwipeActionId, string>> = {
-  archive: "Takes the activity out of summaries. It still costs what it costs.",
-  deactivate: "Switches the activity off: it stops counting toward your budget. Nothing is deleted.",
+export const ACTION_DESCRIPTION_KEYS: Partial<Record<SwipeActionId, string>> = {
+  archive: "gesture.archiveHint",
+  deactivate: "gesture.deactivateHint",
 };
 
 /** Destructive actions render in the danger tone and confirm before they act. */

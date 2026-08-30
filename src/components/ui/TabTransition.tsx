@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
-import { AircraftMark } from "./AircraftMark";
+import { AircraftSilhouette } from "./Aircraft";
+import { useBudgetStore } from "../../store/budgetStore";
 
 interface TabTransitionProps {
   /** Changing this plays the transition. */
@@ -61,6 +62,15 @@ type Phase = "idle" | "covering" | "clearing";
 export const TabTransition: React.FC<TabTransitionProps> = ({ tabKey, children }) => {
   const [phase, setPhase] = useState<Phase>("idle");
   const [shownKey, setShownKey] = useState(tabKey);
+  /**
+   * The aircraft, taken straight from settings.
+   *
+   * Subscribed narrowly rather than to the whole snapshot: this component is
+   * mounted for the lifetime of the session and re-rendering it on every
+   * financial edit would restart nothing but would cost a render of the whole
+   * panel tree beneath it.
+   */
+  const aircraft = useBudgetStore((state) => state.snapshot.settings.aircraft);
 
   /**
    * The tree currently on screen, and the newest one the parent has produced.
@@ -127,7 +137,7 @@ export const TabTransition: React.FC<TabTransitionProps> = ({ tabKey, children }
             <span className="app-sweep-line" />
             <span className="app-sweep-node app-sweep-node-to" />
             <span className="app-sweep-craft">
-              <AircraftMark size={30} variant="solid" hull="#FFFFFF" />
+              <AircraftSilhouette id={aircraft} size={34} />
             </span>
           </div>
         </div>

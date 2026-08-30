@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useId, useRef, useState } from "react";
+import { useTranslation } from "../../i18n/useTranslation";
 
 export interface SwipeAction {
   /** Shown on the revealed panel and used as the button's accessible name. */
@@ -127,6 +128,7 @@ export const SwipeRow: React.FC<SwipeRowProps> = ({
   label,
   className = "",
 }) => {
+  const { t } = useTranslation();
   const [offset, setOffset] = useState(0);
   /**
    * Gesture state lives in refs, not in state.
@@ -298,7 +300,7 @@ export const SwipeRow: React.FC<SwipeRowProps> = ({
 
       {offset !== 0 && (
         <span id={`${groupId}-hint`} className="sr-only">
-          Actions revealed. Press Escape to close.
+          {t("swipe.actionsRevealedPressEscapeTo")}
         </span>
       )}
     </div>

@@ -3,6 +3,7 @@ import { ArrowRight, X } from "lucide-react";
 import { scenarioDiff } from "../../domain/scenarios";
 import { formatMoney } from "../../domain/currency";
 import type { BudgetSnapshot, ScenarioPreset } from "../../domain/types";
+import { useTranslation } from "../../i18n/useTranslation";
 
 interface ScenarioApplyDialogProps {
   preset: ScenarioPreset;
@@ -26,6 +27,7 @@ export const ScenarioApplyDialog: React.FC<ScenarioApplyDialogProps> = ({
   onConfirm,
   onCancel,
 }) => {
+  const { t } = useTranslation();
   const dialogRef = useRef<HTMLDivElement>(null);
   const changes = useMemo(() => scenarioDiff(snapshot, preset), [snapshot, preset]);
 
@@ -94,14 +96,14 @@ export const ScenarioApplyDialog: React.FC<ScenarioApplyDialogProps> = ({
           <h2 id="scenario-apply-title" className="text-title" style={{ margin: 0, minWidth: 0 }}>
             Apply “{preset.name}”?
           </h2>
-          <button className="btn btn-ghost btn-sm btn-icon" onClick={onCancel} aria-label="Close dialog">
+          <button className="btn btn-ghost btn-sm btn-icon" onClick={onCancel} aria-label={t("override.closeDialog")}>
             <X size={18} />
           </button>
         </div>
 
         {changes.length === 0 ? (
           <p className="text-body">
-            These settings are already in effect. Applying this scenario would change nothing.
+            {t("common.theseSettingsAreAlreadyIn")}
           </p>
         ) : (
           <>
@@ -113,7 +115,7 @@ export const ScenarioApplyDialog: React.FC<ScenarioApplyDialogProps> = ({
             <ul className="scenario-diff">
               {changes.map((change) => (
                 <li
-                  key={`${change.kind}-${change.categoryId ?? change.activityId ?? change.label}`}
+                  key={`${change.kind}-${change.categoryId ?? change.activityId ?? change.labelKey ?? change.label}`}
                   className="scenario-diff-row"
                 >
                   <span className="scenario-diff-label">
@@ -124,7 +126,7 @@ export const ScenarioApplyDialog: React.FC<ScenarioApplyDialogProps> = ({
                         aria-hidden="true"
                       />
                     )}
-                    {change.label}
+                    {change.labelKey ? t(change.labelKey) : change.label}
                   </span>
                   <span className="scenario-diff-values">
                     <span className="scenario-diff-before money">{format(change.before)}</span>
@@ -138,15 +140,15 @@ export const ScenarioApplyDialog: React.FC<ScenarioApplyDialogProps> = ({
         )}
 
         <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 20 }}>
-          <button className="btn btn-secondary" onClick={onCancel}>Cancel</button>
+          <button className="btn btn-secondary" onClick={onCancel}>{t("common.cancel")}</button>
           <button className="btn btn-primary" onClick={onConfirm} disabled={changes.length === 0}>
-            Apply scenario
+            {t("common.applyScenario")}
           </button>
         </div>
 
         {changes.length > 0 && (
           <p className="text-note" style={{ margin: "12px 0 0" }}>
-            This can be undone with Ctrl+Z.
+            {t("common.thisCanBeUndoneWith")}
           </p>
         )}
       </div>

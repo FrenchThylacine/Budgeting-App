@@ -97,6 +97,7 @@ import {
   Orbit, Usb, Waypoints, Webcam,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import { useTranslation } from "../../i18n/useTranslation";
 
 /**
  * Icon picker
@@ -506,12 +507,7 @@ for (const option of ICON_CATEGORIES.flatMap((category) => category.icons)) {
   if (!ICON_INDEX.has(option.name)) ICON_INDEX.set(option.name, option);
 }
 
-export const ICON_COUNT = ICON_INDEX.size;
 
-/** Every icon name this picker can offer, in display order. */
-export function iconNames(): string[] {
-  return Array.from(ICON_INDEX.keys());
-}
 
 /** Looks up an icon component by stored name. Unknown names never throw. */
 export function resolveIcon(name: string | null | undefined): LucideIcon {
@@ -550,7 +546,9 @@ interface IconPickerProps {
 
 const COLUMNS = 5;
 
-export const IconPicker: React.FC<IconPickerProps> = ({ value, onChange, accent, label = "Icon", disabled }) => {
+export const IconPicker: React.FC<IconPickerProps> = ({ value, onChange, accent, label, disabled }) => {
+  const { t } = useTranslation();
+  const fieldLabel = label ?? t("mark.icon");
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
@@ -693,7 +691,7 @@ export const IconPicker: React.FC<IconPickerProps> = ({ value, onChange, accent,
         onClick={() => setOpen((current) => !current)}
         aria-haspopup="listbox"
         aria-expanded={open}
-        aria-label={`${label}: ${iconLabel(value)}`}
+        aria-label={`${fieldLabel}: ${iconLabel(value)}`}
         style={{ width: "100%", justifyContent: "flex-start", gap: 10, minWidth: 0, overflow: "hidden" }}
       >
         <span
@@ -747,8 +745,8 @@ export const IconPicker: React.FC<IconPickerProps> = ({ value, onChange, accent,
                 className="input"
                 type="search"
                 value={query}
-                placeholder="Search icons"
-                aria-label="Search icons"
+                placeholder={t("icons.searchIcons")}
+                aria-label={t("icons.searchIcons")}
                 onChange={(event) => setQuery(event.target.value)}
                 onKeyDown={onSearchKeyDown}
                 style={{ height: 34, paddingLeft: 28, fontSize: "0.875rem" }}
@@ -758,7 +756,7 @@ export const IconPicker: React.FC<IconPickerProps> = ({ value, onChange, accent,
               type="button"
               className="btn btn-ghost btn-sm btn-icon"
               onClick={() => close()}
-              aria-label="Close icon picker"
+              aria-label={t("icons.closeIconPicker")}
             >
               <X size={14} />
             </button>
@@ -778,7 +776,7 @@ export const IconPicker: React.FC<IconPickerProps> = ({ value, onChange, accent,
               No icon matches “{query}”.
             </p>
           ) : (
-            <div role="listbox" aria-label="Activity icons" onKeyDown={onGridKeyDown}>
+            <div role="listbox" aria-label={t("icons.activityIcons")} onKeyDown={onGridKeyDown}>
               {groups.map((group) => (
                 <div key={group.id} style={{ marginBottom: 10 }}>
                   <div className="text-footnote" style={{ marginBottom: 6 }}>
@@ -852,15 +850,17 @@ export const ACTIVITY_COLORS = [
   "#64748B",
 ];
 
-export const ColorPicker: React.FC<ColorPickerProps> = ({ value, onChange, disabled }) => (
-  <div role="group" aria-label="Activity colour" style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6 }}>
+export const ColorPicker: React.FC<ColorPickerProps> = ({ value, onChange, disabled }) => {
+  const { t } = useTranslation();
+  return (
+  <div role="group" aria-label={t("icons.activityColour")} style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6 }}>
     <button
       type="button"
       onClick={() => onChange(undefined)}
       disabled={disabled}
-      aria-label="No colour"
+      aria-label={t("icons.noColour")}
       aria-pressed={!value}
-      title="No colour"
+      title={t("icons.noColour")}
       style={{ ...swatchStyle, background: "var(--bg-inset)", borderColor: !value ? "var(--text-primary)" : "var(--border)" }}
     >
       {!value && <X size={12} color="var(--text-secondary)" aria-hidden="true" />}
@@ -871,7 +871,7 @@ export const ColorPicker: React.FC<ColorPickerProps> = ({ value, onChange, disab
         type="button"
         onClick={() => onChange(color)}
         disabled={disabled}
-        aria-label={`Colour ${color}`}
+        aria-label={t("icons.colourNamed", { colour: color })}
         aria-pressed={value === color}
         title={color}
         style={{
@@ -892,13 +892,14 @@ export const ColorPicker: React.FC<ColorPickerProps> = ({ value, onChange, disab
         value={value && /^#[0-9a-f]{6}$/i.test(value) ? value : "#0071E3"}
         onChange={(event) => onChange(event.target.value)}
         disabled={disabled}
-        aria-label="Custom colour"
+        aria-label={t("icons.customColour")}
         style={{ width: 26, height: 26, padding: 0, border: "1px solid var(--border)", borderRadius: 8, background: "transparent" }}
       />
-      Custom
+      {t("icons.custom")}
     </label>
   </div>
-);
+  );
+};
 
 const swatchStyle: React.CSSProperties = {
   display: "grid",

@@ -23,9 +23,6 @@ export function setCacheOwner(userId: string | null): void {
   activeKey = userId ? `user:${userId}` : null;
 }
 
-export function currentCacheOwner(): string | null {
-  return activeKey;
-}
 
 /**
  * Thrown when the cache is used before an owner is set.

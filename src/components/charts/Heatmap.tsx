@@ -1,6 +1,7 @@
 import React from "react";
 import { ChartFrame, chartName, useChartTooltip, type ChartName } from "./ChartFrame";
 import { clamp, finiteValues } from "./scale";
+import { useTranslation } from "../../i18n/useTranslation";
 
 export interface HeatmapCell {
   /** Stable key, typically the ISO date. */
@@ -169,7 +170,9 @@ const HeatmapScale: React.FC<{ color: string; max: number; formatValue: (value: 
   color,
   max,
   formatValue,
-}) => (
+}) => {
+  const { t } = useTranslation();
+  return (
   <div
     style={{
       display: "flex",
@@ -180,7 +183,7 @@ const HeatmapScale: React.FC<{ color: string; max: number; formatValue: (value: 
       color: "var(--text-tertiary)",
     }}
   >
-    <span>No spend</span>
+    <span>{t("chart.noSpend")}</span>
     <span style={{ display: "flex", gap: 3 }}>
       {[0.12, 0.32, 0.52, 0.72, 0.9].map((opacity) => (
         <span
@@ -201,7 +204,8 @@ const HeatmapScale: React.FC<{ color: string; max: number; formatValue: (value: 
         }}
         aria-hidden="true"
       />
-      Not recorded
+      {t("chart.notRecorded")}
     </span>
   </div>
-);
+  );
+};

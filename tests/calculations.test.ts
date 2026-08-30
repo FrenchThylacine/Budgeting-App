@@ -48,14 +48,20 @@ function recurringActivity(overrides: Partial<Activity>): Activity {
 }
 
 describe("budget calculations", () => {
-  it("keeps piloting separated while preserving full totals", () => {
+  it("reports the gross cost of every activity, and what the budget carries", () => {
     const snapshot = createSeedBudgetSnapshot(NOW);
     const result = calculateYear(snapshot, NOW);
 
-    expect(result.generalBudget).toBeGreaterThan(0);
-    expect(result.pilotingBudget).toBeGreaterThan(0);
-    expect(result.combinedBudget).toBeCloseTo(result.generalBudget + result.pilotingBudget, 8);
-    expect(result.includedBudget).toBeCloseTo(result.combinedBudget, 8);
+    // No category is treated specially any more: the gross is every active
+    // activity, and the charged figure is the ones this budget funds.
+    const gross = result.activityEstimates.reduce((sum, item) => sum + item.monthlyBase, 0);
+    const mine = result.activityEstimates
+      .filter((item) => item.funding === "personal")
+      .reduce((sum, item) => sum + item.monthlyBase, 0);
+
+    expect(result.combinedBudget).toBeCloseTo(gross, 8);
+    expect(result.includedBudget).toBeCloseTo(mine, 8);
+    expect(result.combinedBudget).toBeGreaterThan(0);
   });
 
   it("shows NaN only for closed empty periods", () => {
@@ -116,33 +122,46 @@ describe("budget calculations", () => {
   it("suggests a monthly budget from the costs actually required that month", () => {
     const snapshot = createSeedBudgetSnapshot(NOW);
     snapshot.settings.baseCurrency = "EUR";
-    // Whether piloting counts is a setting, and the suggestion now follows it
-    // rather than excluding piloting unconditionally — the old behaviour meant
-    // a budget that *did* include piloting was suggested a figure that could
-    // not cover it.
-    snapshot.settings.pilotIncludedInBudget = false;
     snapshot.years["2026"].activities = [
       recurringActivity({ id: "normal-recurring", categoryId: catId(snapshot, "cat-other"), pricePerMonth: 1234, estimatedCost: 1234 }),
-      recurringActivity({ id: "pilot-recurring", categoryId: catId(snapshot, "cat-piloting"), pricePerMonth: 9999, estimatedCost: 9999 }),
+      // In a category the application once treated specially. It does not any
+      // more: every active activity this budget pays for is part of what the
+      // month requires, whatever category it is filed under.
+      recurringActivity({ id: "aviation-recurring", categoryId: catId(snapshot, "cat-piloting"), pricePerMonth: 9999, estimatedCost: 9999 }),
       recurringActivity({ id: "inactive-recurring", active: false, pricePerMonth: 500, estimatedCost: 500 }),
     ];
 
     const suggestion = calculateSuggestedMonthlyBudget(snapshot);
 
+    expect(suggestion.recurringTotal).toBe(1234 + 9999);
+    expect(suggestion.suggestedAmount).toBe(11300);
+  });
+
+  it("leaves out an activity somebody else pays for, whatever its category", () => {
+    const snapshot = createSeedBudgetSnapshot(NOW);
+    snapshot.settings.baseCurrency = "EUR";
+    snapshot.years["2026"].activities = [
+      recurringActivity({ id: "mine", categoryId: catId(snapshot, "cat-other"), pricePerMonth: 1234, estimatedCost: 1234 }),
+      recurringActivity({
+        id: "theirs",
+        categoryId: catId(snapshot, "cat-piloting"),
+        pricePerMonth: 9999,
+        estimatedCost: 9999,
+        fundingSource: "other",
+      }),
+    ];
+
+    // A budget is money this budget has to find. Funding decides that now —
+    // not the category, which is what the removed "include piloting" setting
+    // used to decide it by.
+    const suggestion = calculateSuggestedMonthlyBudget(snapshot);
     expect(suggestion.recurringTotal).toBe(1234);
     expect(suggestion.suggestedAmount).toBe(1300);
-
-    // Turned on, the piloting activity is part of what the month requires.
-    snapshot.settings.pilotIncludedInBudget = true;
-    const withPiloting = calculateSuggestedMonthlyBudget(snapshot);
-    expect(withPiloting.recurringTotal).toBe(1234 + 9999);
-    expect(withPiloting.suggestedAmount).toBe(11300);
   });
 
   it("rounds suggested budget up to the next hundred in USD", () => {
     const snapshot = createSeedBudgetSnapshot(NOW);
     snapshot.settings.baseCurrency = "USD";
-    snapshot.settings.pilotIncludedInBudget = false;
     snapshot.years["2026"].activities = [
       recurringActivity({ id: "usd-recurring", categoryId: catId(snapshot, "cat-other"), currency: "USD", pricePerMonth: 5678, estimatedCost: 5678 }),
     ];

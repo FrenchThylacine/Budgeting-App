@@ -2,19 +2,122 @@
 
 This is the active engineering tracker. A checkbox is ticked only after implementation **and** the relevant verification have both succeeded. "The code exists" is never sufficient.
 
-**Last updated:** 2026-08-27 — a three-way funding classification, per-month budget requirements from real payment dates, a rebuilt Wallet that is a treasury rather than a number, the whole of ISO 4217 with live cross rates, generic scenarios, an interactive tour, a real notification permission request, and a translation layer with five languages.
+**Last updated:** 2026-08-29 — a new identity built from the supplied artwork, a formation loading sequence, six measured themes, five genuinely complete languages including the reports, no special categories, an interactive tour, a second currency, a rebuilt report, and a browser harness that drives all of it.
 
-**Verification state.** **789 tests across 42 files, all passing**: 707 unit and 82 integration against a real PostgreSQL 17 database (`budget_verify`, thrown away afterwards, never production data). Migrations `014` and `015` were each **falsified** — removed and re-run — to confirm the suites genuinely depend on them. TypeScript compiles clean for both the client and the server, and the production bundle builds. **The 2026-08-27 feature set was then driven through a real Chrome** against a throwaway local PostgreSQL database (`budget_browser`), on a brand-new account, at 1440px, 390px and 320px, in both themes. Nothing from 2026-08-17 onward is verified in production.
+**Verification state.** **771 unit tests across 42 files, all passing** (82 database integration tests skipped without `TEST_DATABASE_URL`), TypeScript clean for both targets, and **`scripts/verify-browser.mjs` driving a real Chrome against a throwaway PostgreSQL 17 database on a brand-new account each run**. Nothing from 2026-08-17 onward is verified in production.
 
 ## How this session verified things
 
-- **Real PostgreSQL.** A throwaway PostgreSQL 17 instance on port 55432. The Neon driver speaks HTTP to Neon only, so `setDatabase()` injects a node-postgres adapter with the same interface; the SQL under test is byte-for-byte what production sends.
-- **Falsification, not just confirmation.** Migration `014`'s `funding_source` column was deleted and the suite re-run: **31 integration tests failed** with the exact 42703 shape the migration exists to prevent. The same was done for `015`'s `wallet_entries.date`: **29 failures**. Both were restored and the suite re-run green.
-- **Real browser, real account.** Chrome DevTools drove a genuinely new account created through the sign-up form. Every figure quoted in the table below was read off the rendered page, not computed in a test.
-- **The specification's own worked examples, twice.** As tests, and again by hand: Navigraph at €81.64 renewing on 14 September; the €600 allocation spent down to €375; and the twenty-four-step acceptance scenario in §44, driven end to end through the interface.
-- **Black and white, by removing the colour.** The generated report was rendered in an iframe under `filter: grayscale(1)` and read back. Every distinction survived.
+- **A browser harness instead of a habit.** `scripts/lib/cdp.mjs` speaks the Chrome DevTools Protocol over Node 22's built-in WebSocket — about two hundred lines, no browser-automation dependency, and no Playwright. `scripts/verify-browser.mjs` creates its own account and drives the loading sequence, all six themes, the three aircraft, the transition's direction, the period selector's layering, the second currency, the specification's own gym, the funding split, the wallet and its reset, and the report.
+- **It found four defects on its first pass**, every one of which had passed the unit suite: `/month avg.` and `/year` hardcoded on the activity card; the loose English word "per" wedged between two controls where no translation could move it; "August 2026" printed directly above "1 août 2026 – 31 août 2026"; and "Mois En Cours", from three CSS rules applying `text-transform: capitalize` to text that used to be an interpolated lower-case English word.
+- **Then a fifth, and a sixth**, on the second pass: "8.86" with a full stop in a French sentence otherwise full of commas, and "tous les 5 semaines" — an article glued in front of a noun whose gender the sentence could not know.
+- **Contrast is measured, not eyeballed.** The themes are data, so `tests/theme-contrast.test.ts` walks every preset in both appearances and asserts every text token against every surface. Thirty assertions, and a theme that fails one fails the build.
+- **Translation completeness is a test, not a claim.** `tests/i18n.test.ts` asserts both directions: every key the source asks for exists in English, and every language marked *translated* covers the whole English key set. 1,054 keys × 5 languages.
 
-Anything that could not be verified this way is under *Not verified* and stays unticked.
+## Completed — 2026-08-29
+
+### Identity, from the supplied artwork
+
+- [x] **The Budget OS badge is the identity.** `assets/brand/app-icon-source.jpg` — a Concorde over a euro sign under a tricolour — is the master, and `scripts/build-icons.mjs` derives the favicon (ICO 16/32/48, PNG 32/96), the home-screen icons (192, 512), a maskable icon, the Apple touch icon and the in-app mark. Verified: the mark decodes on the sign-in card, and every size renders.
+- [x] **The supplied JPEGs are cut out rather than keyed.** The badge arrived with its transparency flattened onto a checkerboard and the aircraft on a watercolour sky; neither can be removed by colour, because the badge's outlines use the same near-black the checkerboard does and the Concorde is as white as the sky's brightest area. `scripts/lib/cutout.mjs` flood-fills inward from the border with a predicate, keeps only the largest connected shape for the aircraft, and feathers the alpha so a JPEG's edge ramp dissolves rather than fringes.
+- [x] **The A350 speck.** The A350 arrived with a mark below its tail that survived the flood fill as its own island and defeated every subsequent `-trim`, padding the finished asset by 40% of its height with empty space. The largest-component filter is why the asset is 560×587 rather than 560×839.
+- [x] **The old identity is deleted**, not left beside the new one: `assets/brand/air-france-fin.jpg`, `public/brand/fin.png`, `public/aircraft.png`, `ui/FinMark.tsx` and `ui/AircraftMark.tsx`.
+- [x] **Three aircraft, each derived twice**: full-colour artwork for the loading sequence and a flat white silhouette — from the artwork's own alpha, not redrawn — for the tab transition. All nose-right, because every animation here travels left to right. Verified in the browser: three distinct silhouettes, all decoding.
+
+### The loading sequence
+
+- [x] **A Patrouille de France formation.** The chosen aircraft holds the centre while two Alpha Jets orbit it on an ellipse, one trailing blue and one red; on ready they roll out of the turn and form up behind it, a third joins trailing white, the ribbons settle into a tricolour, and the formation accelerates right — the departure is what uncovers the application. Verified: the phase sequence `orbit → join → settle → depart → gone` runs on every load.
+- [x] **Driven by `requestAnimationFrame`, deliberately.** The escorts must leave the orbit from wherever they are the instant the data arrives; a CSS animation cannot be interrupted and continued from its current value, and swapping animations snaps to the new one's first frame — a visible jump on the one screen every user sees.
+- [x] **The narrative has a floor and the orbit does not.** A warm reload is ready in 150ms, and a formation join played in 150ms is a flicker. Join, settle and depart are fixed at ≈1.5s; only the orbit is elastic.
+- [x] **Reduced motion is honoured by not animating at all** — the formation is simply there, and the screen leaves when the data does.
+- [x] The lead aircraft is a preference, defaulting to Concorde, mirrored into `localStorage` because the loading screen runs before the snapshot exists.
+
+### The transition
+
+- [x] **The aircraft is the user's**, and the silhouettes are the supplied artwork treated as white icons rather than redrawn. Verified: choosing the A350 changes `/craft/a350-silhouette.png` in the sweep.
+- [x] **Still left to right, always.** Re-verified by reading `animation-name` in both directions: `appSweepCover` / `craftRun` either way.
+- [x] The craft is centred by `translateY(-50%)` rather than a fixed negative margin, because the three silhouettes have three different heights.
+
+### Themes
+
+- [x] **Six presets** — Air France, Concorde, Paper, Deep black, Alpine, Plum — each with a light and a dark map, plus **Light / Dark / System**, where System subscribes to `prefers-color-scheme` rather than reading it once.
+- [x] **They are data, so they are measured.** `tests/theme-contrast.test.ts`: every text token against every surface, both appearances, every preset, WCAG AA. Plus a drift guard asserting the default preset and the stylesheet still agree — the stylesheet carries it so the app paints before any script runs.
+- [x] **Deep black is dark by design** and says so: the appearance control is disabled rather than silently ignored. Verified in the browser: `#000000`, forced dark, control disabled.
+- [x] The theme toggle in the header writes `appearance` *and* `darkMode`, so nothing that still reads the old boolean disagrees with the page.
+
+### Translation: five languages, everywhere
+
+- [x] **1,054 keys × 5 languages, with a test on both directions.** Every key the source asks for exists; every translated language covers the whole English key set.
+- [x] **The reports are translated**, including their headings, labels, notes, month names, number formats, `<html lang>` and `dir="rtl"`.
+- [x] **`domain/storedText.ts`.** The store writes `@audit.activityAdded|name=Padel` rather than an English sentence, and the interface resolves it in the language being read *now*. Values are percent-encoded so a category called "Food | Drink" cannot break the parse; anything the user typed never begins with `@` and passes through untouched; rows written before this keep their English (11 tests).
+- [x] **`AuditLog.historicalPeriod` stores a token, not a label.** It stored `periodLabel(settings)`, so a record written in a French session read "juillet 2026" for ever. It stores `month:2026-07` and is formatted at read time.
+- [x] **The audit summary is no longer suffixed.** `${summary} (historical edit · …)` would have corrupted a `@key|name=value` sigil by appending to its last parameter — and the same two facts are already on the record.
+- [x] **Sentences built by concatenation are gone** from the activity preview, the schedule summary, the payment cycle, the health factors, the dashboard widgets, the wishlist priorities and the scenario diff. Each is a key with named values.
+- [x] **`financialHealth` returns a grade id**, not an English adjective that was also a colour lookup key.
+- [x] **The period label follows the chosen locale.** "August 2026" sat directly above "1 août 2026 – 31 août 2026"; both come from `Intl` against the same locale now.
+- [x] Three `text-transform: capitalize` rules removed: they existed for interpolated lower-case English words, and turned "Mois en cours" into "Mois En Cours".
+- [x] Numbers inside sentences go through the locale — "8,86", not "8.86".
+- [x] "every 5 weeks" is one key per unit, because the French article agrees with the noun.
+
+### No special categories
+
+- [x] **Every piloting behaviour removed**: the separate budget total, `pilotIncludedInBudget`, the `generalTotal`/`pilotingTotal` split, the share-denominator exemption, the monthly-plan exclusion, the scenario boolean and the spending editor's `isPiloting` flag. Funding decides what costs this budget anything, for every activity and every transaction.
+- [x] **Every category takes a share of the same total**, which is why the shares no longer need a footnote explaining why they do not sum to 100.
+- [x] **The `bucket` field is no longer asked for.** A required four-way choice whose only behaviour was the one just deleted.
+- [x] The stored fields stay declared and deprecated so records in the wild round-trip. Nothing reads them.
+
+### The tour, made interactive
+
+- [x] **Six of thirteen steps wait for the reader to do the thing** — pin a currency, add an activity, record a transaction, try paid-by-other, allocate a budget, save a scenario — with the tick read from the real snapshot rather than from a flag the tour sets for itself (22 tests).
+- [x] **"Skip this step" beside every locked Next.** A tour that traps somebody is worse than one that teaches nothing.
+- [x] **"Decide later" is a third answer.** It does not reopen the tour; a single dismissible reminder appears instead, resumable at the step it was left on. Dismissing the reminder ends it without ending the offer — Settings still has the button.
+
+### Exchange rates, without a settings category
+
+- [x] **Rates refresh when the application opens.** `fetchExchangeRates` existed, was unit-tested and had no caller anywhere in `src/` — a new account held no rates at all until somebody found the Currencies tab and pressed *Update now*. `refreshRatesOnOpen` now runs once per session after hydration.
+- [x] **Nothing is written unless something changed.** Storing an identical rate set would bump the snapshot revision and push a sync to every other device, to record that nothing happened. The same guard covers repeated failures.
+- [x] **A failed refresh is recorded, never disguised.** `ratesCheckedAt` and `ratesLastError` move; `ratesUpdatedAt` does not, so the pair sheet says *stale* or *failed* rather than presenting last week's numbers as today's (5 tests).
+- [x] **Found by the browser, not by the tests**: React StrictMode mounts, unmounts and remounts the effect on the same fiber, so the once-per-session ref was already set when the second run arrived — and the first run's cleanup had cancelled the only fetch ever made. The unit tests passed throughout.
+- [x] Exchange Rate Mode verified end to end: the warm overlay *and* a sentence saying what it is, unpin buttons withdrawn while it is on, two presses opening the pair with the rate in both directions, and a close that clears the picks.
+
+### The second currency
+
+- [x] An amount recorded in another currency shows its equivalent underneath, with the original as the primary figure.
+- [x] **Absent whenever it would be a guess** — not configured, already in that currency, or no rate connecting the pair. `rateToBase` falls back to 1:1 to keep the interface rendering; printing that under a real transaction would state a fabricated figure as calmly as a real one (9 tests).
+
+### The report, rebuilt
+
+- [x] Sans-serif, a hero row of the four figures the report exists to give, the funding split as one proportional bar, compact tables, and notes reduced from four paragraphs to one or two lines.
+- [x] **Black and white is still a tested property.** Each segment of the split bar keeps its border when the fill is dropped and carries its glyph and share inside it; ● ◆ ▲ and written labels survive; "over cap" is a word in a box; the emphasised card is distinguished by border weight (25 tests).
+- [x] The health score is no longer printed twice on one page.
+
+### Simplification
+
+- [x] **Settings in five groups** rather than one column of eleven sections.
+- [x] **The header lost five of its eight lines** — every one of them repeated by the period selector directly beneath it.
+- [x] **The error screen is styled.** It used Tailwind utility classes this project has never had, so every one resolved to nothing: the one screen shown when something has already gone wrong was unstyled black text on white.
+- [x] **Removed**: `budget-refactor-prompt/` (a snapshot from three refactors ago), `work/` (one-off diagnostics and a Playwright script), `new_chat.md`, a Windows `.lnk` with an absolute path, and thirty dead translation keys.
+
+### The browser harness
+
+- [x] **`scripts/lib/cdp.mjs`** — a CDP client over Node 22's WebSocket. Real mouse events rather than `element.click()`, because "can this actually be pressed" is the question a harness exists to answer; React-aware value setting, because `element.value = x` is invisible to React's value tracker.
+- [x] **`scripts/verify-browser.mjs`** — a fresh account per run, and stable `data-tab` / `data-field` / `data-action` / `data-auth` hooks in the components, because labels are translated and text is not an address.
+- [x] Deliberately no way to run one check in isolation: the checks are one session, and running the twelfth alone would test nothing and report a pass.
+
+## In progress / next — current
+
+- [ ] Exercise the Neon HTTP driver's `sql.transaction([...])` specifically. Production runs on it; the integration suite drives an adapter with the same interface, not the driver itself.
+- [x] Extend the browser harness to 390px and 320px, and to the dark themes, so the responsive and contrast sweeps are automated rather than repeated by hand. *(Done 2026-08-29: both widths sweep all eight tabs for overflow and sub-24px targets, and the contrast sweep runs over Air France and Deep black.)*
+- [ ] Deploy, and re-verify in production. Everything from 2026-08-17 onward is unverified there.
+
+## Discovered issues — open, current
+
+- [ ] **The icon library's 244 labels are English.** They are a data table rather than prose — the picker searches English keywords as well — and translating them is 244 nouns × 4 languages for a searchable index. The picker's own interface (search, close, the colour controls) is translated.
+- [ ] **The Excel import's warnings are English.** They name English cell labels from the workbook they are describing ("the Budget sheet has no \"Activities\" header cell"), and the dialog is reached only when the user chooses a file. Recorded rather than silently accepted.
+- [ ] **`sessionsPerMonth` and `sessionsPerPeriod` both describe a frequency.** Merging them would migrate every existing `perSession` activity, which is not worth doing for tidiness alone.
+- [ ] **The wallet does not model transfers between currencies.** A movement has one currency and converts for display; moving €100 into a dollar wallet is two entries, not one.
+- [ ] **Notifications are permission-only.** Nothing yet *schedules* a reminder: a real push pipeline needs VAPID keys and a server endpoint, and inventing one would be the "fake permission request" the brief forbids in another form.
+- [ ] `xlsx@0.18.5` carries two high-severity advisories with no registry fix.
 
 ## Verified in a browser, against real PostgreSQL — 2026-08-27
 
@@ -71,12 +174,12 @@ Four of these are the reason browser verification is not optional: every one pas
 - [x] **The wallet ledger stored English sentences.** "Budget for August 2026" was written into the database, so it could never change language afterwards. The store writes `@key` sigils and the panel resolves them; anything the *user* typed passes through untouched. Rows written before the fix keep their stored text — rewriting saved records to change their wording would be worse than the bug. Re-verified: a new transfer renders fully in French.
 - [x] **Reset wallet left the personal balance at −€600.** Zeroing the cash while the ledger still claimed €600 of budget money asserts a contradiction the user can see. The reset now releases the budget claim first. Re-verified: €1 550 / €600 / €950 → **0 / 0 / 0**.
 
-## In progress / next
+## In progress / next — as of 2026-08-27 *(historical)*
 
-- [ ] Exercise the Neon HTTP driver's `sql.transaction([...])` specifically. Production runs on it; the integration suite drives an adapter with the same interface, not the driver itself.
-- [ ] Automate the browser checks (Playwright). Everything in the table above was driven by hand through DevTools; there is still no end-to-end harness, and a stale Chrome process blocked this work for part of the session.
-- [ ] Translate the reports, and finish translation coverage on the dashboard, analytics, wishlist, categories and history. See the open issues.
-- [ ] Deploy, and re-verify in production. Everything from 2026-08-17 onward is unverified there.
+- [ ] Exercise the Neon HTTP driver's `sql.transaction([...])` specifically. Production runs on it; the integration suite drives an adapter with the same interface, not the driver itself. *(Still open — see the current list above.)*
+- [x] Automate the browser checks. *(Done 2026-08-29 — as `scripts/verify-browser.mjs`, driving Chrome over CDP directly rather than through Playwright.)*
+- [x] Translate the reports, and finish translation coverage on the dashboard, analytics, wishlist, categories and history. *(Done 2026-08-29 — 1,087 keys in five languages, reports included.)*
+- [ ] Deploy, and re-verify in production. *(Still open.)*
 
 ## Completed — 2026-08-27
 
@@ -184,24 +287,25 @@ Everything in this section is **implemented, covered by automated tests, and —
 - [x] The three treasury figures replace the single wallet total.
 - [x] Still entirely self-contained: no `<link>`, no `<img>`, no external URL, and user text escaped (asserted).
 
-## Not verified — other
+## Not verified — as of 2026-08-27 *(historical)*
 
 - [ ] Multi-device sync **in production**. Verified locally against PostgreSQL with two isolated contexts; the production instance has no data in it yet.
 - [ ] Live exchange rates **from the production runtime**. The daily-schedule and failure semantics are unit-tested against a stubbed provider; the last real fetch from `open.er-api.com` was on 2026-08-21.
 - [ ] Print/PDF output on a real printer **dialog**. The report was rendered and read back under a greyscale filter — which is what a monochrome printer does to it — and its black-and-white properties are asserted in tests. Nobody has pressed Print against a physical printer.
 - [ ] Swipe gestures on a **physical touchscreen**.
 
-## Discovered issues — open
+## Discovered issues — open as of 2026-08-27 *(historical; closed items marked)*
 
-- [ ] **Reports are written in English only.** The report model and its HTML are not translated: a French user gets a French interface and an English report. The activity "reason" keys are resolved against the English dictionary there deliberately, so nothing prints a raw key — but the section headings, summary labels and notes are English. Threading a translator through `buildPeriodReport`/`reportHtml` is the fix, and it is roughly forty more keys in five languages.
-- [ ] **Translation coverage is partial outside the panels this session touched.** Navigation, activities, spending, currencies, the wallet, scenarios, the tour and the notification settings are translated. The dashboard, the analytics page, the wishlist, categories and history still carry English strings, and the period selector's "CURRENT PERIOD" / "Pending" / "Saved" chrome does too. The architecture is right — every one of these is a `t()` call and a dictionary row, not a rewrite.
-- [ ] **The first paint grew from 94 kB to 125 kB gzipped.** Measured. The four non-English dictionaries and the tour are code-split, and the remaining growth is the currency dataset, the 76-language list, the English dictionary and the new domain modules. Worth another pass; not worth blocking on.
+- [x] **Reports are written in English only.** *(Closed 2026-08-29: `buildPeriodReport`/`reportHtml` take a translator, and the harness asserts a French report.)*
+  Original note: the report model and its HTML are not translated: a French user gets a French interface and an English report. The activity "reason" keys are resolved against the English dictionary there deliberately, so nothing prints a raw key — but the section headings, summary labels and notes are English. Threading a translator through `buildPeriodReport`/`reportHtml` is the fix, and it is roughly forty more keys in five languages.
+- [x] **Translation coverage is partial outside the panels this session touched.** *(Closed 2026-08-29: tests assert no missing, untranslated or unused keys in any of the five dictionaries.)* Original note: Navigation, activities, spending, currencies, the wallet, scenarios, the tour and the notification settings are translated. The dashboard, the analytics page, the wishlist, categories and history still carry English strings, and the period selector's "CURRENT PERIOD" / "Pending" / "Saved" chrome does too. The architecture is right — every one of these is a `t()` call and a dictionary row, not a rewrite.
+- [x] **The first paint grew from 94 kB to 125 kB gzipped.** *(Closed 2026-08-29: the report, the workbook import and each non-English dictionary are separate chunks; the entry is 130 kB gzipped with considerably more in it.)* Original note: Measured. The four non-English dictionaries and the tour are code-split, and the remaining growth is the currency dataset, the 76-language list, the English dictionary and the new domain modules. Worth another pass; not worth blocking on.
 - [ ] **`sessionsPerMonth` and `sessionsPerPeriod` both describe a frequency**, unchanged from the previous session.
 - [ ] **The wallet does not model transfers between currencies.** A movement has one currency and converts for display; moving €100 into a dollar wallet is two entries, not one.
 - [ ] **Notifications are permission-only.** The request, the stored choice, the states and a test notification all work; nothing yet *schedules* a reminder. No service worker and no push subscription — a real push pipeline needs VAPID keys and a server endpoint, and inventing one would be exactly the "fake permission request" the brief forbids in another form.
 - [ ] `xlsx@0.18.5` carries two high-severity advisories with no registry fix, unchanged from the previous session.
-- [ ] No component or end-to-end tests beyond `tests/editor-typing.test.tsx`. This session made that gap expensive: with a Playwright harness the browser verification above would not have been blocked by one stale Chrome process.
-- [ ] `HorizontalBarChart` reserves a fixed minimum height, so a one-row breakdown leaves a tall empty card.
+- [x] No component or end-to-end tests beyond `tests/editor-typing.test.tsx`. *(Closed 2026-08-29: 42 browser checks, plus component tests.)*
+- [x] `HorizontalBarChart` reserves a fixed minimum height, so a one-row breakdown leaves a tall empty card. *(Closed 2026-08-29: measured at 48px for a one-row chart — the reserved height had already gone.)*
 
 ## Discovered issues — closed 2026-08-27
 

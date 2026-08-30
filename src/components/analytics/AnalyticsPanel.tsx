@@ -48,7 +48,6 @@ import {
  * Every section opens with a visual and lets the numbers underneath supply
  * the detail. Three rules from the project bible drive the data handling:
  *  - 0 is a real value; a period with no records is drawn as a gap or "?";
- *  - piloting spend stays visible but never enters a share percentage;
  *  - currency conversion is presentation only (formatDualMoney / normalizeEntry).
  */
 
@@ -126,16 +125,16 @@ const StatRow: React.FC<{ items: Stat[]; columns?: number }> = ({ items, columns
 );
 
 const GRADE_COLOR: Record<string, string> = {
-  Excellent: "var(--success-text)",
-  Good: "var(--success-text)",
-  Fair: "var(--warning-text)",
-  "At risk": "var(--danger-text)",
+  excellent: "var(--success-text)",
+  good: "var(--success-text)",
+  fair: "var(--warning-text)",
+  "at-risk": "var(--danger-text)",
 };
 
 // ─── Main Panel ───────────────────────────────────────────────────────────────
 
 export const AnalyticsPanel: React.FC = () => {
-  const { t } = useTranslation();
+  const { t, language, formatPercent } = useTranslation();
   const snapshot = useBudgetStore((state) => state.snapshot);
   const { settings } = snapshot;
   const mode = settings.selectedPeriodMode ?? "month";
@@ -192,7 +191,7 @@ export const AnalyticsPanel: React.FC = () => {
     const entries = budgetRelevantEntries(entriesForSelectedPeriod(snapshot, lastYearSettings), settings);
     if (entries.length === 0) return null;
     return {
-      label: periodLabel(lastYearSettings),
+      label: periodLabel(lastYearSettings, language),
       total: spendingStats(entries, snapshot).total,
     };
   }, [mode, settings, snapshot]);
@@ -216,7 +215,7 @@ export const AnalyticsPanel: React.FC = () => {
 
   const total = stats.total;
   const utilisation = pacing?.utilisation ?? null;
-  const currentPeriodLabel = periodLabel(settings);
+  const currentPeriodLabel = periodLabel(settings, language);
   const dailyAvg = total != null && window.elapsedDays > 0 ? total / window.elapsedDays : null;
 
   // ── Chart inputs ──
@@ -237,15 +236,10 @@ export const AnalyticsPanel: React.FC = () => {
   }));
 
   const categoryRows: HorizontalBarRow[] = categories.slice(0, 10).map((entry) => {
-    const isPiloting = entry.category?.bucket === "piloting";
     const caption = [
-      entry.share != null
-        ? `${entry.share.toFixed(1)}% of tracked spend`
-        : isPiloting
-        ? "Piloting — excluded from shares"
-        : null,
-      `${entry.count} transaction${entry.count !== 1 ? "s" : ""}`,
-      entry.cap != null ? `cap ${money(entry.cap)}` : null,
+      entry.share != null ? t("stats.shareOfSpend", { percent: formatPercent(entry.share) }) : null,
+      t("common.transactions", { count: entry.count }),
+      entry.cap != null ? t("stats.capOf", { amount: money(entry.cap) }) : null,
     ]
       .filter(Boolean)
       .join(" · ");
@@ -256,7 +250,7 @@ export const AnalyticsPanel: React.FC = () => {
       value: entry.total,
       color: entry.category?.color ?? "#64748B",
       caption,
-      marker: entry.cap != null && entry.cap > 0 ? { value: entry.cap, label: "Monthly cap" } : undefined,
+      marker: entry.cap != null && entry.cap > 0 ? { value: entry.cap, label: t("stats.monthlyCap") } : undefined,
       badge: entry.overCap ? "OVER CAP" : undefined,
       badgeTone: entry.overCap ? "danger" : "neutral",
     };
@@ -279,7 +273,7 @@ export const AnalyticsPanel: React.FC = () => {
             fontSize: 13,
           }}
         >
-          📚 Viewing historical data — all figures are read-only records.
+          {t("stats.viewingHistoricalDataAllFigures")}
         </div>
       )}
 
@@ -298,12 +292,12 @@ export const AnalyticsPanel: React.FC = () => {
             <ProgressRing
               value={health.score}
               valueText={health.score != null ? String(health.score) : "—"}
-              label={health.grade ?? "Not enough data"}
-              caption="Financial health"
+              label={health.grade ? t(`health.grade.${health.grade}`) : t("health.notEnoughData")}
+              caption={t("stats.financialHealth")}
               ariaLabel={
                 health.score != null
-                  ? `Financial health score ${health.score} out of 100 — ${health.grade}`
-                  : "Financial health score unavailable for this period"
+                  ? t("stats.healthAria", { score: health.score, grade: t(`health.grade.${health.grade}`) })
+                  : t("stats.healthUnavailable")
               }
               color={health.grade ? GRADE_COLOR[health.grade] : "var(--text-tertiary)"}
               size={190}
@@ -313,7 +307,7 @@ export const AnalyticsPanel: React.FC = () => {
             <div style={{ display: "grid", gap: 8, minWidth: 0 }}>
               <span className="text-footnote">Spent · {currentPeriodLabel}</span>
               <span style={{ fontSize: "clamp(1.75rem, 7vw, 2.5rem)", fontWeight: 700, lineHeight: 1.1 }}>
-                {total != null ? money(total) : "No data"}
+                {total != null ? money(total) : t("common.noData")}
               </span>
               <span
                 className="text-caption"
@@ -329,11 +323,11 @@ export const AnalyticsPanel: React.FC = () => {
               >
                 {comparison.deltaAbs != null
                   ? `${comparison.deltaAbs > 0 ? "▲" : "▼"} ${money(Math.abs(comparison.deltaAbs))} vs ${comparison.previousLabel}`
-                  : `No comparable data for ${comparison.previousLabel}`}
+                  : t("stats.noComparable", { period: comparison.previousLabel })}
               </span>
               <Sparkline
                 values={recentBars.map((bar) => bar.value)}
-                ariaLabel={`Spending across the last ${recentBars.length} ${mode}s`}
+                ariaLabel={t("stats.ariaRecent", { count: recentBars.length, period: t(`period.${mode}`) })}
                 fluid
                 height={38}
               />
@@ -346,17 +340,17 @@ export const AnalyticsPanel: React.FC = () => {
               {
                 label: "Transactions",
                 value: String(stats.count),
-                detail: window.elapsedDays > 0 ? `over ${window.elapsedDays} day${window.elapsedDays !== 1 ? "s" : ""}` : "period not started",
+                detail: window.elapsedDays > 0 ? t("stats.overDays", { count: window.elapsedDays }) : t("stats.periodNotStarted"),
               },
-              { label: "Daily average", value: dailyAvg != null ? money(dailyAvg) : "—" },
+              { label: t("stats.dailyAverage"), value: dailyAvg != null ? money(dailyAvg) : "—" },
               {
-                label: "Budget left",
+                label: t("stats.budgetLeft"),
                 value: pacing != null ? money(pacing.remaining) : "—",
-                detail: pacing != null ? `of ${money(pacing.budget)}` : "month view only",
+                detail: pacing != null ? t("stats.ofBudget", { amount: money(pacing.budget) }) : t("stats.monthViewOnly"),
                 tone: pacing == null ? undefined : pacing.remaining < 0 ? "negative" : "positive",
               },
               {
-                label: "Burn rate",
+                label: t("stats.burnRate"),
                 value: utilisation != null ? `${utilisation.toFixed(0)}%` : "—",
                 detail: "of monthly budget",
                 tone:
@@ -366,7 +360,7 @@ export const AnalyticsPanel: React.FC = () => {
               {
                 label: "Wishlist",
                 value: money(calc.wishlist.activeTotal),
-                detail: `${calc.wishlist.activeCount} active item${calc.wishlist.activeCount !== 1 ? "s" : ""}`,
+                detail: t("stats.activeItems", { count: calc.wishlist.activeCount }),
               },
             ]}
           />
@@ -376,9 +370,9 @@ export const AnalyticsPanel: React.FC = () => {
               {health.factors.map((factor) => (
                 <div key={factor.id} style={{ display: "grid", gap: 4, minWidth: 0 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 12 }}>
-                    <span style={{ color: "var(--text-secondary)", fontWeight: 600 }}>{factor.label}</span>
+                    <span style={{ color: "var(--text-secondary)", fontWeight: 600 }}>{t(factor.labelKey)}</span>
                     <span style={{ color: "var(--text-tertiary)", textAlign: "right", minWidth: 0 }}>
-                      {factor.detail}
+                      {factor.detailKey ? t(factor.detailKey, factor.detailParams) : null}
                     </span>
                   </div>
                   <div style={{ height: 6, borderRadius: 99, background: "var(--bg-inset)", overflow: "hidden" }}>
@@ -400,21 +394,21 @@ export const AnalyticsPanel: React.FC = () => {
       </Section>
 
       {/* ── Spending ───────────────────────────────────────────────────────── */}
-      <Section title="Spending">
+      <Section title={t("nav.spending")}>
         <div style={{ display: "grid", gap: 16, minWidth: 0 }}>
           <ChartCard
-            title={mode === "week" ? "Weekly trend" : `Spending through ${settings.selectedYear}`}
+            title={mode === "week" ? t("stats.weeklyTrend") : t("stats.spendingThrough", { year: settings.selectedYear })}
             subtitle={
               mode === "week"
-                ? "Twelve weeks around the selected week · unrecorded weeks are left blank"
-                : "Monthly totals · unrecorded months break the line rather than reading as zero"
+                ? t("stats.weeksHint")
+                : t("stats.monthsHint")
             }
           >
             {trendBars.length === 0 || trendBars.every((bar) => bar.value == null) ? (
-              <ChartPlaceholder height={180} message="No spending recorded yet for this window." />
+              <ChartPlaceholder height={180} message={t("stats.noSpendingRecordedYetFor")} />
             ) : (
               <LineChart
-                title={`Spending trend in ${settings.baseCurrency}`}
+                title={t("stats.ariaTrend", { currency: settings.baseCurrency })}
                 labels={trendBars.map((bar) => bar.label)}
                 series={[
                   {
@@ -437,12 +431,12 @@ export const AnalyticsPanel: React.FC = () => {
 
           {calendar && (
             <ChartCard
-              title={mode === "week" ? "Daily spending this week" : "Daily spending"}
-              subtitle="Darker days cost more · dashed days are not recorded yet"
+              title={mode === "week" ? t("stats.dailyThisWeek") : t("stats.daily")}
+              subtitle={t("stats.darkerDaysCostMoreDashed")}
             >
               <Heatmap
                 cells={heatmapCells}
-                title={`Daily spending calendar for ${currentPeriodLabel}`}
+                title={t("stats.ariaCalendar", { period: currentPeriodLabel })}
                 formatValue={money}
               />
             </ChartCard>
@@ -452,9 +446,9 @@ export const AnalyticsPanel: React.FC = () => {
             <div className="card" style={{ padding: 16, minWidth: 0 }}>
               <StatRow
                 items={[
-                  { label: "Average transaction", value: money(stats.average) },
-                  { label: "Median transaction", value: money(stats.median) },
-                  { label: "Largest transaction", value: money(stats.largest) },
+                  { label: t("report.averageTransaction"), value: money(stats.average) },
+                  { label: t("stats.medianTransaction"), value: money(stats.median) },
+                  { label: t("report.largestTransaction"), value: money(stats.largest) },
                   { label: "Transactions", value: String(stats.count) },
                 ]}
               />
@@ -464,21 +458,21 @@ export const AnalyticsPanel: React.FC = () => {
       </Section>
 
       {/* ── Budget ─────────────────────────────────────────────────────────── */}
-      <Section title="Budget">
+      <Section title={t("settings.budget")}>
         <div style={{ display: "grid", gap: 16, minWidth: 0 }}>
           <ChartCard
-            title="Budget vs actual"
+            title={t("stats.budgetVsActual")}
             subtitle={
               budgetBase > 0
-                ? `Monthly budget of ${money(budgetBase)} shown as the dashed reference`
-                : "Set a monthly budget in Settings to see the reference line"
+                ? t("stats.budgetReference", { amount: money(budgetBase) })
+                : t("stats.noBudgetReference")
             }
           >
             {monthlyBars.every((bar) => bar.value == null) ? (
-              <ChartPlaceholder height={180} message="No monthly spending recorded for this year." />
+              <ChartPlaceholder height={180} message={t("stats.noMonthlySpendingRecordedFor")} />
             ) : (
               <BarChart
-                title={`Monthly spend against budget in ${settings.baseCurrency}`}
+                title={t("stats.ariaBudget", { currency: settings.baseCurrency })}
                 bars={monthlyBars.map((bar) => ({
                   label: bar.label,
                   value: bar.value,
@@ -494,23 +488,23 @@ export const AnalyticsPanel: React.FC = () => {
 
           {forecast ? (
             <ChartCard
-              title="Forecast"
-              subtitle="Cumulative spend so far, extended at the current pace to the end of the period"
+              title={t("dashboard.forecast")}
+              subtitle={t("stats.cumulativeSpendSoFarExtended")}
             >
               <LineChart
-                title={`Cumulative spend and projection in ${settings.baseCurrency}`}
+                title={t("stats.ariaForecast", { currency: settings.baseCurrency })}
                 labels={forecast.labels}
                 series={[
                   {
                     id: "actual",
-                    name: "Actual so far",
+                    name: t("stats.actualSoFar"),
                     color: "var(--accent)",
                     values: forecast.actual,
                     area: true,
                   },
                   {
                     id: "projected",
-                    name: "Projected at this pace",
+                    name: t("stats.projectedAtPace"),
                     color: "var(--warning-text)",
                     values: forecast.projected,
                     dashed: true,
@@ -527,11 +521,11 @@ export const AnalyticsPanel: React.FC = () => {
                 <StatRow
                   items={[
                     {
-                      label: "Projected total",
+                      label: t("stats.projectedTotal"),
                       value: pacing.projectedTotal != null ? money(pacing.projectedTotal) : "—",
                     },
                     {
-                      label: "Projected end of month",
+                      label: t("stats.projectedEnd"),
                       value:
                         pacing.projectedRemaining != null
                           ? pacing.projectedRemaining < 0
@@ -546,14 +540,14 @@ export const AnalyticsPanel: React.FC = () => {
                           : "positive",
                     },
                     {
-                      label: "Stay-on-budget pace",
+                      label: t("stats.stayOnBudgetPace"),
                       value: pacing.requiredDailyPace != null ? `${money(pacing.requiredDailyPace)}/day` : "—",
                       detail: `${pacing.daysLeft} day${pacing.daysLeft !== 1 ? "s" : ""} left`,
                     },
                     {
-                      label: "Spent so far",
+                      label: t("stats.spentSoFar"),
                       value: money(pacing.spent),
-                      detail: utilisation != null ? `${utilisation.toFixed(0)}% of budget` : undefined,
+                      detail: utilisation != null ? t("stats.ofBudgetPercent", { percent: Math.round(utilisation) }) : undefined,
                       tone: utilisation != null && utilisation >= 100 ? "negative" : undefined,
                     },
                   ]}
@@ -563,29 +557,29 @@ export const AnalyticsPanel: React.FC = () => {
           ) : (
             <div className="card card-body" style={{ color: "var(--text-secondary)", fontSize: 13 }}>
               {mode === "year"
-                ? "Forecasting works on month and week views — the budget itself is defined monthly."
-                : "No spending recorded for this period yet, so there is nothing to project."}
+                ? t("stats.forecastModeHint")
+                : t("stats.forecastEmpty")}
             </div>
           )}
         </div>
       </Section>
 
       {/* ── Categories ─────────────────────────────────────────────────────── */}
-      <Section title="Categories">
+      <Section title={t("nav.categories")}>
         <div style={{ display: "grid", gap: 16, minWidth: 0 }}>
           <ChartCard
-            title="Where the money went"
-            subtitle="Each bar carries its category's own colour · piloting stays visible but never enters a share"
+            title={t("dashboard.whereTheMoneyWent")}
+            subtitle={t("stats.categoriesHint")}
           >
             {categoryRows.length === 0 ? (
               <EmptyState
-                title="No spending for this period"
-                description="Zero recorded spending and unavailable historical data remain distinct."
+                title={t("stats.noSpendingForThisPeriod")}
+                description={t("stats.zeroRecordedSpendingAndUnavailable")}
               />
             ) : (
               <>
                 <HorizontalBarChart
-                  title={`Spending by category in ${settings.baseCurrency}`}
+                  title={t("stats.ariaCategories", { currency: settings.baseCurrency })}
                   rows={categoryRows}
                   formatValue={money}
                 />
@@ -605,14 +599,14 @@ export const AnalyticsPanel: React.FC = () => {
           </ChartCard>
 
           <ChartCard
-            title="Category evolution"
-            subtitle={`Top ${categoryEvolution.series.length || 4} categories across ${settings.selectedYear}`}
+            title={t("stats.categoryEvolution")}
+            subtitle={t("stats.topCategories", { count: categoryEvolution.series.length || 4, year: settings.selectedYear })}
           >
             {categoryEvolution.series.length === 0 ? (
-              <ChartPlaceholder height={180} message="No category history recorded for this year." />
+              <ChartPlaceholder height={180} message={t("stats.noCategoryHistoryRecordedFor")} />
             ) : (
               <LineChart
-                title={`Monthly spend per category in ${settings.baseCurrency}`}
+                title={t("stats.ariaPerCategory", { currency: settings.baseCurrency })}
                 labels={categoryEvolution.labels}
                 series={categoryEvolution.series.map((series) => ({
                   id: series.categoryId,
@@ -631,14 +625,14 @@ export const AnalyticsPanel: React.FC = () => {
       </Section>
 
       {/* ── Recurring ──────────────────────────────────────────────────────── */}
-      <Section title="Recurring">
+      <Section title={t("report.recurring")}>
         <div style={{ display: "grid", gap: 16, minWidth: 0 }}>
           <ChartCard
-            title="Committed vs discretionary"
-            subtitle="Recurring covers weekly, monthly, yearly and session costs"
+            title={t("stats.committedVsDiscretionary")}
+            subtitle={t("stats.recurringCoversWeeklyMonthlyYearly")}
           >
             <DonutChart
-              title={`Recurring versus one-off spending for ${currentPeriodLabel}`}
+              title={t("stats.ariaRecurring", { period: currentPeriodLabel })}
               segments={[
                 { id: "recurring", label: "Recurring", value: stats.recurringTotal, color: recurringTone },
                 { id: "oneoff", label: "One-off", value: stats.oneOffTotal, color: oneOffTone },
@@ -647,7 +641,7 @@ export const AnalyticsPanel: React.FC = () => {
               centerLabel="total spend"
               formatValue={money}
               size={200}
-              emptyMessage="No spending recorded for this period."
+              emptyMessage={t("report.noSpending")}
             />
             {stats.count > 0 && (
               <StatRow
@@ -673,14 +667,14 @@ export const AnalyticsPanel: React.FC = () => {
           </ChartCard>
 
           <ChartCard
-            title={`Commitment load through ${settings.selectedYear}`}
-            subtitle="How much of each month was already spoken for"
+            title={t("stats.commitmentLoad", { year: settings.selectedYear })}
+            subtitle={t("stats.howMuchOfEachMonth")}
           >
             {recurringSplit.recurring.every((value) => value == null) ? (
-              <ChartPlaceholder height={180} message="No spending recorded for this year." />
+              <ChartPlaceholder height={180} message={t("stats.noSpendingRecordedForThis")} />
             ) : (
               <StackedBarChart
-                title={`Recurring and one-off spend per month in ${settings.baseCurrency}`}
+                title={t("stats.ariaCommitment", { currency: settings.baseCurrency })}
                 labels={recurringSplit.labels}
                 series={[
                   { id: "recurring", name: "Recurring", color: recurringTone, values: recurringSplit.recurring },
@@ -788,7 +782,7 @@ export const AnalyticsPanel: React.FC = () => {
                       detail: `${money(activityCosts.monthly.personal)} ${t("common.perMonth")}`,
                     },
                     {
-                      label: t("activities.requiredThisMonth", { month: periodLabel(settings) }),
+                      label: t("activities.requiredThisMonth", { month: periodLabel(settings, language) }),
                       value: money(activityCosts.requiredThisMonth.personal),
                       detail: t("activities.requiredThisMonthHint"),
                     },
@@ -811,14 +805,14 @@ export const AnalyticsPanel: React.FC = () => {
       </Section>
 
       {/* ── History ────────────────────────────────────────────────────────── */}
-      <Section title="History">
+      <Section title={t("nav.history")}>
         <div style={{ display: "grid", gap: 16, minWidth: 0 }}>
           <ChartCard
-            title="Period comparison"
-            subtitle={`The last ${recentBars.length} ${mode}s · "?" marks periods with no records`}
+            title={t("stats.periodComparison")}
+            subtitle={t("stats.recentHint", { count: recentBars.length, period: t(`period.${mode}`) })}
           >
             <BarChart
-              title={`Spending across the last ${recentBars.length} ${mode}s in ${settings.baseCurrency}`}
+              title={t("stats.ariaRecentCurrency", { count: recentBars.length, period: t(`period.${mode}`), currency: settings.baseCurrency })}
               bars={recentBars.map((bar) => ({ label: bar.label, value: bar.value, highlight: bar.highlight }))}
               formatValue={money}
               formatTick={tick}
@@ -831,31 +825,31 @@ export const AnalyticsPanel: React.FC = () => {
                   value:
                     comparison.deltaAbs != null
                       ? formatDualMoney(comparison.deltaAbs, settings, { showSign: true })
-                      : "No data",
+                      : t("common.noData"),
                   detail:
                     comparison.deltaPct != null
-                      ? `${comparison.deltaPct > 0 ? "+" : ""}${comparison.deltaPct.toFixed(1)}% vs previous ${mode}`
+                      ? t("stats.vsPrevious", { change: `${comparison.deltaPct > 0 ? "+" : ""}${comparison.deltaPct.toFixed(1)}%`, period: t(`period.${mode}`) })
                       : comparison.previousTotal == null
                       ? "previous period has no records"
                       : "current period has no records",
                   tone: comparison.deltaAbs == null ? undefined : comparison.deltaAbs > 0 ? "negative" : "positive",
                 },
                 {
-                  label: "Previous period",
-                  value: comparison.previousTotal != null ? money(comparison.previousTotal) : "No data",
+                  label: t("stats.previousPeriod"),
+                  value: comparison.previousTotal != null ? money(comparison.previousTotal) : t("common.noData"),
                   detail: comparison.previousLabel,
                 },
                 ...(lastYearComparison
                   ? [
                       {
-                        label: "Same month last year",
+                        label: t("stats.sameMonthLastYear"),
                         value: money(lastYearComparison.total),
                         detail: lastYearComparison.label,
                       },
                     ]
                   : []),
                 {
-                  label: "Rollover to date",
+                  label: t("stats.rolloverToDate"),
                   value: formatDualMoney(calc.wallet.rolloverTotal, settings, { showSign: true }),
                   detail: "accumulated month-end rollovers",
                   tone: calc.wallet.rolloverTotal >= 0 ? "positive" : "negative",

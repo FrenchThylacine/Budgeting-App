@@ -544,7 +544,4 @@ export function getApiClient(): BudgetApiClient {
   return apiClient;
 }
 
-export function setApiClient(client: BudgetApiClient): void {
-  apiClient = client;
-}
 

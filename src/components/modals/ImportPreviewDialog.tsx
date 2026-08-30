@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, Download, FileSpreadsheet, X } from "lucide-react";
 import type { BudgetSnapshot } from "../../domain/types";
 import type { WorkbookImportSummary } from "../../domain/workbookImport";
+import { useTranslation } from "../../i18n/useTranslation";
 
 export interface ImportPreview {
   fileName: string;
@@ -44,6 +45,7 @@ export const ImportPreviewDialog: React.FC<ImportPreviewDialogProps> = ({
   onCancel,
   onBackup,
 }) => {
+  const { t } = useTranslation();
   const [acknowledged, setAcknowledged] = useState(false);
   const [backedUp, setBackedUp] = useState(false);
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -93,8 +95,8 @@ export const ImportPreviewDialog: React.FC<ImportPreviewDialogProps> = ({
       { label: "Categories", before: current.categories.length, after: preview.snapshot.categories.length },
       { label: "Activities", before: count(current, (y) => y.activities.length), after: count(preview.snapshot, (y) => y.activities.length) },
       { label: "Transactions", before: count(current, (y) => y.spendingEntries.length), after: count(preview.snapshot, (y) => y.spendingEntries.length) },
-      { label: "Wishlist items", before: count(current, (y) => y.wishlistItems.length), after: count(preview.snapshot, (y) => y.wishlistItems.length) },
-      { label: "Wallet entries", before: count(current, (y) => y.walletEntries.length), after: count(preview.snapshot, (y) => y.walletEntries.length) },
+      { label: t("import.wishlistItems"), before: count(current, (y) => y.wishlistItems.length), after: count(preview.snapshot, (y) => y.wishlistItems.length) },
+      { label: t("import.walletEntries"), before: count(current, (y) => y.walletEntries.length), after: count(preview.snapshot, (y) => y.walletEntries.length) },
     ];
   }, [current, preview.snapshot]);
 
@@ -129,25 +131,25 @@ export const ImportPreviewDialog: React.FC<ImportPreviewDialogProps> = ({
               Replace your budget with {preview.fileName}?
             </h2>
           </div>
-          <button className="btn btn-ghost btn-sm btn-icon" onClick={onCancel} aria-label="Close dialog">
+          <button className="btn btn-ghost btn-sm btn-icon" onClick={onCancel} aria-label={t("override.closeDialog")}>
             <X size={18} />
           </button>
         </div>
 
         <div id="import-preview-description">
           <p className="text-body" style={{ marginBottom: 14 }}>
-            This <strong>replaces</strong> your budget rather than merging into it. Anything not present in
-            the file is removed.
+            This <strong>{t("import.replaces")}</strong> {t("import.yourBudgetRatherThanMerging")}
           </p>
 
           <div className="import-table-wrap">
             <table className="import-table">
-              <caption className="sr-only">What the import changes</caption>
+              <caption className="sr-only">{t("import.whatTheImportChanges")}</caption>
               <thead>
                 <tr>
-                  <th scope="col">&nbsp;</th>
-                  <th scope="col">Now</th>
-                  <th scope="col">After</th>
+                  {/* The row-label column has no heading; it is the stub of the table. */}
+                  <th scope="col"><span className="sr-only">{t("import.rowLabel")}</span></th>
+                  <th scope="col">{t("import.now")}</th>
+                  <th scope="col">{t("import.after")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -173,7 +175,7 @@ export const ImportPreviewDialog: React.FC<ImportPreviewDialogProps> = ({
           </div>
 
           <p className="text-footnote" style={{ marginTop: 10 }}>
-            Years in the file: <strong>{preview.summary.years.join(", ") || "none"}</strong>
+            {t("import.yearsInTheFile")} <strong>{preview.summary.years.join(", ") || "none"}</strong>
           </p>
 
           {droppedYears.length > 0 && (
@@ -196,7 +198,7 @@ export const ImportPreviewDialog: React.FC<ImportPreviewDialogProps> = ({
 
           {preview.warnings.length > 0 && (
             <>
-              <h3 className="text-callout" style={{ margin: "16px 0 6px" }}>Notes from the file</h3>
+              <h3 className="text-callout" style={{ margin: "16px 0 6px" }}>{t("import.notesFromTheFile")}</h3>
               <ul className="modal-consequences">
                 {preview.warnings.map((warning) => (
                   <li key={warning}>{warning}</li>
@@ -224,16 +226,16 @@ export const ImportPreviewDialog: React.FC<ImportPreviewDialogProps> = ({
                 style={{ marginTop: 3 }}
               />
               <span className="text-callout">
-                I understand my current budget will be replaced by this file.
+                {t("import.iUnderstandMyCurrentBudget")}
               </span>
             </label>
           </div>
         </div>
 
         <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 20 }}>
-          <button className="btn btn-secondary" onClick={onCancel}>Cancel</button>
+          <button className="btn btn-secondary" onClick={onCancel}>{t("common.cancel")}</button>
           <button className="btn btn-danger" onClick={onConfirm} disabled={!acknowledged}>
-            Replace my budget
+            {t("import.replaceMyBudget")}
           </button>
         </div>
       </div>

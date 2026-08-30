@@ -374,16 +374,15 @@ export function monthlyBudgetPlan(
   month: number = snapshot.settings.selectedMonth,
 ): MonthlyBudgetPlan {
   const record = snapshot.years[String(year)];
-  const categories = new Map(snapshot.categories.map((category) => [category.id, category]));
-  const includePiloting = snapshot.settings.pilotIncludedInBudget === true;
 
   const relevant = (record?.activities ?? []).filter((activity) => {
     if (!activity.active || !activity.visible) return false;
     // Only money this budget has to find: an activity somebody else pays for,
-    // or one kept outside the budget, needs none of it.
-    if (activityFundingKind(activity) !== "personal") return false;
-    if (!includePiloting && categories.get(activity.categoryId)?.bucket === "piloting") return false;
-    return true;
+    // or one kept outside the budget, needs none of it. Nothing else excludes
+    // an activity — a category no longer decides whether its activities count,
+    // which is what the old "include piloting" setting did for exactly one
+    // hard-coded category name.
+    return activityFundingKind(activity) === "personal";
   });
 
   let requirement = 0;

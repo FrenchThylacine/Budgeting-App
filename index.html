@@ -16,23 +16,23 @@
       mode, which reads as a rendering fault rather than as a choice.
     -->
     <meta name="theme-color" media="(prefers-color-scheme: light)" content="#F6F8FB" />
-    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#031E49" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#080D17" />
 
     <!--
-      The identity is the A350 fin artwork supplied by the owner, kept at
-      `assets/brand/air-france-fin.jpg` and derived into every size here by
+      The identity is the Budget OS badge supplied by the owner — a Concorde
+      over a euro sign, under a tricolour band — kept at
+      `assets/brand/app-icon-source.jpg` and derived into every size here by
       `scripts/build-icons.mjs`.
 
-      Two framings, deliberately. The home-screen icons keep the artwork's own
-      margin, which a launcher needs. The tab icons are cropped to the fin, so
-      the shape fills a 16px tile instead of floating in a quarter-width band of
-      empty navy — and each size is rendered from the 1024px original rather
-      than downsampled from one large PNG, which is what turns a fin into a
-      smudge.
+      Two framings, deliberately. The home-screen icons keep a small margin,
+      which a launcher needs. The tab icons take none, so the badge fills a 16px
+      tile instead of floating inside its own padding — and each size is
+      rendered from the full-resolution master rather than downsampled from one
+      large PNG, which is what turns a mark into a smudge.
 
-      No SVG: the artwork is a raster with gradients, so a vector version would
-      be a redrawing rather than the supplied image. The ICO carries 16, 32 and
-      48; the two PNGs serve browsers that prefer one, including at 2×.
+      No SVG: the artwork is a raster illustration, so a vector version would be
+      a redrawing rather than the supplied image. The ICO carries 16, 32 and 48;
+      the two PNGs serve browsers that prefer one, including at 2×.
     -->
     <link rel="icon" href="/favicon.ico" sizes="16x16 32x32 48x48" />
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />

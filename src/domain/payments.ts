@@ -25,6 +25,7 @@ import {
   parseLocalDate,
   startOfDay,
 } from "./schedule";
+import { numberLocale } from "./currency";
 import type { Activity, IsoWeekday } from "./types";
 
 /**
@@ -38,9 +39,6 @@ import type { Activity, IsoWeekday } from "./types";
  * and a fabricated calendar would not be.
  */
 export const WEEKS_PER_MONTH = 52 / 12;
-
-/** Weeks in a year, matching `WEEKS_PER_MONTH`. */
-export const WEEKS_PER_YEAR = 52;
 
 /** How often the sessions happen, as a rate. */
 export type SessionPeriod = "week" | "month";
@@ -322,32 +320,80 @@ export function fixedYearlyAmount(activity: Activity): number | null {
  * Written to make the distinction the whole model exists for impossible to
  * miss: the sessions and the payments are stated as two separate facts.
  */
-export function describePaymentCycle(activity: Activity): string | null {
-  if (activity.costModel === "fixedYearly") {
-    return "Billed once a year";
-  }
+export function describePaymentCycle(
+  activity: Activity,
+  t?: (key: string, params?: Record<string, string | number>) => string,
+): string | null {
+  // Without a translator — a test, an export — the English is produced as
+  // before. With one, every fragment is a key, because "twice a week, paid
+  // every ten sessions" orders those two facts differently in each language.
+  const say = (key: string, params: Record<string, string | number>, fallback: string) =>
+    t ? t(key, params) : fallback;
+
+  if (activity.costModel === "fixedYearly") return say("payments.billedYearly", {}, "Billed once a year");
   if (activity.costModel !== "sessionPack") return null;
+
   const perPayment = normalizeSessionsPerPayment(activity.sessionsPerPayment);
   const rate = positive(activity.sessionsPerPeriod);
   const period = normalizeSessionPeriod(activity.sessionPeriod);
-  const cadence = rate != null ? `${trim(rate)} / ${period}` : null;
-  if (perPayment == null) return cadence ? `${cadence} · pay per session` : null;
+  const cadence =
+    rate != null
+      ? say(
+          period === "week" ? "payments.perWeek" : "payments.perMonth",
+          { rate: trim(rate) },
+          `${trim(rate)} / ${period}`,
+        )
+      : null;
+
+  if (perPayment == null) {
+    if (!cadence) return null;
+    return say("payments.paySession", { cadence }, `${cadence} · pay per session`);
+  }
+
   const every = sessionPackIntervalDays(activity);
-  const everyLabel = every != null ? ` (≈ every ${describeDays(every)})` : "";
-  return `${cadence ? `${cadence} · ` : ""}pay every ${perPayment} sessions${everyLabel}`;
+  const interval = every != null ? describeDays(every, t, true) : null;
+  const core =
+    interval != null
+      ? say("payments.payEveryWithInterval", { count: perPayment, interval }, `pay every ${perPayment} sessions (≈ ${interval})`)
+      : say("payments.payEvery", { count: perPayment }, `pay every ${perPayment} sessions`);
+  return cadence ? say("payments.cycle", { cadence, core }, `${cadence} · ${core}`) : core;
 }
 
 /** "35 days" as "5 weeks" where that is the clearer unit. */
-export function describeDays(days: number): string {
+export function describeDays(
+  days: number,
+  t?: (key: string, params?: Record<string, string | number>) => string,
+  /**
+   * Produce "every 5 weeks" rather than "5 weeks".
+   *
+   * One key rather than an article glued in front of another: in French the
+   * article agrees with the noun — *tous les 35 jours*, *toutes les 5
+   * semaines* — so a sentence that supplies "tous les" and interpolates
+   * whichever unit came back is wrong half the time. It was.
+   */
+  every = false,
+): string {
   if (days % 7 === 0) {
     const weeks = days / 7;
-    return `${weeks} week${weeks === 1 ? "" : "s"}`;
+    if (!t) return every ? `every ${weeks} week${weeks === 1 ? "" : "s"}` : `${weeks} week${weeks === 1 ? "" : "s"}`;
+    return t(every ? "common.everyWeeks" : "common.weeks", { count: weeks });
   }
-  return `${days} day${days === 1 ? "" : "s"}`;
+  if (!t) return every ? `every ${days} day${days === 1 ? "" : "s"}` : `${days} day${days === 1 ? "" : "s"}`;
+  return t(every ? "common.everyDays" : "common.days", { count: days });
 }
 
+/**
+ * A number with at most two decimals, punctuated the way the reader's language
+ * punctuates numbers.
+ *
+ * `String(8.86)` is "8.86" in every locale, which put a full stop in the middle
+ * of a French sentence full of commas. `numberLocale()` is the one the language
+ * selector set — see `domain/currency.ts` — so this agrees with every other
+ * figure on the page.
+ */
 function trim(value: number): string {
-  return Number.isInteger(value) ? String(value) : String(Math.round(value * 100) / 100);
+  const rounded = Number.isInteger(value) ? value : Math.round(value * 100) / 100;
+  return rounded.toLocaleString(numberLocale(), { maximumFractionDigits: 2 });
 }
 
 /**

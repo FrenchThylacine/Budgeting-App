@@ -2,7 +2,9 @@
 
 A personal finance application for tracking a real monthly budget: spending, recurring commitments, categories with caps, a wishlist, a wallet, and analytics that explain where the money went — visually, not as a wall of numbers.
 
-Each account holds its own budget, and one account can be used from as many devices as you like against one shared database.
+Each account holds its own budget, and one account can be used from as many devices as you like against one shared database. The whole interface is available in five languages, and every date, number and plural follows the language you chose.
+
+**Budget OS was made with Claude, Codex, ChatGPT, Gemini and Copilot** — designed, written, reviewed and rewritten by those tools working on one repository, against a specification and a test suite that outlived any one of them.
 
 ---
 
@@ -29,7 +31,7 @@ A next-renewal date states what no rule can derive — the day an annual subscri
 
 **Wishlist.** Product, price, currency, priority (`Dream` is the *lowest*), category, notes, colour, an icon, and two separate links: where it is **bought** and whose **brand** the icon should come from. They are different facts — an add-on sold on one store and built by another — so using one field for both forced a choice between an item that looks right and an item that buys right. Marking an item bought can create the matching transaction, and creating a transaction can mark the item bought; neither can produce a duplicate.
 
-**Scenarios and seasons.** A scenario stores a budget, the piloting rule and category caps, and applies behind a preview of every value that will change. A season stores which activities are running and what they cost — lessons stop over the summer, heating stops in June — and is created by capturing the arrangement you are already looking at.
+**Scenarios and seasons.** A scenario stores a budget, category caps, and — per activity — whether it runs and who pays for it, and applies behind a preview of every value that will change. A season stores which activities are running and what they cost — lessons stop over the summer, heating stops in June — and is created by capturing the arrangement you are already looking at.
 
 **Categories.** Colour, icon, parent, notes, and an optional monthly cap that is tracked and reported when exceeded. Archiving hides a category from new entries while preserving every existing transaction.
 
@@ -39,7 +41,11 @@ A next-renewal date states what no rule can derive — the day an annual subscri
 
 **Reports.** Printable monthly, annual and **custom-range** reports, generated from the same calculations as the screen. A custom range deliberately carries no budget or remaining figure: the budget is set per month, and prorating one across six weeks would be a number nobody chose.
 
-**Currencies.** Display currency plus live exchange rates with a manual override and offline fallback. Conversion is presentation-only: stored amounts are never rewritten. You choose which currencies the app offers, so a budget in two currencies is not asked to pick from ten — but the display currency, and any currency real records are denominated in, can never be untracked.
+**Languages.** Seventy-six languages are offered; five (English, French, Spanish, German, Arabic) are fully translated, and a test asserts that "fully" is true — every key the interface asks for exists in every one of them, including the printed reports. The rest are offered for their locale formatting and labelled as such rather than pretending a translation exists. Right-to-left is real: `dir="rtl"` on the root and the handful of physically-sided rules mirrored.
+
+**Themes.** Six colour themes — Air France, Concorde, Paper, Deep black, Alpine, Plum — each with a light and a dark variant, plus Light / Dark / System. The themes are *data* rather than stylesheets, which is what lets `tests/theme-contrast.test.ts` measure every text colour against every surface in every theme and fail the build if one drops below WCAG AA.
+
+**Currencies.** Display currency, an optional **second currency** shown under any amount recorded in another one, plus live exchange rates, refreshed once when the application opens and only when the day's rates are due. A refresh that fails is reported as failed rather than being passed off as current, and there is a manual override and an offline fallback. Conversion is presentation-only: stored amounts are never rewritten. You choose which currencies the app offers, so a budget in two currencies is not asked to pick from ten — but the display currency, and any currency real records are denominated in, can never be untracked.
 
 **Accounts.** Email and password sign-in with revocable sessions. Every account starts with an empty budget of its own — no demo data, and no adoption of anyone else's. Passwords are hashed with scrypt; sessions are opaque tokens stored hashed, so a database read cannot impersonate anyone. Signing in, changing your address and changing your password are all rate-limited or password-checked.
 
@@ -57,8 +63,8 @@ These are enforced in code and covered by tests. They are the reason the app can
 2. **Missing data stays missing.** A period with no records renders as `?` or "No data" — never as a fabricated `0`. Charts break the line rather than drawing through a gap.
 3. **History is immutable by default.** Editing a closed period requires an explicit, warned unlock, and every such change is flagged in the audit trail.
 4. **Approved budgets are decision records.** They stay immutable even while a period is unlocked for editing.
-5. **Currency conversion is display-only.** Stored values are never converted in place.
-6. **Piloting stays visible but is excluded** from category share percentages, so it cannot distort ordinary spending distribution.
+5. **Currency conversion is display-only.** Stored values are never converted in place, and an equivalent is never shown for a pair with no known rate — an "≈" in front of a fabricated figure reads exactly like a fact.
+6. **No category is special.** Every category takes a share of the same total and every activity is costed the same way. "Piloting" used to be a category with powers no other category had — its own budget total, a setting deciding whether that total counted, and exemption from category shares — which assumed a budget with a Piloting category in it and answered one hard-coded question that the funding classification already answers for every activity.
 7. **Money somebody else spent is not yours to have spent.** A transaction marked *Someone else paid* or *Outside my budget* keeps its full amount and stays in the ledger, and is excluded from every figure that answers "how am I doing against my budget" — remaining, utilisation, burn rate, forecast, category totals and caps, health, period comparisons, the year and year-to-date totals, and the reports. Budget €1,000, personal €300, external €200 leaves **€700**, not €500. This is not a setting; it lives in `src/domain/funding.ts` and every budget selector filters through it.
 
 ---
@@ -182,7 +188,8 @@ After a deploy, `GET /api/health` answers `{"status":"ok","database":"connected"
 | `npm run server:prod` | Run the compiled backend |
 | `npm test` | Test suite |
 | `npm run test:db` | PostgreSQL integration suites (needs `TEST_DATABASE_URL`) |
-| `node scripts/build-icons.mjs` | Regenerate every icon from `assets/brand/air-france-fin.jpg` (needs ImageMagick; the outputs are committed) |
+| `node scripts/build-icons.mjs` | Regenerate the icon set and the aircraft artwork from `assets/brand/` (needs ImageMagick; the outputs are committed) |
+| `npm run verify` | Drive the running app through a real Chrome and check the workflows end to end (start it against a freshly started dev server) |
 
 ---
 
@@ -203,9 +210,15 @@ The integration suites run the real schema, migrations, repository SQL, and the 
 
 **Air France-inspired, not Air France.** Deep navy chrome, refined blue, the signature red used as a mark rather than a colour, French-editorial type and a lot of whitespace. A small centred tricolour signs the top of the app, in three fixed colours that do not follow the theme — a flag whose middle band disappears in dark mode is a broken rule, not a flag. On a phone — where there is no sidebar to carry the identity — the header becomes a full-bleed navy band, because otherwise the identity was in practice desktop-only.
 
-**The mark is the supplied A350 fin artwork**, mastered once at `assets/brand/air-france-fin.jpg` and derived into every size by `scripts/build-icons.mjs`. Home-screen icons keep the artwork's own margin; tab icons are cropped to the fin, because at 16px that margin is width the shape cannot spare. Clicking the mark beside "Budget OS" collapses and expands the sidebar.
+**The mark is the supplied Budget OS badge** — a Concorde over a euro sign under a tricolour band — mastered at `assets/brand/app-icon-source.jpg` and derived into every size by `scripts/build-icons.mjs`. It arrived as a JPEG with its transparency flattened onto a checkerboard, so the script flood-fills the background away rather than keying on a colour: the badge's own outlines use the same near-black the checkerboard does, and a global colour replacement punches holes through the artwork. Home-screen icons keep a small margin; tab icons take none, because at 16px that margin is width the shape cannot spare. Clicking the mark beside "Budget OS" collapses and expands the sidebar.
+
+**Three aircraft, and you pick one.** The Concorde, the A350 and the Alpha Jet were supplied as illustrations on a watercolour sky; the same script cuts each one out, turns it nose-right — every animation in this application travels left to right, so a rotation of zero means "the way this app moves" — and derives a flat white silhouette from the artwork's own outline for the tab transition. Concorde is the default, and the choice drives both the loading screen and the transition.
+
+**The loading screen is a formation.** The chosen aircraft holds the centre while two Alpha Jets orbit it, one trailing blue smoke and one red; when the data is ready they roll out of the turn and form up behind it, a third joins trailing white, the three ribbons settle into a tricolour, and the whole formation accelerates away to the right — taking the loading screen with it and uncovering the application. It is the one animation in the app driven by `requestAnimationFrame` rather than CSS, for one reason: the escorts have to leave the orbit *from wherever they happen to be* the instant the data arrives, and a CSS animation cannot be interrupted and continued from its current value.
 
 **Your colours are yours.** The identity applies to the application's own chrome. A green activity stays green, a purple category stays purple, a custom wishlist colour stays custom; nothing recolours user-chosen entities.
+
+**A shell that says each thing once.** The header used to repeat the period selector directly beneath it — an eyebrow, the period as an `<h1>`, its date range, "Monthly view · normal", and a line saying what you had just done — five of eight lines restating what the next element already said, and on a phone the whole first screen. What is left is what only it can say: the two states worth flagging, whether the work has reached the server, and the four application-level actions.
 
 **Motion, in one direction.** Changing tab moves the whole application: a navy plane covers the viewport, a route draws between two waypoints with an airliner along it, and the incoming page arrives behind it. Period changes slide the same way. Both used to mirror the direction of travel; they no longer do, because a motion whose direction changes is a second thing to read on every navigation — and because the sweep and the page derived their directions separately, so half the time the aircraft flew one way and the page the other. Everything is transform and opacity, and **all of it is skipped under `prefers-reduced-motion`** — the page still changes, it simply appears.
 
@@ -213,29 +226,36 @@ The integration suites run the real schema, migrations, repository SQL, and the 
 
 **Tap to edit, swipe for an action.** Tapping a wishlist item, activity, transaction, category or scenario opens its editor. Swiping a row *reveals* its actions rather than performing them: the row tracks the finger to the panel edge, rubber-bands past it, and arms at 150px of travel, at which point releasing acts. The revealed controls are real buttons in the DOM at all times, so nothing is available only to a finger, and which action sits on each side is configurable.
 
+**A tour that asks rather than tells.** The first run is thirteen cards, each switching to the tab it describes — and six of them wait for the reader to actually do the thing: pin a currency, add an activity, record a transaction, mark something as paid by somebody else, allocate a month's budget, save a scenario. The tick is read from the real snapshot, never from a flag the tour sets for itself, and "Skip this step" sits beside every locked Next, because a tour that traps somebody is worse than one that teaches nothing. **"Decide later" is a third answer**: not a refusal, so the tour is not offered again unasked, and a single dismissible reminder appears instead, resumable at the step it was left on.
+
 **Accessibility.** Every interactive control on every tab has an accessible name; no target is under 24px; status is never carried by colour alone; modals trap focus and restore it; and the text palette is measured rather than eyeballed — a scripted sweep composites the real background behind every text node on all ten tabs in both themes and asserts WCAG AA. It currently reports zero failures. The sweep composites **gradients** as well as background colours: an earlier version read the colour alone, scored every tinted card against the page behind it, and reported zero while six real failures were on screen.
 
 ---
 
 ## Performance
 
-First load is four cached chunks rather than one:
+First load is three cached chunks rather than one:
 
 | Chunk | Raw | Gzipped | Changes when |
 | --- | --- | --- | --- |
-| `index` (application) | 442 kB | 96 kB | every deploy |
+| `index` (application) | 588 kB | 130 kB | every deploy |
 | `react` | 330 kB | 101 kB | React is upgraded |
-| `icons` | 142 kB | 29 kB | the icon library changes |
-| `xlsx` | 430 kB | 143 kB | **loaded only when a spreadsheet is imported** |
+| `icons` | 145 kB | 30 kB | the icon library changes |
+| `xlsx` | 430 kB | 143 kB | **only when a spreadsheet is imported** |
+| `workbookImport` | 9 kB | — | **only when a spreadsheet is imported** |
+| `report` | 21 kB | 7 kB | **only when a report is generated** |
+| `fr` / `es` / `de` / `ar` | 66–81 kB | 21–22 kB each | **only the one language you chose** |
 
-Analytics, Scenarios, History, Categories and Settings are separate chunks, fetched when the browser is idle so a tab switch is instant rather than paying the cost at the moment the transition plays.
+Analytics, Scenarios, History, Categories, Currencies, Settings and the tour are separate chunks, fetched when the browser is idle so a tab switch is instant rather than paying the cost at the moment the transition plays.
+
+Only English is bundled. Four dictionaries are about 85 kB gzipped and four fifths of them are dead weight for any given reader; until a chosen language's chunk lands the interface is English rather than blank. The `index` chunk grew from 96 kB to 130 kB gzipped this session — the English dictionary is a thousand keys, and the currency dataset, the language list and the icon catalogue are each a table the application genuinely uses. It is measured, and it is on the list.
 
 ---
 
 ## Current limitations
 
 - **The Neon HTTP transport itself is not exercised by tests** — the SQL is verified against real PostgreSQL through an equivalent driver interface, but Neon's own wire protocol, notably `sql.transaction([...])`, is assumed.
-- **Almost no automated browser tests.** `tests/editor-typing.test.tsx` covers the editor's focus behaviour under jsdom; everything else is verified by hand in a real browser at 320px, 390px and 1440px. A Playwright suite is the obvious next step.
+- **The browser harness covers the workflows, not the whole surface.** `npm run verify` drives a real Chrome through the DevTools protocol — the loading sequence, every theme, the aircraft, the transition's direction, the period selector's layering, the exchange-rate refresh and its pair sheet, building an activity and a transaction, the funding split, the wallet and its reset, the report, and sweeps for overflow, small targets and WCAG AA contrast at 320px, 390px and 1440px in both a light and a dark theme. It does not open every editor or every dialog.
 - **`xlsx@0.18.5` carries two high-severity advisories** with no fix published to the npm registry. It is loaded on demand, only for a file the user chose themselves, and never runs on the server.
 - **Password-reset email needs a verified sender.** Without `RESEND_API_KEY` and a verified domain, the reset link is written to the server log instead of being sent.
 - Further open items are tracked in `implementation_plan.md` and `docs/KNOWN_ISSUES.md`.
@@ -253,6 +273,7 @@ Analytics, Scenarios, History, Categories and Settings are separate chunks, fetc
 | `docs/DESIGN_SYSTEM.md` | Typography, colour, charts, components |
 | `docs/TESTING.md` | Test layers and how to run them |
 | `docs/KNOWN_ISSUES.md` | Open problems and technical debt |
+| `CODEX_MASTER_GUIDE.md`, `PROJECT_BIBLE.md` | The owner's original specification and working rules |
 | `CHANGELOG.md` | What changed and why |
 
 `implementation_plan.md` is the single live tracker. A task is ticked only when it is implemented **and** verified.

@@ -51,7 +51,7 @@ export const MobileNav: React.FC<{ activeTab: TabKey; setActiveTab: (t: TabKey) 
           <div
             className="mobile-more-sheet"
             role="dialog"
-            aria-label="More sections"
+            aria-label={t("nav.moreSections")}
             onClick={(e) => e.stopPropagation()}
           >
             <div className="mobile-more-header">
@@ -83,11 +83,12 @@ export const MobileNav: React.FC<{ activeTab: TabKey; setActiveTab: (t: TabKey) 
         </div>
       )}
 
-      <nav className="mobile-nav" aria-label="Mobile navigation">
+      <nav className="mobile-nav" aria-label={t("nav.mobileNavigation")}>
         {mobileTabs.map((tab) => (
           <button
             key={tab.key}
             className={`mobile-nav-item ${activeTab === tab.key ? "active" : ""}`}
+            data-tab={tab.key}
             onClick={() => {
               setActiveTab(tab.key);
               setMoreOpen(false);

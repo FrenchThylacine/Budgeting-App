@@ -49,6 +49,15 @@ const CurrencyPanel = lazy(() => loadCurrencies().then((m) => ({ default: m.Curr
  * it have no business in the chunk that has to arrive before anything paints.
  */
 const Tutorial = lazy(() => import("./components/onboarding/Tutorial").then((m) => ({ default: m.Tutorial })));
+/**
+ * The reminder for somebody who chose "Decide later".
+ *
+ * Deferred with the tour it belongs to: it renders nothing for the vast
+ * majority of sessions, and its module is the tour's own.
+ */
+const TutorialReminder = lazy(() =>
+  import("./components/onboarding/TutorialReminder").then((m) => ({ default: m.TutorialReminder })),
+);
 
 /**
  * Fetch every deferred panel once the browser is idle.
@@ -82,10 +91,13 @@ import { Lock, Unlock } from "lucide-react";
 import { useAuthStore } from "./store/authStore";
 import { AuthScreen } from "./components/auth/AuthScreen";
 import { TabTransition } from "./components/ui/TabTransition";
-import { AircraftArt, AircraftMark } from "./components/ui/AircraftMark";
 import { Tricolour } from "./components/ui/Tricolour";
+import { LoadingScreen, recallBootAircraft, rememberBootAircraft } from "./components/loading/LoadingScreen";
+import { applyTheme, clearTheme, resolveAppearance, themeFor } from "./domain/theme";
 import { shouldAutoStartTutorial } from "./domain/tutorial";
 import { useTranslation } from "./i18n/useTranslation";
+import { resolveStoredText } from "./domain/storedText";
+import { refreshRatesOnOpen } from "./domain/exchangeRates";
 
 type TabKey =
   | "dashboard"
@@ -130,6 +142,15 @@ export default function App() {
   const tutorialDecided = useRef(false);
   const [rolloverOpen, setRolloverOpen] = useState(false);
   const [historicalDialogOpen, setHistoricalDialogOpen] = useState(false);
+  /**
+   * The boot overlay, and the aircraft it flies.
+   *
+   * Read once, on mount: re-reading it would swap the aeroplane mid-departure
+   * the moment the snapshot arrives with a different preference in it.
+   */
+  const [bootComplete, setBootComplete] = useState(false);
+  const [bootAircraft] = useState(recallBootAircraft);
+  const { t, language } = useTranslation();
 
   const snapshot = useBudgetStore((s) => s.snapshot);
   const hydrated = useBudgetStore((s) => s.hydrated);
@@ -154,6 +175,38 @@ export default function App() {
   useEffect(() => {
     if (user) void hydrate();
   }, [user, hydrate]);
+
+  /*
+   * Exchange rates, on open.
+   *
+   * Once per session and only when a refresh is genuinely due — the daily
+   * publication boundary and the age guard live in `domain/exchangeRates.ts`,
+   * and a fresh cache answers without touching the network. Nothing is written
+   * unless something actually changed, because an identical rate set stored
+   * again is a revision bump and a sync to every other device saying nothing.
+   *
+   * A failure is recorded rather than swallowed: the Currencies tab reports
+   * "the last attempt failed" rather than presenting yesterday's numbers as
+   * today's.
+   */
+  const ratesChecked = useRef(false);
+  useEffect(() => {
+    if (!hydrated || ratesChecked.current) return;
+    ratesChecked.current = true;
+    /*
+     * No cancellation on unmount, deliberately. Under StrictMode this effect
+     * runs, is torn down and runs again on the same fiber — so the ref has
+     * already been set by the time the second run arrives, and cancelling the
+     * first run's promise threw away the only fetch that was ever made. The
+     * result goes to the store rather than to component state, so a write that
+     * lands after unmount is simply a write.
+     */
+    void refreshRatesOnOpen(useBudgetStore.getState().snapshot.settings.exchangeRates)
+      .then((result) => {
+        if (result) useBudgetStore.getState().updateSettings({ exchangeRates: result.rates });
+      })
+      .catch(() => undefined); // a rate refresh must never surface as an error
+  }, [hydrated]);
 
   // Warm the deferred panels once there is something on screen.
   useEffect(() => {
@@ -201,20 +254,54 @@ export default function App() {
   useEffect(() => {
     try { localStorage.setItem(SIDEBAR_PREF_KEY, String(sidebarCollapsed)); } catch { /* noop */ }
   }, [sidebarCollapsed]);
+  /*
+   * The theme.
+   *
+   * Three inputs: the chosen preset, the chosen appearance, and — when the
+   * appearance is "system" — what the operating system is doing right now. The
+   * last one is subscribed to rather than read once, because a laptop that
+   * switches to dark at sunset should take the application with it.
+   */
+  const themePreset = snapshot.settings.themePreset;
+  const appearance = snapshot.settings.appearance;
+  const darkModeSetting = snapshot.settings.darkMode === true;
+  const [systemDark, setSystemDark] = useState(
+    () => window.matchMedia?.("(prefers-color-scheme: dark)").matches === true,
+  );
+  useEffect(() => {
+    const query = window.matchMedia?.("(prefers-color-scheme: dark)");
+    if (!query) return;
+    const onChange = (event: MediaQueryListEvent) => setSystemDark(event.matches);
+    query.addEventListener("change", onChange);
+    return () => query.removeEventListener("change", onChange);
+  }, []);
+
   useEffect(() => {
     const root = document.documentElement;
+    const theme = themeFor(themePreset);
+    const dark = resolveAppearance(appearance, darkModeSetting, systemDark, theme);
     // `=== true`, not the raw value: classList.toggle ignores an `undefined`
     // second argument and flips the class instead of clearing it. A snapshot
     // stored without `darkMode` therefore inverted the theme on every run of
     // this effect, leaving a dark page with light-scheme form controls.
-    const dark = snapshot.settings.darkMode === true;
     root.classList.toggle("dark", dark);
     root.style.colorScheme = dark ? "dark" : "light";
+    applyTheme(root, theme, dark);
     return () => {
       root.classList.remove("dark");
       root.style.removeProperty("color-scheme");
+      clearTheme(root);
     };
-  }, [snapshot.settings.darkMode]);
+  }, [themePreset, appearance, darkModeSetting, systemDark]);
+
+  /*
+   * The loading screen runs before the snapshot exists, so it cannot read the
+   * chosen aircraft from it. The choice is mirrored into local storage purely
+   * as a hint for the *next* cold start.
+   */
+  useEffect(() => {
+    if (hydrated) rememberBootAircraft(snapshot.settings.aircraft);
+  }, [hydrated, snapshot.settings.aircraft]);
 
   /**
    * Move the page when the period changes — always the same way.
@@ -280,43 +367,30 @@ export default function App() {
     return () => window.removeEventListener("keydown", handler);
   }, []);
 
-  // Three states, not two: "still checking" must not look like "signed out",
-  // or the sign-in form flashes at an already-signed-in user on every load.
-  if (!authChecked) {
-    return (
-      <div className="boot-screen" role="status" aria-live="polite">
-        <div className="boot-inner">
-          <div className="boot-craft">
-            <AircraftArt size={132} />
-          </div>
-          <div style={{ display: "grid", justifyItems: "center", gap: 4 }}>
-            <div className="boot-title">Budget OS</div>
-            <div className="boot-caption">Checking your session…</div>
-          </div>
-          <div className="boot-route" aria-hidden="true" />
-        </div>
-      </div>
-    );
-  }
+  /*
+   * The boot overlay covers the application until there is something real
+   * underneath it, and then flies away — which is what uncovers the page. Three
+   * states, not two: "still checking" must not look like "signed out", or the
+   * sign-in form flashes at an already-signed-in user on every load.
+   */
+  const appReady = authChecked && (!user || hydrated);
+  const boot = !bootComplete ? (
+    <LoadingScreen
+      ready={appReady}
+      aircraft={bootAircraft}
+      caption={!authChecked ? t("boot.checkingSession") : t("boot.loading")}
+      onFinished={() => setBootComplete(true)}
+    />
+  ) : null;
+
+  if (!appReady) return boot;
 
   if (!user) {
-    return <AuthScreen />;
-  }
-
-  if (!hydrated) {
     return (
-      <div className="boot-screen" role="status" aria-live="polite">
-        <div className="boot-inner">
-          <div className="boot-craft">
-            <AircraftArt size={132} />
-          </div>
-          <div style={{ display: "grid", justifyItems: "center", gap: 4 }}>
-            <div className="boot-title">Budget OS</div>
-            <div className="boot-caption">Loading your finances…</div>
-          </div>
-          <div className="boot-route" aria-hidden="true" />
-        </div>
-      </div>
+      <>
+        {boot}
+        <AuthScreen />
+      </>
     );
   }
 
@@ -338,6 +412,7 @@ export default function App() {
 
   return (
     <ErrorBoundary>
+      {boot}
       <Tricolour className="tricolour-app" />
       <div className={`app-shell ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}>
         <Sidebar
@@ -351,18 +426,24 @@ export default function App() {
           {notice && (
             <div className="notice-bar">
               <span>{notice}</span>
-              <button className="btn btn-ghost btn-sm" onClick={() => setNotice("")}>Dismiss</button>
+              <button className="btn btn-ghost btn-sm" onClick={() => setNotice("")}>{t("common.dismiss")}</button>
             </div>
           )}
 
           {syncNotice && (
             <div className="notice-bar" role="alert">
-              <span>{syncNotice}</span>
-              <button className="btn btn-ghost btn-sm" onClick={clearSyncNotice}>Dismiss</button>
+              <span>{resolveStoredText(syncNotice, t)}</span>
+              <button className="btn btn-ghost btn-sm" onClick={clearSyncNotice}>{t("common.dismiss")}</button>
             </div>
           )}
 
           <Header calculation={calculation} setRolloverOpen={setRolloverOpen} />
+
+          {/* Renders nothing unless the tour was put off; see
+              `shouldOfferReminder`. */}
+          <Suspense fallback={null}>
+            <TutorialReminder onResume={() => setTutorialOpen(true)} />
+          </Suspense>
 
           {/* Above the historical indicator in the DOM *and* in the paint
               order, which is what makes its popover reach the pointer. See
@@ -375,23 +456,20 @@ export default function App() {
             historicalEditUnlocked ? (
               <div className="historical-banner historical-banner-unlocked" role="alert">
                 <Unlock size={16} aria-hidden="true" />
-                <span>
-                  Editing <strong>{periodLabel(snapshot.settings)}</strong> — a closed period. Changes are
-                  recorded in the audit trail.
-                </span>
+                <span>{t("historical.editing", { period: periodLabel(snapshot.settings, language) })}</span>
                 {/* Pushed to the trailing edge by the stylesheet, not by an
                     inline style: inline wins over every rule, so the phone
                     layout could not stack it without `!important`. */}
                 <button className="btn btn-secondary btn-sm" onClick={lockHistoricalEditing}>
-                  <Lock size={14} /> Relock
+                  <Lock size={14} /> {t("historical.relock")}
                 </button>
               </div>
             ) : (
               <div className="historical-banner" role="status">
                 <Lock size={16} aria-hidden="true" />
-                <span>Historical period · period-bound financial data is read-only.</span>
+                <span>{t("historical.readOnly")}</span>
                 <button className="btn btn-ghost btn-sm" onClick={() => setHistoricalDialogOpen(true)}>
-                  <Unlock size={14} /> Edit this period
+                  <Unlock size={14} /> {t("historical.edit")}
                 </button>
               </div>
             )
@@ -407,7 +485,7 @@ export default function App() {
               fallback={
                 <div className="panel-loading" role="status" aria-live="polite">
                   <span className="panel-loading-bar" aria-hidden="true" />
-                  <span className="text-caption">Loading…</span>
+                  <span className="text-caption">{t("common.loading")}</span>
                 </div>
               }
             >
@@ -429,7 +507,7 @@ export default function App() {
 
         {historicalDialogOpen && (
           <HistoricalEditDialog
-            periodLabel={periodLabel(snapshot.settings)}
+            periodLabel={periodLabel(snapshot.settings, language)}
             onCancel={() => setHistoricalDialogOpen(false)}
             onConfirm={() => {
               unlockHistoricalEditing();

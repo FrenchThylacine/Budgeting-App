@@ -1,11 +1,9 @@
 import type { BudgetSnapshot, Settings } from "./types";
 import { activityBudgetSummary, type FundingTotals } from "./activityBudget";
 import { FUNDING_KINDS, FUNDING_META, type FundingKind } from "./funding";
-import { monthName as monthNameOf } from "./dates";
-import { en } from "../i18n/en";
+import { createTranslator, formatDate, formatNumber, formatPercent, monthNames, type Translator } from "./i18n";
 import { calculateYear, normalizeEntry } from "./calculations";
 import { formatMoney } from "./currency";
-import { monthName } from "./dates";
 import {
   budgetPacing,
   budgetRelevantEntries,
@@ -24,12 +22,23 @@ import {
  * Built from the same shared analytics selectors as the screen, so a printed
  * report can never state a different number than the dashboard. Rendering is
  * kept separate (see `reportHtml`) so the data can also be tested on its own.
+ *
+ * **It is written in the reader's language.** Every string below is resolved
+ * through a translator the caller supplies, and every date, number and month
+ * name through `Intl` against that translator's locale — a French interface
+ * used to hand its reader an English report, which is the one place in this
+ * application where the language silently changed.
+ *
+ * The translator defaults to English so a test, a script or any other
+ * non-React caller can build a report without wiring one up.
  */
 
 export interface ReportSection {
   label: string;
   value: string;
   detail?: string;
+  /** Shown in the hero row rather than the summary grid. */
+  lead?: boolean;
 }
 
 /** One line of the funding breakdown. */
@@ -64,6 +73,10 @@ export interface PeriodReport {
   subtitle: string;
   generatedAt: string;
   currency: string;
+  /** BCP 47 tag the report was written in, for `<html lang>`. */
+  language: string;
+  /** True when the language is written right to left. */
+  rtl: boolean;
   summary: ReportSection[];
   categories: CategoryStat[];
   monthly: { label: string; value: number | null }[];
@@ -103,17 +116,17 @@ export function isCustomRange(scope: ReportScope): scope is CustomRange {
   return typeof scope === "object" && scope !== null;
 }
 
-/** Written form of a range, e.g. "1 Mar – 15 Apr 2026". */
-function rangeTitle(range: CustomRange): string {
+/** Written form of a range, e.g. "1 Mar – 15 Apr 2026", in the report's locale. */
+function rangeTitle(range: CustomRange, locale: string): string {
   const start = new Date(`${range.from}T12:00:00`);
   const end = new Date(`${range.to}T12:00:00`);
   const sameYear = start.getFullYear() === end.getFullYear();
-  const startText = start.toLocaleDateString(undefined, {
+  const startText = formatDate(start, locale, {
     day: "numeric",
     month: "short",
     ...(sameYear ? {} : { year: "numeric" }),
   });
-  const endText = end.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
+  const endText = formatDate(end, locale, { day: "numeric", month: "short", year: "numeric" });
   return `${startText} – ${endText}`;
 }
 
@@ -145,7 +158,13 @@ export function buildPeriodReport(
   snapshot: BudgetSnapshot,
   scope: ReportScope,
   now = new Date(),
+  t: Translator = createTranslator("en"),
 ): PeriodReport {
+  const locale = t.language;
+  const months = monthNames(locale);
+  const monthLabel = (month: number) => months[Math.min(11, Math.max(0, month - 1))];
+  const shortMonths = monthNames(locale, "short");
+
   const custom = isCustomRange(scope) ? scope : null;
   const settings: Settings = {
     ...snapshot.settings,
@@ -172,75 +191,105 @@ export function buildPeriodReport(
    */
   const pacing = custom ? null : budgetPacing(scoped, entries, now);
   const categories = categoryBreakdown(entries, scoped, custom ? false : undefined);
-  const comparison = custom
-    ? rangeComparison(scoped, custom)
-    : periodComparison(scoped, settings);
+  const comparison = custom ? rangeComparison(scoped, custom, locale) : periodComparison(scoped, settings);
   const health = financialHealth({ pacing, categories, comparison, stats });
 
   const money = (value: number | null | undefined) =>
     value == null || !Number.isFinite(value) ? "—" : formatMoney(value, settings.baseCurrency, settings.currencyDisplayMode);
+  const percent = (value: number | null | undefined) =>
+    value == null || !Number.isFinite(value) ? "—" : formatPercent(value, locale);
 
   const title = custom
-    ? rangeTitle(custom)
+    ? rangeTitle(custom, locale)
     : scope === "month"
-      ? `${monthName(settings.selectedMonth)} ${settings.selectedYear}`
-      : String(settings.selectedYear);
+      ? `${monthLabel(settings.selectedMonth)} ${formatNumber(settings.selectedYear, locale, { useGrouping: false })}`
+      : formatNumber(settings.selectedYear, locale, { useGrouping: false });
 
+  /*
+   * The hero row.
+   *
+   * Four figures answer the question the report is opened to answer: what went
+   * out, what was available, what is left, and how healthy that is. Everything
+   * else is detail behind them. They are marked `lead` rather than being a
+   * separate list so `summary` remains one ordered model to test.
+   */
   const summary: ReportSection[] = [
     {
-      label: "Total spending",
-      value: stats.total != null ? money(stats.total) : "No data recorded",
-      detail: funding.externalCount > 0 ? "Charged to your budget" : undefined,
+      label: t("report.totalSpending"),
+      value: stats.total != null ? money(stats.total) : t("report.noDataRecorded"),
+      detail: funding.externalCount > 0 ? t("report.chargedToBudget") : undefined,
+      lead: true,
     },
-    { label: "Transactions", value: String(stats.count) },
-    { label: "Average transaction", value: stats.average != null ? money(stats.average) : "—" },
-    { label: "Largest transaction", value: stats.largest != null ? money(stats.largest) : "—" },
-    { label: "Recurring", value: money(stats.recurringTotal), detail: stats.recurringShare != null ? `${stats.recurringShare.toFixed(1)}% of spend` : undefined },
-    { label: "One-off", value: money(stats.oneOffTotal) },
   ];
+
+  if (pacing) {
+    summary.push(
+      { label: t("report.budget"), value: money(pacing.budget), lead: true },
+      {
+        label: t("report.remaining"),
+        value: money(pacing.remaining),
+        detail: t("report.used", { percent: percent(pacing.utilisation ?? 0) }),
+        lead: true,
+      },
+    );
+  }
+
+  summary.push(
+    { label: t("report.transactions"), value: formatNumber(stats.count, locale) },
+    { label: t("report.averageTransaction"), value: stats.average != null ? money(stats.average) : "—" },
+    { label: t("report.largestTransaction"), value: stats.largest != null ? money(stats.largest) : "—" },
+    {
+      label: t("report.recurring"),
+      value: money(stats.recurringTotal),
+      detail: stats.recurringShare != null ? t("report.ofSpend", { percent: percent(stats.recurringShare) }) : undefined,
+    },
+    { label: t("report.oneOff"), value: money(stats.oneOffTotal) },
+  );
 
   // Named only when there is something to name, so an ordinary month is not
   // padded with a line reading "—".
   if (funding.otherFundedCount > 0) {
     summary.push({
-      label: "Paid by other",
+      label: t("funding.other"),
       value: money(funding.otherFunded),
-      detail: `${funding.otherFundedCount} transaction${funding.otherFundedCount === 1 ? "" : "s"}, never charged to you`,
+      detail: t("report.neverChargedToYou", { count: funding.otherFundedCount }),
     });
   }
   if (funding.outsideBudgetCount > 0) {
     summary.push({
-      label: "Outside budget",
+      label: t("funding.outside"),
       value: money(funding.outsideBudget),
-      detail: `${funding.outsideBudgetCount} transaction${
-        funding.outsideBudgetCount === 1 ? "" : "s"
-      }, your money kept off this budget`,
+      detail: t("report.keptOffBudget", { count: funding.outsideBudgetCount }),
     });
   }
   if (funding.externalCount > 0) {
     summary.push({
-      label: "All transactions",
+      label: t("report.allTransactions"),
       value: money(funding.transactions),
-      detail: "Every kind of funding together",
+      detail: t("report.everyKind"),
     });
-  }
-
-  if (pacing) {
-    summary.push(
-      { label: "Budget", value: money(pacing.budget) },
-      { label: "Remaining", value: money(pacing.remaining), detail: `${Math.round(pacing.utilisation ?? 0)}% used` },
-    );
   }
 
   summary.push(
     // The three treasury figures, never collapsed into one. See domain/wallet.ts.
-    { label: "Wallet balance", value: money(calc.wallet.walletTotal), detail: "Actual money held" },
-    { label: "Remaining budget", value: money(calc.wallet.budgetRemaining), detail: "Budget money still available" },
-    { label: "Personal balance", value: money(calc.wallet.personalBalance), detail: "Money outside the budget" },
+    { label: t("report.walletBalance"), value: money(calc.wallet.walletTotal), detail: t("report.actualMoneyHeld") },
     {
-      label: `vs ${comparison.previousLabel}`,
-      value: comparison.deltaAbs != null ? money(comparison.deltaAbs) : "No comparable data",
-      detail: comparison.deltaPct != null ? `${comparison.deltaPct > 0 ? "+" : ""}${comparison.deltaPct.toFixed(1)}%` : undefined,
+      label: t("report.remainingBudget"),
+      value: money(calc.wallet.budgetRemaining),
+      detail: t("report.budgetMoneyAvailable"),
+    },
+    {
+      label: t("report.personalBalance"),
+      value: money(calc.wallet.personalBalance),
+      detail: t("report.moneyOutsideBudget"),
+    },
+    {
+      label: t("report.versus", { period: comparison.previousLabel }),
+      value: comparison.deltaAbs != null ? money(comparison.deltaAbs) : t("report.noComparableData"),
+      detail:
+        comparison.deltaPct != null
+          ? `${comparison.deltaPct > 0 ? "+" : ""}${percent(comparison.deltaPct)}`
+          : undefined,
     },
   );
 
@@ -259,7 +308,7 @@ export function buildPeriodReport(
       })
     : calc.monthlyTrend
   ).map((period, index) => ({
-    label: monthName(index + 1).slice(0, 3),
+    label: shortMonths[index] ?? String(index + 1),
     // A month with no records stays null: the report must not print a
     // fabricated zero for a month we know nothing about.
     value: period.status === "value" || period.status === "zero" ? period.total ?? 0 : null,
@@ -284,7 +333,7 @@ export function buildPeriodReport(
     const gross = funding.transactions ?? 0;
     return {
       kind,
-      label: FUNDING_META[kind].label,
+      label: t(`funding.${kind}`),
       glyph: FUNDING_META[kind].glyph,
       amount,
       count,
@@ -307,92 +356,83 @@ export function buildPeriodReport(
   const activityShares = new Map(activitySummary.shares.map((share) => [share.activity.id, share.share]));
   const activityLines: ActivityLine[] = activitySummary.items.map((item) => ({
     name: item.activity.name,
-    category: categoryNames.get(item.activity.categoryId) ?? "Uncategorized",
+    category: categoryNames.get(item.activity.categoryId) ?? t("common.uncategorised"),
     funding: item.funding,
-    fundingLabel: FUNDING_META[item.funding].shortLabel,
+    fundingLabel: t(`funding.${item.funding}.short`),
     glyph: FUNDING_META[item.funding].glyph,
     monthly: item.monthlyBase,
     yearly: item.yearlyBase,
     share: activityShares.get(item.activity.id) ?? null,
     dueThisMonth: item.status === "unknown" ? null : (item.dueBase ?? 0),
     /*
-     * The report is written in English, so the reason **key** is resolved
-     * against the English dictionary here. `unknownReason` is a key rather
-     * than a sentence precisely so the *interface* can say it in the reader's
-     * own language; printing the raw key would be the worst of both.
+     * `unknownReason` is a translation key rather than a sentence, precisely so
+     * both the interface and this report can say it in the reader's own
+     * language. Printing the raw key would be the worst of both.
      */
     dueNote:
       item.status === "unknown"
-        ? ((en as Record<string, string>)[item.unknownReason ?? ""] ?? "Payment month unknown")
+        ? t(item.unknownReason ?? "activity.unknownMonth")
         : item.status === "not-due"
-          ? "Not due this month"
-          : "Due this month",
+          ? t("report.notDueThisMonth")
+          : t("report.dueThisMonth"),
   }));
 
+  /*
+   * Notes: short, factual, and only when there is something to say.
+   *
+   * They used to be paragraphs — four sentences to explain that money somebody
+   * else paid is not charged to you, in a report that has already shown that
+   * three times in a table. A report that has to be *read* to be understood is
+   * a report nobody reads.
+   */
   const notes: string[] = [];
   const overCap = categories.filter((c) => c.overCap);
   if (overCap.length > 0) {
     notes.push(
-      `${overCap.length} categor${overCap.length === 1 ? "y" : "ies"} exceeded the monthly cap: ${overCap
-        .map((c) => `${c.category?.name ?? "Uncategorized"} (${money(c.total - (c.cap ?? 0))} over)`)
-        .join(", ")}.`,
+      t("report.noteOverCap", {
+        count: overCap.length,
+        list: overCap
+          .map((c) => `${c.category?.name ?? t("common.uncategorised")} (+${money(c.total - (c.cap ?? 0))})`)
+          .join(", "),
+      }),
     );
   }
-  if (categories.some((c) => c.category?.bucket === "piloting")) {
-    notes.push("Piloting is reported separately and is excluded from category share percentages.");
-  }
-  if (stats.total == null) {
-    notes.push("No spending was recorded for this period. Missing data is reported as unavailable, not as zero.");
-  }
-  if (custom) {
-    notes.push(
-      "This is a custom range. Your budget is set per month, so there is no budget figure to measure a range against — prorating one would be a number you never chose. Category caps are reported as totals rather than as breaches for the same reason.",
-    );
-  }
-  if (funding.otherFundedCount > 0) {
-    notes.push(
-      `${money(funding.otherFunded)} across ${funding.otherFundedCount} transaction${
-        funding.otherFundedCount === 1 ? " was" : "s were"
-      } paid by someone else. ${
-        funding.otherFundedCount === 1 ? "It is" : "They are"
-      } recorded at full value and excluded from the budget, so every figure above is what this budget actually spent.`,
-    );
-  }
-  if (funding.outsideBudgetCount > 0) {
-    notes.push(
-      `${money(funding.outsideBudget)} across ${funding.outsideBudgetCount} transaction${
-        funding.outsideBudgetCount === 1 ? " is" : "s are"
-      } your own money kept outside this budget. Recorded in full, charged to nothing here, and reported separately from spending somebody else paid for — the two are not the same fact.`,
-    );
-  }
+  if (stats.total == null) notes.push(t("report.noteNoSpending"));
+  if (custom) notes.push(t("report.noteCustomRange"));
   if (activitySummary.unscheduled.length > 0) {
     notes.push(
-      `${activitySummary.unscheduled.length} activit${
-        activitySummary.unscheduled.length === 1 ? "y has" : "ies have"
-      } no known payment date, so ${
-        activitySummary.unscheduled.length === 1 ? "it is" : "they are"
-      } excluded from "required in ${monthNameOf(activityMonth)}" rather than being assigned to a month nobody chose. ${
-        activitySummary.unscheduled.map((item) => item.activity.name).join(", ")
-      }.`,
+      t("report.noteUnscheduled", {
+        count: activitySummary.unscheduled.length,
+        month: monthLabel(activityMonth),
+        list: activitySummary.unscheduled.map((item) => item.activity.name).join(", "),
+      }),
     );
   }
 
   return {
     title,
     subtitle: custom
-      ? `Report for ${inclusiveDays(custom.from, custom.to)} days`
+      ? t("report.customRange", { days: inclusiveDays(custom.from, custom.to) })
       : scope === "month"
-        ? "Monthly financial report"
-        : "Annual financial report",
+        ? t("report.monthly")
+        : t("report.annual"),
     generatedAt: now.toISOString(),
     currency: settings.baseCurrency,
+    language: locale,
+    rtl: t.rtl,
     summary,
     categories,
     monthly,
     health: {
       score: health.score,
       grade: health.grade,
-      factors: health.factors.map((f) => ({ label: f.label, score: f.score, detail: f.detail })),
+      // Resolved here rather than carried as keys, because the report model is
+      // the thing that gets printed: by this point the language is decided.
+      factors: health.factors.map((f) => ({
+        label: t(f.labelKey),
+        score: f.score,
+        detail: f.detailKey ? t(f.detailKey, f.detailParams) : undefined,
+      })),
     },
     funding: { lines: fundingLines, gross: funding.transactions },
     activities: {
@@ -401,7 +441,7 @@ export function buildPeriodReport(
       yearly: activitySummary.yearly,
       requiredThisMonth: activitySummary.requiredThisMonth,
       unscheduled: activitySummary.unscheduled.length,
-      monthLabel: monthNameOf(activityMonth),
+      monthLabel: monthLabel(activityMonth),
     },
     notes,
   };
@@ -414,7 +454,7 @@ export function buildPeriodReport(
  * weeks before them. A range with no records on either side stays `null` on
  * that side — missing is not zero.
  */
-function rangeComparison(snapshot: BudgetSnapshot, range: CustomRange) {
+function rangeComparison(snapshot: BudgetSnapshot, range: CustomRange, locale: string) {
   const previous = precedingRange(range);
   const total = (window: CustomRange): number | null => {
     const found = budgetRelevantEntries(entriesInRange(snapshot, window), snapshot.settings);
@@ -426,7 +466,7 @@ function rangeComparison(snapshot: BudgetSnapshot, range: CustomRange) {
   return {
     currentTotal,
     previousTotal,
-    previousLabel: rangeTitle(previous),
+    previousLabel: rangeTitle(previous, locale),
     deltaAbs: comparable ? currentTotal - previousTotal : null,
     deltaPct: comparable && previousTotal !== 0 ? ((currentTotal - previousTotal) / previousTotal) * 100 : null,
   };
@@ -440,6 +480,13 @@ function escapeHtml(value: string): string {
     .replace(/"/g, "&quot;");
 }
 
+/** The three funding colours, as real values: a printed page has no CSS variables. */
+const FUNDING_COLOUR: Record<FundingKind, string> = {
+  personal: "#1E5AA8",
+  other: "#0B7C8C",
+  outside: "#B45309",
+};
+
 /**
  * Print-ready HTML for a report.
  *
@@ -447,33 +494,53 @@ function escapeHtml(value: string): string {
  * in the browser's print-to-PDF dialog, which is what turns it into a PDF
  * without shipping a PDF library.
  *
- * **Colour is never the only thing carrying meaning.** The report is printed,
- * and a great many printers are monochrome. Every distinction therefore
- * survives being reduced to grey:
+ * ─── What it is trying to be ─────────────────────────────────────────────────
  *
- *  - each funding kind carries a **glyph** (● ◆ ▲) and its written label, not
- *    just a swatch;
- *  - category swatches are a filled disc *and* the category's name, and the
- *    bars beside them carry a hatched or solid fill that stays distinct in
- *    greyscale;
- *  - "over cap" is a word and a heavy rule, not a red bar;
- *  - the summary cards separate by rule weight and type size rather than by
- *    background tint alone;
- *  - `print-color-adjust: exact` is deliberately *not* used to force colour —
- *    the layout is designed to work without it.
+ * Bright, modern and scannable: a headline row of the four figures the report
+ * exists to give, then each section as a compact table or chart. It used to be
+ * set in a serif and read as a newspaper — dignified, and slow to scan. The
+ * figures are the content; the prose is not.
  *
- * The colours that remain are there to make the screen version pleasant, and
- * every one of them is decoration on top of a distinction already made.
+ * ─── Colour is never the only thing carrying meaning ─────────────────────────
+ *
+ * The report is printed, and a great many printers are monochrome — and Chrome
+ * does not print background colours at all unless the reader ticks a box. Every
+ * distinction therefore survives being reduced to grey **and** survives losing
+ * its fills entirely:
+ *
+ *  - each funding kind carries a **glyph** (● ◆ ▲) and its written label, and
+ *    each segment of the split bar carries its glyph and its percentage *inside
+ *    the segment*, with a border that stays when the fill does not;
+ *  - category swatches are a bordered disc beside the category's name;
+ *  - "over cap" is a word in a box, not a red bar;
+ *  - the emphasised card is distinguished by border weight, not by tint;
+ *  - a month with no data prints "?" rather than a bar of height zero.
+ *
+ * `print-color-adjust: exact` is deliberately not used. The layout works
+ * without it, which is the only way to know that it works.
  */
-export function reportHtml(report: PeriodReport, moneyFormatter: (value: number) => string): string {
+export function reportHtml(
+  report: PeriodReport,
+  moneyFormatter: (value: number) => string,
+  t: Translator = createTranslator("en"),
+): string {
   const maxMonthly = Math.max(...report.monthly.map((m) => m.value ?? 0), 1);
   const maxCategory = Math.max(...report.categories.map((c) => c.total), 1);
   const maxActivity = Math.max(...report.activities.lines.map((line) => line.yearly), 1);
+  const locale = report.language;
+  const percent = (value: number | null | undefined) =>
+    value == null || !Number.isFinite(value) ? "—" : formatPercent(value, locale);
+  const count = (value: number) => formatNumber(value, locale);
+
+  const lead = report.summary.filter((item) => item.lead);
+  const rest = report.summary.filter((item) => !item.lead);
 
   const monthlyBars = report.monthly
     .map((month) => {
       if (month.value == null) {
-        return `<div class="bar"><div class="bar-missing" title="No data">?</div><span>${escapeHtml(month.label)}</span></div>`;
+        return `<div class="bar"><div class="bar-missing" title="${escapeHtml(t("report.noData"))}">?</div><span>${escapeHtml(
+          month.label,
+        )}</span></div>`;
       }
       const height = Math.max(2, (month.value / maxMonthly) * 100);
       return `<div class="bar"><div class="bar-fill" style="height:${height}%" title="${escapeHtml(
@@ -485,31 +552,54 @@ export function reportHtml(report: PeriodReport, moneyFormatter: (value: number)
   const categoryRows = report.categories
     .map((stat) => {
       const width = Math.max(1, (stat.total / maxCategory) * 100);
-      const share = stat.share != null ? `${stat.share.toFixed(1)}%` : "—";
-      // "Over cap" is a word in its own column. A red bar says nothing to a
+      // "Over cap" is a word in its own right. A red bar says nothing to a
       // monochrome printer, and nothing at all to a colour-blind reader.
-      const flag = stat.overCap ? '<span class="flag">OVER CAP</span>' : "";
+      const flag = stat.overCap ? `<span class="flag">${escapeHtml(t("report.overCap"))}</span>` : "";
+      const colour = escapeHtml(stat.category?.color ?? "#64748B");
       return `<tr${stat.overCap ? ' class="row-flagged"' : ""}>
-        <td><span class="dot" style="background:${escapeHtml(stat.category?.color ?? "#64748B")}"></span>${escapeHtml(
-          stat.category?.name ?? "Uncategorized",
+        <td><span class="dot" style="background:${colour}"></span>${escapeHtml(
+          stat.category?.name ?? t("common.uncategorised"),
         )} ${flag}</td>
         <td class="num">${escapeHtml(moneyFormatter(stat.total))}</td>
-        <td class="num">${escapeHtml(share)}</td>
+        <td class="num">${escapeHtml(percent(stat.share))}</td>
         <td class="num">${stat.cap != null ? escapeHtml(moneyFormatter(stat.cap)) : "—"}</td>
-        <td class="barcell"><div class="hbar" style="width:${width}%;background:${escapeHtml(
-          stat.category?.color ?? "#64748B",
-        )}"></div></td>
+        <td class="barcell"><div class="hbar" style="width:${width}%;background:${colour};border-color:${colour}"></div></td>
       </tr>`;
     })
     .join("");
 
+  /*
+   * The split, as one bar.
+   *
+   * A stacked bar answers "how much of this was mine" at a glance in a way
+   * three table rows do not. Each segment carries its own glyph and share
+   * inside it, so with the fills stripped out by a printer it is still three
+   * labelled, bordered boxes in proportion.
+   */
+  const gross = report.funding.gross ?? 0;
+  const splitBar =
+    gross > 0
+      ? `<div class="split" role="img" aria-label="${escapeHtml(t("report.funding"))}">${report.funding.lines
+          .filter((line) => (line.amount ?? 0) > 0)
+          .map((line) => {
+            const share = ((line.amount ?? 0) / gross) * 100;
+            const colour = FUNDING_COLOUR[line.kind];
+            return `<div class="split-part" style="width:${share}%;background:${colour};border-color:${colour}">
+              <span class="split-label">${escapeHtml(line.glyph)} ${escapeHtml(percent(share))}</span>
+            </div>`;
+          })
+          .join("")}</div>`
+      : "";
+
   const fundingRows = report.funding.lines
     .map(
       (line) => `<tr>
-        <td><span class="glyph" aria-hidden="true">${escapeHtml(line.glyph)}</span>${escapeHtml(line.label)}</td>
+        <td><span class="glyph" style="color:${FUNDING_COLOUR[line.kind]}" aria-hidden="true">${escapeHtml(
+          line.glyph,
+        )}</span>${escapeHtml(line.label)}</td>
         <td class="num">${line.amount != null ? escapeHtml(moneyFormatter(line.amount)) : "—"}</td>
-        <td class="num">${line.count}</td>
-        <td class="num">${line.share != null ? `${line.share.toFixed(1)}%` : "—"}</td>
+        <td class="num">${escapeHtml(count(line.count))}</td>
+        <td class="num">${escapeHtml(percent(line.share))}</td>
       </tr>`,
     )
     .join("");
@@ -517,183 +607,206 @@ export function reportHtml(report: PeriodReport, moneyFormatter: (value: number)
   const activityRows = report.activities.lines
     .map((line) => {
       const width = Math.max(1, (line.yearly / maxActivity) * 100);
+      const colour = FUNDING_COLOUR[line.funding];
       return `<tr>
         <td>
-          <span class="glyph" aria-hidden="true">${escapeHtml(line.glyph)}</span>${escapeHtml(line.name)}
+          <span class="glyph" style="color:${colour}" aria-hidden="true">${escapeHtml(line.glyph)}</span>${escapeHtml(
+            line.name,
+          )}
           <span class="sub">${escapeHtml(line.category)} · ${escapeHtml(line.fundingLabel)}</span>
         </td>
         <td class="num">${escapeHtml(moneyFormatter(line.monthly))}</td>
         <td class="num">${escapeHtml(moneyFormatter(line.yearly))}</td>
-        <td class="num">${line.share != null ? `${line.share.toFixed(1)}%` : "—"}</td>
+        <td class="num">${escapeHtml(percent(line.share))}</td>
         <td class="num">${
           line.dueThisMonth == null
-            ? `<span class="unknown" title="${escapeHtml(line.dueNote)}">not known</span>`
+            ? `<span class="unknown" title="${escapeHtml(line.dueNote)}">${escapeHtml(t("report.notKnown"))}</span>`
             : escapeHtml(moneyFormatter(line.dueThisMonth))
         }</td>
-        <td class="barcell"><div class="hbar hbar-plain" style="width:${width}%"></div></td>
+        <td class="barcell"><div class="hbar" style="width:${width}%;background:${colour};border-color:${colour}"></div></td>
       </tr>`;
     })
     .join("");
 
-  const summaryCards = report.summary
-    .map(
-      (item) => `<div class="card">
+  /*
+   * A card's value is usually a figure and occasionally a sentence — "Nothing
+   * recorded", "No comparable data". At the figure's size a sentence wraps to
+   * three lines and reads as the loudest thing on the page, so a long value is
+   * set smaller. The threshold is length rather than a type flag: the model
+   * says what the value *is*, not how big it should be.
+   */
+  const card = (item: ReportSection, strong = false) => `<div class="card${strong ? " card-strong" : ""}">
         <div class="card-label">${escapeHtml(item.label)}</div>
-        <div class="card-value">${escapeHtml(item.value)}</div>
+        <div class="card-value${item.value.length > 14 ? " card-value-text" : ""}">${escapeHtml(item.value)}</div>
         ${item.detail ? `<div class="card-detail">${escapeHtml(item.detail)}</div>` : ""}
-      </div>`,
-    )
-    .join("");
+      </div>`;
+
+  const heroCards = lead.map((item, index) => card(item, index === 0)).join("");
+  const summaryCards = rest.map((item) => card(item)).join("");
 
   const factors = report.health.factors
     .map(
       (factor) => `<div class="factor">
-        <div class="factor-head"><span>${escapeHtml(factor.label)}</span><strong>${Math.round(factor.score)}</strong></div>
-        <div class="factor-track"><div class="factor-fill" style="width:${Math.min(100, Math.max(0, factor.score))}%"></div></div>
+        <div class="factor-head"><span>${escapeHtml(factor.label)}</span><strong>${escapeHtml(
+          count(Math.round(factor.score)),
+        )}</strong></div>
+        <div class="factor-track"><div class="factor-fill" style="width:${Math.min(
+          100,
+          Math.max(0, factor.score),
+        )}%"></div></div>
         ${factor.detail ? `<div class="factor-detail">${escapeHtml(factor.detail)}</div>` : ""}
       </div>`,
     )
     .join("");
 
   const activityTotals = `<div class="grid grid-tight">
-      <div class="card"><div class="card-label">Total activity cost</div><div class="card-value">${escapeHtml(
+      <div class="card"><div class="card-label">${escapeHtml(t("funding.gross"))}</div><div class="card-value">${escapeHtml(
         moneyFormatter(report.activities.monthly.gross),
       )}</div><div class="card-detail">${escapeHtml(
-        moneyFormatter(report.activities.yearly.gross),
-      )} per year · everything, whoever pays</div></div>
-      <div class="card"><div class="card-label">● Paid by me — in budget</div><div class="card-value">${escapeHtml(
-        moneyFormatter(report.activities.monthly.personal),
-      )}</div><div class="card-detail">${escapeHtml(moneyFormatter(report.activities.yearly.personal))} per year</div></div>
-      <div class="card"><div class="card-label">◆ Paid by other</div><div class="card-value">${escapeHtml(
-        moneyFormatter(report.activities.monthly.other),
-      )}</div><div class="card-detail">${escapeHtml(moneyFormatter(report.activities.yearly.other))} per year</div></div>
-      <div class="card"><div class="card-label">▲ Outside budget</div><div class="card-value">${escapeHtml(
-        moneyFormatter(report.activities.monthly.outside),
-      )}</div><div class="card-detail">${escapeHtml(moneyFormatter(report.activities.yearly.outside))} per year</div></div>
-      <div class="card card-strong"><div class="card-label">Required in ${escapeHtml(
-        report.activities.monthLabel,
+        t("report.perYear", { amount: moneyFormatter(report.activities.yearly.gross) }),
+      )}</div></div>
+      ${FUNDING_KINDS.map(
+        (kind) => `<div class="card"><div class="card-label"><span class="glyph" style="color:${
+          FUNDING_COLOUR[kind]
+        }">${FUNDING_META[kind].glyph}</span>${escapeHtml(t(`funding.${kind}.short`))}</div><div class="card-value">${escapeHtml(
+          moneyFormatter(report.activities.monthly[kind === "personal" ? "personal" : kind === "other" ? "other" : "outside"]),
+        )}</div><div class="card-detail">${escapeHtml(
+          t("report.perYear", {
+            amount: moneyFormatter(
+              report.activities.yearly[kind === "personal" ? "personal" : kind === "other" ? "other" : "outside"],
+            ),
+          }),
+        )}</div></div>`,
+      ).join("")}
+      <div class="card card-strong"><div class="card-label">${escapeHtml(
+        t("report.requiredIn", { month: report.activities.monthLabel }),
       )}</div><div class="card-value">${escapeHtml(
         moneyFormatter(report.activities.requiredThisMonth.personal),
-      )}</div><div class="card-detail">Payments actually due this month, not a twelfth of the year</div></div>
+      )}</div><div class="card-detail">${escapeHtml(t("report.requiredHint"))}</div></div>
     </div>`;
 
   return `<!doctype html>
-<html lang="en"><head><meta charset="utf-8" />
+<html lang="${escapeHtml(report.language)}"${report.rtl ? ' dir="rtl"' : ""}><head><meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>${escapeHtml(report.title)} · ${escapeHtml(report.subtitle)}</title>
 <style>
-  @page { margin: 15mm; }
+  @page { margin: 14mm; }
   * { box-sizing: border-box; }
   :root {
-    --ink: #0F1722;
-    --ink-soft: #47515F;
-    --ink-faint: #767F8B;
-    --rule: #D8DDE4;
-    --rule-soft: #EDF0F3;
-    --navy: #0B2E5B;
+    --ink: #101722;
+    --ink-soft: #4C5768;
+    --ink-faint: #7B8698;
+    --rule: #E2E7EE;
+    --rule-soft: #F2F5F8;
+    --navy: #12326B;
     --accent: #C8102E;
+    --blue: #1E3FA8;
   }
   body {
-    font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+    /* Sans throughout: this is a dashboard on paper, not a broadsheet. Figures
+       are tabular so a column of amounts lines up. */
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
     color: var(--ink);
     margin: 0;
-    padding: 30px 34px 40px;
+    padding: 26px 30px 34px;
     background: #fff;
     line-height: 1.45;
+    font-size: 12.5px;
     -webkit-font-smoothing: antialiased;
   }
-  .sans { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
 
-  /* The masthead: a heavy rule and a hairline in the signature red. Both are
-     structural, so the hierarchy survives with no colour at all. */
+  /* The masthead: the title, and the identity as a tricolour rule. Both the
+     rule and the heavy line under the header are structural, so the hierarchy
+     survives with no colour at all. */
   header {
-    border-bottom: 3px solid var(--navy);
-    padding-bottom: 12px;
-    margin-bottom: 4px;
     display: flex; justify-content: space-between; align-items: flex-end;
     gap: 16px; flex-wrap: wrap;
+    border-bottom: 2px solid var(--ink);
+    padding-bottom: 11px;
   }
-  .rule-accent { height: 2px; background: var(--accent); width: 88px; margin-bottom: 26px; }
-  h1 { font-size: 33px; margin: 0; letter-spacing: -0.015em; line-height: 1.1; }
-  .sub { color: var(--ink-soft); font-size: 12.5px; margin-top: 5px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  .tricolour { display: flex; height: 3px; width: 96px; margin: 0 0 22px; }
+  .tricolour i { flex: 1; }
+  .tricolour i:nth-child(1) { background: var(--blue); }
+  .tricolour i:nth-child(2) { background: #E8EDF5; }
+  .tricolour i:nth-child(3) { background: var(--accent); }
+  h1 { font-size: 30px; margin: 0; letter-spacing: -0.02em; line-height: 1.08; font-weight: 700; }
+  .sub { color: var(--ink-soft); font-size: 12px; margin-top: 4px; }
 
   h2 {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em;
-    color: var(--navy); margin: 30px 0 10px; padding-bottom: 5px;
-    border-bottom: 1px solid var(--rule);
+    font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.09em;
+    color: var(--navy); margin: 26px 0 9px; padding-bottom: 4px;
+    border-bottom: 1px solid var(--rule); font-weight: 700;
   }
-  h2:first-of-type { margin-top: 20px; }
-  .lede { font-size: 12.5px; color: var(--ink-soft); margin: -4px 0 12px; }
+  .lede { font-size: 11.5px; color: var(--ink-soft); margin: -2px 0 10px; }
 
-  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(158px, 1fr)); gap: 10px; }
-  .grid-tight { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
-  .card { border: 1px solid var(--rule); border-radius: 3px; padding: 11px 13px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 9px; }
+  .grid-hero { grid-template-columns: repeat(auto-fit, minmax(168px, 1fr)); margin-top: 4px; }
+  .grid-tight { grid-template-columns: repeat(auto-fit, minmax(132px, 1fr)); }
+  .card { border: 1px solid var(--rule); border-radius: 6px; padding: 10px 12px; }
   /* Weight, not tint: the emphasised card reads as emphasised in greyscale. */
   .card-strong { border: 2px solid var(--navy); }
-  .card-label {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.07em; color: var(--ink-faint);
-  }
-  .card-value { font-size: 19px; font-weight: 700; margin-top: 3px; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
-  .card-detail { font-size: 10.5px; color: var(--ink-faint); margin-top: 3px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  .card-label { font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.07em; color: var(--ink-faint); font-weight: 600; }
+  .card-value { font-size: 20px; font-weight: 700; margin-top: 3px; font-variant-numeric: tabular-nums; letter-spacing: -0.015em; }
+  .grid-hero .card-value { font-size: 26px; }
+  /* A sentence where a figure usually goes. Declared after both rules above so
+     it wins in the hero row too. */
+  .card-value-text, .grid-hero .card-value-text { font-size: 13.5px; font-weight: 600; letter-spacing: 0; }
+  .card-detail { font-size: 10.5px; color: var(--ink-faint); margin-top: 3px; }
 
-  .health { display: flex; align-items: center; gap: 26px; flex-wrap: wrap; }
-  .score { font-size: 58px; font-weight: 800; letter-spacing: -0.035em; line-height: 1; color: var(--navy); }
-  .grade { font-size: 12px; color: var(--ink-soft); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
-  .factors { flex: 1; min-width: 250px; display: grid; gap: 8px; }
-  .factor-head { display: flex; justify-content: space-between; font-size: 11.5px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  .grade { font-size: 11.5px; color: var(--ink-soft); }
+  .factors { flex: 1; min-width: 240px; display: grid; gap: 7px; }
+  .factors-wide { display: grid; gap: 8px; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); }
+  .factor-head { display: flex; justify-content: space-between; font-size: 11px; }
   .factor-track { height: 5px; background: var(--rule-soft); border: 1px solid var(--rule); border-radius: 99px; overflow: hidden; margin-top: 3px; }
   .factor-fill { height: 100%; background: var(--navy); }
   .factor-detail { font-size: 10.5px; color: var(--ink-faint); margin-top: 2px; }
 
-  .chart { display: flex; align-items: flex-end; gap: 5px; height: 140px; border-bottom: 1.5px solid var(--ink); padding-bottom: 4px; }
-  .bar { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; height: 100%; gap: 5px; }
-  .bar-fill { width: 100%; background: var(--navy); border: 1px solid var(--navy); border-radius: 2px 2px 0 0; min-height: 2px; }
-  .bar-missing { font-size: 11px; color: var(--ink-faint); }
-  .bar span { font-size: 9.5px; color: var(--ink-faint); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
-
-  table { width: 100%; border-collapse: collapse; font-size: 11.5px; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
-  th {
-    text-align: left; font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.07em;
-    color: var(--ink-faint); border-bottom: 1.5px solid var(--ink); padding: 6px 6px;
+  /* The funding split, as one proportional bar. Every segment keeps its border
+     when a printer drops the fill, and carries its own glyph and share. */
+  .split { display: flex; height: 26px; border-radius: 5px; overflow: hidden; margin-bottom: 12px; }
+  .split-part {
+    display: flex; align-items: center; justify-content: center; min-width: 0;
+    border: 1px solid; border-right-width: 0; overflow: hidden;
   }
-  th.num, td.num { text-align: right; }
+  .split-part:first-child { border-radius: 5px 0 0 5px; }
+  .split-part:last-child { border-radius: 0 5px 5px 0; border-right-width: 1px; }
+  .split-label { color: #fff; font-size: 10px; font-weight: 700; white-space: nowrap; padding: 0 4px; }
+
+  .chart { display: flex; align-items: flex-end; gap: 4px; height: 128px; border-bottom: 1.5px solid var(--ink); padding-bottom: 4px; }
+  .bar { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; height: 100%; gap: 4px; }
+  .bar-fill { width: 100%; background: var(--blue); border: 1px solid var(--blue); border-radius: 3px 3px 0 0; min-height: 2px; }
+  .bar-missing { font-size: 11px; color: var(--ink-faint); }
+  .bar span { font-size: 9px; color: var(--ink-faint); }
+
+  table { width: 100%; border-collapse: collapse; font-size: 11.5px; }
+  th { text-align: start; font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.07em; color: var(--ink-faint); border-bottom: 1.5px solid var(--ink); padding: 6px; font-weight: 700; }
+  th.num, td.num { text-align: end; }
   td { padding: 7px 6px; border-bottom: 1px solid var(--rule-soft); vertical-align: top; }
   td.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
-  td.barcell { width: 22%; }
+  td.barcell { width: 20%; }
   tbody tr:last-child td { border-bottom: 1px solid var(--rule); }
   .row-flagged td { background: var(--rule-soft); }
-  .hbar { height: 6px; border-radius: 99px; }
-  /* A plain bar with a border, so it is still a bar with the fill removed. */
-  .hbar-plain { background: var(--navy); border: 1px solid var(--navy); }
-  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: middle; border: 1px solid rgba(0,0,0,0.35); }
-  .glyph { display: inline-block; width: 14px; color: var(--navy); }
+  /* A bar with a border, so it is still a bar with the fill removed. */
+  .hbar { height: 7px; border-radius: 99px; border: 1px solid; }
+  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-inline-end: 6px; vertical-align: middle; border: 1px solid rgba(0,0,0,0.35); }
+  .glyph { display: inline-block; width: 14px; }
   .sub { display: block; font-size: 10px; color: var(--ink-faint); }
   td .sub { margin-top: 2px; }
   /* A word, in a box, in small caps — legible with every drop of ink removed. */
-  .flag {
-    display: inline-block; margin-left: 6px; padding: 0 5px;
-    font-size: 8.5px; letter-spacing: 0.08em; text-transform: uppercase;
-    border: 1px solid var(--ink); border-radius: 2px; vertical-align: 1px;
-  }
+  .flag { display: inline-block; margin-inline-start: 6px; padding: 0 5px; font-size: 8.5px; letter-spacing: 0.08em; text-transform: uppercase; border: 1px solid var(--ink); border-radius: 3px; vertical-align: 1px; font-weight: 700; }
   .unknown { color: var(--ink-faint); font-style: italic; }
 
-  .notes { margin-top: 22px; padding: 12px 14px; border: 1px solid var(--rule); border-left: 3px solid var(--navy); border-radius: 2px; font-size: 11.5px; color: var(--ink-soft); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
-  .notes ul { margin: 0; padding-left: 16px; }
+  .notes { margin-top: 20px; padding: 11px 13px; border: 1px solid var(--rule); border-inline-start: 3px solid var(--navy); border-radius: 5px; font-size: 11.5px; color: var(--ink-soft); }
+  .notes ul { margin: 0; padding-inline-start: 16px; }
   .notes li { margin: 4px 0; }
-  .legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 10.5px; color: var(--ink-soft); margin: 8px 0 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 10.5px; color: var(--ink-soft); margin: 8px 0 0; }
 
-  footer { margin-top: 26px; border-top: 1px solid var(--rule); padding-top: 9px; font-size: 9.5px; color: var(--ink-faint); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  footer { margin-top: 24px; border-top: 1px solid var(--rule); padding-top: 8px; font-size: 9.5px; color: var(--ink-faint); }
 
-  .print-btn {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    padding: 9px 15px; border-radius: 3px; border: 1px solid var(--navy);
-    background: var(--navy); color: #fff; font-weight: 600; cursor: pointer; font-size: 12.5px;
-  }
+  .print-btn { padding: 9px 15px; border-radius: 5px; border: 1px solid var(--navy); background: var(--navy); color: #fff; font-weight: 600; cursor: pointer; font-size: 12.5px; font-family: inherit; }
 
   @media print {
-    body { padding: 0; }
+    body { padding: 0; font-size: 11.5px; }
     .no-print { display: none; }
     /* Never break a table row or a section heading across a page. */
     tr, .card, .factor { break-inside: avoid; }
@@ -705,63 +818,96 @@ export function reportHtml(report: PeriodReport, moneyFormatter: (value: number)
   <header>
     <div>
       <h1>${escapeHtml(report.title)}</h1>
-      <div class="sub">${escapeHtml(report.subtitle)} · amounts in ${escapeHtml(report.currency)}</div>
+      <div class="sub">${escapeHtml(report.subtitle)} · ${escapeHtml(
+        t("report.amountsIn", { currency: report.currency }),
+      )}</div>
     </div>
-    <button class="no-print print-btn" onclick="window.print()">Print / Save as PDF</button>
+    <button class="no-print print-btn" onclick="window.print()">${escapeHtml(t("report.print"))}</button>
   </header>
-  <div class="rule-accent" aria-hidden="true"></div>
+  <div class="tricolour" aria-hidden="true"><i></i><i></i><i></i></div>
 
-  <h2>Budget health</h2>
-  <div class="health">
-    <div>
-      <div class="score">${report.health.score != null ? Math.round(report.health.score) : "—"}</div>
-      <div class="grade">${escapeHtml(report.health.grade ?? "Not enough data")}</div>
+  <div class="grid grid-hero">
+    ${heroCards}
+    <div class="card">
+      <div class="card-label">${escapeHtml(t("report.health"))}</div>
+      <div class="card-value">${report.health.score != null ? escapeHtml(count(Math.round(report.health.score))) : "—"}</div>
+      <div class="card-detail">${escapeHtml(
+        report.health.grade ? t(`health.grade.${report.health.grade}`) : t("report.notEnoughData"),
+      )}</div>
     </div>
-    <div class="factors">${factors || '<div class="grade">No measurable factors for this period.</div>'}</div>
   </div>
 
-  <h2>Summary</h2>
-  <div class="grid">${summaryCards}</div>
-
-  <h2>Who funded this period</h2>
-  <p class="lede">
-    Paid by me counts against the budget. Paid by other and Outside budget are recorded in full and
-    charged to nothing — and they are reported separately, because they are different facts.
-  </p>
+  <h2>${escapeHtml(t("report.funding"))}</h2>
+  ${splitBar}
   <table>
-    <thead><tr><th>Funding</th><th class="num">Amount</th><th class="num">Transactions</th><th class="num">Share</th></tr></thead>
+    <thead><tr><th>${escapeHtml(t("report.colFunding"))}</th><th class="num">${escapeHtml(
+      t("report.colAmount"),
+    )}</th><th class="num">${escapeHtml(t("report.colTransactions"))}</th><th class="num">${escapeHtml(
+      t("report.colShare"),
+    )}</th></tr></thead>
     <tbody>${fundingRows}</tbody>
   </table>
-  <p class="legend">
-    <span>● Paid by me — in budget</span><span>◆ Paid by other</span><span>▲ Outside budget</span>
-  </p>
 
-  <h2>Activity costs</h2>
+  <h2>${escapeHtml(t("report.activityCosts"))}</h2>
   ${activityTotals}
   ${
     report.activities.lines.length > 0
-      ? `<table style="margin-top:12px">
+      ? `<table style="margin-top:11px">
           <thead><tr>
-            <th>Activity</th><th class="num">Per month</th><th class="num">Per year</th>
-            <th class="num">Share</th><th class="num">Due in ${escapeHtml(report.activities.monthLabel)}</th><th></th>
+            <th>${escapeHtml(t("report.colActivity"))}</th><th class="num">${escapeHtml(
+              t("report.colPerMonth"),
+            )}</th><th class="num">${escapeHtml(t("report.colPerYear"))}</th>
+            <th class="num">${escapeHtml(t("report.colShare"))}</th><th class="num">${escapeHtml(
+              t("report.colDueIn", { month: report.activities.monthLabel }),
+            )}</th><th></th>
           </tr></thead>
           <tbody>${activityRows}</tbody>
         </table>`
-      : '<div class="grade">No active activities.</div>'
+      : `<div class="grade">${escapeHtml(t("report.noActivities"))}</div>`
   }
 
-  <h2>Monthly trend</h2>
+  <h2>${escapeHtml(t("report.trend"))}</h2>
   <div class="chart">${monthlyBars}</div>
 
-  <h2>Categories</h2>
+  <h2>${escapeHtml(t("report.categories"))}</h2>
   ${
     report.categories.length > 0
-      ? `<table><thead><tr><th>Category</th><th class="num">Spent</th><th class="num">Share</th><th class="num">Cap</th><th></th></tr></thead><tbody>${categoryRows}</tbody></table>`
-      : '<div class="grade">No spending recorded for this period.</div>'
+      ? `<table><thead><tr><th>${escapeHtml(t("report.colCategory"))}</th><th class="num">${escapeHtml(
+          t("report.colSpent"),
+        )}</th><th class="num">${escapeHtml(t("report.colShare"))}</th><th class="num">${escapeHtml(
+          t("report.colCap"),
+        )}</th><th></th></tr></thead><tbody>${categoryRows}</tbody></table>`
+      : `<div class="grade">${escapeHtml(t("report.noSpending"))}</div>`
   }
 
-  ${report.notes.length > 0 ? `<div class="notes"><ul>${report.notes.map((n) => `<li>${escapeHtml(n)}</li>`).join("")}</ul></div>` : ""}
+  <h2>${escapeHtml(t("report.detail"))}</h2>
+  <div class="grid">${summaryCards}</div>
 
-  <footer>Generated ${escapeHtml(new Date(report.generatedAt).toLocaleString())} · figures use the same calculations as the application.</footer>
+  <h2>${escapeHtml(t("report.healthDetail"))}</h2>
+  <!-- The score itself is in the hero row. Repeating it here at 54px would be
+       the same number twice on one page, which is exactly the padding this
+       redesign set out to remove; this section is the breakdown behind it. -->
+  <div class="factors factors-wide">${
+    factors || `<div class="grade">${escapeHtml(t("report.noFactors"))}</div>`
+  }</div>
+
+  ${
+    report.notes.length > 0
+      ? `<div class="notes"><ul>${report.notes.map((n) => `<li>${escapeHtml(n)}</li>`).join("")}</ul></div>`
+      : ""
+  }
+
+  <p class="legend">
+    ${FUNDING_KINDS.map(
+      (kind) =>
+        `<span><span class="glyph" style="color:${FUNDING_COLOUR[kind]}">${FUNDING_META[kind].glyph}</span>${escapeHtml(
+          t(`funding.${kind}`),
+        )}</span>`,
+    ).join("")}
+  </p>
+
+  <footer>${escapeHtml(
+    t("report.generated", { when: formatDate(report.generatedAt, locale, { dateStyle: "medium", timeStyle: "short" }) }),
+  )} · ${escapeHtml(t("report.sameCalculations"))}</footer>
 </body></html>`;
 }

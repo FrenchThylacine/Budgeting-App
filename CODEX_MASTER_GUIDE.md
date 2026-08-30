@@ -475,6 +475,17 @@ They should NOT necessarily affect budget calculations equally.
 
 ## Piloting Category
 
+> **Superseded, 2026-08-29, by the owner:** *"Do not create special logic for
+> piloting. Piloting is simply another activity which can be paid by me,
+> someone else or outside the budget."*
+>
+> The rule below was implemented and has since been removed. Whether something
+> costs this budget anything is now decided by its **funding classification**,
+> which every activity and every transaction has — see
+> `docs/AI_CONTEXT.md` and `src/domain/funding.ts`. The paragraph is kept
+> because it explains what the code used to do and why records in the wild
+> still carry a `piloting` bucket.
+
 Piloting is intentionally special.
 
 It should remain visible.

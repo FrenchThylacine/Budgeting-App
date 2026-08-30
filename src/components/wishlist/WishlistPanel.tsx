@@ -38,6 +38,7 @@ import { EmptyState } from "../ui/EmptyState";
 import { Field, FieldGroup } from "../ui/Field";
 import { Section } from "../ui/Section";
 import type { BudgetCategory, CurrencyCode, SpendingEntry, WishlistItem } from "../../domain/types";
+import { useTranslation } from "../../i18n/useTranslation";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -83,6 +84,7 @@ interface EditFormProps {
 }
 
 const EditForm: React.FC<EditFormProps> = ({ title, categories, currencies, draft, onChange, onSave, onCancel, submitLabel }) => {
+  const { t } = useTranslation();
   const urlError = draft.url.trim().length > 0 && normalizeItemUrl(draft.url) == null;
   const brandUrlError = draft.brandUrl.trim().length > 0 && normalizeItemUrl(draft.brandUrl) == null;
   const valid = draft.name.trim().length > 0 && !urlError && !brandUrlError;
@@ -127,18 +129,18 @@ const EditForm: React.FC<EditFormProps> = ({ title, categories, currencies, draf
           in `placeholder` alone, which vanish the moment anything is typed —
           so an item being edited showed four boxes with values in them and
           nothing to say what any of them meant. */}
-      <FieldGroup title="Item">
-        <Field label="Name" span>
+      <FieldGroup title={t("wishlist.item")}>
+        <Field label={t("activities.fieldName")} span>
           <input
             className="input"
             required
-            placeholder="Azur Poly A350"
+            placeholder={t("wishlist.azurPolyA350")}
             value={draft.name}
             onChange={(e) => onChange({ name: e.target.value })}
             autoFocus
           />
         </Field>
-        <Field label="Price" hint="Optional">
+        <Field label={t("wishlist.price")} hint={t("common.optional")}>
           <input
             className="input"
             type="number"
@@ -149,7 +151,7 @@ const EditForm: React.FC<EditFormProps> = ({ title, categories, currencies, draf
             onChange={(e) => onChange({ actualPrice: e.target.value })}
           />
         </Field>
-        <Field label="Currency">
+        <Field label={t("spending.currency")}>
           <select
             className="select"
             value={draft.currency}
@@ -160,7 +162,7 @@ const EditForm: React.FC<EditFormProps> = ({ title, categories, currencies, draf
             ))}
           </select>
         </Field>
-        <Field label="Priority" hint={PRIORITY_META[draft.priority as WishlistItem["priority"]]?.hint}>
+        <Field label={t("wishlist.priority")} hint={t(PRIORITY_META[draft.priority as WishlistItem["priority"]]?.hintKey ?? "priority.low.hint")}>
           <select
             className="select"
             value={draft.priority}
@@ -168,12 +170,12 @@ const EditForm: React.FC<EditFormProps> = ({ title, categories, currencies, draf
           >
             {PRIORITY_ORDER.map((priority) => (
               <option key={priority} value={priority}>
-                {PRIORITY_META[priority].label}
+                {t(PRIORITY_META[priority].labelKey)}
               </option>
             ))}
           </select>
         </Field>
-        <Field label="Category">
+        <Field label={t("spending.category")}>
           <select
             className="select"
             value={draft.categoryId}
@@ -188,13 +190,13 @@ const EditForm: React.FC<EditFormProps> = ({ title, categories, currencies, draf
         </Field>
       </FieldGroup>
 
-      <FieldGroup title="Where to buy it">
+      <FieldGroup title={t("wishlist.whereToBuyIt")}>
         <Field
-          label="Seller link"
+          label={t("wishlist.sellerLink")}
           span
           hint={
             urlError ? (
-              <span style={{ color: "var(--danger-text)" }}>Enter a valid web address (http or https only).</span>
+              <span style={{ color: "var(--danger-text)" }}>{t("wishlist.enterAValidWebAddress")}</span>
             ) : (
               "The shop this is bought from. Opened by the link on the card."
             )
@@ -211,7 +213,7 @@ const EditForm: React.FC<EditFormProps> = ({ title, categories, currencies, draf
             // rejects javascript: and data:, which type="url" happily accepts.
             type="text"
             inputMode="url"
-            placeholder="contrail.com/products/azur-poly"
+            placeholder={t("wishlist.contrailComProductsAzurPoly")}
             value={draft.url}
             onChange={(e) => onChange({ url: e.target.value })}
             style={{ borderColor: urlError ? "var(--danger)" : undefined }}
@@ -232,7 +234,7 @@ const EditForm: React.FC<EditFormProps> = ({ title, categories, currencies, draf
         fallback={<ShoppingBag size={22} color={draft.color || accent} />}
         sourceLabel="Maker's site"
         sourcePlaceholder="azurpoly.com"
-        sourceHint="Use this when the maker is not the shop — a model kit from a marketplace, an add-on sold on one store and built by another. The seller link above is never changed. Leave it empty to use the shop's own icon."
+        sourceHint={t("wishlist.useThisWhenTheMaker")}
         onChange={(patch) =>
           onChange({
             ...(patch.icon !== undefined ? { icon: patch.icon } : {}),
@@ -244,48 +246,48 @@ const EditForm: React.FC<EditFormProps> = ({ title, categories, currencies, draf
         }
       />
 
-      <AdvancedFields label="Colour">
-        <FieldGroup title="Appearance">
-          <Field label="Colour" group>
+      <AdvancedFields label={t("activity.colour")}>
+        <FieldGroup title={t("settings.appearance")}>
+          <Field label={t("activity.colour")} group>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
               <input
                 type="color"
-                aria-label="Item colour"
+                aria-label={t("wishlist.itemColour")}
                 value={/^#[0-9a-f]{6}$/i.test(draft.color) ? draft.color : accent}
                 onChange={(e) => onChange({ color: e.target.value })}
                 style={{ width: 40, height: 34, border: "none", background: "none", cursor: "pointer", padding: 2 }}
               />
               {draft.color ? (
                 <Button type="button" variant="ghost" size="sm" onClick={() => onChange({ color: "" })}>
-                  Reset to automatic
+                  {t("wishlist.resetToAutomatic")}
                 </Button>
               ) : (
-                <span className="text-caption">Derived from the seller</span>
+                <span className="text-caption">{t("wishlist.derivedFromTheSeller")}</span>
               )}
             </div>
           </Field>
         </FieldGroup>
       </AdvancedFields>
 
-      <FieldGroup title="Notes">
-        <Field label="Notes" span hint="Anything worth remembering about this purchase">
+      <FieldGroup title={t("activity.notes")}>
+        <Field label={t("activity.notes")} span hint={t("wishlist.anythingWorthRememberingAboutThis")}>
           <textarea
             className="input"
-            placeholder="Optional"
+            placeholder={t("common.optional")}
             value={draft.notes}
             onChange={(e) => onChange({ notes: e.target.value })}
             rows={2}
             style={{ resize: "vertical", minWidth: 0, height: "auto", padding: 10 }}
           />
         </Field>
-        <Field label="Visibility" span group>
+        <Field label={t("wishlist.visibility")} span group>
           <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, cursor: "pointer" }}>
             <input
               type="checkbox"
               checked={draft.inWishlist}
               onChange={(e) => onChange({ inWishlist: e.target.checked })}
             />
-            Show in the wishlist
+            {t("wishlist.showInTheWishlist")}
           </label>
         </Field>
       </FieldGroup>
@@ -298,6 +300,7 @@ const EditForm: React.FC<EditFormProps> = ({ title, categories, currencies, draf
 // ─── Main panel ───────────────────────────────────────────────────────────────
 
 export const WishlistPanel: React.FC = () => {
+  const { t } = useTranslation();
   const snapshot = useBudgetStore((s) => s.snapshot);
   const add = useBudgetStore((s) => s.addWishlistItem);
   const update = useBudgetStore((s) => s.updateWishlistItem);
@@ -590,8 +593,8 @@ export const WishlistPanel: React.FC = () => {
 
   return (
     <div className="page-enter" style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr)", gap: 20 }}>
-      <Section title="Wishlist">
-        {!mutable && <div className="historical-banner">Historical periods are read-only.</div>}
+      <Section title={t("nav.wishlist")}>
+        {!mutable && <div className="historical-banner">{t("common.readOnly")}</div>}
 
         {/* Toolbar */}
         <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: 4 }}>
@@ -609,7 +612,7 @@ export const WishlistPanel: React.FC = () => {
           <div style={{ flex: "1 1 0", minWidth: 0 }} />
           {mutable && (
             <Button variant="primary" size="sm" onClick={startAdd}>
-              <Plus size={14} /> Add item
+              <Plus size={14} /> {t("wishlist.addItem")}
             </Button>
           )}
         </div>
@@ -632,7 +635,7 @@ export const WishlistPanel: React.FC = () => {
             <button
               type="button"
               onClick={() => setNotice(null)}
-              aria-label="Dismiss message"
+              aria-label={t("a11y.dismissMessage")}
               style={{ background: "none", border: "none", color: "inherit", cursor: "pointer", padding: 0 }}
             >
               <X size={13} />
@@ -668,10 +671,10 @@ export const WishlistPanel: React.FC = () => {
                 Cancel
               </Button>
               <Button type="button" variant="secondary" onClick={() => markBoughtOnly(purchasingItem)}>
-                Just mark bought
+                {t("wishlist.justMarkBought")}
               </Button>
               <Button type="submit" variant="primary" form="wishlist-purchase-form">
-                <Check size={14} /> Record purchase
+                <Check size={14} /> {t("wishlist.recordPurchase")}
               </Button>
             </>
           }
@@ -699,7 +702,7 @@ export const WishlistPanel: React.FC = () => {
                 onChange={(e) => setPurchaseDraft((current) => (current ? { ...current, amount: e.target.value } : current))}
               />
             </Field>
-            <Field label="Date">
+            <Field label={t("spending.date")}>
               <input
                 className="input"
                 type="date"
@@ -708,7 +711,7 @@ export const WishlistPanel: React.FC = () => {
                 onChange={(e) => setPurchaseDraft((current) => (current ? { ...current, date: e.target.value } : current))}
               />
             </Field>
-            <Field label="Category" span>
+            <Field label={t("spending.category")} span>
               <select
                 className="select"
                 value={purchaseDraft.categoryId}
@@ -737,7 +740,7 @@ export const WishlistPanel: React.FC = () => {
                 ? "Nothing bought yet"
                 : "Your wishlist is empty"
           }
-          description="Save future purchases without mixing them with monthly spending."
+          description={t("wishlist.saveFuturePurchasesWithoutMixing")}
         />
       ) : (
         <div
@@ -901,9 +904,9 @@ export const WishlistPanel: React.FC = () => {
                   <span
                     className="badge"
                     style={{ background: priority.soft, color: priority.color }}
-                    title={priority.hint}
+                    title={t(priority.hintKey)}
                   >
-                    {priority.label}
+                    {t(priority.labelKey)}
                   </span>
                   {item.bought && (
                     <span className="badge badge-success">
@@ -923,7 +926,7 @@ export const WishlistPanel: React.FC = () => {
                       <Receipt size={11} /> {showLink ? "Hide transaction" : "View transaction"}
                     </button>
                   )}
-                  {!item.inWishlist && <span className="badge badge-neutral">Not in wishlist</span>}
+                  {!item.inWishlist && <span className="badge badge-neutral">{t("wishlist.notInWishlist")}</span>}
                 </div>
 
                 {item.notes && (
@@ -957,7 +960,7 @@ export const WishlistPanel: React.FC = () => {
                         "Uncategorized"}
                       {linked.note ? ` · ${linked.note}` : ""}
                     </span>
-                    <span>Find it in Spending to edit or delete it.</span>
+                    <span>{t("wishlist.findItInSpendingTo")}</span>
                   </div>
                 )}
 
@@ -973,9 +976,9 @@ export const WishlistPanel: React.FC = () => {
                         size="sm"
                         variant="ghost"
                         onClick={() => markNotBought(item)}
-                        title="Unmark as bought"
+                        title={t("wishlist.unmarkAsBought")}
                       >
-                        <X size={14} /> Not bought
+                        <X size={14} /> {t("wishlist.notBought")}
                       </Button>
                     )}
                     {linked && (
@@ -984,8 +987,8 @@ export const WishlistPanel: React.FC = () => {
                         variant="ghost"
                         icon
                         onClick={() => unlinkOnly(item)}
-                        aria-label="Unlink transaction"
-                        title="Unlink the transaction, keeping both records"
+                        aria-label={t("wishlist.unlinkTransaction")}
+                        title={t("wishlist.unlinkTheTransactionKeepingBoth")}
                       >
                         <Link2Off size={14} />
                       </Button>
@@ -998,7 +1001,7 @@ export const WishlistPanel: React.FC = () => {
                       icon
                       onClick={() => startEdit(item)}
                       aria-label={`Edit ${item.name}`}
-                      title="Edit"
+                      title={t("common.edit")}
                     >
                       <Pencil size={14} />
                     </Button>
@@ -1007,8 +1010,8 @@ export const WishlistPanel: React.FC = () => {
                       variant="ghost"
                       icon
                       onClick={() => handleDelete(item)}
-                      aria-label="Delete wishlist item"
-                      title="Delete"
+                      aria-label={t("wishlist.deleteWishlistItem")}
+                      title={t("common.delete")}
                       style={{ color: "var(--danger-text)" }}
                     >
                       <Trash2 size={14} />
@@ -1027,12 +1030,12 @@ export const WishlistPanel: React.FC = () => {
       {allItems.length > 0 && (
         <div className="card card-body" style={{ display: "flex", gap: 24, flexWrap: "wrap", fontSize: 13 }}>
           <div>
-            <span style={{ color: "var(--text-secondary)" }}>Active items: </span>
+            <span style={{ color: "var(--text-secondary)" }}>{t("wishlist.activeItems")} </span>
             <strong>{activeItems.length}</strong>
           </div>
           {activeTotal > 0 && (
             <div>
-              <span style={{ color: "var(--text-secondary)" }}>Active total: </span>
+              <span style={{ color: "var(--text-secondary)" }}>{t("wishlist.activeTotal")} </span>
               <strong>{formatDualMoney(activeTotal, settings)}</strong>
               {activeIsMixedCurrency && (
                 <span className="text-caption" style={{ color: "var(--text-tertiary)" }}>
@@ -1043,7 +1046,7 @@ export const WishlistPanel: React.FC = () => {
             </div>
           )}
           <div>
-            <span style={{ color: "var(--text-secondary)" }}>Bought: </span>
+            <span style={{ color: "var(--text-secondary)" }}>{t("wishlist.bought")} </span>
             <strong>{boughtItems.length}</strong>
           </div>
         </div>

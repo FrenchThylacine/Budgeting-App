@@ -255,3 +255,40 @@ export function applyRatesToSettings(current: ExchangeRates, snapshot: RateSnaps
 
   return next;
 }
+
+/**
+ * The whole "refresh on open" decision, in one testable function.
+ *
+ * The brief is that rates update whenever the application is opened. Taken
+ * literally that is a network request on every navigation and a database write
+ * on every load, so what "opened" has to mean is: *once per session, and only
+ * when a refresh is genuinely due.* `fetchExchangeRates` already owns "due" —
+ * the 12:00 UTC publication boundary and the age guard — and answers `cached`
+ * without touching the network when it is not.
+ *
+ * Returns the rates to store, or **null when there is nothing to store**. That
+ * distinction is the point: writing an identical rate set on every load would
+ * bump the snapshot revision, push a sync to every other device and fill the
+ * audit trail, all to record that nothing changed.
+ */
+export async function refreshRatesOnOpen(
+  current: ExchangeRates,
+  options: { now?: number; fetchImpl?: typeof fetch } = {},
+): Promise<{ rates: ExchangeRates; outcome: "updated" | "failed" } | null> {
+  const now = options.now ?? Date.now();
+  const result = await fetchExchangeRates({ now, fetchImpl: options.fetchImpl });
+
+  if (result.status === "unavailable") {
+    // A failure is only worth recording if we did not already record one for
+    // this attempt window — otherwise every offline load writes a new
+    // timestamp saying the same thing.
+    if (current.ratesLastError === (result.message ?? "") && current.ratesCheckedAt) return null;
+    return { rates: noteRateFailure(current, result.message ?? "Rates unavailable.", new Date(now)), outcome: "failed" };
+  }
+
+  const snapshot = result.snapshot;
+  if (!snapshot) return null;
+  // Already stored — including the common case of a fresh cache on a reload.
+  if (current.ratesUpdatedAt === snapshot.fetchedAt && !current.ratesLastError) return null;
+  return { rates: applyRatesToSettings(current, snapshot), outcome: "updated" };
+}

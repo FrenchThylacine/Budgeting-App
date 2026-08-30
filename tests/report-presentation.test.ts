@@ -9,6 +9,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { buildPeriodReport, reportHtml } from "../src/domain/report";
+import { createTranslator, DICTIONARIES } from "../src/domain/i18n";
 import { createSeedBudgetSnapshot, createEmptyBudgetSnapshot } from "../src/data/seedBudget";
 import { catId } from "./helpers/seedIds";
 import { formatMoney } from "../src/domain/currency";
@@ -120,10 +121,12 @@ describe("the funding breakdown", () => {
     expect(new Set(glyphs).size).toBe(3);
   });
 
-  it("says in words that neither exclusion was charged to the budget", () => {
-    const notes = report.notes.join(" ");
-    expect(notes).toMatch(/paid by someone else/i);
-    expect(notes).toMatch(/outside this budget/i);
+  it("says beside each figure that it was not charged to the budget", () => {
+    // Stated where the number is, rather than in a paragraph at the foot of
+    // the report: the reader who needs it is looking at the amount.
+    const detail = (label: string) => report.summary.find((item) => item.label === label)?.detail ?? "";
+    expect(detail("Paid by other")).toMatch(/never charged to you/i);
+    expect(detail("Outside budget")).toMatch(/kept off this budget/i);
   });
 });
 
@@ -183,9 +186,12 @@ describe("printing without colour", () => {
   });
 
   it("prints a legend naming what each mark means", () => {
-    expect(html).toMatch(/●\s*Paid by me/);
-    expect(html).toMatch(/◆\s*Paid by other/);
-    expect(html).toMatch(/▲\s*Outside budget/);
+    // Read as text, not as markup: the glyph is in its own coloured span, and
+    // what matters is that a reader sees the mark next to its name.
+    const text = html.replace(/<[^>]+>/g, "");
+    expect(text).toMatch(/●\s*Paid by me/);
+    expect(text).toMatch(/◆\s*Paid by other/);
+    expect(text).toMatch(/▲\s*Outside budget/);
   });
 
   it("says 'over cap' in words rather than only in red", () => {
@@ -193,7 +199,10 @@ describe("printing without colour", () => {
     const category = snapshot.categories.find((item) => item.id === catId(snapshot, "cat-spending"))!;
     category.monthlyCap = 100;
     const withBreach = reportHtml(buildPeriodReport(snapshot, "month", NOW), money);
-    expect(withBreach).toContain("OVER CAP");
+    expect(withBreach).toMatch(/>Over cap</i);
+    // Set in small caps by the stylesheet rather than shouted in the source,
+    // so a translation is not required to be uppercase to look right.
+    expect(withBreach).toMatch(/\.flag\s*\{[^}]*text-transform:\s*uppercase/);
     // And the flag is a bordered box, so it survives with no fill at all.
     expect(withBreach).toMatch(/\.flag\s*\{[^}]*border:/);
   });
@@ -203,8 +212,11 @@ describe("printing without colour", () => {
   });
 
   it("gives bars a border so they remain visible unfilled", () => {
-    expect(html).toMatch(/\.hbar-plain\s*\{[^}]*border:/);
+    expect(html).toMatch(/\.hbar\s*\{[^}]*border:/);
     expect(html).toMatch(/\.bar-fill\s*\{[^}]*border:/);
+    // The funding split is one bar of three segments; each keeps its own
+    // border when a printer drops the fill, and carries its glyph inside it.
+    expect(html).toMatch(/\.split-part\s*\{[^}]*border:/);
   });
 
   it("keeps rows and headings from breaking across pages", () => {
@@ -238,8 +250,63 @@ describe("a report with nothing in it", () => {
     empty.settings.selectedMonth = 8;
     const report = buildPeriodReport(empty, "month", NOW);
     expect(report.activities.lines).toHaveLength(0);
-    expect(report.notes.join(" ")).toMatch(/no spending was recorded/i);
+    expect(report.notes.join(" ")).toMatch(/nothing was recorded/i);
     // And it still renders.
     expect(() => reportHtml(report, money)).not.toThrow();
+  });
+});
+
+describe("the funding split, drawn as one bar", () => {
+  const snapshot = reportSnapshot();
+  const html = reportHtml(buildPeriodReport(snapshot, "month", NOW), money);
+
+  it("draws one segment per kind that has an amount, in proportion", () => {
+    const segments = [...html.matchAll(/<div class="split-part" style="width:([\d.]+)%/g)].map((match) =>
+      Number(match[1]),
+    );
+    expect(segments.length).toBeGreaterThan(1);
+    expect(segments.reduce((sum, value) => sum + value, 0)).toBeCloseTo(100, 3);
+  });
+
+  it("labels each segment with its glyph and its share, inside the segment", () => {
+    // Which is what makes the bar readable when a printer drops the fills: the
+    // three boxes are still three boxes, in proportion, each carrying a mark.
+    const labels = [...html.matchAll(/<span class="split-label">([^<]+)<\/span>/g)].map((match) => match[1].trim());
+    expect(labels.length).toBeGreaterThan(1);
+    for (const label of labels) expect(label).toMatch(/^[●◆▲]\s/);
+  });
+});
+
+describe("the report is written in the reader's language", () => {
+  it("takes its headings, labels and month names from the translator it is given", () => {
+    // A real dictionary rather than a stub, so this asserts the wiring end to
+    // end. It is registered directly because the lazy loader is a dynamic
+    // import the report layer deliberately knows nothing about.
+    DICTIONARIES.fr = {
+      "report.funding": "Qui a payé",
+      "report.activityCosts": "Coût des activités",
+      "report.print": "Imprimer / enregistrer en PDF",
+      "funding.personal": "Payé par moi — dans le budget",
+    };
+    const french = createTranslator("fr");
+    const report = buildPeriodReport(reportSnapshot(), "month", NOW, french);
+    const html = reportHtml(report, money, french);
+
+    expect(report.language).toBe("fr");
+    expect(report.title).toBe("août 2026");
+    expect(html).toContain('<html lang="fr"');
+    expect(html).toContain("Qui a payé");
+    expect(html).toContain("Coût des activités");
+    expect(html).toContain("Imprimer / enregistrer en PDF");
+    // A key the French dictionary does not carry falls back to English rather
+    // than printing the key — a half-translated report is still a report.
+    expect(html).toContain("Categories");
+  });
+
+  it("marks a right-to-left language on the document itself", () => {
+    DICTIONARIES.ar = { "report.funding": "من دفع" };
+    const arabic = createTranslator("ar");
+    const html = reportHtml(buildPeriodReport(reportSnapshot(), "month", NOW, arabic), money, arabic);
+    expect(html).toContain('dir="rtl"');
   });
 });

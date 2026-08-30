@@ -31,9 +31,11 @@ export async function exportAllYearsToExcel(snapshot: BudgetSnapshot): Promise<v
     workbook,
     XLSX.utils.json_to_sheet([
       { Metric: "Selected year", Value: calculation.year },
-      { Metric: "General budget", Value: calculation.generalBudget },
-      { Metric: "Piloting budget", Value: calculation.pilotingBudget },
-      { Metric: "Included budget", Value: calculation.includedBudget },
+      // Gross first, then what this budget actually carries. The two used to
+      // be "general" and "piloting", which described the seed's own category
+      // list rather than anything about the budget being exported.
+      { Metric: "Total activity cost", Value: calculation.combinedBudget },
+      { Metric: "Charged to this budget", Value: calculation.includedBudget },
       { Metric: "Monthly spend", Value: calculation.selectedMonthSpend.total ?? "NaN/Pending" },
       { Metric: "Delta", Value: calculation.delta ?? "NaN/Pending" },
       { Metric: "Wallet total", Value: calculation.wallet.walletTotal },

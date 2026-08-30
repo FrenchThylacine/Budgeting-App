@@ -123,7 +123,7 @@ export const ScenarioEditor: React.FC<ScenarioEditorProps> = ({ preset, snapshot
   return (
     <EditorSheet
       title={preset ? `Edit ${preset.name}` : "New scenario"}
-      subtitle="Nothing is applied until you preview and confirm it."
+      subtitle={t("scenario.nothingIsAppliedUntilYou")}
       onClose={onClose}
       footer={
         <>
@@ -137,18 +137,18 @@ export const ScenarioEditor: React.FC<ScenarioEditorProps> = ({ preset, snapshot
       }
     >
       <form id="scenario-editor-form" onSubmit={save} style={{ display: "grid", gap: 20, minWidth: 0 }}>
-        <FieldGroup title="Scenario">
-          <Field label="Name" span>
+        <FieldGroup title={t("scenario.scenario")}>
+          <Field label={t("activities.fieldName")} span>
             <input
               className="input"
               required
               value={name}
               autoFocus
               onChange={(event) => setName(event.target.value)}
-              placeholder="Tight month"
+              placeholder={t("scenario.tightMonth")}
             />
           </Field>
-          <Field label="Monthly budget" hint="Leave empty to keep the current budget">
+          <Field label={t("settings.monthlyBudget")} hint={t("scenario.leaveEmptyToKeepThe")}>
             <input
               className="input"
               type="number"
@@ -159,12 +159,12 @@ export const ScenarioEditor: React.FC<ScenarioEditorProps> = ({ preset, snapshot
               placeholder="—"
             />
           </Field>
-          <Field label="Notes" span hint="When you would use this">
+          <Field label={t("activity.notes")} span hint={t("scenario.whenYouWouldUseThis")}>
             <input
               className="input"
               value={notes}
               onChange={(event) => setNotes(event.target.value)}
-              placeholder="Optional"
+              placeholder={t("common.optional")}
             />
           </Field>
         </FieldGroup>
@@ -229,7 +229,7 @@ export const ScenarioEditor: React.FC<ScenarioEditorProps> = ({ preset, snapshot
           label={cappedCount > 0 ? `Category caps · ${cappedCount} set` : "Category caps"}
         >
           <p className="text-note" style={{ margin: "0 0 10px" }}>
-            An empty field leaves that category's cap untouched. Zero is a real cap of nothing.
+            {t("scenario.anEmptyFieldLeavesThat")}
           </p>
           <div className="scenario-caps">
             {visibleCategories.map((category) => (

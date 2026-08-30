@@ -217,8 +217,11 @@ describe("the worked example: €1,000 budget, €300 personal, €200 external"
     expect(line("Total spending")).toContain("300");
     expect(line("Remaining")).toContain("700");
     expect(line("Paid by other")).toContain("200");
-    // And the report says so in words, so a printed page cannot mislead.
-    expect(report.notes.join(" ")).toMatch(/excluded from the budget/i);
+    // And the report says so beside the figure, so a printed page cannot
+    // mislead. It used to be a paragraph at the foot of the report; the fact
+    // belongs next to the number it qualifies, not four sections later.
+    const detail = report.summary.find((item) => item.label === "Paid by other")?.detail ?? "";
+    expect(detail).toMatch(/never charged to you/i);
   });
 });
 

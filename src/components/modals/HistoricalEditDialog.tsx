@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { AlertTriangle, X } from "lucide-react";
 import { Button } from "../ui/Button";
+import { useTranslation } from "../../i18n/useTranslation";
 
 interface HistoricalEditDialogProps {
   periodLabel: string;
@@ -21,6 +22,7 @@ export const HistoricalEditDialog: React.FC<HistoricalEditDialogProps> = ({
   onConfirm,
   onCancel,
 }) => {
+  const { t } = useTranslation();
   const [acknowledged, setAcknowledged] = useState(false);
   const dialogRef = useRef<HTMLDivElement>(null);
 
@@ -88,29 +90,28 @@ export const HistoricalEditDialog: React.FC<HistoricalEditDialogProps> = ({
               <AlertTriangle size={20} />
             </span>
             <h2 id="historical-edit-title" className="text-title" style={{ margin: 0 }}>
-              Edit a closed period?
+              {t("historical.editAClosedPeriod")}
             </h2>
           </div>
-          <button className="btn btn-ghost btn-sm btn-icon" onClick={onCancel} aria-label="Close dialog">
+          <button className="btn btn-ghost btn-sm btn-icon" onClick={onCancel} aria-label={t("override.closeDialog")}>
             <X size={18} />
           </button>
         </div>
 
         <div id="historical-edit-description">
           <p className="text-body" style={{ marginBottom: 14 }}>
-            You are about to unlock <strong>{periodLabel}</strong> for editing. This period is closed, so its
-            figures are treated as a settled record.
+            {t("historical.youAreAboutToUnlock")} <strong>{periodLabel}</strong> {t("historical.forEditingThisPeriodIs")}
           </p>
 
           <ul className="modal-consequences">
-            <li>Totals, analytics and period comparisons will change.</li>
-            <li>A rollover already carried into a later month is not recalculated automatically.</li>
-            <li>Approved budgets stay locked — an approval records a decision, not data.</li>
-            <li>Every change is written to the audit trail and flagged as a historical edit.</li>
+            <li>{t("historical.totalsAnalyticsAndPeriodComparisons")}</li>
+            <li>{t("historical.aRolloverAlreadyCarriedInto")}</li>
+            <li>{t("historical.approvedBudgetsStayLockedAn")}</li>
+            <li>{t("historical.everyChangeIsWrittenTo")}</li>
           </ul>
 
           <p className="text-caption" style={{ marginTop: 14 }}>
-            The period relocks automatically as soon as you move to another period.
+            {t("historical.thePeriodRelocksAutomaticallyAs")}
           </p>
 
           <label
@@ -133,7 +134,7 @@ export const HistoricalEditDialog: React.FC<HistoricalEditDialogProps> = ({
               onChange={(event) => setAcknowledged(event.target.checked)}
               style={{ marginTop: 2 }}
             />
-            <span>I understand this rewrites a closed period.</span>
+            <span>{t("historical.iUnderstandThisRewritesA")}</span>
           </label>
         </div>
 
@@ -142,7 +143,7 @@ export const HistoricalEditDialog: React.FC<HistoricalEditDialogProps> = ({
             Cancel
           </Button>
           <Button variant="danger" onClick={onConfirm} disabled={!acknowledged}>
-            Unlock editing
+            {t("historical.unlockEditing")}
           </Button>
         </div>
       </div>

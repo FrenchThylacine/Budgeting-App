@@ -13,6 +13,8 @@
  */
 import { afterEach, describe, expect, it } from "vitest";
 import { useBudgetStore } from "../src/store/budgetStore";
+import { resolveStoredText } from "../src/domain/storedText";
+import { createTranslator } from "../src/domain/i18n";
 import { createSeedBudgetSnapshot } from "../src/data/seedBudget";
 import { calculateYear } from "../src/domain/calculations";
 import { walletState } from "../src/domain/wallet";
@@ -137,7 +139,10 @@ describe("resetting the wallet", () => {
     useBudgetStore.getState().resetWallet();
     const entry = useBudgetStore.getState().snapshot.auditLog[0];
     expect(entry.type).toBe("wallet");
-    expect(entry.summary).toMatch(/wallet balance to zero/i);
+    // A translation key, not a sentence: the store has no language, and the
+    // audit trail outlives the session that wrote it. See domain/storedText.ts.
+    expect(entry.summary).toBe("@audit.walletReset");
+    expect(resolveStoredText(entry.summary, createTranslator("en"))).toMatch(/wallet balance to zero/i);
   });
 
   it("survives a reload — it is in the snapshot, not in a component", () => {

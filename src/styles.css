@@ -1170,8 +1170,15 @@ strong {
   margin-bottom: var(--space-6);
   overflow: hidden;
   /* Deep navy, fully opaque. Fixed values rather than theme tokens: this band
-     states the same fact in both themes and must look the same doing it. */
-  background: linear-gradient(120deg, #001A46 0%, #002157 52%, #0B3B7A 100%);
+     states the same fact in both themes and must look the same doing it.
+
+     The colour is declared as well as the gradient. A gradient is a background
+     *image*, and an image that fails to paint — a print stylesheet, a forced
+     colour mode, an old renderer — leaves `background-color`, which was
+     `transparent`. This band being see-through is the exact defect the whole
+     rule above exists to fix, so it does not depend on an image. */
+  background-color: #002157;
+  background-image: linear-gradient(120deg, #001A46 0%, #002157 52%, #0B3B7A 100%);
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: var(--radius-lg);
   color: #EAF1FC;
@@ -1521,58 +1528,8 @@ strong {
   .tab-panel, .page-enter { animation: none; }
 }
 
-/* Brand loading screen */
-.boot-screen {
-  display: grid;
-  place-items: center;
-  min-height: 100vh;
-  background: radial-gradient(120% 120% at 50% 0%, var(--accent-soft) 0%, var(--bg) 55%);
-}
-
-.boot-inner { display: grid; justify-items: center; gap: 18px; }
-
-.boot-mark {
-  width: 68px;
-  height: 68px;
-  display: grid;
-  place-items: center;
-  border-radius: 20px;
-  color: #FFFFFF;
-  background: linear-gradient(135deg, var(--brand-mark-from), var(--brand-mark-to));
-  box-shadow: var(--shadow-lg);
-  animation: bootPulse 1.6s var(--ease-out) infinite;
-}
-
-.boot-track {
-  width: 168px;
-  height: 3px;
-  border-radius: 99px;
-  background: var(--bg-inset);
-  overflow: hidden;
-}
-
-.boot-fill {
-  height: 100%;
-  width: 40%;
-  border-radius: 99px;
-  background: linear-gradient(90deg, var(--accent), var(--purple));
-  animation: bootSlide 1.15s var(--ease-out) infinite;
-}
-
-@keyframes bootPulse {
-  0%, 100% { transform: scale(1); box-shadow: var(--shadow-md); }
-  50% { transform: scale(1.05); box-shadow: var(--shadow-lg); }
-}
-
-@keyframes bootSlide {
-  0% { transform: translateX(-110%); }
-  100% { transform: translateX(310%); }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .boot-mark, .boot-fill { animation: none; }
-  .boot-fill { width: 100%; }
-}
+/* The loading screen lives entirely in `styles-extras.css`, beside the
+   transition it hands over to. */
 
 /* Page transitions */
 .page-enter {

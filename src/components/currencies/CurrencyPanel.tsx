@@ -170,7 +170,7 @@ export const CurrencyPanel: React.FC = () => {
   const unconvertible = pinned.filter((code) => !canConvert(code, settings.baseCurrency, settings.exchangeRates));
 
   return (
-    <div className="page-enter currency-page" style={{ display: "grid", gap: 20 }}>
+    <div className="page-enter currency-page" data-exchange-mode={exchangeMode ? "on" : "off"} style={{ display: "grid", gap: 20 }}>
       <Section
         title={t("currencies.title")}
         action={
@@ -185,6 +185,7 @@ export const CurrencyPanel: React.FC = () => {
               variant={exchangeMode ? "primary" : "secondary"}
               size="sm"
               aria-pressed={exchangeMode}
+              data-action="exchange-mode"
               className={exchangeMode ? "exchange-toggle-active" : undefined}
               onClick={() => setExchangeMode((on) => !on)}
             >
@@ -236,6 +237,7 @@ export const CurrencyPanel: React.FC = () => {
                 <button
                   type="button"
                   className="currency-card-face"
+                  data-currency={code}
                   aria-pressed={exchangeMode ? selected : undefined}
                   aria-label={
                     exchangeMode
@@ -428,7 +430,7 @@ const ExchangeResult: React.FC<{
         </>
       }
     >
-      <div className="exchange-result">
+      <div className="exchange-result" data-exchange-result={`${pair.from}-${pair.to}`}>
         {rate == null ? (
           <p className="text-body">{t("currencies.exchangeUnknown", { from: pair.from, to: pair.to })}</p>
         ) : (

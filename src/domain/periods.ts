@@ -82,9 +82,14 @@ export function isAtCurrentPeriod(settings: Settings, now = new Date()): boolean
 /**
  * Full date range of a period, e.g. "1–31 August 2026" or "10–16 Aug".
  * Lets the user tell a selected period apart from the real one at a glance.
+ *
+ * `locale` is threaded in rather than left to the browser: the application
+ * follows the language the user chose, and this label sits directly beside one
+ * produced by `periodLabel`. Two neighbouring labels in two different languages
+ * — which is exactly what happened — reads as a bug.
  */
-export function periodRangeLabel(settings: Settings): string {
-  const formatter = new Intl.DateTimeFormat(undefined, {
+export function periodRangeLabel(settings: Settings, locale?: string): string {
+  const formatter = new Intl.DateTimeFormat(locale, {
     day: "numeric",
     month: "short",
     year: "numeric",
@@ -92,7 +97,9 @@ export function periodRangeLabel(settings: Settings): string {
   });
 
   if (settings.selectedPeriodMode === "year") {
-    return `1 Jan – 31 Dec ${settings.selectedYear}`;
+    const start = new Date(Date.UTC(settings.selectedYear, 0, 1));
+    const end = new Date(Date.UTC(settings.selectedYear, 11, 31));
+    return `${formatter.format(start)} – ${formatter.format(end)}`;
   }
   if (settings.selectedPeriodMode === "week") {
     const start = startOfIsoWeek(selectedIsoWeekYear(settings), settings.selectedWeek);
@@ -106,18 +113,44 @@ export function periodRangeLabel(settings: Settings): string {
 }
 
 /** Label for the real-world period of the same mode, for comparison. */
-export function currentPeriodLabel(settings: Settings, now = new Date()): string {
-  return periodLabel({ ...settings, ...currentPeriodPatch(settings, now) } as Settings);
+export function currentPeriodLabel(settings: Settings, now = new Date(), locale?: string): string {
+  return periodLabel({ ...settings, ...currentPeriodPatch(settings, now) } as Settings, locale);
 }
 
-export function periodLabel(settings: Settings): string {
+/**
+ * The period's name: "August 2026", "2026", "Week 33 · 10–16 Aug".
+ *
+ * The month name comes from `Intl` against the given locale, not from the
+ * English-only `monthName()`. Without the locale it followed the browser's,
+ * which is how a French interface came to show "August 2026" directly above
+ * "1 août 2026 – 31 août 2026".
+ */
+export function periodLabel(settings: Settings, locale?: string): string {
   if (settings.selectedPeriodMode === "year") return String(settings.selectedYear);
-  if (settings.selectedPeriodMode === "month") return `${monthName(settings.selectedMonth)} ${settings.selectedYear}`;
+  if (settings.selectedPeriodMode === "month") {
+    const month = new Intl.DateTimeFormat(locale, { month: "long", timeZone: "UTC" }).format(
+      new Date(Date.UTC(settings.selectedYear, settings.selectedMonth - 1, 1)),
+    );
+    return `${month} ${settings.selectedYear}`;
+  }
   const start = startOfIsoWeek(selectedIsoWeekYear(settings), settings.selectedWeek);
   const end = new Date(start);
   end.setUTCDate(start.getUTCDate() + 6);
-  const formatter = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", timeZone: "UTC" });
-  return `Week ${settings.selectedWeek} · ${formatter.format(start)}–${formatter.format(end)}`;
+  const formatter = new Intl.DateTimeFormat(locale, { month: "short", day: "numeric", timeZone: "UTC" });
+  return `${weekLabel(settings.selectedWeek, locale)} · ${formatter.format(start)}–${formatter.format(end)}`;
+}
+
+/**
+ * "Week 33", in the reader's language.
+ *
+ * A tiny table rather than a translation key: this module is imported by the
+ * server's validation and by tests, and giving it a dependency on the
+ * dictionary for one word would be the wrong trade.
+ */
+function weekLabel(week: number, locale?: string): string {
+  const words: Record<string, string> = { en: "Week", fr: "Semaine", es: "Semana", de: "Woche", ar: "الأسبوع" };
+  const word = words[(locale ?? "en").split("-")[0]] ?? words.en;
+  return `${word} ${week}`;
 }
 
 /**
@@ -137,4 +170,51 @@ export function periodOrdinal(settings: Settings): number {
   if (mode === "year") return settings.selectedYear;
   if (mode === "week") return selectedIsoWeekYear(settings) * 53 + (settings.selectedWeek ?? 1);
   return settings.selectedYear * 12 + (settings.selectedMonth ?? 1);
+}
+
+/**
+ * A stable, language-independent name for a period, for storage.
+ *
+ * `periodLabel` produces "August 2026" — which is a *display* string, and the
+ * audit trail was storing it. A record written in a French session then read
+ * "juillet 2026" for ever, in every language, exactly like the wallet ledger
+ * used to. This is what goes in the database; `formatPeriodToken` turns it back
+ * into words at the moment somebody reads it.
+ */
+export function periodToken(settings: Settings): string {
+  if (settings.selectedPeriodMode === "year") return `year:${settings.selectedYear}`;
+  if (settings.selectedPeriodMode === "week") {
+    return `week:${selectedIsoWeekYear(settings)}-W${String(settings.selectedWeek).padStart(2, "0")}`;
+  }
+  return `month:${settings.selectedYear}-${String(settings.selectedMonth).padStart(2, "0")}`;
+}
+
+/**
+ * A stored token as words, in the reader's language.
+ *
+ * Anything that is not a token is returned unchanged: rows written before this
+ * existed hold a finished English string, and rewriting saved records to change
+ * their format would destroy history to tidy a format.
+ */
+export function formatPeriodToken(token: string, locale?: string): string {
+  const [kind, value] = token.split(":");
+  if (!value) return token;
+  if (kind === "year") return value;
+  if (kind === "month") {
+    const [year, month] = value.split("-").map(Number);
+    if (!Number.isFinite(year) || !Number.isFinite(month)) return token;
+    return periodLabel(
+      { selectedPeriodMode: "month", selectedYear: year, selectedMonth: month } as Settings,
+      locale,
+    );
+  }
+  if (kind === "week") {
+    const [year, week] = value.split("-W").map(Number);
+    if (!Number.isFinite(year) || !Number.isFinite(week)) return token;
+    return periodLabel(
+      { selectedPeriodMode: "week", selectedWeekYear: year, selectedYear: year, selectedWeek: week } as Settings,
+      locale,
+    );
+  }
+  return token;
 }

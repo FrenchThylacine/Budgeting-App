@@ -1,10 +1,13 @@
 import React, { useEffect, useId, useMemo, useRef, useState } from "react";
-import { Bell, ChevronLeft, ChevronRight, X } from "lucide-react";
+import { Bell, Check, ChevronLeft, ChevronRight, X } from "lucide-react";
 import { useBudgetStore } from "../../store/budgetStore";
 import {
   TUTORIAL_STEPS,
   completedOnboarding,
+  postponedOnboarding,
+  resumeStep,
   skippedOnboarding,
+  taskDone,
   type TutorialTab,
 } from "../../domain/tutorial";
 import { notificationStatus, requestNotificationPermission } from "../../domain/notifications";
@@ -16,19 +19,31 @@ import { Button } from "../ui/Button";
  *
  * A small card over the app rather than a modal that hides it: each step
  * switches to the tab it is describing, so the thing being explained is
- * visible behind the words. A wall of text in a dialog explains an interface
- * nobody can see while they read it.
+ * visible behind the words — and, on six of the thirteen steps, the reader is
+ * asked to *do* it.
  *
- * Three behaviours worth stating:
+ * ─── Why the tasks are the point ─────────────────────────────────────────────
  *
- *  - **Leaving is one press, and it sticks.** Skip is a first-class control,
- *    not a grey link in a corner, and it records the same "settled" state that
- *    finishing does. The tour never reappears unasked afterwards.
- *  - **Reduced motion is honoured.** The card animates in unless the user has
- *    asked it not to, in which case it simply appears.
- *  - **The notification step asks the browser for real.** It is the only step
- *    with an action, and pressing its button is the user gesture every browser
- *    requires — see `domain/notifications.ts`.
+ * A tour that advances on Next is a slideshow. At the end of it somebody has
+ * read twelve paragraphs about pinning a currency and has pinned none. So the
+ * card states the task, watches the real snapshot for it, and unlocks Next when
+ * it is genuinely done — the tick is the application's own state, never a flag
+ * the tour sets for itself.
+ *
+ * **Skip this step is always there.** A tour that cannot be left is a trap, and
+ * somebody who does not want a scenario should not have to invent one to reach
+ * the end. The task is an invitation with a lock on the *default* path, not on
+ * every path.
+ *
+ * ─── Three answers, not two ──────────────────────────────────────────────────
+ *
+ *  - **Finish / Skip** end the offer. The tour never reappears unasked.
+ *  - **Decide later** defers it: nothing reopens by itself, and a single quiet
+ *    reminder appears in the shell, resumable at the step it was left on.
+ *
+ * Reduced motion is honoured by not adding the animation at all, and the
+ * notification step asks the browser for real — it is the only step with an
+ * action, and pressing its button is the user gesture every browser requires.
  */
 export const Tutorial: React.FC<{
   onNavigate: (tab: TutorialTab) => void;
@@ -36,10 +51,19 @@ export const Tutorial: React.FC<{
 }> = ({ onNavigate, onClose }) => {
   const { t } = useTranslation();
   const updateSettings = useBudgetStore((state) => state.updateSettings);
-  const notifications = useBudgetStore((state) => state.snapshot.settings.notifications);
+  const snapshot = useBudgetStore((state) => state.snapshot);
+  const notifications = snapshot.settings.notifications;
 
-  const [index, setIndex] = useState(0);
+  const [index, setIndex] = useState(() => resumeStep(snapshot.settings.onboarding));
   const [permissionNote, setPermissionNote] = useState<string | null>(null);
+  /**
+   * Steps whose task the reader chose to pass over.
+   *
+   * Session state, not stored: skipping a task is a decision about this run of
+   * the tour, and a stored one would silently unlock the task next time the
+   * tour was replayed from Settings.
+   */
+  const [skippedTasks, setSkippedTasks] = useState<Record<string, true>>({});
   const cardRef = useRef<HTMLDivElement>(null);
   const titleId = useId();
   const step = TUTORIAL_STEPS[index];
@@ -49,6 +73,10 @@ export const Tutorial: React.FC<{
     () => typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true,
     [],
   );
+
+  const done = step.task ? taskDone(step.task, snapshot) : true;
+  const passed = step.task ? Boolean(skippedTasks[step.id]) : false;
+  const canAdvance = done || passed;
 
   // Show the tab this step is about. Steps without one leave the view alone,
   // which is what a "welcome" or "reports" card should do.
@@ -81,6 +109,11 @@ export const Tutorial: React.FC<{
 
   const skip = () => {
     updateSettings({ onboarding: skippedOnboarding(index) });
+    onClose();
+  };
+
+  const later = () => {
+    updateSettings({ onboarding: postponedOnboarding(index) });
     onClose();
   };
 
@@ -148,6 +181,15 @@ export const Tutorial: React.FC<{
         </h2>
         <p className="text-body tutorial-body">{t(step.bodyKey)}</p>
 
+        {step.task && (
+          <div className={`tutorial-task${done ? " is-done" : ""}`} role="status">
+            <span className="tutorial-task-mark" aria-hidden="true">
+              {done ? <Check size={14} /> : <span className="tutorial-task-dot" />}
+            </span>
+            <span>{t(done ? `tutorial.task.${step.task}.done` : `tutorial.task.${step.task}`)}</span>
+          </div>
+        )}
+
         {step.action === "request-notifications" && (
           <div className="tutorial-action">
             <Button
@@ -172,19 +214,45 @@ export const Tutorial: React.FC<{
         )}
 
         <footer className="tutorial-foot">
-          <Button variant="ghost" size="sm" onClick={skip}>
-            {t("tutorial.skip")}
-          </Button>
+          <div className="tutorial-foot-leave">
+            <Button variant="ghost" size="sm" onClick={skip}>
+              {t("tutorial.skip")}
+            </Button>
+            {/* Offered on the first card only. Later on, the reader is already
+                in the middle of it and "later" is what Skip means. */}
+            {index === 0 && (
+              <Button variant="ghost" size="sm" onClick={later}>
+                {t("tutorial.later")}
+              </Button>
+            )}
+          </div>
           <div className="tutorial-foot-nav">
             <Button variant="secondary" size="sm" disabled={index === 0} onClick={() => setIndex((n) => n - 1)}>
               <ChevronLeft size={14} /> {t("tutorial.back")}
             </Button>
+            {/* The escape hatch. A locked Next with no way past it is a trap,
+                and somebody who does not want a scenario should not have to
+                invent one to reach the end of the tour. */}
+            {step.task && !canAdvance && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setSkippedTasks((current) => ({ ...current, [step.id]: true }))}
+              >
+                {t("tutorial.skipTask")}
+              </Button>
+            )}
             {isLast ? (
               <Button variant="primary" size="sm" onClick={finish}>
                 {t("tutorial.finish")}
               </Button>
             ) : (
-              <Button variant="primary" size="sm" onClick={() => setIndex((n) => n + 1)}>
+              <Button
+                variant="primary"
+                size="sm"
+                disabled={!canAdvance}
+                onClick={() => setIndex((n) => n + 1)}
+              >
                 {t("tutorial.next")} <ChevronRight size={14} />
               </Button>
             )}

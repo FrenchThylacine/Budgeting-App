@@ -20,14 +20,15 @@ import type {
   WishlistItem,
   YearRecord,
 } from "../domain/types";
-import { createEmptyBudgetSnapshot, createSeedBudgetSnapshot } from "../data/seedBudget";
+import { createEmptyBudgetSnapshot } from "../data/seedBudget";
 import { scenarioFromCurrentState } from "../domain/scenarios";
 import { defaultCategories } from "../data/seedBudget";
 import { deleteSnapshot as deleteIdbSnapshot, loadSnapshot as loadIdbSnapshot, saveSnapshot as saveIdbSnapshot } from "../storage/idb";
 import { ApiUnavailableError, AuthRequiredError, getApiClient, SnapshotConflictError } from "../api/client";
 import { useAuthStore } from "./authStore";
 import { isViewingHistoricalPeriod } from "../utils/formatters";
-import { periodLabel } from "../domain/periods";
+import { periodToken } from "../domain/periods";
+import { storedText } from "../domain/storedText";
 
 /** Settings fields that define which period is being viewed. */
 const PERIOD_SETTING_KEYS = [
@@ -301,7 +302,7 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
         syncState: "offline",
         pendingLocalChanges: local != null,
         syncError:
-          "The server is unreachable, so this is the copy stored on this device. Changes will not reach your other devices until it reconnects.",
+          storedText("sync.offlineCopy"),
       });
     }
   },
@@ -315,7 +316,7 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
     persistSnapshot(next, set, get);
   },
 
-  importSnapshot: (snapshot, summary = "Imported budget data.") => {
+  importSnapshot: (snapshot, summary = storedText("audit.import")) => {
     commit(set, get, () => normalizeSnapshot(snapshot), "import", summary);
   },
 
@@ -332,7 +333,7 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
         snapshot.settings = { ...snapshot.settings, ...patch };
       },
       "settings",
-      "Updated settings.",
+      storedText("audit.settings"),
       patch,
     );
   },
@@ -350,7 +351,7 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
         snapshot.settings.selectedMonth = Math.min(Math.max(snapshot.settings.selectedMonth, 1), 12);
       },
       "year",
-      `Switched to ${year}.`,
+      storedText("audit.yearSwitched", { year }),
       { year },
     );
   },
@@ -369,7 +370,7 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
         });
       },
       "activity",
-      `Added activity ${activity.name}.`,
+      storedText("audit.activityAdded", { name: activity.name }),
     );
   },
 
@@ -383,7 +384,7 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
         if (activity) Object.assign(activity, patch);
       },
       "activity",
-      "Updated activity.",
+      storedText("audit.activityUpdated"),
       { id: idValue, patch },
     );
   },
@@ -403,7 +404,7 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
         return removed?.name;
       },
       "delete",
-      "Deleted activity.",
+      storedText("audit.activityDeleted"),
       { id: idValue },
     );
   },
@@ -425,7 +426,7 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
         });
       },
       "activity",
-      "Duplicated activity.",
+      storedText("audit.activityDuplicated"),
       { id: idValue },
     );
   },
@@ -443,7 +444,7 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
         [activities[index].order, activities[target].order] = [activities[target].order, activities[index].order];
       },
       "activity",
-      "Reordered activities.",
+      storedText("audit.activitiesReordered"),
       { id: idValue, direction },
     );
   },
@@ -465,7 +466,7 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
         });
       },
       "activity",
-      "Drag-reordered activities.",
+      storedText("audit.activitiesDragged"),
       { sourceId, targetId },
     );
   },
@@ -487,7 +488,7 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
         });
       },
       "spending",
-      "Added spending entry.",
+      storedText("audit.spendingAdded"),
       entry,
     );
   },
@@ -514,7 +515,7 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
         }
       },
       "spending",
-      "Updated spending entry.",
+      storedText("audit.spendingUpdated"),
       { id: idValue, patch },
     );
   },
@@ -533,7 +534,7 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
         }
       },
       "delete",
-      "Deleted spending entry.",
+      storedText("audit.spendingDeleted"),
       { id: idValue },
     );
   },
@@ -551,7 +552,7 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
         });
       },
       "wishlist",
-      `Added wishlist item ${item.name}.`,
+      storedText("audit.wishlistAdded", { name: item.name }),
     );
   },
 
@@ -569,7 +570,7 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
         Object.assign(item, normalizeWishlistPatch(item));
       },
       "wishlist",
-      "Updated wishlist item.",
+      storedText("audit.wishlistUpdated"),
       { id: idValue, patch },
     );
   },
@@ -587,7 +588,7 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
         year.wishlistItems = year.wishlistItems.filter((item) => item.id !== idValue);
       },
       "delete",
-      "Deleted wishlist item.",
+      storedText("audit.wishlistDeleted"),
       { id: idValue },
     );
   },
@@ -640,7 +641,7 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
         markWishlistBought(target, spendingId, date);
       },
       "spending",
-      `Recorded purchase of ${item.name}.`,
+      storedText("audit.wishlistPurchased", { name: item.name }),
       { itemId, spendingId, amount, date },
     );
 
@@ -661,7 +662,7 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
         get,
         (draft) => clearWishlistLinks(draft, entry.wishlistItemId, spendingId),
         "wishlist",
-        "Unlinked a transaction from its wishlist item.",
+        storedText("audit.wishlistUnlinked"),
         { spendingId, itemId: entry.wishlistItemId },
       );
       return { status: "unlinked", spendingId };
@@ -690,7 +691,7 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
         markWishlistBought(draftItem, spendingId, draftEntry.date);
       },
       "wishlist",
-      `Linked ${item.name} to a transaction.`,
+      storedText("audit.wishlistLinked", { name: item.name }),
       { spendingId, itemId },
     );
     return { status: "linked", spendingId };
@@ -712,7 +713,7 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
       // money that was really spent disappears from a period.
       (draft) => clearWishlistLinks(draft, itemId, linkedId),
       "wishlist",
-      `Unlinked ${item.name} from its transaction.`,
+      storedText("audit.wishlistUnlinkedFrom", { name: item.name }),
       { itemId, spendingId: linkedId },
     );
     return { status: "unlinked", spendingId: linked?.id };
@@ -744,7 +745,7 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
         Object.assign(target, normalizeWishlistPatch(target));
       },
       "wishlist",
-      bought ? `Marked ${item.name} as bought.` : `Marked ${item.name} as not bought.`,
+      storedText(bought ? "audit.wishlistBought" : "audit.wishlistUnbought", { name: item.name }),
       { itemId, bought },
     );
 
@@ -770,7 +771,7 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
         });
       },
       "wallet",
-      "Added wallet entry.",
+      storedText("audit.walletAdded"),
       entry,
     );
   },
@@ -801,14 +802,14 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
            * `wallet.allocationSource` at render time, so the ledger reads in
            * whatever language the user is using today.
            */
-          source: source?.trim() || `@wallet.allocationSource|${monthName(month)}|${year}`,
+          source: source?.trim() || storedText("wallet.allocationSource", { month: monthName(month), year }),
           type: ALLOCATION_TYPE,
           note: note?.trim() ?? "",
           createdAt: new Date().toISOString(),
         });
       },
       "wallet",
-      `Allocated budget for ${monthName(month)} ${year}.`,
+      storedText("audit.budgetAllocated", { month: monthName(month), year }),
       { year, month, amount, currency },
     );
   },
@@ -830,14 +831,14 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
           date: todayDateInput(),
           amount,
           currency: draft.settings.baseCurrency,
-          source: "@wallet.transferSource",
+          source: storedText("wallet.transferSource"),
           type: TRANSFER_TYPE,
-          note: note?.trim() || "@wallet.transferLedgerNote",
+          note: note?.trim() || storedText("wallet.transferLedgerNote"),
           createdAt: new Date().toISOString(),
         });
       },
       "wallet",
-      "Moved leftover budget to the personal balance.",
+      storedText("audit.walletTransferred"),
       { year, month, amount },
     );
   },
@@ -875,9 +876,9 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
             date: todayDateInput(),
             amount: claimed,
             currency: draft.settings.baseCurrency,
-            source: "@wallet.resetSource",
+            source: storedText("wallet.resetSource"),
             type: TRANSFER_TYPE,
-            note: "@wallet.resetClaimNote",
+            note: storedText("wallet.resetClaimNote"),
             createdAt: new Date().toISOString(),
           });
         }
@@ -888,14 +889,14 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
           amount: adjustment,
           currency: draft.settings.baseCurrency,
           date: todayDateInput(),
-          source: "@wallet.resetSource",
+          source: storedText("wallet.resetSource"),
           type: "adjustment",
-          note: "@wallet.resetLedgerNote",
+          note: storedText("wallet.resetLedgerNote"),
           createdAt: new Date().toISOString(),
         });
       },
       "wallet",
-      "Reset the wallet balance to zero.",
+      storedText("audit.walletReset"),
       { year, previousBalance: balance, adjustment },
     );
     return adjustment;
@@ -911,7 +912,7 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
         if (entry) Object.assign(entry, patch);
       },
       "wallet",
-      "Updated wallet entry.",
+      storedText("audit.walletUpdated"),
       { id: idValue, patch },
     );
   },
@@ -926,7 +927,7 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
         year.walletEntries = year.walletEntries.filter((item) => item.id !== idValue);
       },
       "delete",
-      "Deleted wallet entry.",
+      storedText("audit.walletDeleted"),
       { id: idValue },
     );
   },
@@ -955,7 +956,7 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
             spendTotal: null,
             delta: null,
             confirmedAt: timestamp,
-            note: "Closed period has no value, so the NaN policy blocks automatic rollover.",
+            note: storedText("audit.rolloverBlocked"),
           };
         } else if (applyRollover) {
           const walletEntryId = id("wallet-rollover");
@@ -965,9 +966,9 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
             month,
             amount: delta,
             currency: snapshot.settings.baseCurrency,
-            source: "Month-end rollover",
+            source: storedText("wallet.monthEndRollover"),
             type: "rollover",
-            note: delta < 0 ? "Negative delta reduced wallet." : "Positive delta added to wallet.",
+            note: delta < 0 ? storedText("audit.rolloverNegative") : storedText("audit.rolloverPositive"),
             createdAt: timestamp,
           });
           closeRecord = {
@@ -979,7 +980,7 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
             delta,
             rolloverWalletEntryId: walletEntryId,
             confirmedAt: timestamp,
-            note: delta < 0 ? "Confirmed negative rollover." : "Confirmed positive rollover.",
+            note: delta < 0 ? storedText("audit.rolloverConfirmedNegative") : storedText("audit.rolloverConfirmedPositive"),
           };
         } else {
           closeRecord = {
@@ -990,13 +991,13 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
             spendTotal: snapshot.settings.monthlyBudget - delta,
             delta,
             confirmedAt: timestamp,
-            note: "Month closed without wallet rollover.",
+            note: storedText("audit.rolloverSkipped"),
           };
         }
         record.closedMonths.push(closeRecord);
       },
       "rollover",
-      applyRollover ? "Closed month with rollover." : "Closed month without rollover.",
+      applyRollover ? storedText("audit.monthClosedRollover") : storedText("audit.monthClosed"),
       { year, month, applyRollover },
     );
   },
@@ -1028,7 +1029,7 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
         }
       },
       "settings",
-      approval.status === "approved" ? "Approved suggested monthly budget." : "Rejected suggested monthly budget.",
+      approval.status === "approved" ? storedText("audit.budgetApproved") : storedText("audit.budgetRejected"),
       approval,
     );
   },
@@ -1049,9 +1050,7 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
         }
       },
       "settings",
-      trimmed
-        ? `Noted against ${monthName(month)} ${year}.`
-        : `Cleared the note on ${monthName(month)} ${year}.`,
+      storedText(trimmed ? "audit.noteWritten" : "audit.noteCleared", { month: monthName(month), year }),
       { year, month },
     );
   },
@@ -1080,11 +1079,13 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
           name,
           season,
           activityOverrides,
-          notes: `Captured from ${year.activities.length} ${year.activities.length === 1 ? "activity" : "activities"}.`,
+          // The season's own note is stored text: it is written once and read
+          // back by whoever opens the Scenario Lab, in their language.
+          notes: storedText("audit.seasonCaptured", { count: year.activities.length }),
         });
       },
       "preset",
-      `Saved the current activities as the "${name}" season.`,
+      storedText("audit.seasonSaved", { name }),
     );
   },
 
@@ -1096,7 +1097,7 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
         snapshot.seasonalPresets = snapshot.seasonalPresets.filter((item) => item.id !== presetId);
       },
       "delete",
-      "Deleted a season.",
+      storedText("audit.seasonDeleted"),
       { presetId },
     );
   },
@@ -1116,7 +1117,7 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
         }
       },
       "preset",
-      "Applied seasonal preset.",
+      storedText("audit.seasonApplied"),
       { presetId },
     );
   },
@@ -1129,7 +1130,7 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
         snapshot.scenarioPresets.push({ ...preset, id: id("scenario") } as ScenarioPreset);
       },
       "preset",
-      `Created scenario "${preset.name}".`,
+      storedText("audit.scenarioCreated", { name: preset.name }),
     );
   },
 
@@ -1143,7 +1144,7 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
         Object.assign(preset, patch);
       },
       "preset",
-      "Updated scenario.",
+      storedText("audit.scenarioUpdated"),
       { presetId },
     );
   },
@@ -1166,7 +1167,7 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
         });
       },
       "preset",
-      "Duplicated scenario.",
+      storedText("audit.scenarioDuplicated"),
       { presetId },
     );
   },
@@ -1180,7 +1181,7 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
         if (index !== -1) snapshot.scenarioPresets.splice(index, 1);
       },
       "preset",
-      "Deleted scenario.",
+      storedText("audit.scenarioDeleted"),
       { presetId },
     );
   },
@@ -1193,7 +1194,7 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
         snapshot.scenarioPresets.push(scenarioFromCurrentState(snapshot, name, id("scenario")));
       },
       "preset",
-      `Saved the current budget as "${name}".`,
+      storedText("audit.scenarioCaptured", { name }),
     );
   },
 
@@ -1231,7 +1232,7 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
         }
       },
       "preset",
-      "Applied scenario preset.",
+      storedText("audit.scenarioApplied"),
       { presetId },
     );
   },
@@ -1254,7 +1255,7 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
         snapshot.categories.push(newCat);
       },
       "settings",
-      "Added category.",
+      storedText("audit.categoryAdded"),
       category,
     );
   },
@@ -1280,7 +1281,7 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
         Object.assign(cat, safePatch);
       },
       "settings",
-      "Updated category.",
+      storedText("audit.categoryUpdated"),
       { id: idValue, patch },
     );
   },
@@ -1294,7 +1295,7 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
         if (cat) cat.archived = true;
       },
       "settings",
-      "Archived category.",
+      storedText("audit.categoryArchived"),
       { id: idValue },
     );
   },
@@ -1312,7 +1313,7 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
         cats.splice(targetIndex, 0, source);
       },
       "settings",
-      "Reordered categories.",
+      storedText("audit.categoriesReordered"),
       { sourceId, targetId },
     );
   },
@@ -1368,7 +1369,7 @@ function commit(
     get().historicalEditUnlocked &&
     isViewingHistoricalPeriod(before.settings);
 
-  touch(finalSnapshot, type, summary, metadata, historicalEdit ? periodLabel(before.settings) : null);
+  touch(finalSnapshot, type, summary, metadata, historicalEdit ? periodToken(before.settings) : null);
   set({
     snapshot: finalSnapshot,
     undoStack: [before, ...get().undoStack].slice(0, 40),
@@ -1396,7 +1397,17 @@ function touch(
   snapshot.auditLog.unshift({
     id: id("audit"),
     type,
-    summary: historicalPeriodLabel ? `${summary} (historical edit · ${historicalPeriodLabel})` : summary,
+    /*
+     * The summary is left exactly as written.
+     *
+     * It used to have "(historical edit · July 2026)" appended, which (a) put a
+     * second English sentence inside a record the interface now translates, and
+     * (b) would corrupt a `@key|name=value` sigil by appending text to its last
+     * parameter. The same two facts are already on the record as
+     * `historicalEdit` and `historicalPeriod`, and the History panel shows
+     * both.
+     */
+    summary,
     createdAt: timestamp,
     historicalEdit: historicalPeriodLabel != null,
     historicalPeriod: historicalPeriodLabel ?? undefined,
@@ -1541,9 +1552,6 @@ function isBudgetSnapshot(value: unknown): value is BudgetSnapshot {
   return Boolean(value && typeof value === "object" && "version" in value && "settings" in value);
 }
 
-export function currenciesForStore(): CurrencyCode[] {
-  return ["EUR", "USD", "LBP", "GBP", "CAD", "AUD", "JPY", "TRY", "SAR", "AED"];
-}
 
 function normalizeSnapshot(snapshot: BudgetSnapshot): BudgetSnapshot {
   // Matched on the seed key, not the id: ids are now generated per budget, so
@@ -1632,12 +1640,11 @@ function persistSnapshot(
               baseRevision: error.serverRevision ?? server.revision ?? null,
               syncState: "conflict",
               pendingLocalChanges: false,
-              syncNotice:
-                "Another device saved a newer version while this one was behind. The latest data has been loaded — please re-apply your last change.",
+              syncNotice: storedText("sync.conflictReloaded"),
             });
             await saveIdbSnapshot(server).catch(() => undefined);
           } else {
-            set({ syncState: "conflict", syncNotice: "This device was out of date. Reload to get the latest data." });
+            set({ syncState: "conflict", syncNotice: storedText("sync.outOfDate") });
           }
           return;
         }
@@ -1656,7 +1663,7 @@ function persistSnapshot(
           set({
             syncState: "offline",
             pendingLocalChanges: true,
-            syncError: "The server is unreachable. Changes are saved on this device only.",
+            syncError: storedText("sync.offlineOnly"),
           });
           return;
         }
@@ -1664,7 +1671,7 @@ function persistSnapshot(
         set({
           syncState: "error",
           pendingLocalChanges: true,
-          syncError: error instanceof Error ? error.message : "Failed to save to the server.",
+          syncError: error instanceof Error ? error.message : storedText("sync.saveFailed"),
         });
       }
     });
@@ -1701,7 +1708,7 @@ async function syncFromServer(
       set({
         syncState: "conflict",
         syncNotice:
-          "This device has changes that never reached the server, and another device has saved since. Retry sync to send them, or reload to take the server version.",
+          storedText("sync.divergedRetry"),
       });
       return;
     }
@@ -1728,11 +1735,11 @@ async function syncFromServer(
     if (error instanceof ApiUnavailableError) {
       set({
         syncState: "offline",
-        syncError: "The server is unreachable. Working from this device's local copy.",
+        syncError: storedText("sync.offlineLocal"),
       });
       return;
     }
-    set({ syncState: "error", syncError: error instanceof Error ? error.message : "Sync failed." });
+    set({ syncState: "error", syncError: error instanceof Error ? error.message : storedText("sync.failed") });
   }
 }
 
