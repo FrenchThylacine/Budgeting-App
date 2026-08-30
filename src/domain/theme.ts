@@ -332,6 +332,21 @@ export function resolveAppearance(
 }
 
 /**
+ * The part of an element this module actually touches.
+ *
+ * Deliberately structural rather than `HTMLElement`. The API validates theme
+ * ids against `THEME_IDS` from this same file, so `domain/theme.ts` is
+ * compiled by the server's TypeScript project as well — and that project has
+ * no DOM library, so a single reference to a browser global fails the server
+ * build while the frontend build stays green. A real element satisfies this.
+ */
+export interface ThemeTarget {
+  style: { setProperty(name: string, value: string): void; removeProperty(name: string): string };
+  setAttribute(name: string, value: string): void;
+  removeAttribute(name: string): void;
+}
+
+/**
  * Write a theme onto an element.
  *
  * Every token in the map is set, and nothing else is touched. Removing the
@@ -339,13 +354,13 @@ export function resolveAppearance(
  * key sets — which the type guarantees, and which is the reason the map is a
  * fixed interface rather than `Record<string, string>`.
  */
-export function applyTheme(root: HTMLElement, theme: ThemePreset, dark: boolean): void {
+export function applyTheme(root: ThemeTarget, theme: ThemePreset, dark: boolean): void {
   const tokens = dark ? theme.dark : theme.light;
   for (const [name, value] of Object.entries(tokens)) root.style.setProperty(name, value);
-  root.dataset.theme = theme.id;
+  root.setAttribute("data-theme", theme.id);
 }
 
-export function clearTheme(root: HTMLElement): void {
+export function clearTheme(root: ThemeTarget): void {
   for (const name of Object.keys(THEME_PRESETS[0].light)) root.style.removeProperty(name);
-  delete root.dataset.theme;
+  root.removeAttribute("data-theme");
 }
