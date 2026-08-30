@@ -2,13 +2,31 @@
 
 This is the active engineering tracker. A checkbox is ticked only after implementation **and** the relevant verification have both succeeded. "The code exists" is never sufficient.
 
-**Last updated:** 2026-08-30 — the V4 pass: the funding statistic corrected at the domain level, the whole Flightradar24 fleet extracted for the transition, a loading sequence with a genuine 3D orbit and advected smoke, a hundred and six untranslated strings found and fixed, and a broad reduction in controls and words across the application.
+**Last updated:** 2026-08-30 (V4.2) — the refinement pass: the two "≈" lines untangled, the funding ambiguity that made a correct statistic read as a wrong one, a visual vocabulary for how often money moves, an aerobatic routine with smoke that starts at the exhaust, and a broad reduction in what is on screen at once.
 
-**Version:** 4.0.0. See `CHANGELOG.md` for what each version was.
+**Version:** 4.2.0. See `CHANGELOG.md` for what each version was.
 
-**Verification state.** **872 tests across 46 files, all passing** — 790 unit and 82 against a real PostgreSQL 17 database. TypeScript clean for **both** targets: the frontend project and the server's, which compiles `src/domain` with no DOM library and caught a defect the frontend build is structurally blind to. **`scripts/verify-browser.mjs` drives a real Chrome on a brand-new account each run: 49 checks, all passing.** Both bundles build clean. Nothing from 2026-08-17 onward is verified in production.
+**Verification state.** **890 tests across 48 files, all passing** — 808 unit and 82 against a real PostgreSQL 17 database. TypeScript clean for **both** targets. **`scripts/verify-browser.mjs` drives a real Chrome on a brand-new account each run: 57 checks, all passing**, including six phone widths, two themes, and measurements of the loading animation rather than assertions about it. Both bundles build clean. Nothing from 2026-08-17 onward is verified in production.
 
 ## How this session verified things
+
+**V4.2, 2026-08-30.** The lesson of this pass, three times over: *the claim
+was true and the reader was still right.*
+
+- The share-of-yearly-total arithmetic was correct and the page still read as
+  though it were not, because two statistics used one word for two different
+  wholes. Fixing the number would have changed nothing.
+- The smoke emitter was correct to within four pixels, measured — and the
+  ribbon still *looked* detached, because at the head it is three pixels wide
+  under a three-pixel blur.
+- The orbit genuinely was three-dimensional and still read as machinery,
+  because it was one circle at a constant rate.
+
+So this pass measured instead of asserting wherever it could: the distance from
+a sprite's own transform to the nearest pixel of its own colour; the variation
+in the track's radius over a circuit; the order of the smoke bands read off the
+canvas. A claim that cannot be measured is a claim that has to be looked at.
+
 
 **V4, 2026-08-30.** Three things this pass added to the method, each because
 something had slipped through the previous one:
@@ -36,7 +54,52 @@ something had slipped through the previous one:
 - **Contrast is measured, not eyeballed.** The themes are data, so `tests/theme-contrast.test.ts` walks every preset in both appearances and asserts every text token against every surface. Thirty assertions, and a theme that fails one fails the build.
 - **Translation completeness is a test, not a claim.** `tests/i18n.test.ts` asserts both directions: every key the source asks for exists in English, and every language marked *translated* covers the whole English key set. 1,054 keys × 5 languages.
 
-## Completed — 2026-08-30 (V4)
+## Completed — 2026-08-30 (V4.2)
+
+### The two "≈" lines answered each other's question
+
+- [x] **A record's equivalent is the display currency; an aggregate's is the second currency.** One function did both, keyed on the second currency, so a 150 000 LBP taxi in a euro budget printed "≈ $1.47" — a currency the reader never asked about for that figure, and one nothing beside it was in. `displayEquivalent` and `secondaryEquivalent` are two functions with two names, `Money` is for records and `Total` is for aggregates.
+- [x] **The second currency reaches the figures the brief names**: the wallet's three balances, the activity totals, the period's spending.
+- [x] **Verified in a browser**, both at once: `L.L. 150 000 ≈ € 1,44` on the row and `€ 496,98 ≈ $ 576,86` on the total. Three harness checks, one of which asserts the *negative* — choosing a second currency must not move a record onto it. The check that used to be here asserted only that the setting stored, which is how the swap survived it.
+
+### The funding statistic: the ambiguity, not the arithmetic
+
+- [x] **Two statistics said "of the total" and meant different wholes.** The arithmetic was already right — the personal share chart lists only what the user pays for, against what they pay — but the funding split's percentages, attached to a column headed PAID BY OTHER, read exactly like the statistic that must exclude it.
+- [x] **The three percentages became one measured bar**, each segment carrying its glyph, so the split is read as a length rather than as three sentences.
+- [x] **The two wholes are named once each**: "of all activity cost, whoever pays" and "of what you pay for". The report's column says "Your share".
+
+### A vocabulary for how often
+
+- [x] **`domain/cadence.ts`** names seven cadences once, each with a shape, a tone from a three-hue palette (recurring / counted / once) and a word. Never colour alone. The silhouettes differ rather than the details, because at fourteen pixels two calendars are one calendar.
+- [x] **A transaction row printed the stored enum value** — `monthly`, capitalised by a CSS rule. It carries the shape now.
+- [x] **An activity row went from three stacked lines to one**, and from about 115px to 78px: a shape, a category, and the due state, which keeps its colour because it is the part that changes with the month. "Nothing due this month" gave up its line and kept its glyph, tooltip and accessible name.
+- [x] Nine tests pin the mapping, including that the silhouettes are distinct and that seven cadences share three tones.
+
+### The loading sequence
+
+- [x] **A routine, not a ring.** Three incommensurate harmonics ride on the orbit — the plane rolls, the track climbs, the radius breathes — at 1, 1/1.7 and 1/2.3 of a circuit, with the escorts phased apart so they weave rather than mirror. Measured on the page: 185–269px from the lead, where a circle is flat.
+- [x] **The smoke starts at the exhaust.** The emitter was a bare `x - 26` with no heading at all through the roll-out and the formation. One `tailpipe()` now, used by every phase. Measured off the sprite's own transform against the nearest pixel of its own colour: **0px**.
+- [x] **It looked detached where it was not** — three pixels wide under a three-pixel blur. A third pass draws the newest quarter-second denser and tighter.
+- [x] **The departure grows out of the hold**: the airspeed builds through the settle, so the ribbons stretch before anything moves.
+- [x] Frame budget unchanged: 8.3ms median, 10.4ms worst.
+
+### Less on screen at once
+
+- [x] **The statistics page was 5,103px.** Five of its seven sections close by default; it opens at 1,794. `Section` grew a `collapsible` prop whose heading *is* the control, because a chevron beside it is a target for a mouse and not for a thumb.
+- [x] **The dashboard: 1,865 → 1,332px**, and its trend chart is absent rather than an empty card when there is nothing to trend.
+- [x] **The activity editor: twenty-one fields in view to eight.** The price shown is the one the chosen cost model actually reads; colour and icon moved behind a disclosure. Nothing was removed.
+- [x] **Three stacked filter rows on a phone became two.**
+- [x] Every wallet ledger row read "Train tickets · Train tickets"; the planning card no longer says "€0.00 · a plan, not money you have".
+
+### Correctness and accessibility found on the way
+
+- [x] **"Spending through 2,026"** — every numeric placeholder went through `Intl.NumberFormat`. A placeholder named `year` is a label now.
+- [x] **A 17px Retry** in the offline banner — the one control somebody reaches for when their work is not saving.
+- [x] **Four phone widths nobody had checked.** The harness swept 320 and 390; it sweeps 320, 360, 375, 390, 412 and 430.
+- [x] **Nineteen more untranslated strings**, and three more shapes for the scanner: `||` and `??` fallbacks, and English inside a template literal.
+- [x] **The unused-key test the plan has claimed since the translation pass.** It found eight orphans immediately, and has caught four more since.
+
+## Completed — 2026-08-30 (V4.0)
 
 ### The funding statistic was wrong, at the domain level
 
