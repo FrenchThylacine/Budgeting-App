@@ -2,6 +2,8 @@ import React, { useMemo, useState } from "react";
 import { Pencil, Plus, ShoppingBag, Trash2, X } from "lucide-react";
 import { currencyOptionsFor, formatMoney } from "../../domain/currency";
 import { Money, Total } from "../ui/Money";
+import { CadenceMark } from "../ui/CadenceMark";
+import { entryCadence } from "../../domain/cadence";
 import { monthFromDateInput, todayDateInput, weekFromDateInput, weekYear } from "../../domain/dates";
 import { selectedIsoWeekYear } from "../../domain/periods";
 import {
@@ -659,7 +661,7 @@ export const SpendingPanel: React.FC = () => {
             return (
               <SwipeRow
                 key={entry.id}
-                label={entry.note || category?.name || "Transaction"}
+                label={entry.note || category?.name || t("spending.transaction")}
                 trailing={spendingSwipe(spendingGestures.trailing, entry)}
                 leading={spendingSwipe(spendingGestures.leading, entry)}
               >
@@ -698,11 +700,10 @@ export const SpendingPanel: React.FC = () => {
                       }}
                     />
                     {category?.name ?? t("common.uncategorised")}
-                    {isRecurring && (
-                      <span className="badge badge-info" style={{ textTransform: "capitalize" }}>
-                        {entry.recurrenceType}
-                      </span>
-                    )}
+                    {/* The shape, not the enum. This printed the stored value
+                        — "monthly", "session" — capitalised by a CSS rule: an
+                        internal identifier, in English, on a user's row. */}
+                    {isRecurring && <CadenceMark cadence={entryCadence(entry)} />}
                     {/* Which of the two exclusions it is, not merely that it
                         is one. "Paid by other" and "Outside budget" behave the
                         same against the budget and mean different things. */}

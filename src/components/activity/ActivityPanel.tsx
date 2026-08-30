@@ -17,6 +17,8 @@ import {
 import { currencyOptionsFor, formatMoney, numberLocale } from "../../domain/currency";
 import { SwipeRow } from "../ui/SwipeRow";
 import { RowMenu } from "../ui/RowMenu";
+import { CadenceMark } from "../ui/CadenceMark";
+import { activityCadence } from "../../domain/cadence";
 import { Total } from "../ui/Money";
 import { gesturesFor } from "../../domain/gestures";
 import { AdvancedFields, EditorSheet } from "../ui/EditorSheet";
@@ -419,7 +421,7 @@ export const ActivityPanel: React.FC = () => {
         {open && (
           <EditorSheet
             title={editing ? editing.name || t("activities.edit") : t("activities.new")}
-            subtitle={editing ? "Changes apply from the selected period onward." : undefined}
+            subtitle={editing ? t("activities.editSubtitle") : undefined}
             onClose={() => {
               setOpen(false);
               setEditing(null);
@@ -777,7 +779,7 @@ export const ActivityPanel: React.FC = () => {
               <Field
                 label={t("activity.yearlyEstimate")}
                 emphasised={form.recurrenceType === "yearly" || form.costModel === "fixedYearly"}
-                hint={form.costModel === "fixedYearly" ? "The same field as the yearly charge above." : undefined}
+                hint={form.costModel === "fixedYearly" ? t("activity.sameAsYearlyCharge") : undefined}
               >
                 <input
                   className="input"
@@ -1026,43 +1028,63 @@ export const ActivityPanel: React.FC = () => {
                         </span>
                       )}
                     </div>
-                    <div className="text-footnote" style={{ letterSpacing: "0.02em", textTransform: "none" }}>
-                      {describeActivity(activity, year, month, t, monthNames())}
-                    </div>
-                    <div className="text-caption" style={{ marginTop: 2 }}>
-                      {categoryName(activity.categoryId)}
+                    {/* One meta line, not three.
+                        It was: the cadence sentence, then the category, then
+                        what falls due — three stacked lines under every name,
+                        for facts that fit on one. The cadence is a shape, the
+                        category is a word, and the due state keeps its own
+                        colour because it is the only part that changes with
+                        the month. */}
+                    <div className="activity-meta">
+                      <CadenceMark cadence={activityCadence(activity)} />
+                      <span className="activity-meta-category">{categoryName(activity.categoryId)}</span>
+                      {describeActivity(activity, year, month, t, monthNames()) && (
+                        <span className="activity-meta-detail">
+                          {describeActivity(activity, year, month, t, monthNames())}
+                        </span>
+                      )}
                       {/* The seasonal tag, only when it is not the default:
                           "normal" on every row is a column of the same word. */}
-                      {activity.seasonalTag && activity.seasonalTag !== "normal"
-                        ? ` · ${activity.seasonalTag}`
-                        : ""}
-                    </div>
-                    {/* What this month actually requires from this activity —
-                        which for eleven months of a yearly subscription is
-                        nothing, and for an activity with no known date is
-                        neither nothing nor a guess. */}
-                    {due && (
-                      <div className="activity-due" data-status={due.status}>
-                        <CalendarClock size={12} aria-hidden="true" />
-                        <span>
-                          {due.status === "unknown"
-                            ? t("activities.dateUnknown")
-                            : due.status === "not-due"
-                              ? t("activities.notDueThisMonth")
-                              : due.datesKnown && due.dueDates.length > 0
-                                ? `${baseMoney(due.dueBase)} · ${t("activities.dueOn", {
-                                    date: formatDate(due.dueDates[0], { day: "numeric", month: "short" }),
-                                  })}`
-                                : `${baseMoney(due.dueBase)} · ${t("activities.dueThisMonth")}`}
-                        </span>
-                        {due.status === "unknown" && due.unknownReason && (
-                          <span title={t(due.unknownReason)} className="activity-due-why">
-                            <HelpCircle size={12} aria-hidden="true" />
-                            <span className="sr-only">{t(due.unknownReason)}</span>
+                      {activity.seasonalTag && activity.seasonalTag !== "normal" && (
+                        <span className="activity-meta-detail">{activity.seasonalTag}</span>
+                      )}
+                      {/* What this month actually requires from this activity —
+                          which for eleven months of a yearly subscription is
+                          nothing, and for an activity with no known date is
+                          neither nothing nor a guess. */}
+                      {due && (
+                        <span
+                          className="activity-due"
+                          data-status={due.status}
+                          title={due.status === "not-due" ? t("activities.notDueThisMonth") : undefined}
+                        >
+                          <CalendarClock size={12} aria-hidden="true" />
+                          {/* "Nothing due this month" was a column of the same
+                              five words down a list where most rows are not due
+                              in most months. What is worth reading is the row
+                              that *is* — so the quiet case keeps its glyph, its
+                              tooltip and its accessible name, and gives up its
+                              line. */}
+                          <span className={due.status === "not-due" ? "sr-only" : undefined}>
+                            {due.status === "unknown"
+                              ? t("activities.dateUnknown")
+                              : due.status === "not-due"
+                                ? t("activities.notDueThisMonth")
+                                : due.datesKnown && due.dueDates.length > 0
+                                  ? `${baseMoney(due.dueBase)} · ${t("activities.dueOn", {
+                                      date: formatDate(due.dueDates[0], { day: "numeric", month: "short" }),
+                                    })}`
+                                  : `${baseMoney(due.dueBase)} · ${t("activities.dueThisMonth")}`}
                           </span>
-                        )}
-                      </div>
-                    )}
+                          {due.status === "unknown" && due.unknownReason && (
+                            <span title={t(due.unknownReason)} className="activity-due-why">
+                              <HelpCircle size={12} aria-hidden="true" />
+                              <span className="sr-only">{t(due.unknownReason)}</span>
+                            </span>
+                          )}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
 
@@ -1352,11 +1374,20 @@ function describeActivity(activity: Activity, year: number, month: number, t: Tr
           cycle,
         });
   }
-  if (model === "fixedYearly") return t("activity.summaryYearly");
-  if (model === "fixed") return t("activity.summaryFixed");
-  return t("activity.summaryAuto", {
-    recurrence: t(`recurrence.${activity.recurrenceType}`),
-    interval: activity.recurrenceInterval,
+  /*
+   * Nothing, where the mark beside it has already said it.
+   *
+   * "billed once a year" next to a yearly icon, "fixed monthly" next to a
+   * monthly one, "Monthly · every 1" next to either — the same fact twice, on
+   * every row of the list. What survives is only what the shape cannot carry:
+   * a count, a schedule, a payment cycle, an interval that is not one.
+   */
+  if (model === "fixedYearly" || model === "fixed") return "";
+  const interval = activity.recurrenceInterval;
+  if (!interval || interval === 1) return "";
+  return t("activity.summaryEvery", {
+    interval,
+    recurrence: t(`recurrence.${activity.recurrenceType}`).toLowerCase(),
   });
 }
 

@@ -41,6 +41,7 @@ import {
 } from "lucide-react";
 import { EditorSheet } from "../ui/EditorSheet";
 import { useTranslation } from "../../i18n/useTranslation";
+import type { Translator } from "../../domain/i18n";
 import { storedText } from "../../domain/storedText";
 import { FUNDING_META } from "../../domain/funding";
 import {
@@ -90,19 +91,21 @@ function healthSummary(
   score: number,
   projectedRemaining: number | null,
   money: (value: number | null | undefined) => string,
+  t: Translator,
 ): string {
-  const lead =
+  const lead = t(
     score >= 85
-      ? "Comfortably inside your limits."
+      ? "health.leadComfortable"
       : score >= 70
-      ? "On track, with room to absorb a surprise."
-      : score >= 50
-      ? "Workable, but the margin is thin."
-      : "Spending is outrunning the plan.";
-  if (projectedRemaining == null) return `${lead} Scored on budget pace, caps, trend and how much is committed.`;
+        ? "health.leadOnTrack"
+        : score >= 50
+          ? "health.leadThin"
+          : "health.leadOverrunning",
+  );
+  if (projectedRemaining == null) return lead;
   return projectedRemaining < 0
-    ? `${lead} At this pace the period ends ${money(Math.abs(projectedRemaining))} over budget.`
-    : `${lead} At this pace the period ends with ${money(projectedRemaining)} unspent.`;
+    ? `${lead} ${t("health.endsOver", { amount: money(Math.abs(projectedRemaining)) })}`
+    : `${lead} ${t("health.endsUnspent", { amount: money(projectedRemaining) })}`;
 }
 
 const Figure: React.FC<{
@@ -362,7 +365,7 @@ export const Dashboard: React.FC<{ onNavigate?: (tab: "spending" | "activities" 
                         not a score with no explanation attached to it. */}
                     {health.score != null && (
                       <p className="text-note" style={{ margin: 0 }}>
-                        {healthSummary(health.score, pacing?.projectedRemaining ?? null, money)}
+                        {healthSummary(health.score, pacing?.projectedRemaining ?? null, money, t)}
                       </p>
                     )}
 

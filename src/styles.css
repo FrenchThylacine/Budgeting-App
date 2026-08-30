@@ -140,6 +140,18 @@
   --funding-other-text: #1A5FBF;
   --funding-other-soft: rgba(29, 111, 224, 0.12);
   --funding-outside: var(--warning);
+
+  /* ── How often ───────────────────────────────────────────────────────────
+     Three hues for seven cadences, because the *family* is most of the
+     information: something on a calendar the app knows, something counted by
+     how often you turn up, or something that happened once. Every use pairs
+     the colour with an icon and a word — see `domain/cadence.ts`. */
+  --cadence-recurring: #4B6BA8;
+  --cadence-recurring-soft: rgba(75, 107, 168, 0.12);
+  --cadence-counted: #6B7A8F;
+  --cadence-counted-soft: rgba(107, 122, 143, 0.12);
+  --cadence-once: #8C93A1;
+  --cadence-once-soft: rgba(140, 147, 161, 0.12);
   --funding-outside-text: var(--warning-text);
   --funding-outside-soft: var(--warning-soft);
 
@@ -259,6 +271,14 @@
   --funding-other: #4FD1E8;
   --funding-other-text: #4FD1E8;
   --funding-other-soft: rgba(79, 209, 232, 0.18);
+
+  /* Lifted off the dark ground; the three stay one step apart. */
+  --cadence-recurring: #9DB6E8;
+  --cadence-recurring-soft: rgba(157, 182, 232, 0.16);
+  --cadence-counted: #A6B2C4;
+  --cadence-counted-soft: rgba(166, 178, 196, 0.16);
+  --cadence-once: #98A0AE;
+  --cadence-once-soft: rgba(152, 160, 174, 0.16);
 
   --series-1: #6BA5FF;
   --series-2: #FFA726;

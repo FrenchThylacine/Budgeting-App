@@ -327,8 +327,8 @@ export const HistoryPanel: React.FC = () => {
               title={t("report.noDataRecorded")}
               description={
                 auditFilter === "historical"
-                  ? "No closed period has been edited."
-                  : "Changes you make are recorded here."
+                  ? t("history.noHistoricalEdits")
+                  : t("history.changesRecordedHere")
               }
             />
           ) : (

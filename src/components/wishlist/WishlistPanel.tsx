@@ -513,7 +513,7 @@ export const WishlistPanel: React.FC = () => {
         setNotice({ tone: "warning", message: "Enter an amount before recording this purchase (0 is allowed)." });
         break;
       case "not-found":
-        setNotice({ tone: "warning", message: "That item no longer exists." });
+        setNotice({ tone: "warning", message: t("wishlist.itemGone") });
         break;
       default:
         setNotice(null);

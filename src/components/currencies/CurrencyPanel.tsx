@@ -104,7 +104,7 @@ export const CurrencyPanel: React.FC = () => {
         update({ exchangeRates: applyRatesToSettings(settings.exchangeRates, result.snapshot) });
         setMessage({ ok: true, text: t("currencies.ratesUpdated", { when: formatDate(result.snapshot.fetchedAt, { dateStyle: "medium", timeStyle: "short" } as Intl.DateTimeFormatOptions) }) });
       } else {
-        const reason = result.message ?? "The rate provider could not be reached.";
+        const reason = result.message ?? t("currencies.providerUnreachable");
         update({ exchangeRates: noteRateFailure(settings.exchangeRates, reason) });
         setMessage({ ok: false, text: `${t("currencies.ratesFailed")} ${reason}` });
       }
