@@ -1,6 +1,155 @@
 # Changelog
 
-## 2026-08-29 — One identity, five languages, and no special categories
+## Versions
+
+Semantic, and coarse on purpose. A version is a *release* — a set of changes
+somebody could describe in one sentence — not a commit, so several sections
+below share a number where they shipped together on the same day, and a day
+with one small fix gets a patch rather than a new minor.
+
+| Version | What it was |
+| --- | --- |
+| **4.0.0** | The V4 pass: minimalism, the whole aircraft fleet, a real 3D loading sequence, funding correctness |
+| **3.2.0** | One identity, five languages, no special categories |
+| **3.0.0**–**3.1.0** | The financial model: who paid, real payment cycles, the wallet as a treasury |
+| **2.0.0**–**2.1.0** | Accounts, Excel import, dedicated editors, scenarios, swipe, the first identity |
+| **1.0.0**–**1.1.0** | The first working budget: activities, spending, wishlist, reports |
+| **0.1.0**–**0.2.0** | Before it was an application |
+
+## 4.0.0 — 2026-08-30 — Less of everything, and a fleet
+
+### "Share of the yearly total" counted money you do not pay
+
+An activity somebody else funds took a percentage of a total it contributes
+nothing to. A €600 gym alongside a €1,200 subscription a parent pays looked
+like a third of the year instead of all of it.
+
+The list and the denominator now move together: the chart shows the activities
+**you** pay for, against **your** yearly total, with a chip saying how many
+were left out and the funding split below answering the other question. Fixed
+in `activityBudgetSummary`, so the report and the statistics page inherit it
+rather than each hiding it separately. Six regression tests, where there had
+been none.
+
+### The transition flies the whole sheet
+
+The supplied Flightradar24 icon sheet was used to trace three silhouettes from
+the three hand-drawn aircraft. That is not what it is: it is two dozen aircraft,
+and `scripts/extract-craft.mjs` now cuts every one of them out — flood-fill the
+paper *and its drop shadows* from the border, label what survives, regroup the
+components into icons by the layout's own geometry (which is what makes the
+sleigh one icon and two neighbouring airliners two), drop the four that are not
+aircraft, rotate each nose-right and fit it to one box.
+
+Twenty-two white silhouettes, chosen in Settings, Concorde by default. The
+loading screen keeps its own three drawings and its own preference: they answer
+different questions, and one setting would either shrink the transition back to
+three shapes or offer the loading screen nineteen aircraft it cannot draw.
+
+### The escorts fly a real orbit, and leave real smoke
+
+The Alpha Jets went round a flat ellipse in the screen plane — two stickers on
+a turntable. The circle is now in a plane tilted 56° out of the screen, and
+every depth cue comes off the same z: perspective from `D / (D − z)`, occlusion
+from its sign, and a little aerial perspective on the far half of the turn. They
+pass above the lead, under it, in front of its nose and away behind its tail.
+
+The smoke was a CSS gradient bar pinned to the tail: straight, rigid, pointing
+wherever the aeroplane pointed. Now each jet emits a particle a frame at its
+tailpipe and the particle belongs to the air — it drifts back at the airspeed,
+spreads on a square root, wanders on two slow frequencies and fades. Every
+property that was asked for falls out of that one decision instead of being
+animated separately: the ribbon follows the flight path because it *is* the
+flight path, it billows because each puff ages, it lags on the roll-out because
+a puff laid down 300ms ago is where the aircraft was 300ms ago — and three jets
+holding station in still air leave three straight bands, blue, white and red.
+
+It is drawn on two canvases, one behind the lead aircraft and one in front, so
+a ribbon laid down behind it stays behind it while the jet that drew it comes
+round the front. Median frame 8.3ms.
+
+### A hundred and forty-three sentences that were never translated
+
+The previous release reported the application translated. It was not. A hundred
+and six user-facing strings were written in English directly in the JSX: every
+swipe-action label, the whole sign-in screen, chart tooltips, editor titles,
+empty states, "Delta unavailable", and the word "immutable" on a history row.
+
+They survived because nothing looked for them — every check ran against the
+*dictionaries*, and a sentence that never reaches a dictionary passes all of
+them. There is now a test that reads the components instead, with an allowlist
+of three: the product's name, one last-resort chart label, and a theme id in a
+comment.
+
+Then it learned two more shapes and found thirty-seven more. A sentence alone
+between an opening and a closing tag over three lines — the password hint, the
+suggested-budget caption, "Nothing is dated in the next 14 days", the import
+dialog's own title. And a **template literal**, which is none of the shapes the
+earlier rules look for: every chart's "Budget €1,400" reference line, the
+wishlist's three view tabs, "Buy {item}", "Edit {name}" on four kinds of row.
+
+The sign-in screen was showing the API's own English sentences verbatim, and
+the session-expired banner was printing a raw `@auth.sessionExpired` — the
+store writes a key rather than a sentence so the message can be said in
+whatever language is chosen when it is *read*, and the card rendered it
+unresolved. The API answers with a stable code; the client says it.
+
+Each of the three shapes the guard knows about now has its own test, with a
+case that must match and a case that must not, because a heuristic's real
+failure mode is quietly matching nothing.
+
+An English interface also headed a card **"VS JUILLET 2026"**: `periodComparison`
+built its label without a locale, so `Intl` used the browser's.
+
+### Less of everything
+
+- **Every figure read "€ EUR 1,400"** — a symbol and its own ISO code, on a
+  screen that states the display currency once at the top and never changes it.
+  The default is the symbol now. "Both" stays for a budget whose two currencies
+  share a symbol.
+- **Six buttons per activity row became one and a menu.** Six activities meant
+  thirty-six controls on screen for actions taken monthly at most. Editing
+  stayed; reordering, duplicating, deactivating and deleting are one press away
+  in an overflow menu — the correct distance for something used occasionally,
+  and much better than the wrong distance for nothing at all.
+- **Nine permanent controls at the foot of the navigation became two closed
+  groups** — including a red **Reset all data** that was one press from every
+  page in the application.
+- **"· active" left every row that is not deactivated**, and "· normal" left
+  every row whose season is the default: a column of the same word, on every
+  line, saying nothing about any of them.
+- **Four chart subtitles that described the chart above them** are gone, along
+  with two section summaries and a heading that appeared twice twelve pixels
+  apart.
+- **The two sentences explaining money somebody else paid** became two chips.
+
+### One vocabulary for who paid
+
+The three funding states now have named tokens and one identity used everywhere:
+the accent for money out of this budget, **blue** for somebody else's — it was
+teal, which reads as turquoise and says nothing — and amber for money kept
+outside it. Each carries a glyph and a word as well as a colour, so the states
+survive greyscale and colour blindness, and the report's three inks are
+separated by *lightness* as well as hue, which is now measured by a test: two
+blues of the same weight are one grey on a laser printer.
+
+### The report reads like a dashboard
+
+A tinted hero band with the budget drawn as a **length** rather than as a
+subtraction; a coloured tab on every section heading to scan by; the trend
+chart hidden when there are fewer than two months to trend (it used to draw one
+bar and eleven question marks); and the detail grid cut from thirteen cards to
+nine by removing the three that repeated the funding table two sections above.
+
+### And
+
+- **About**, in Settings: what this is, which build, who it was built with.
+- **Coherent versions.** The changelog had twenty date-headed sections and no
+  version numbers; it now has both, and `package.json` says 4.0.0.
+- Exchange rates refresh once when the application opens (3.2.0, below): the
+  fetch existed, was tested, and had no caller anywhere in `src/`.
+
+## 3.2.0 — 2026-08-29 — One identity, five languages, and no special categories
 
 ### The application speaks the reader's language, everywhere
 
@@ -96,7 +245,7 @@ It found four defects on its first pass, all of which had passed the unit suite:
 
 `budget-refactor-prompt/` (a snapshot of a version of the app from three refactors ago, kept as a prompt for another tool), `work/` (one-off import diagnostics and a Playwright script superseded by the harness above), `new_chat.md`, a Windows `.lnk` shortcut with an absolute path in it, the A350 identity assets, `FinMark`/`AircraftMark`, thirty dead translation keys, and the Tailwind classes on the error screen — which this project has never had Tailwind to resolve, so the one screen shown when something has already gone wrong was unstyled black text on white.
 
-## 2026-08-22 — Two sessions a week is not two payments a week
+## 3.1.0 — 2026-08-22 — Two sessions a week is not two payments a week
 
 ### The gym problem
 
@@ -200,7 +349,7 @@ Zero failures again — this time from a checker that can see the grounds it is 
 - The historical banner's button carried an inline `margin-left: auto`, which beats every stylesheet rule short of `!important` — so the phone layout could not stack it until the alignment moved into CSS where it belonged.
 - `PeriodPopover` had no importer left. Deleted rather than kept beside its replacement.
 
-## 2026-08-21 — Money someone else spent, and a caret that would not stay still
+## 3.0.0 — 2026-08-21 — Money someone else spent, and a caret that would not stay still
 
 ### The budget was charging you for other people's spending
 
@@ -300,7 +449,7 @@ Checkboxes were the user agent's 13×13 default, below every touch-target guidel
 
 Not deployed. Nothing here is verified in production.
 
-## 2026-08-17 — Three rules that had never once applied
+## 2.1.0 — 2026-08-17 — Three rules that had never once applied
 
 Three pieces of this app were written, committed, and never ran.
 
@@ -358,7 +507,7 @@ Putting it on the loading screen exposed a defect in the route line underneath: 
 
 84 to 192, across 15 groups. Four are new: Aviation, Gaming, Shopping & services, Outdoors. Every name was checked against the installed lucide build before being written — an icon that does not exist renders as the fallback, so the picker would have offered a choice that silently did nothing. Measured cost: 13.2 KB gzipped, 193.2 → 206.4 KB.
 
-## 2026-08-16 — The stutter was a download, not an animation
+## 2.0.4 — 2026-08-16 — The stutter was a download, not an animation
 
 ### Measured before changing anything
 
@@ -386,7 +535,7 @@ Each is a real button to a screen reader, responds to Enter and Space, and ignor
 **Verification** — `npx tsc -b` clean · **435 tests passing**, 65 against real PostgreSQL 17 · both builds clean. Frame cadence re-measured after the change: median 8.3 ms, worst 10.4 ms, zero frames over 20 ms.
 
 
-## 2026-08-16 — A proper aircraft, calmer motion, bolder colour
+## 2.0.3 — 2026-08-16 — A proper aircraft, calmer motion, bolder colour
 
 ### The mark is now an airliner
 
@@ -422,7 +571,7 @@ Many sites have no usable favicon, and some return a placeholder indistinguishab
 **Verification** — `npx tsc -b` clean · **435 tests passing**, 65 against real PostgreSQL 17 · both builds clean.
 
 
-## 2026-08-16 — One interaction model everywhere
+## 2.0.2 — 2026-08-16 — One interaction model everywhere
 
 ### Editing is a dedicated editor, on every entity
 
@@ -446,7 +595,7 @@ That is configurable rather than fixed because the destructive action is the one
 **Verification** — `npx tsc -b` clean · **435 tests passing**, 65 against real PostgreSQL 17 · both builds clean. In a browser: the gesture settings persist to PostgreSQL, changing one changes what the wishlist reveals, and a transaction row opens the editor already filled in.
 
 
-## 2026-08-16 — Dedicated editors, a clean start, and a header that gets out of the way
+## 2.0.1 — 2026-08-16 — Dedicated editors, a clean start, and a header that gets out of the way
 
 ### A new account starts empty
 
@@ -479,7 +628,7 @@ The animation still existed, but lazily loaded panels made it useless: the wrapp
 **Verification** — `npx tsc -b` clean · **427 tests passing**, 65 against real PostgreSQL 17 · both builds clean. Checked in a browser at 1440 px: the period selector collapses and opens, the tab animation runs on real content, the activity editor opens from the card.
 
 
-## 2026-08-16 — Swipe actions
+## 2.0.0 — 2026-08-16 — Swipe actions
 
 ### The gesture reveals; it never acts
 
@@ -505,7 +654,7 @@ Escape closes an open row, and so does a tap anywhere outside it, so a revealed 
 **Verification** — `npx tsc -b` clean · **421 tests passing**, 65 against real PostgreSQL 17 · both builds clean. Driven with touch emulation at 390 px: a swipe opens the panel, the revealed Delete removes the item and it reaches PostgreSQL, Hide toggles an activity's visibility and persists, a vertical drag leaves the row alone, and Escape closes it. At 1440 px the panels are absent and a mouse drag does nothing.
 
 
-## 2026-08-16 — Where an item is bought, and what it looks like
+## 2.0.0 — 2026-08-16 — Where an item is bought, and what it looks like
 
 ### One field could not carry both facts
 
@@ -524,7 +673,7 @@ The fields are now `type="text"` with `inputMode="url"`. The keyboard is unchang
 **Verification** — `npx tsc -b` clean · **411 tests passing**, 65 against real PostgreSQL 17 · both builds clean. Driven in a browser: an item bought from one domain and branded by another stores both links, draws its icon from the brand, and still links to the shop.
 
 
-## 2026-08-16 — Scenarios you can see, build and undo
+## 2.0.0 — 2026-08-16 — Scenarios you can see, build and undo
 
 ### Applying a scenario was destructive and silent
 
@@ -548,7 +697,7 @@ There was no way to add, edit, duplicate or delete one. The three seeded scenari
 **Verification** — `npx tsc -b` clean · **400 tests passing**, 63 against real PostgreSQL 17 · both builds clean. Driven in a browser against real data: the seeded "Balanced" scenario is correctly detected as already in effect; applying "Tight Month" previews two changes, persists them, and moves the badge; creating a scenario with a zero cap round-trips; deleting asks first.
 
 
-## 2026-08-16 — One-off exceptions to a recurring schedule
+## 2.0.0 — 2026-08-16 — One-off exceptions to a recurring schedule
 
 ### "Just this once", without corrupting the rest of the year
 
@@ -577,7 +726,7 @@ Migration `008` persists them. The repository writes a fixed column list, so a f
 **Verification** — `npx tsc -b` clean · **388 tests passing**, 63 against real PostgreSQL 17 · both builds clean. Driven end to end in a browser: skip an occurrence → the timeline drops it → the committed monthly falls from €442.68 to €410.32, exactly one session → the override reaches PostgreSQL → undo restores both the figure and the database.
 
 
-## 2026-08-16 — Identity, and a dashboard that answers a different question
+## 2.0.0 — 2026-08-16 — Identity, and a dashboard that answers a different question
 
 ### An Air France identity, without touching your colours
 
@@ -618,7 +767,7 @@ The honest parts:
 **Verification** — `npx tsc -b` clean · **367 tests passing**, 61 against real PostgreSQL 17 · both builds clean · checked in a browser at 1440 and 390 px, in both themes, with no horizontal overflow.
 
 
-## 2026-08-16 — Excel import
+## 2.0.0 — 2026-08-16 — Excel import
 
 ### The importer existed but was wired to nothing, and did not work
 
@@ -656,7 +805,7 @@ An import **replaces** the budget: the save deletes anything absent from the inc
 **Verification** — `npx tsc -b` clean · **355 tests passing**, 61 against real PostgreSQL 17 · both builds clean · the full round trip driven in a browser: file → preview → confirm → store → API → PostgreSQL → read back → undo.
 
 
-## 2026-08-16 — Accounts
+## 2.0.0 — 2026-08-16 — Accounts
 
 ### Email and password sign-in, with the data model made safe for it first
 
@@ -693,7 +842,7 @@ IndexedDB used a single slot named `active`. With accounts that is a leak: sign 
 `npx tsc -b` clean · **330 tests passing**, 61 of them against a real PostgreSQL 17 server · both builds clean. The new isolation and authentication suites were each re-run against the previous code and fail there, so they measure the fixes rather than merely accompanying them. The full flow was then driven in a real browser: sign up, sign in, two accounts in isolated contexts confirming neither can see the other's budget, sign out clearing the cache, and a 375 px viewport with no horizontal overflow.
 
 
-## 2026-08-16 — V3
+## 2.0.0 — 2026-08-16 — Accounts, import, editors and an identity
 
 ### Multi-device synchronization was broken. This is the fix.
 
@@ -755,7 +904,7 @@ A single type scale defined as tokens and consumed through `.text-*` utilities, 
 - A lucide `Map` icon import shadowed the global `Map` constructor and crashed the app with "Map is not a constructor".
 - New loading screen and tab transitions, both respecting `prefers-reduced-motion`.
 
-## 2026-08-15 (later)
+## 1.1.0 — 2026-08-15 (later)
 
 ### Consent-gated historical editing, a real audit trail, and working category caps
 
@@ -801,7 +950,7 @@ The global handler called `preventDefault()` on Ctrl+Z and then did nothing, dis
 
 94 tests (up from 81), including 13 new ones covering the historical-editing override, audit flagging, auto-relock, approval immutability under override, and category cap behaviour. Two new database integration tests confirm the audit flags round-trip through PostgreSQL (migration `004-add-audit-historical-edit`) and that omitting the audit log from a payload cannot erase it.
 
-## 2026-08-15
+## 1.1.0 — 2026-08-15
 
 ### Verified persistence against a real database, shared analytics, and mobile repairs
 
@@ -865,7 +1014,7 @@ The persistence layer had only ever been tested with a mocked driver, so SQL-lev
 - Vite now proxies `/api` so development exercises the real API path rather than falling back to IndexedDB.
 - Removed dead code: `ActivityEditor`, `WishlistEditor`, `src/api/hooks.ts` (all zero-importer), the unused `recharts` dependency, and stale compiled artifacts committed under `src/domain/`.
 
-## 2026-08-11
+## 1.0.1 — 2026-08-11
 
 ### Analytics panel rebuilt, wishlist editing, and category editing
 
@@ -906,7 +1055,7 @@ The persistence layer had only ever been tested with a mocked driver, so SQL-lev
 - Server build: ✅ 0 errors.
 - Test suite: ✅ 31/31 tests passing across 7 files.
 
-## 2026-08-10
+## 1.0.0 — 2026-08-10
 
 ### Safe targeted snapshot persistence and API validation hardening
 
@@ -950,7 +1099,7 @@ The persistence layer had only ever been tested with a mocked driver, so SQL-lev
 - `npm run test`, `npm run build`, and `npm run server:build` passed after these changes. The production build has an existing chunk-size warning only.
 - Browser/mobile theme checks, authenticated Vercel deployment, and live Neon durability tests remain unverified because this environment lacks an approved local server execution path and a `DATABASE_URL`.
 
-## 2026-08-09
+## 0.2.0 — 2026-08-09
 
 ### Core workflow restoration and financial safeguards
 
@@ -982,7 +1131,7 @@ The persistence layer had only ever been tested with a mocked driver, so SQL-lev
 - No database migration needs to be applied for this client-workflow restoration. A configured `DATABASE_URL` is still required to verify server-side persistence.
 - The commit is local until GitHub authentication is available; the repository is one commit ahead of `origin/main`.
 
-## 2026-07-31
+## 0.1.0 — 2026-07-31
 
 ### Phase 1 & 2: Neon PostgreSQL Backend Migration
 - Fully replaced SQLite (`better-sqlite3`) with Neon PostgreSQL (`@neondatabase/serverless`).

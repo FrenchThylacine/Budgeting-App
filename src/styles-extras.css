@@ -1434,31 +1434,23 @@
 
 .boot-escort-late.is-joined { opacity: 1; }
 
-/* The smoke. A tapering ribbon behind the tail, drawn from the aircraft's own
-   frame so it banks with it for free. */
-.boot-trail {
+/* ── The smoke ────────────────────────────────────────────────────────────────
+   Two canvases, one on each side of the lead aircraft, so a ribbon laid down
+   behind it stays behind it while the jet that drew it comes round the front.
+   The blur is on the element rather than in the drawing: one GPU pass over a
+   finished bitmap costs nothing, where `ctx.filter` would re-blur every one of
+   the six polygons on every frame. */
+.boot-smoke {
   position: absolute;
-  right: 22px;
-  top: -3px;
-  height: 6px;
-  width: 90px;
-  border-radius: 6px;
-  transform-origin: right center;
-  background: linear-gradient(270deg, var(--trail-colour) 0%, color-mix(in srgb, var(--trail-colour) 55%, transparent) 45%, transparent 100%);
-  filter: blur(1.5px);
-  opacity: 0.85;
-  transition: width 520ms var(--ease-out), opacity 320ms linear;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  filter: blur(3px);
 }
 
-/* Once in formation the ribbons run long and level: three parallel bands, blue
-   over white over red. */
-.boot-escort.is-joined .boot-trail { width: 300px; }
-
-.boot-phase-depart .boot-trail {
-  /* The blast: the ribbons stretch as the formation accelerates away. */
-  width: 720px;
-  transition: width 720ms cubic-bezier(0.4, 0, 1, 1);
-}
+.boot-smoke-back { z-index: 0; }
+.boot-smoke-front { z-index: 4; }
 
 .boot-caption-block {
   grid-row: 2;
@@ -1492,7 +1484,6 @@
 
 @media (prefers-reduced-motion: reduce) {
   .boot-lead-art { animation: none; }
-  .boot-trail { transition: none; }
   .boot-escort-late { transition: none; opacity: 1; }
 }
 
@@ -2212,15 +2203,15 @@ label:has(> input[type="radio"]) {
 }
 
 .funding-badge[data-funding="other"] {
-  border-color: var(--teal);
-  color: var(--teal-text);
-  background: var(--teal-soft);
+  border-color: var(--funding-other);
+  color: var(--funding-other-text);
+  background: var(--funding-other-soft);
 }
 
 .funding-badge[data-funding="outside"] {
-  border-color: var(--warning);
-  color: var(--warning-text);
-  background: var(--warning-soft);
+  border-color: var(--funding-outside);
+  color: var(--funding-outside-text);
+  background: var(--funding-outside-soft);
 }
 
 .funding-glyph {
@@ -2230,8 +2221,8 @@ label:has(> input[type="radio"]) {
 
 /* The split's three columns take the tone of what they describe, and each
    already carries its glyph and its label in the markup. */
-.funding-split > [data-funding="other"] .funding-split-value { color: var(--teal-text); }
-.funding-split > [data-funding="outside"] .funding-split-value { color: var(--warning-text); }
+.funding-split > [data-funding="other"] .funding-split-value { color: var(--funding-other-text); }
+.funding-split > [data-funding="outside"] .funding-split-value { color: var(--funding-outside-text); }
 
 /* ─── The Activities financial overview ───────────────────────────────────── */
 
@@ -2271,7 +2262,7 @@ label:has(> input[type="radio"]) {
   border-left: 3px solid var(--accent);
 }
 
-.activity-summary-figure[data-funding="other"] .activity-summary-value { color: var(--teal-text); }
+.activity-summary-figure[data-funding="other"] .activity-summary-value { color: var(--funding-other-text); }
 .activity-summary-figure[data-funding="outside"] .activity-summary-value { color: var(--warning-text); }
 
 /* Activities the app cannot place in a month. Called out rather than hidden:
@@ -3262,3 +3253,219 @@ label:has(> input[type="radio"]) {
   font-size: var(--text-footnote);
   color: var(--text-tertiary);
 }
+
+/* ── V4: chips that state rather than invite ──────────────────────────────────
+   `.chip` is a control — pointer cursor, hover state, pressed appearance. A
+   qualification on a chart is none of those things, and a static label that
+   looks pressable is a small lie the reader tests by clicking it. */
+.chip-muted {
+  cursor: default;
+  background: var(--bg-subtle);
+  border-color: transparent;
+  color: var(--text-tertiary);
+  font-weight: 500;
+  white-space: nowrap;
+}
+.chip-muted:hover { border-color: transparent; color: var(--text-tertiary); }
+
+.chart-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+/* ── V4: the fleet picker ─────────────────────────────────────────────────────
+   Twenty-two shapes, so the tiles are small, square and unlabelled: the name
+   reaches a screen reader through `aria-label` and a mouse through `title`,
+   and the eye reads the aeroplane. A dark tile because the silhouettes are
+   white — on a light card they would be invisible, which is the one thing a
+   picker cannot be. */
+.fleet-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(52px, 1fr));
+  gap: 8px;
+}
+
+.fleet-choice {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 1;
+  padding: 6px;
+  border-radius: var(--radius-md);
+  border: 1px solid transparent;
+  background: #101724;
+  cursor: pointer;
+  transition: border-color var(--duration-fast) var(--ease-out), transform var(--duration-fast) var(--ease-out);
+}
+
+.fleet-choice:hover { transform: translateY(-1px); }
+.fleet-choice:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.fleet-choice.is-active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+.settings-stack { display: grid; gap: 8px; }
+.settings-stack + .settings-stack { margin-top: 16px; }
+
+/* ── V4: the funding vocabulary, as chips ─────────────────────────────────────
+   Money this budget did not pay for used to be explained in a sentence on
+   every card that mentioned it. It is a *state*, and states get a chip: the
+   glyph, the amount, the word. Three channels, so it survives greyscale and
+   colour blindness, in less than a line. */
+.funding-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.funding-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: var(--radius-full);
+  border: 1px solid transparent;
+  font-size: var(--text-footnote);
+  font-weight: var(--weight-medium);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.funding-chip[data-funding="other"] {
+  border-color: var(--funding-other);
+  color: var(--funding-other-text);
+  background: var(--funding-other-soft);
+}
+
+.funding-chip[data-funding="outside"] {
+  border-color: var(--funding-outside);
+  color: var(--funding-outside-text);
+  background: var(--funding-outside-soft);
+}
+
+/* The word, quieter than the amount: the colour and the glyph have already
+   said which state this is, and the figure is what is being read. */
+.funding-chip-label { opacity: 0.78; font-weight: var(--weight-regular); }
+
+/* Under 380px the words go and the glyph carries it — with the label still in
+   the accessible name through `title`. */
+@media (max-width: 380px) {
+  .funding-chip-label { display: none; }
+}
+
+/* ── V4: the row's other actions ──────────────────────────────────────────────
+   `position: fixed`, because a row is a swipe surface with `overflow: hidden`
+   and an absolutely-positioned menu inside one is a menu with its bottom half
+   cut off. The coordinates come from the trigger's own box, recomputed on
+   scroll and resize. */
+.row-menu {
+  position: fixed;
+  z-index: 1200;
+  min-width: 184px;
+  padding: 5px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  box-shadow: var(--shadow-lg, 0 12px 32px rgba(0, 0, 0, 0.18));
+  display: grid;
+  gap: 1px;
+}
+
+.row-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  min-height: 34px;
+  padding: 7px 10px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: var(--text-footnote);
+  text-align: start;
+  cursor: pointer;
+}
+
+.row-menu-item:hover:not(:disabled) { background: var(--bg-subtle); }
+.row-menu-item:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.row-menu-item:disabled { opacity: 0.42; cursor: default; }
+
+/* Destructive last, and separated: the eye should have to cross a line to get
+   to it, rather than land on it while aiming for the item above. */
+.row-menu-item.is-destructive {
+  color: var(--danger-text);
+  margin-top: 4px;
+  border-top: 1px solid var(--border);
+  border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+  padding-top: 10px;
+}
+
+/* ── V4: navigation groups that stay shut ─────────────────────────────────── */
+.nav-group { display: grid; }
+
+.nav-group-trigger {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 34px;
+  padding: 7px 12px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: var(--text-footnote);
+  font-weight: var(--weight-medium);
+  cursor: pointer;
+  text-align: start;
+}
+
+.nav-group-trigger:hover { background: var(--bg-subtle); color: var(--text-primary); }
+.nav-group-trigger:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.nav-group-trigger > span { flex: 1 1 auto; }
+
+.nav-group-chevron {
+  flex: 0 0 auto;
+  transition: transform var(--duration-fast) var(--ease-out);
+}
+.nav-group.is-open .nav-group-chevron { transform: rotate(180deg); }
+
+.nav-group-body {
+  display: grid;
+  gap: 8px;
+  padding: 6px 0 12px;
+}
+
+/* ── V4: About ────────────────────────────────────────────────────────────── */
+.about-card { gap: 16px; }
+
+.about-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.about-version { margin-inline-start: auto; font-variant-numeric: tabular-nums; }
+
+.about-facts {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+}
+.about-facts dd { margin: 2px 0 0; font-size: var(--text-footnote); color: var(--text-secondary); }
+
+.about-links { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* ── V4: the health card fills its own card ───────────────────────────────── */
+.health-card { display: grid; }
+.health-card-body { height: 100%; display: grid; align-content: center; }

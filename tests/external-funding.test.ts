@@ -216,12 +216,20 @@ describe("the worked example: €1,000 budget, €300 personal, €200 external"
     const line = (label: string) => report.summary.find((item) => item.label === label)?.value;
     expect(line("Total spending")).toContain("300");
     expect(line("Remaining")).toContain("700");
-    expect(line("Paid by other")).toContain("200");
-    // And the report says so beside the figure, so a printed page cannot
-    // mislead. It used to be a paragraph at the foot of the report; the fact
-    // belongs next to the number it qualifies, not four sections later.
-    const detail = report.summary.find((item) => item.label === "Paid by other")?.detail ?? "";
-    expect(detail).toMatch(/never charged to you/i);
+
+    /*
+     * The €200 is named in the funding table, with its amount, its count and
+     * its share of the gross — once, where the reader is already looking.
+     *
+     * It used to be named there *and* repeated as a card lower down with a
+     * caption explaining that it was not charged to the budget. Two statements
+     * of one figure in one report is worse than one: the reader stops to work
+     * out whether they are the same figure.
+     */
+    const other = report.funding.lines.find((entry) => entry.kind === "other")!;
+    expect(other.amount).toBe(200);
+    expect(other.count).toBe(1);
+    expect(report.summary.map((item) => item.label)).not.toContain("Paid by other");
   });
 });
 

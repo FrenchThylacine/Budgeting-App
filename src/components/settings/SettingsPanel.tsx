@@ -10,13 +10,14 @@ import {
   RefreshCw,
   Search,
   UserRound,
+  ExternalLink,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { trackedCurrencies } from "../../domain/currency";
 import { formatDateTime } from "../../domain/dates";
 import { LANGUAGES, findLanguage, searchLanguages } from "../../domain/languages";
 import { resolveLanguage } from "../../domain/i18n";
-import { AIRCRAFT } from "../../domain/aircraft";
+import { AIRCRAFT, DEFAULT_AIRCRAFT, DEFAULT_FLEET_CRAFT, FLEET } from "../../domain/aircraft";
 import { THEME_PRESETS, themeFor } from "../../domain/theme";
 import {
   declineNotifications,
@@ -28,7 +29,8 @@ import { restartedOnboarding } from "../../domain/tutorial";
 import { useTranslation } from "../../i18n/useTranslation";
 import { Button } from "../ui/Button";
 import { EditorSheet } from "../ui/EditorSheet";
-import { AircraftSilhouette } from "../ui/Aircraft";
+import { AircraftArt, AircraftSilhouette } from "../ui/Aircraft";
+import { AppMark } from "../ui/AppMark";
 import { useBudgetStore } from "../../store/budgetStore";
 import type { Appearance } from "../../domain/theme";
 import type { CurrencyCode, CurrencyDisplayMode, RoundingRule } from "../../domain/types";
@@ -187,26 +189,61 @@ const GeneralSettings: React.FC = () => {
         </div>
       </Section>
 
+      {/* Two aeroplanes, two questions, no prose.
+          The pictures are the explanation: one row shows the drawings the
+          loading sequence flies, the other the silhouettes the transition
+          flies. The paragraph that used to sit above them said, in a sentence,
+          what a thumbnail says instantly. */}
       <Section title={t("settings.aircraft")}>
         <div className="card card-body settings-card">
-          <p className="text-note settings-note">{t("settings.aircraftHint")}</p>
-          <div className="aircraft-grid" role="radiogroup" aria-label={t("settings.aircraft")}>
-            {AIRCRAFT.map((craft) => {
-              const active = (settings.aircraft ?? AIRCRAFT[0].id) === craft.id;
-              return (
-                <button
-                  key={craft.id}
-                  type="button"
-                  role="radio"
-                  aria-checked={active}
-                  className={`aircraft-choice${active ? " is-active" : ""}`}
-                  onClick={() => update({ aircraft: craft.id })}
-                >
-                  <AircraftSilhouette id={craft.id} size={72} />
-                  <span className="text-caption">{t(craft.labelKey)}</span>
-                </button>
-              );
-            })}
+          <div className="settings-stack">
+            <span className="text-footnote">{t("settings.aircraftLoading")}</span>
+            <div className="aircraft-grid" role="radiogroup" aria-label={t("settings.aircraftLoading")}>
+              {AIRCRAFT.map((craft) => {
+                const active = (settings.aircraft ?? DEFAULT_AIRCRAFT) === craft.id;
+                return (
+                  <button
+                    key={craft.id}
+                    type="button"
+                    role="radio"
+                    aria-checked={active}
+                    className={`aircraft-choice${active ? " is-active" : ""}`}
+                    data-aircraft={craft.id}
+                    onClick={() => update({ aircraft: craft.id })}
+                  >
+                    <AircraftArt id={craft.id} size={92} />
+                    <span className="text-caption">{t(craft.labelKey)}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="settings-stack">
+            <span className="text-footnote">{t("settings.aircraftTransition")}</span>
+            {/* Twenty-two tiles, named only to a screen reader. A grid of
+                shapes is read by looking at it; twenty-two captions would be a
+                wall of words describing pictures that are already there. */}
+            <div className="fleet-grid" role="radiogroup" aria-label={t("settings.aircraftTransition")}>
+              {FLEET.map((craft) => {
+                const active = (settings.transitionAircraft ?? DEFAULT_FLEET_CRAFT) === craft.id;
+                return (
+                  <button
+                    key={craft.id}
+                    type="button"
+                    role="radio"
+                    aria-checked={active}
+                    aria-label={t(craft.labelKey)}
+                    title={t(craft.labelKey)}
+                    className={`fleet-choice${active ? " is-active" : ""}`}
+                    data-fleet={craft.id}
+                    onClick={() => update({ transitionAircraft: craft.id })}
+                  >
+                    <AircraftSilhouette id={craft.id} size={34} />
+                  </button>
+                );
+              })}
+            </div>
           </div>
         </div>
       </Section>
@@ -538,6 +575,7 @@ const AccountGroup: React.FC = () => {
             <Button
               variant="secondary"
               size="sm"
+              data-action="replay-tutorial"
               onClick={() => {
                 // Clearing both marks is what makes the tour run from the
                 // start rather than resuming where it was abandoned, and the
@@ -551,7 +589,59 @@ const AccountGroup: React.FC = () => {
           </div>
         </div>
       </Section>
+
+      <About />
     </>
+  );
+};
+
+/**
+ * About: what this is, which build, and who made it.
+ *
+ * Deliberately short. An About page is read once, by somebody checking a
+ * version number before reporting something — so the version is the first
+ * thing on it and the prose is four lines. The credits are there because the
+ * application was genuinely built with those tools and saying so is more
+ * honest than an empty "© 2026".
+ */
+const About: React.FC = () => {
+  const { t } = useTranslation();
+  // Substituted at build time from `package.json`; falls back rather than
+  // throwing in a context that has no define (a test renderer, say).
+  const version = typeof __APP_VERSION__ === "string" ? __APP_VERSION__ : "—";
+
+  return (
+    <Section title={t("settings.about")}>
+      <div className="card card-body settings-card about-card">
+        <div className="about-head">
+          <AppMark size={40} />
+          <div>
+            <div className="text-callout" style={{ fontWeight: 600 }}>
+              Budget OS
+            </div>
+            <div className="text-caption">{t("about.tagline")}</div>
+          </div>
+          <span className="chip chip-muted about-version">v{version}</span>
+        </div>
+
+        <dl className="about-facts">
+          <div>
+            <dt className="text-footnote">{t("about.builtWith")}</dt>
+            <dd>Claude · Codex · ChatGPT · Gemini · Copilot</dd>
+          </div>
+          <div>
+            <dt className="text-footnote">{t("about.yourData")}</dt>
+            <dd>{t("about.yourDataValue")}</dd>
+          </div>
+        </dl>
+
+        <div className="about-links">
+          <a className="btn btn-secondary btn-sm" href="https://github.com/FrenchThylacine/Budgeting-App" target="_blank" rel="noreferrer noopener">
+            <ExternalLink size={14} /> {t("about.source")}
+          </a>
+        </div>
+      </div>
+    </Section>
   );
 };
 

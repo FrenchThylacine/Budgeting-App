@@ -91,10 +91,10 @@ export const ImportPreviewDialog: React.FC<ImportPreviewDialogProps> = ({
       Object.values(snapshot.years).reduce((total, year) => total + pick(year), 0);
 
     return [
-      { label: "Years", before: Object.keys(current.years).length, after: Object.keys(preview.snapshot.years).length },
-      { label: "Categories", before: current.categories.length, after: preview.snapshot.categories.length },
-      { label: "Activities", before: count(current, (y) => y.activities.length), after: count(preview.snapshot, (y) => y.activities.length) },
-      { label: "Transactions", before: count(current, (y) => y.spendingEntries.length), after: count(preview.snapshot, (y) => y.spendingEntries.length) },
+      { label: t("import.years"), before: Object.keys(current.years).length, after: Object.keys(preview.snapshot.years).length },
+      { label: t("nav.categories"), before: current.categories.length, after: preview.snapshot.categories.length },
+      { label: t("nav.activities"), before: count(current, (y) => y.activities.length), after: count(preview.snapshot, (y) => y.activities.length) },
+      { label: t("stats.transactions"), before: count(current, (y) => y.spendingEntries.length), after: count(preview.snapshot, (y) => y.spendingEntries.length) },
       { label: t("import.wishlistItems"), before: count(current, (y) => y.wishlistItems.length), after: count(preview.snapshot, (y) => y.wishlistItems.length) },
       { label: t("import.walletEntries"), before: count(current, (y) => y.walletEntries.length), after: count(preview.snapshot, (y) => y.walletEntries.length) },
     ];
@@ -128,7 +128,7 @@ export const ImportPreviewDialog: React.FC<ImportPreviewDialogProps> = ({
               <FileSpreadsheet size={20} />
             </span>
             <h2 id="import-preview-title" className="text-title" style={{ margin: 0, minWidth: 0, overflowWrap: "anywhere" }}>
-              Replace your budget with {preview.fileName}?
+              {t("import.replaceWith", { file: preview.fileName })}
             </h2>
           </div>
           <button className="btn btn-ghost btn-sm btn-icon" onClick={onCancel} aria-label={t("override.closeDialog")}>
@@ -182,9 +182,7 @@ export const ImportPreviewDialog: React.FC<ImportPreviewDialogProps> = ({
             <p className="auth-banner auth-banner-error" role="alert" style={{ marginTop: 12 }}>
               <AlertTriangle size={16} aria-hidden="true" />
               <span>
-                {droppedYears.length === 1 ? "Year" : "Years"} <strong>{droppedYears.join(", ")}</strong>{" "}
-                {droppedYears.length === 1 ? "is" : "are"} not in this file and will be deleted, along with
-                every transaction in {droppedYears.length === 1 ? "it" : "them"}.
+                {t("import.yearsWillBeDeleted", { count: droppedYears.length, years: droppedYears.join(", ") })}
               </span>
             </p>
           )}
@@ -215,7 +213,7 @@ export const ImportPreviewDialog: React.FC<ImportPreviewDialogProps> = ({
                 setBackedUp(true);
               }}
             >
-              <Download size={15} /> {backedUp ? "Backup downloaded" : "Download a backup first"}
+              <Download size={15} /> {t(backedUp ? "import.backupDownloaded" : "import.downloadBackupFirst")}
             </button>
 
             <label style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>

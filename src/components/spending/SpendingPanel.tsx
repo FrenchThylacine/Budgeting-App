@@ -63,7 +63,7 @@ interface Draft {
 }
 
 export const SpendingPanel: React.FC = () => {
-  const { t } = useTranslation();
+  const { t, formatDate } = useTranslation();
   const snapshot = useBudgetStore((s) => s.snapshot);
   const add = useBudgetStore((s) => s.addSpendingEntry);
   const update = useBudgetStore((s) => s.updateSpendingEntry);
@@ -224,10 +224,10 @@ export const SpendingPanel: React.FC = () => {
   const spendingSwipe = (action: SwipeActionId, entry: SpendingEntry) => {
     if (!mutable || action === "none") return [];
     if (action === "delete") {
-      return [{ label: "Delete", icon: <Trash2 size={18} />, destructive: true, onAction: () => confirmDelete(entry) }];
+      return [{ label: t("common.delete"), icon: <Trash2 size={18} />, destructive: true, onAction: () => confirmDelete(entry) }];
     }
     if (action === "edit") {
-      return [{ label: "Edit", icon: <Pencil size={18} />, onAction: () => beginEdit(entry) }];
+      return [{ label: t("common.edit"), icon: <Pencil size={18} />, onAction: () => beginEdit(entry) }];
     }
     return [];
   };
@@ -290,7 +290,7 @@ export const SpendingPanel: React.FC = () => {
       const previous = editing.wishlistItemId ?? "";
       if (draft.wishlistItemId !== previous) {
         const result = linkToWishlistItem(editing.id, draft.wishlistItemId || null);
-        const name = wishlistById.get(draft.wishlistItemId)?.name ?? "That item";
+        const name = wishlistById.get(draft.wishlistItemId)?.name ?? t("common.thatItem");
         if (!reportLinkResult(result, name)) return;
       } else {
         setNotice(null);
@@ -312,7 +312,7 @@ export const SpendingPanel: React.FC = () => {
         source: draft.source,
         recurrenceType: draft.recurrenceType,
       });
-      if (!reportLinkResult(result, item?.name ?? "That item")) return;
+      if (!reportLinkResult(result, item?.name ?? t("common.thatItem"))) return;
       reset();
       return;
     }
@@ -344,7 +344,7 @@ export const SpendingPanel: React.FC = () => {
     const warning = linkedItem
       ? `\n\n"${linkedItem.name}" will be unlinked from it and stays in your wishlist.`
       : "";
-    if (window.confirm(`Delete this transaction?${warning}`)) {
+    if (window.confirm(`${t("spending.confirmDelete")}${warning}`)) {
       remove(entry.id);
       setNotice(null);
     }
@@ -621,7 +621,7 @@ export const SpendingPanel: React.FC = () => {
             </div>
             <div className="money funding-split-value">{formatDualMoney(split.otherFunded, snapshot.settings)}</div>
             <div className="text-caption">
-              {t("common.transactions", { count: split.otherFundedCount })} · {t("funding.notCharged")}
+              {t("common.transactions", { count: split.otherFundedCount })}
             </div>
           </div>
           <div data-funding="outside">
@@ -633,7 +633,7 @@ export const SpendingPanel: React.FC = () => {
               {formatDualMoney(split.outsideBudget, snapshot.settings)}
             </div>
             <div className="text-caption">
-              {t("common.transactions", { count: split.outsideBudgetCount })} · {t("funding.notCharged")}
+              {t("common.transactions", { count: split.outsideBudgetCount })}
             </div>
           </div>
           <div>
@@ -667,7 +667,7 @@ export const SpendingPanel: React.FC = () => {
                 className={`item-row${mutable ? " editable-row" : ""}`}
                 role={mutable ? "button" : undefined}
                 tabIndex={mutable ? 0 : undefined}
-                aria-label={mutable ? `Edit transaction` : undefined}
+                aria-label={mutable ? t("spending.editTransaction") : undefined}
                 onClick={(event) => {
                   if (!mutable) return;
                   const target = event.target as HTMLElement;
@@ -697,7 +697,7 @@ export const SpendingPanel: React.FC = () => {
                         flexShrink: 0,
                       }}
                     />
-                    {category?.name ?? "Uncategorized"}
+                    {category?.name ?? t("common.uncategorised")}
                     {isRecurring && (
                       <span className="badge badge-info" style={{ textTransform: "capitalize" }}>
                         {entry.recurrenceType}
@@ -728,12 +728,15 @@ export const SpendingPanel: React.FC = () => {
                         title={t("spending.linkedWishlistItem")}
                       >
                         <ShoppingBag size={11} />{" "}
-                        {wishlistById.get(entry.wishlistItemId)?.name ?? "Wishlist item"}
+                        {wishlistById.get(entry.wishlistItemId)?.name ?? t("spending.wishlistItem")}
                       </span>
                     )}
                   </div>
                   <div className="text-footnote">
-                    {entry.date}
+                    {/* The reader's own date format. It was the stored ISO
+                        string — sortable, unambiguous, and not how anybody
+                        writes a date. */}
+                    {formatDate(entry.date, { day: "numeric", month: "short" })}
                     {entry.note ? <span className="user-text"> · {entry.note}</span> : ""}
                   </div>
                 </div>

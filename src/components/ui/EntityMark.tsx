@@ -1,3 +1,4 @@
+import type { Translator } from "../../domain/i18n";
 import React, { useEffect, useState } from "react";
 import { ShoppingBag } from "lucide-react";
 import { faviconUrl, itemDomain, normalizeItemUrl, withAlpha } from "../../domain/wishlist";
@@ -162,7 +163,14 @@ export const EntityMark: React.FC<EntityMarkProps> = ({
  * The chain has four steps and any of them can quietly fail. Stating which one
  * is in force is the difference between choosing an icon and hoping for one.
  */
-export function describeMarkSource(source: MarkSource, layer?: MarkLayer): string {
+/**
+ * What the mark is actually showing, in the reader's language.
+ *
+ * The translator is a parameter because this is a module-level helper rather
+ * than a component — the same arrangement `describeSchedule` and
+ * `describePaymentCycle` use in the domain.
+ */
+export function describeMarkSource(source: MarkSource, t: Translator, layer?: MarkLayer): string {
   const domain = itemDomain(source.sourceUrl);
   const wanted = normalizeItemUrl(source.iconUrl)
     ? "image"
@@ -179,22 +187,21 @@ export function describeMarkSource(source: MarkSource, layer?: MarkLayer): strin
   if (layer && layer !== wanted && wanted === "image") {
     const instead =
       layer === "icon"
-        ? "the icon you picked"
+        ? t("mark.insteadIcon")
         : layer === "site"
-          ? `the site icon of ${domain}`
-          : "a neutral mark";
-    return `That image did not load, so ${instead} is being used instead. Check the link.`;
+          ? t("mark.insteadSite", { domain })
+          : t("mark.insteadFallback");
+    return t("mark.imageFailed", { instead });
   }
 
-  if (wanted === "image") return "Using the image you linked.";
-  if (wanted === "icon") return "Using the icon you picked.";
+  if (wanted === "image") return t("mark.usingImage");
+  if (wanted === "icon") return t("mark.usingIcon");
   if (wanted === "site") {
-    return layer === "fallback"
-      ? `${domain} has no usable icon, so a neutral mark is used.`
-      : `Using the site icon of ${domain}.`;
+    return layer === "fallback" ? t("mark.siteHasNoIcon", { domain }) : t("mark.usingSiteIcon", { domain });
   }
-  return "No icon set yet — a neutral mark is used.";
+  return t("mark.none");
 }
+
 
 interface MarkFieldsProps {
   /**
@@ -265,7 +272,7 @@ export const MarkFields: React.FC<MarkFieldsProps> = ({
         <Field label={t("mark.preview")} span group>
           <div className="wishlist-mark-preview">
             <EntityMark source={resolved} accent={accent} size={40} fallback={fallback} onResolve={setLayer} />
-            <span className="text-caption">{describeMarkSource(resolved, layer)}</span>
+            <span className="text-caption">{describeMarkSource(resolved, t, layer)}</span>
           </div>
         </Field>
         <Field

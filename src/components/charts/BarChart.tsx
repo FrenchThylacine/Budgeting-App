@@ -1,4 +1,5 @@
 import React from "react";
+import { useTranslation } from "../../i18n/useTranslation";
 import {
   CategoryAxis,
   ChartFrame,
@@ -51,6 +52,7 @@ export const BarChart: React.FC<BarChartProps> = ({
   footer,
   ...naming
 }) => {
+  const { t } = useTranslation();
   const { tooltip, show, hide } = useChartTooltip();
   const tickFormat = formatTick ?? formatValue;
   const emphasisIndex = bars.findIndex((bar) => bar.highlight);
@@ -147,7 +149,7 @@ export const BarChart: React.FC<BarChartProps> = ({
                       y: bottom - barHeight,
                       title: bar.label,
                       rows: [
-                        { label: "Spend", value: formatValue(bar.value as number), color: fill },
+                        { label: t("chart.spend"), value: formatValue(bar.value as number), color: fill },
                         ...(bar.detail ? [{ label: bar.detail, value: "" }] : []),
                       ],
                     })

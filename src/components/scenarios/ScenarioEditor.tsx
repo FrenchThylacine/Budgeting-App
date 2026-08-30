@@ -122,16 +122,16 @@ export const ScenarioEditor: React.FC<ScenarioEditorProps> = ({ preset, snapshot
 
   return (
     <EditorSheet
-      title={preset ? `Edit ${preset.name}` : "New scenario"}
+      title={preset ? t("common.editNamed", { name: preset.name }) : t("scenario.newScenario")}
       subtitle={t("scenario.nothingIsAppliedUntilYou")}
       onClose={onClose}
       footer={
         <>
           <Button type="button" variant="ghost" onClick={onClose}>
-            Cancel
+            {t("common.cancel")}
           </Button>
           <Button type="submit" variant="primary" form="scenario-editor-form" disabled={!name.trim()}>
-            {preset ? "Save changes" : "Create scenario"}
+            {t(preset ? "common.saveChanges" : "scenario.createScenario")}
           </Button>
         </>
       }
@@ -226,7 +226,7 @@ export const ScenarioEditor: React.FC<ScenarioEditorProps> = ({ preset, snapshot
         {/* Most scenarios change one number. A column of every category is the
             uncommon case, and it should not be the first thing on screen. */}
         <AdvancedFields
-          label={cappedCount > 0 ? `Category caps · ${cappedCount} set` : "Category caps"}
+          label={cappedCount > 0 ? t("scenario.categoryCapsSet", { count: cappedCount }) : t("scenario.categoryCaps")}
         >
           <p className="text-note" style={{ margin: "0 0 10px" }}>
             {t("scenario.anEmptyFieldLeavesThat")}
@@ -245,7 +245,7 @@ export const ScenarioEditor: React.FC<ScenarioEditorProps> = ({ preset, snapshot
                   step="0.01"
                   value={caps[category.id] ?? ""}
                   onChange={(event) => setCaps((current) => ({ ...current, [category.id]: event.target.value }))}
-                  aria-label={`Cap for ${category.name}`}
+                  aria-label={t("scenario.capFor", { name: category.name })}
                   placeholder="—"
                 />
               </label>

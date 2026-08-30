@@ -90,13 +90,59 @@ try {
   await page.goto(BASE);
 
   const phases = [];
+  /*
+   * Sampled *while it plays*, because none of this exists afterwards. Two
+   * things are recorded on the way past: whether an escort is ever drawn
+   * behind the lead aircraft and ever in front of it (the depth), and the
+   * order of the smoke bands once the formation is together (the tricolour).
+   */
+  const depth = new Set();
+  let bands = null;
   const deadline = Date.now() + 20000;
   while (Date.now() < deadline) {
-    const phase = await page.evaluate(
-      "document.querySelector('.boot-screen')?.className.match(/boot-phase-(\\w+)/)?.[1] ?? 'gone'",
-    );
-    if (phases.at(-1) !== phase) phases.push(phase);
-    if (phase === "gone") break;
+    const frame = await page.evaluate(`
+      const screen = document.querySelector('.boot-screen');
+      const phase = screen?.className.match(/boot-phase-(\\w+)/)?.[1] ?? 'gone';
+      const layers = [...document.querySelectorAll('.boot-escort')].map((e) => e.style.zIndex).filter(Boolean);
+      let bands = null;
+      if (phase === 'settle' || phase === 'depart') {
+        const canvases = [...document.querySelectorAll('.boot-smoke')];
+        if (canvases.length === 2) {
+          const dpr = canvases[0].width / 1180;
+          // A vertical cut just behind the formation's slots, where the three
+          // ribbons are still parallel and have not yet spread into each other.
+          const x = Math.round((1180 / 2 - 170) * dpr);
+          const columns = canvases.map((c) => c.getContext('2d').getImageData(x, 0, 1, c.height).data);
+          const rows = [];
+          for (let y = 0; y < canvases[0].height; y += Math.round(2 * dpr)) {
+            let best = null;
+            for (const data of columns) {
+              const p = y * 4;
+              if (data[p + 3] < 12) continue;
+              if (!best || data[p + 3] > best[3]) best = [data[p], data[p + 1], data[p + 2], data[p + 3]];
+            }
+            if (!best) continue;
+            const hue = best[2] > best[0] + 18 ? 'blue' : best[0] > best[2] + 18 ? 'red' : 'white';
+            rows.push({ y: Math.round(y / dpr - 310), hue });
+          }
+          const runs = [];
+          for (const row of rows) {
+            if (runs.at(-1)?.hue !== row.hue) runs.push({ hue: row.hue, from: row.y, to: row.y });
+            else runs.at(-1).to = row.y;
+          }
+          bands = runs.filter((r) => r.to - r.from >= 4);
+        }
+      }
+      return { phase, layers, bands };
+    `);
+    if (phases.at(-1) !== frame.phase) phases.push(frame.phase);
+    for (const layer of frame.layers) depth.add(layer);
+    // The three ribbons nearest the slots, once all three are laid down.
+    if (frame.bands) {
+      const near = frame.bands.filter((band) => band.from >= -80 && band.to <= 80);
+      if (near.length === 3) bands = near;
+    }
+    if (frame.phase === "gone") break;
     await sleep(40);
   }
 
@@ -105,6 +151,26 @@ try {
       assert(phases.includes(expected), `never reached "${expected}" (saw ${phases.join(" → ")})`);
     }
     return phases.join(" → ");
+  });
+
+  /*
+   * "Circle around" means depth, not a flat ellipse.
+   *
+   * The previous version moved two sprites round a racetrack in the screen
+   * plane; they passed left and right of the lead and never once went behind
+   * it. The z-index is the evidence that they do now: the escorts are drawn
+   * under the lead on the far half of the turn and over it on the near half.
+   */
+  await check("the escorts pass both behind and in front of the lead", () => {
+    assert(depth.has("1"), "no escort was ever drawn behind the lead aircraft");
+    assert(depth.has("3"), "no escort was ever drawn in front of the lead aircraft");
+    return "behind and in front";
+  });
+
+  await check("the formation leaves a tricolour: blue, white, red", () => {
+    assert(bands, "the three ribbons were never all parallel behind the formation");
+    equal(bands.map((band) => band.hue).join(" "), "blue white red", "the bands, top to bottom");
+    return bands.map((band) => `${band.hue}@${band.from}`).join(" · ");
   });
 
   await check("the Concorde is the default lead aircraft", async () => {
@@ -127,6 +193,28 @@ try {
     `);
     assert(loaded, "the mark did not decode");
     return src;
+  });
+
+  /*
+   * The server's errors, in the reader's language.
+   *
+   * They were the server's own English sentences, shown verbatim — and the
+   * session-expired banner was worse: the store writes a key rather than a
+   * sentence so it can be said in whatever language is chosen when it is
+   * *read*, and the sign-in card rendered the key. The API answers with a
+   * stable code; the client says it.
+   */
+  await check("a failed sign-in is reported in the reader's language", async () => {
+    await page.setValue("input[type=email]", `nobody-${stamp}@example.test`);
+    await page.setValue("input[type=password]", "definitely-not-the-password");
+    await page.click(".auth-submit");
+    await page.waitFor("!!document.querySelector('.auth-banner-error')", { timeoutMs: 9000, label: "the error banner" });
+    const banner = await page.evaluate("document.querySelector('.auth-banner-error')?.innerText.trim() ?? ''");
+    assert(banner.length > 0, "a failed sign-in said nothing");
+    assert(!banner.includes("@auth."), `a raw translation key reached the screen: ${banner}`);
+    // The harness runs in French; the English wording must not be what shows.
+    assert(!/incorrect email or password/i.test(banner), `the server's English reached the screen: ${banner}`);
+    return banner;
   });
 
   await check("creates an account through the form", async () => {
@@ -181,23 +269,121 @@ try {
     return heading;
   });
 
-  await check("the tour can be dismissed and stays dismissed", async () => {
+  /*
+   * The tour teaches by asking, and remembers a "later".
+   *
+   * Both halves are checked here because both were claimed and neither had
+   * ever been driven: that a task step really refuses to advance until the
+   * work is done, and that "Decide later" leaves a resumable reminder rather
+   * than either nagging or forgetting.
+   */
+  await check("a task step will not advance until the task is actually done", async () => {
+    for (let i = 0; i < 3; i++) {
+      await page.click(".tutorial-card .btn-primary");
+      await sleep(600);
+    }
+    const state = await page.evaluate(`
+      const card = document.querySelector('.tutorial-card');
+      return {
+        step: card?.querySelector('.tutorial-progress')?.textContent ?? '',
+        hasTask: !!card?.querySelector('.tutorial-task'),
+        locked: !!card?.querySelector('.btn-primary')?.disabled,
+        escape: !!card?.querySelector('.tutorial-task button, .tutorial-foot-nav .btn-ghost'),
+      };
+    `);
+    assert(state.hasTask, "three steps in and no step asks for anything");
+    assert(state.locked, "the task step advances without the task being done");
+    assert(state.escape, "a locked step with no way past it is a trap");
+    return "locked, with a way past";
+  });
+
+  await check('"Decide later" is remembered, and is resumable', async () => {
     await page.evaluate(`
-      const skip = Array.from(document.querySelectorAll('.tutorial-foot button'))
-        .find((button) => button.classList.contains('btn-ghost'));
-      (skip ?? document.querySelector('.tutorial-head button')).click();
+      const later = [...document.querySelectorAll('.tutorial-card .tutorial-foot-leave button')].at(-1);
+      if (!later) throw new Error('no later button');
+      later.click();
       return true;
     `);
-    await sleep(400);
-    const gone = await page.evaluate("!document.querySelector('.tutorial-card')");
-    assert(gone, "the tour is still on screen after Skip");
-    return "skipped";
+    await sleep(600);
+    assert(await page.evaluate("!document.querySelector('.tutorial-card')"), "the card stayed open");
+    const reminder = await page.evaluate(
+      "document.querySelector('.tutorial-reminder')?.innerText.replace(/\\n/g, ' · ') ?? ''",
+    );
+    assert(reminder.length > 0, "postponing left no reminder");
+    // And it survives a reload without the tour reopening by itself.
+    await page.goto(BASE);
+    await waitForApp(page);
+    await sleep(1200);
+    const after = await page.evaluate(`
+      return { card: !!document.querySelector('.tutorial-card'), reminder: !!document.querySelector('.tutorial-reminder') };
+    `);
+    assert(!after.card, "the tour reopened by itself after being postponed");
+    assert(after.reminder, "the reminder did not survive a reload");
+    return reminder.slice(0, 60);
+  });
+
+  await check("dismissing the reminder ends it for good", async () => {
+    await page.evaluate(`
+      const close = document.querySelector('.tutorial-reminder .btn-icon');
+      if (!close) throw new Error('no dismiss button');
+      close.click();
+      return true;
+    `);
+    await sleep(500);
+    await page.goto(BASE);
+    await waitForApp(page);
+    await sleep(1200);
+    const after = await page.evaluate(`
+      return { card: !!document.querySelector('.tutorial-card'), reminder: !!document.querySelector('.tutorial-reminder') };
+    `);
+    assert(!after.reminder, "the dismissed reminder came back");
+    assert(!after.card, "the tour reopened after the reminder was dismissed");
+    return "gone, and stays gone";
+  });
+
+  /*
+   * Skip is not Later, and the difference is the whole point of having two.
+   *
+   * Later leaves a reminder (checked above). Skip is a refusal: the tour ends,
+   * nothing reappears, and no reminder strip is left behind. The tour is
+   * restarted from Settings to test it, which also exercises the replay
+   * button — the only route back once somebody has said no.
+   */
+  await check("Skip refuses the tour outright, and leaves no reminder", async () => {
+    await openTab(page, "settings");
+    await page.click('.settings-group:nth-child(5)');
+    await sleep(300);
+    await page.evaluate(`
+      const replay = document.querySelector('[data-action="replay-tutorial"]');
+      if (!replay) throw new Error('no replay button in Settings');
+      replay.click();
+      return true;
+    `);
+    await page.waitFor("!!document.querySelector('.tutorial-card')", { timeoutMs: 6000, label: "the replayed tour" });
+    await page.evaluate(`
+      const skip = document.querySelector('.tutorial-foot-leave button');
+      if (!skip) throw new Error('no skip button');
+      skip.click();
+      return true;
+    `);
+    await sleep(500);
+    const after = await page.evaluate(`
+      return { card: !!document.querySelector('.tutorial-card'), reminder: !!document.querySelector('.tutorial-reminder') };
+    `);
+    assert(!after.card, "the tour is still on screen after Skip");
+    assert(!after.reminder, "Skip left a reminder, which is what Later is for");
+    return "refused, no reminder";
   });
 
   // ── Themes ─────────────────────────────────────────────────────────────────
   group("Themes");
 
   await openTab(page, "settings");
+  // Settings remembers which group is open, and the checks above leave it on
+  // Account. Selecting the group explicitly means these checks do not depend
+  // on what ran before them.
+  await page.click('.settings-group:nth-child(1)');
+  await sleep(250);
 
   await check("every preset applies, and paints the page it claims to", async () => {
     const observed = [];
@@ -260,41 +446,98 @@ try {
   // ── The aircraft preference ────────────────────────────────────────────────
   group("Aircraft");
 
-  await check("three aircraft are offered, each with its own silhouette", async () => {
+  await page.click('.settings-group:nth-child(1)');
+  await sleep(250);
+
+  await check("three aircraft fly the loading screen, each its own drawing", async () => {
     const sources = await page.evaluate(
       "Array.from(document.querySelectorAll('.aircraft-choice img')).map((i) => i.getAttribute('src'))",
     );
-    equal(sources.length, 3, "aircraft offered");
-    assert(new Set(sources).size === 3, `silhouettes are not distinct: ${sources.join(", ")}`);
+    equal(sources.length, 3, "loading aircraft offered");
+    assert(new Set(sources).size === 3, `the drawings are not distinct: ${sources.join(", ")}`);
     const decoded = await page.evaluate(
       "Array.from(document.querySelectorAll('.aircraft-choice img')).every((i) => i.complete && i.naturalWidth > 0)",
     );
-    assert(decoded, "a silhouette failed to decode");
+    assert(decoded, "a drawing failed to decode");
     return sources.join(", ");
   });
 
+  /*
+   * The whole sheet, not three of it.
+   *
+   * The previous pass shipped three silhouettes traced from the three
+   * illustrations and called that "the supplied aircraft set". This checks the
+   * thing that was actually asked for: every aircraft on the Flightradar24
+   * sheet, cut out, white, and offered.
+   */
+  await check("the transition offers the whole fleet, in white", async () => {
+    const fleet = await page.evaluate(`
+      const tiles = [...document.querySelectorAll('.fleet-choice img')];
+      return {
+        count: tiles.length,
+        distinct: new Set(tiles.map((i) => i.getAttribute('src'))).size,
+        decoded: tiles.every((i) => i.complete && i.naturalWidth > 0),
+        fromSheet: tiles.every((i) => (i.getAttribute('src') ?? '').startsWith('/craft/fleet/')),
+        named: [...document.querySelectorAll('.fleet-choice')].every((b) => (b.getAttribute('aria-label') ?? '').length > 1),
+      };
+    `);
+    assert(fleet.count >= 20, `only ${fleet.count} aircraft in the fleet`);
+    equal(fleet.distinct, fleet.count, "every tile is a different aircraft");
+    assert(fleet.decoded, "a silhouette failed to decode");
+    assert(fleet.fromSheet, "a silhouette does not come from the extracted sheet");
+    assert(fleet.named, "a silhouette has no accessible name");
+    // White, measured off the pixels rather than assumed from the filename.
+    const white = await page.evaluate(`
+      const image = document.querySelector('.fleet-choice img');
+      const canvas = document.createElement('canvas');
+      canvas.width = image.naturalWidth; canvas.height = image.naturalHeight;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(image, 0, 0);
+      const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+      let opaque = 0, whitish = 0;
+      for (let i = 0; i < data.length; i += 4) {
+        if (data[i + 3] < 200) continue;
+        opaque++;
+        if (data[i] > 240 && data[i + 1] > 240 && data[i + 2] > 240) whitish++;
+      }
+      return { opaque, whitish };
+    `);
+    assert(white.opaque > 200, "the silhouette is empty");
+    assert(white.whitish / white.opaque > 0.98, `only ${((white.whitish / white.opaque) * 100).toFixed(1)}% of the shape is white`);
+    return `${fleet.count} aircraft, white`;
+  });
+
   await check("choosing one changes the aircraft in the transition", async () => {
-    await page.click(".aircraft-grid .aircraft-choice:nth-child(2)");
+    await page.click('[data-fleet="turboprop"]');
     await sleep(300);
     await page.click('.nav-item[data-tab="dashboard"]');
     await sleep(120);
     const src = await page.evaluate(
       "document.querySelector('.app-sweep-craft img')?.getAttribute('src') ?? 'no craft'",
     );
-    equal(src, "/craft/a350-silhouette.png", "the transition aircraft");
+    equal(src, "/craft/fleet/turboprop.png", "the transition aircraft");
     await sleep(800);
     return src;
   });
 
-  await check("and is remembered for the next loading screen", async () => {
+  await check("the loading aircraft is remembered for the next boot", async () => {
+    await openTab(page, "settings");
+    await page.click('[data-aircraft="a350"]');
+    await sleep(300);
     equal(await page.evaluate("localStorage.getItem('boot-aircraft')"), "a350", "the stored boot aircraft");
     return "a350";
   });
 
-  await check("back to the Concorde", async () => {
-    await openTab(page, "settings");
-    await page.click(".aircraft-grid .aircraft-choice:nth-child(1)");
+  await check("back to the Concorde, in both places", async () => {
+    await page.click('[data-aircraft="concorde"]');
+    await page.click('[data-fleet="concorde"]');
     await sleep(300);
+    const stored = await page.evaluate(`
+      const { useBudgetStore } = await import('/src/store/budgetStore.ts');
+      const s = useBudgetStore.getState().snapshot.settings;
+      return [s.aircraft, s.transitionAircraft].join(",");
+    `);
+    equal(stored, "concorde,concorde", "the two aircraft preferences");
     return "concorde";
   });
 

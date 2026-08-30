@@ -773,14 +773,17 @@ export const IconPicker: React.FC<IconPickerProps> = ({ value, onChange, accent,
 
           {flat.length === 0 ? (
             <p className="text-caption" style={{ margin: "10px 4px" }}>
-              No icon matches “{query}”.
+              {t("icons.noMatch", { query })}
             </p>
           ) : (
             <div role="listbox" aria-label={t("icons.activityIcons")} onKeyDown={onGridKeyDown}>
               {groups.map((group) => (
                 <div key={group.id} style={{ marginBottom: 10 }}>
+                  {/* The sixteen headings are translated; the 244 icon names
+                      under them are a search index and stay English, which is
+                      recorded in the plan rather than quietly accepted. */}
                   <div className="text-footnote" style={{ marginBottom: 6 }}>
-                    {group.label}
+                    {t(`iconCategory.${group.id}`)}
                   </div>
                   <div style={{ display: "grid", gridTemplateColumns: `repeat(${COLUMNS}, minmax(0, 1fr))`, gap: 4 }}>
                     {group.icons.map((option) => {

@@ -4,6 +4,7 @@ import { useAuthStore } from "../../store/authStore";
 import { AppMark } from "../ui/AppMark";
 import { Tricolour } from "../ui/Tricolour";
 import { useTranslation } from "../../i18n/useTranslation";
+import { resolveStoredText } from "../../domain/storedText";
 
 type Mode = "signin" | "signup" | "forgot" | "reset";
 
@@ -63,7 +64,15 @@ export const AuthScreen: React.FC = () => {
     if (initialToken) clearTokenFromLocation();
   }, [initialToken]);
 
-  const error = localError ?? storeError;
+  /*
+   * The store carries keys, not sentences.
+   *
+   * `messageFor` writes a `storedText` sigil so the message is said in
+   * whatever language is chosen at the moment it is read, rather than the one
+   * that was chosen when the request failed. Rendering it raw printed
+   * "@auth.sessionExpired" on the sign-in card.
+   */
+  const error = localError ?? (storeError ? resolveStoredText(storeError, t) : null);
 
   function switchMode(next: Mode): void {
     setMode(next);
@@ -87,11 +96,11 @@ export const AuthScreen: React.FC = () => {
 
     if (mode === "signup") {
       if (password.length < MIN_PASSWORD_LENGTH) {
-        setLocalError(`Use at least ${MIN_PASSWORD_LENGTH} characters.`);
+        setLocalError(t("auth.passwordTooShort", { count: MIN_PASSWORD_LENGTH }));
         return;
       }
       if (password !== confirmPassword) {
-        setLocalError("The two passwords do not match.");
+        setLocalError(t("auth.error.passwordMismatch"));
         return;
       }
       await signUp(email, password, inviteCode.trim() || undefined);
@@ -108,11 +117,11 @@ export const AuthScreen: React.FC = () => {
 
     if (mode === "reset" && resetToken) {
       if (password.length < MIN_PASSWORD_LENGTH) {
-        setLocalError(`Use at least ${MIN_PASSWORD_LENGTH} characters.`);
+        setLocalError(t("auth.passwordTooShort", { count: MIN_PASSWORD_LENGTH }));
         return;
       }
       if (password !== confirmPassword) {
-        setLocalError("The two passwords do not match.");
+        setLocalError(t("auth.error.passwordMismatch"));
         return;
       }
       const ok = await resetPassword(resetToken, password);
@@ -126,10 +135,10 @@ export const AuthScreen: React.FC = () => {
   }
 
   const copy = {
-    signin: { title: t("auth.welcomeBack"), sub: "Sign in to your budget.", action: "Sign in" },
-    signup: { title: t("auth.createYourAccount"), sub: "Your budget stays private to you.", action: "Create account" },
-    forgot: { title: t("auth.resetYourPassword"), sub: "We'll email you a link.", action: "Send reset link" },
-    reset: { title: t("auth.chooseANewPassword"), sub: "This link works once.", action: "Update password" },
+    signin: { title: t("auth.welcomeBack"), sub: t("auth.signInSub"), action: t("auth.signIn") },
+    signup: { title: t("auth.createYourAccount"), sub: t("auth.signUpSub"), action: t("auth.createAccount") },
+    forgot: { title: t("auth.resetYourPassword"), sub: t("auth.forgotSub"), action: t("auth.sendResetLink") },
+    reset: { title: t("auth.chooseANewPassword"), sub: t("auth.resetSub"), action: t("auth.updatePassword") },
   }[mode];
 
   return (
@@ -180,7 +189,7 @@ export const AuthScreen: React.FC = () => {
         {mode !== "forgot" && (
           <label className="auth-field">
             <span className="text-caption">
-              {mode === "signin" ? "Password" : "New password"}
+              {t(mode === "signin" ? "auth.password" : "auth.newPassword")}
             </span>
             <div className="auth-password">
               <input
@@ -199,15 +208,13 @@ export const AuthScreen: React.FC = () => {
                 type="button"
                 className="btn btn-ghost btn-icon auth-eye"
                 onClick={() => setShowPassword((v) => !v)}
-                aria-label={showPassword ? "Hide password" : "Show password"}
+                aria-label={t(showPassword ? "auth.hidePassword" : "auth.showPassword")}
               >
                 {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
               </button>
             </div>
             {mode !== "signin" && (
-              <span className="text-note">
-                At least {MIN_PASSWORD_LENGTH} characters. Length matters more than symbols.
-              </span>
+              <span className="text-note">{t("auth.passwordHint", { count: MIN_PASSWORD_LENGTH })}</span>
             )}
           </label>
         )}

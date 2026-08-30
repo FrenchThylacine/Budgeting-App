@@ -116,6 +116,33 @@
   --pink: #DB2777;
   --pink-soft: rgba(219, 39, 119, 0.12);
 
+  /* ── Who paid ────────────────────────────────────────────────────────────
+     Three funding states, three identities, used everywhere the question
+     "whose money was this" is answered: badges, chart series, figures,
+     report. Naming them here rather than reaching for `--teal` at each call
+     site is the point — the states are a vocabulary, and a vocabulary has to
+     be the same word every time it is spoken.
+
+     `personal` is the accent, because money out of this budget *is* the
+     budget's own identity. `other` is a blue distinct from the navy accent —
+     it was `--teal`, which reads as turquoise and said nothing. `outside` is
+     the amber already used for "your money, but not here".
+
+     Colour is never the only channel: every one of the three also carries a
+     glyph (● ◆ ▲) and a word, so the states survive a monochrome print and a
+     colour-blind reader. See `domain/funding.ts`. */
+  --funding-personal: var(--accent);
+  --funding-personal-text: var(--accent);
+  --funding-personal-soft: var(--accent-soft);
+  --funding-other: #1D6FE0;
+  /* 5.4 : 1 on white, 4.8 : 1 on the inset ground. The fill above is 3.9 and
+     is for shapes, exactly as with `--teal` and `--warning`. */
+  --funding-other-text: #1A5FBF;
+  --funding-other-soft: rgba(29, 111, 224, 0.12);
+  --funding-outside: var(--warning);
+  --funding-outside-text: var(--warning-text);
+  --funding-outside-soft: var(--warning-soft);
+
   /* Coordinated series palette for charts. Ordered so neighbouring series
      stay distinguishable, including for the most common colour-vision
      deficiencies (blue/orange lead, red and green never adjacent). */
@@ -225,6 +252,13 @@
   --teal-soft: rgba(34, 211, 238, 0.18);
   --pink: #F472B6;
   --pink-soft: rgba(244, 114, 182, 0.18);
+
+  /* On a dark ground the accent is itself a light blue, so `other` is pushed
+     toward cyan to keep a legible gap between the two in a chart legend —
+     and the glyphs carry the distinction where the hues are close. */
+  --funding-other: #4FD1E8;
+  --funding-other-text: #4FD1E8;
+  --funding-other-soft: rgba(79, 209, 232, 0.18);
 
   --series-1: #6BA5FF;
   --series-2: #FFA726;

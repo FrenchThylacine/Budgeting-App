@@ -6,63 +6,120 @@ import { AIRCRAFT_IDS, DEFAULT_AIRCRAFT, ESCORT_AIRCRAFT, aircraftFor } from "..
  * The loading sequence
  * ====================
  *
- * A lead aircraft holds the centre of the screen while two Alpha Jets orbit it,
- * one trailing blue smoke and one red. When the application is ready they roll
- * out of the turn and form up behind the lead, a third joins them trailing
- * white, the three ribbons settle into a tricolour, and the whole formation
- * accelerates away to the right — taking the loading screen with it and leaving
- * the application behind.
+ * A lead aircraft holds the centre of the screen while two Alpha Jets fly a
+ * banked orbit around it — over the top, under the belly, in front of the nose
+ * and away behind the tail — one trailing blue smoke and one red. When the
+ * application is ready they roll out of the turn and form up behind the lead, a
+ * third joins them trailing white, the three ribbons settle into a tricolour,
+ * and the whole formation accelerates away to the right, taking the loading
+ * screen with it and leaving the application behind.
  *
- * ─── Why this is driven by rAF and not by keyframes ──────────────────────────
+ * ─── The orbit is in three dimensions, not two ───────────────────────────────
+ *
+ * The first version flew an ellipse in the screen plane. Two aeroplanes going
+ * round a flat racetrack: they passed left and right of the lead and changed
+ * size a little, and the whole thing read as two stickers on a turntable.
+ *
+ * This one puts the circle in a **plane tilted 56° out of the screen**. The
+ * escort's position is a real 3D point, and the three things that make depth
+ * legible are all derived from its z:
+ *
+ *  - **Perspective.** `scale = D / (D − z)` — nearer is bigger, and the growth
+ *    is hyperbolic rather than linear, which is what an eye reads as distance
+ *    rather than as a zoom.
+ *  - **Occlusion.** Positive z draws over the lead, negative z draws under it.
+ *    Passing *behind* something is the strongest depth cue there is, and it is
+ *    free.
+ *  - **Aerial perspective.** Distance takes a little contrast out of the far
+ *    half of the turn.
+ *
+ * The heading is the tangent of the *projected* path, computed by sampling the
+ * curve a moment ahead, so the aeroplane points where it is actually going on
+ * screen. An orbiting aircraft that does not do this looks like a spinning
+ * sticker no matter how good the projection is.
+ *
+ * ─── The smoke is advected, not drawn behind the aircraft ────────────────────
+ *
+ * The trails were a CSS gradient bar pinned to the tail: straight, rigid, and
+ * pointing wherever the aeroplane pointed. Real display smoke does none of
+ * that — it is left *in the air*, and the air does not move with the aircraft.
+ *
+ * So each jet emits a particle per frame at its tailpipe, and from then on the
+ * particle belongs to the sky: it drifts backwards at the airspeed, spreads,
+ * fades and wanders. The ribbon is the polygon through those particles, and
+ * every property the brief asks for falls out of that one decision rather than
+ * being animated separately —
+ *
+ *  - it follows the flight path, because it *is* the flight path;
+ *  - it curves through the turn and lags on the roll-out, because a particle
+ *    laid down 300ms ago is where the aircraft was 300ms ago;
+ *  - it billows, because each particle's width grows with its own age;
+ *  - it wanders, because a little smooth noise is added as it ages;
+ *  - and in formation it becomes three long parallel bands — blue, white, red —
+ *    because three aircraft holding station in still air leave straight lines.
+ *
+ * It is drawn on two canvases, one behind the lead and one in front, and each
+ * particle goes to the canvas its own z-sign chooses. That is what lets a
+ * ribbon pass *through* the scene: the smoke laid down behind the aircraft
+ * stays behind it while the aircraft comes round the front.
+ *
+ * ─── Why this is rAF and not keyframes ───────────────────────────────────────
  *
  * Everything else in this application animates in CSS, and should. This does
  * not, for one reason: the escorts have to leave the orbit *from wherever they
  * happen to be* the instant the data arrives. A CSS animation cannot be
  * interrupted and continued from its current value — swapping to a second
  * animation snaps the element to the new animation's first frame, which is a
- * visible jump on the one screen the user is guaranteed to look at. Either the
- * transition waits for the orbit to come round (up to a full revolution of
- * doing nothing while the data sits ready), or the position is a number this
- * component owns. It owns the number.
+ * visible jump on the one screen the user is guaranteed to look at.
  *
- * The cost is one rAF loop over four elements writing `transform` and nothing
- * else — no layout, no paint, entirely on the compositor — and it stops the
- * moment the sequence finishes.
+ * The cost is one loop over three sprites writing `transform`, plus two canvas
+ * draws of six filled polygons. No layout, no reflow, and it stops the moment
+ * the sequence finishes.
  *
  * ─── Why there is a floor on how fast it can go ──────────────────────────────
  *
  * A warm reload can be ready in 150ms. Playing a formation join in 150ms is not
  * a fast loading screen, it is a flicker. So the *narrative* has a fixed length
- * (join, settle, depart ≈ 1.5s) and only the orbit is elastic: a slow load
+ * (join, settle, depart ≈ 2s) and only the orbit is elastic: a slow load
  * circles for as long as it takes, a fast one circles briefly and then leaves.
- * Nothing waits on the animation once the departure has started, because the
- * departure is what reveals the application.
  */
 
-const ORBIT_RX = 190;
-const ORBIT_RY = 78;
+/** Radius of the orbit, in scene pixels. */
+const ORBIT_R = 178;
+/**
+ * How far the orbital plane is tipped out of the screen.
+ *
+ * 0° would be a flat disc seen face-on (the escorts would never pass in front
+ * or behind); 90° would be edge-on (they would never pass above or below, and
+ * would vanish at the sides). 56° is past the middle on purpose: vertical
+ * travel is what makes "it went over the top" readable at a glance, and the
+ * remaining 34° of depth is more than enough for the occlusion to register.
+ */
+const ORBIT_TILT = (56 * Math.PI) / 180;
+/** Camera distance for the perspective divide. Smaller is a wider lens. */
+const CAMERA_D = 540;
 /** One revolution. Slow enough to read as a turn rather than a spin. */
-const ORBIT_MS = 2600;
+const ORBIT_MS = 3000;
 /** Long enough that the orbit is seen at all before it is broken off. */
-const MIN_ORBIT_MS = 620;
-const JOIN_MS = 900;
-const SETTLE_MS = 340;
-const DEPART_MS = 720;
+const MIN_ORBIT_MS = 700;
+const JOIN_MS = 950;
+const SETTLE_MS = 420;
+const DEPART_MS = 760;
 
 type Phase = "orbit" | "join" | "settle" | "depart" | "done";
 
 /**
  * Where each escort ends up, relative to the lead.
  *
- * Three abreast and slightly stepped, so the ribbons stack into horizontal
- * bands: blue above, white through the middle, red below. That is the shape the
- * Patrouille de France actually leaves in the sky, and it is the reason the
- * slots are a column rather than the diamond a formation would normally fly.
+ * Three abreast and stepped, so the ribbons stack into horizontal bands: blue
+ * above, white through the middle, red below. That is the shape the Patrouille
+ * de France actually leaves in the sky, and it is why the slots are a column
+ * rather than the diamond a formation would normally fly.
  */
 const SLOTS = [
-  { x: -118, y: -46, colour: "var(--boot-blue)", key: "blue" },
-  { x: -132, y: 0, colour: "var(--boot-white)", key: "white" },
-  { x: -118, y: 46, colour: "var(--boot-red)", key: "red" },
+  { x: -120, y: -48, key: "blue", smoke: [96, 152, 232] },
+  { x: -136, y: 0, key: "white", smoke: [246, 248, 252] },
+  { x: -120, y: 48, key: "red", smoke: [228, 58, 70] },
 ] as const;
 
 /** Ease-out cubic: fast out of the turn, settling gently into the slot. */
@@ -73,41 +130,77 @@ const clamp01 = (value: number) => (value < 0 ? 0 : value > 1 ? 1 : value);
 const mix = (from: number, to: number, t: number) => from + (to - from) * t;
 /** Shortest way round, so a heading never unwinds the long way. */
 const mixAngle = (from: number, to: number, t: number) => {
-  let delta = ((to - from + 540) % 360) - 180;
+  const delta = ((to - from + 540) % 360) - 180;
   return from + delta * t;
 };
 
-interface OrbitState {
+/** A point on the orbit, in scene space, before projection. */
+interface Point3 {
   x: number;
   y: number;
-  angle: number;
-  scale: number;
-  /** Above the lead on the near half of the ellipse, behind it on the far half. */
-  front: boolean;
+  z: number;
 }
 
 /**
- * One escort's position on the ellipse at a given angle.
+ * The circle, in the tilted plane.
  *
- * The heading is the tangent, not the radius — an aircraft flying a circle
- * points along its path. Getting this wrong is the single thing that makes an
- * orbiting aeroplane look like a spinning sticker.
+ * Spanned by a horizontal axis and one tipped out of the screen, so θ = 0 is
+ * level and to the right, θ = 90° is below and in front, θ = 180° is level and
+ * to the left, θ = 270° is above and behind.
  */
-function orbitAt(theta: number): OrbitState {
+function orbitPoint(theta: number): Point3 {
   const radians = (theta * Math.PI) / 180;
-  const sin = Math.sin(radians);
   const cos = Math.cos(radians);
+  const sin = Math.sin(radians);
   return {
-    x: ORBIT_RX * cos,
-    y: ORBIT_RY * sin,
-    // atan2 of the derivative of the ellipse. Degrees, screen coordinates
-    // (y grows downwards), and the artwork points nose-right at zero.
-    angle: (Math.atan2(ORBIT_RY * cos, -ORBIT_RX * sin) * 180) / Math.PI,
-    // Nearer the viewer on the lower half, so it grows a little there.
-    scale: 0.8 + 0.26 * ((sin + 1) / 2),
-    front: sin > 0,
+    x: ORBIT_R * cos,
+    y: ORBIT_R * sin * Math.sin(ORBIT_TILT),
+    z: ORBIT_R * sin * Math.cos(ORBIT_TILT),
   };
 }
+
+interface Projected {
+  x: number;
+  y: number;
+  z: number;
+  scale: number;
+}
+
+/** Perspective divide. `z` is kept, because occlusion and fog both need it. */
+function project(point: Point3): Projected {
+  const scale = CAMERA_D / (CAMERA_D - point.z);
+  return { x: point.x * scale, y: point.y * scale, z: point.z, scale };
+}
+
+/** Where the projected path is going, in screen degrees. */
+function headingAt(theta: number): number {
+  const here = project(orbitPoint(theta));
+  const next = project(orbitPoint(theta + 3));
+  return (Math.atan2(next.y - here.y, next.x - here.x) * 180) / Math.PI;
+}
+
+/**
+ * One puff of smoke.
+ *
+ * Laid down at the tailpipe and thereafter owned by the air: `x`/`y` are scene
+ * coordinates it keeps as the aircraft flies away from it.
+ */
+interface Puff {
+  x: number;
+  y: number;
+  z: number;
+  /** Seconds since it was emitted. Drives width, fade and wander. */
+  age: number;
+  /** A fixed per-puff offset, so the wander is smooth along the ribbon. */
+  seed: number;
+}
+
+/** How long a puff lives. Longer is a longer ribbon and more to draw. */
+const PUFF_LIFE = 2.4;
+/** Airspeed, in scene pixels per second: how fast the smoke falls behind. */
+const CRUISE = 132;
+/** And on the way out, when the formation lights the burners. */
+const DEPART_SPEED = 2100;
 
 export interface LoadingScreenProps {
   /** True once the application behind this can actually be shown. */
@@ -120,11 +213,17 @@ export interface LoadingScreenProps {
   aircraft?: string;
 }
 
+/** The canvas box, centred on the scene origin. Wide enough for the ribbons. */
+const CANVAS_W = 1180;
+const CANVAS_H = 620;
+
 export const LoadingScreen: React.FC<LoadingScreenProps> = ({ ready, onFinished, caption, aircraft }) => {
   const lead = aircraftFor(aircraft);
   const sceneRef = useRef<HTMLDivElement>(null);
   const escortRefs = useRef<(HTMLDivElement | null)[]>([]);
   const rootRef = useRef<HTMLDivElement>(null);
+  const backRef = useRef<HTMLCanvasElement>(null);
+  const frontRef = useRef<HTMLCanvasElement>(null);
   const [phase, setPhase] = useState<Phase>("orbit");
 
   const reduced = useMemo(
@@ -147,7 +246,7 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({ ready, onFinished,
   useEffect(() => {
     /*
      * Reduced motion: the formation is simply *there*, and the screen leaves as
-     * soon as the data does. A shape flying in circles is precisely what that
+     * soon as the data does. Aircraft flying in circles is precisely what that
      * setting exists to stop, and the sequence carries no information the
      * caption does not.
      */
@@ -160,13 +259,44 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({ ready, onFinished,
       return;
     }
 
+    const back = backRef.current?.getContext("2d") ?? null;
+    const front = frontRef.current?.getContext("2d") ?? null;
+    // A device-pixel-ratio backing store, capped: a phone at DPR 3 would be
+    // drawing nine times the pixels for a difference nobody can see on a
+    // blurred ribbon.
+    const dpr = Math.min(2, typeof window === "undefined" ? 1 : window.devicePixelRatio || 1);
+    for (const canvas of [backRef.current, frontRef.current]) {
+      if (!canvas) continue;
+      canvas.width = Math.round(CANVAS_W * dpr);
+      canvas.height = Math.round(CANVAS_H * dpr);
+    }
+    for (const context of [back, front]) {
+      if (!context) continue;
+      context.setTransform(dpr, 0, 0, dpr, (CANVAS_W / 2) * dpr, (CANVAS_H / 2) * dpr);
+      context.lineJoin = "round";
+      context.lineCap = "round";
+    }
+
+    /** Three ribbons: two orbiting, one that joins late. */
+    const trails: Puff[][] = [[], [], []];
     let frame = 0;
-    const start = performance.now();
+    let last = performance.now();
+    const start = last;
     /** When the orbit was broken off. Null while it is still turning. */
     let breakOff: number | null = null;
-    /** Each escort's state at the moment it broke off, for the interpolation. */
-    let released: OrbitState[] = [];
+    /** Each escort's projected state when it broke off, for the interpolation. */
+    let released: { projected: Projected; heading: number }[] = [];
     let current: Phase = "orbit";
+    /*
+     * A clock the wander is sampled against.
+     *
+     * The seed has to vary *slowly* along the ribbon: seeding each puff from
+     * its index gave neighbours a large phase difference, so the "turbulence"
+     * came out as a zigzag with corners in it rather than as smoke. Sampling a
+     * clock means two puffs emitted a frame apart are a frame apart in the
+     * noise as well.
+     */
+    let emitClock = 0;
 
     const setPhaseOnce = (next: Phase) => {
       if (current === next) return;
@@ -174,76 +304,247 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({ ready, onFinished,
       setPhase(next);
     };
 
+    /**
+     * Move every puff, and retire the ones that have blown away.
+     *
+     * The whole sky slides backwards at the airspeed. That is the trick the
+     * rest of the effect rests on: the aircraft never has to "draw" a trail,
+     * and three jets holding formation in still air leave three straight lines
+     * without a single line of code that knows about formations.
+     */
+    const advect = (dt: number, speed: number) => {
+      for (const trail of trails) {
+        let write = 0;
+        for (let read = 0; read < trail.length; read++) {
+          const puff = trail[read];
+          puff.age += dt;
+          if (puff.age > PUFF_LIFE) continue;
+          puff.x -= speed * dt;
+          // Smoke rises and spreads a little as it decays, and wanders on the
+          // disturbed air behind the aircraft. Deterministic — `Math.random`
+          // here would make the ribbon shimmer instead of drift.
+          puff.y += Math.sin(puff.age * 2.3 + puff.seed) * 5.5 * dt;
+          trail[write++] = puff;
+        }
+        trail.length = write;
+      }
+    };
+
+    /**
+     * Draw one ribbon, split by depth.
+     *
+     * The polygon is built by walking up one side of the centreline and back
+     * down the other, with the half-width taken from each puff's own age — so
+     * the ribbon is a fine line at the tailpipe and a soft billow at the far
+     * end, which is the shape smoke actually makes.
+     *
+     * The split is what sells the depth: a run of puffs with z < 0 is drawn on
+     * the canvas *under* the lead aircraft and a run with z > 0 on the one over
+     * it, so a ribbon laid down behind the lead stays behind it.
+     */
+    const drawTrail = (trail: Puff[], colour: readonly number[], alpha: number, spread: number) => {
+      if (trail.length < 3) return;
+      let runStart = 0;
+      for (let index = 1; index <= trail.length; index++) {
+        const ends = index === trail.length || trail[index].z >= 0 !== trail[runStart].z >= 0;
+        if (!ends) continue;
+        // One extra puff of overlap, so consecutive runs meet rather than
+        // leaving a hairline gap where the ribbon crosses the lead.
+        const run = trail.slice(runStart, Math.min(index + 1, trail.length));
+        runStart = index;
+        if (run.length < 3) continue;
+        const context = run[0].z >= 0 ? front : back;
+        if (!context) continue;
+
+        const upper: [number, number][] = [];
+        const lower: [number, number][] = [];
+        for (let i = 0; i < run.length; i++) {
+          const puff = run[i];
+          const previous = run[Math.max(0, i - 1)];
+          const next = run[Math.min(run.length - 1, i + 1)];
+          const dx = next.x - previous.x;
+          const dy = next.y - previous.y;
+          const length = Math.hypot(dx, dy) || 1;
+          // Perpendicular to the local direction of travel.
+          const nx = -dy / length;
+          const ny = dx / length;
+          const life = puff.age / PUFF_LIFE;
+          const scale = project(puff).scale;
+          /*
+           * Thin at the nozzle, billowing as it decays — and the growth is on
+           * a square root, because a plume spreads quickly at first and then
+           * slows. Linear growth gives a wedge, which reads as a banner.
+           */
+          const half = (2.2 + 26 * Math.sqrt(life) * spread) * scale;
+          // Two frequencies, both slow: one long undulation and one shorter
+          // ripple on top of it. A single sine reads as a sine.
+          const wander =
+            (Math.sin(puff.seed * 1.7) * 5.2 + Math.sin(puff.seed * 4.3 + 1.7) * 2.1) * life;
+          const px = puff.x * scale;
+          const py = puff.y * scale + wander;
+          upper.push([px + nx * half, py + ny * half]);
+          lower.push([px - nx * half, py - ny * half]);
+        }
+
+        /*
+         * Drawn as quadratic curves through the midpoints rather than as line
+         * segments. The polygon has one vertex per frame, so at 60fps a turn
+         * puts a visible corner every few pixels; running the curve through
+         * the midpoints turns that chain of corners into one smooth edge for
+         * the price of the same number of points.
+         */
+        const edge = (points: [number, number][]) => {
+          for (let i = 1; i < points.length - 1; i++) {
+            const [cx, cy] = points[i];
+            const mx = (points[i][0] + points[i + 1][0]) / 2;
+            const my = (points[i][1] + points[i + 1][1]) / 2;
+            context.quadraticCurveTo(cx, cy, mx, my);
+          }
+          const last = points[points.length - 1];
+          context.lineTo(last[0], last[1]);
+        };
+
+        context.beginPath();
+        context.moveTo(upper[0][0], upper[0][1]);
+        edge(upper);
+        lower.reverse();
+        context.lineTo(lower[0][0], lower[0][1]);
+        edge(lower);
+        context.closePath();
+        context.fillStyle = `rgba(${colour[0]}, ${colour[1]}, ${colour[2]}, ${alpha})`;
+        context.fill();
+      }
+    };
+
     const tick = (now: number) => {
+      // Clamped: a backgrounded tab resumes with a gap of seconds, and an
+      // unclamped step would teleport the smoke off the screen in one frame.
+      const dt = Math.min(0.05, (now - last) / 1000);
+      last = now;
       const elapsed = now - start;
+
+      let speed = CRUISE;
+      const emit: { x: number; y: number; z: number; index: number }[] = [];
 
       if (breakOff === null) {
         const theta = (elapsed / ORBIT_MS) * 360;
         for (let index = 0; index < 2; index++) {
-          const state = orbitAt(theta + index * 180);
+          const angle = theta + index * 180;
+          const point = orbitPoint(angle);
+          const projected = project(point);
+          const heading = headingAt(angle);
           const node = escortRefs.current[index];
           if (node) {
             node.style.transform =
-              `translate3d(${state.x.toFixed(2)}px, ${state.y.toFixed(2)}px, 0) ` +
-              `rotate(${state.angle.toFixed(2)}deg) scale(${state.scale.toFixed(3)})`;
-            node.style.zIndex = state.front ? "3" : "1";
+              `translate3d(${projected.x.toFixed(2)}px, ${projected.y.toFixed(2)}px, 0) ` +
+              `rotate(${heading.toFixed(2)}deg) scale(${projected.scale.toFixed(3)})`;
+            node.style.zIndex = point.z >= 0 ? "3" : "1";
+            // Aerial perspective: the far half of the turn loses a little
+            // contrast, the way distance actually works.
+            node.style.opacity = (0.72 + 0.28 * ((point.z + ORBIT_R) / (2 * ORBIT_R))).toFixed(3);
           }
+          // The tailpipe, in scene space: a little way back along the heading.
+          const radians = (heading * Math.PI) / 180;
+          emit.push({
+            x: point.x - Math.cos(radians) * 26,
+            y: point.y - Math.sin(radians) * 26,
+            z: point.z,
+            index,
+          });
         }
         if (readyRef.current && elapsed >= MIN_ORBIT_MS) {
           breakOff = now;
-          released = [orbitAt(theta), orbitAt(theta + 180)];
+          released = [0, 1].map((index) => {
+            const angle = theta + index * 180;
+            return { projected: project(orbitPoint(angle)), heading: headingAt(angle) };
+          });
           setPhaseOnce("join");
         }
-        frame = requestAnimationFrame(tick);
-        return;
-      }
+      } else {
+        const since = now - breakOff;
 
-      const since = now - breakOff;
+        if (since < JOIN_MS) {
+          const t = easeOut(clamp01(since / JOIN_MS));
+          for (let index = 0; index < 2; index++) {
+            const from = released[index];
+            const slot = SLOTS[index === 0 ? 0 : 2];
+            const x = mix(from.projected.x, slot.x, t);
+            const y = mix(from.projected.y, slot.y, t);
+            const node = escortRefs.current[index];
+            if (node) {
+              node.style.transform =
+                `translate3d(${x.toFixed(2)}px, ${y.toFixed(2)}px, 0) ` +
+                `rotate(${mixAngle(from.heading, 0, t).toFixed(2)}deg) scale(${mix(from.projected.scale, 1, t).toFixed(3)})`;
+              node.style.zIndex = "1";
+              node.style.opacity = "1";
+            }
+            emit.push({ x: x - 26, y, z: mix(from.projected.z, 0, t), index });
+          }
+          // The third slides in from behind and below, arriving as the other
+          // two settle: a wingman joining, not an object fading in.
+          const third = escortRefs.current[2];
+          const arrival = easeOut(clamp01((since - JOIN_MS * 0.45) / (JOIN_MS * 0.55)));
+          if (third) {
+            third.style.transform =
+              `translate3d(${mix(SLOTS[1].x - 210, SLOTS[1].x, arrival).toFixed(2)}px, ` +
+              `${mix(SLOTS[1].y + 96, SLOTS[1].y, arrival).toFixed(2)}px, 0)`;
+          }
+          if (arrival > 0) emit.push({ x: mix(SLOTS[1].x - 210, SLOTS[1].x, arrival) - 26, y: mix(SLOTS[1].y + 96, SLOTS[1].y, arrival), z: 0, index: 2 });
+        } else {
+          // Locked into the slots from here on; the scene moves as one body.
+          for (let index = 0; index < 3; index++) {
+            const slot = SLOTS[index === 0 ? 0 : index === 1 ? 2 : 1];
+            const node = escortRefs.current[index];
+            if (node) node.style.transform = `translate3d(${slot.x}px, ${slot.y}px, 0)`;
+            emit.push({ x: slot.x - 26, y: slot.y, z: 0, index });
+          }
 
-      if (since < JOIN_MS) {
-        const t = easeOut(clamp01(since / JOIN_MS));
-        for (let index = 0; index < 2; index++) {
-          const from = released[index];
-          const slot = SLOTS[index === 0 ? 0 : 2];
-          const node = escortRefs.current[index];
-          if (!node) continue;
-          node.style.transform =
-            `translate3d(${mix(from.x, slot.x, t).toFixed(2)}px, ${mix(from.y, slot.y, t).toFixed(2)}px, 0) ` +
-            `rotate(${mixAngle(from.angle, 0, t).toFixed(2)}deg) scale(${mix(from.scale, 1, t).toFixed(3)})`;
-          node.style.zIndex = "1";
+          if (since < JOIN_MS + SETTLE_MS) {
+            setPhaseOnce("settle");
+          } else {
+            const departed = since - JOIN_MS - SETTLE_MS;
+            setPhaseOnce("depart");
+            const t = clamp01(departed / DEPART_MS);
+            speed = mix(CRUISE, DEPART_SPEED, easeIn(t));
+            const scene = sceneRef.current;
+            const root = rootRef.current;
+            if (scene) scene.style.transform = `translate3d(${(easeIn(t) * 165).toFixed(2)}vw, 0, 0)`;
+            // The overlay leaves by the right edge, uncovering the application
+            // in the same direction everything else in this app travels.
+            if (root) root.style.clipPath = `inset(0 0 0 ${(easeIn(Math.max(0, t - 0.18) / 0.82) * 100).toFixed(2)}%)`;
+            if (t >= 1) {
+              setPhaseOnce("done");
+              finishedRef.current();
+              return;
+            }
+          }
         }
-        frame = requestAnimationFrame(tick);
-        return;
       }
 
-      // Locked into the slots from here on; the scene moves as one body.
-      for (let index = 0; index < 2; index++) {
-        const slot = SLOTS[index === 0 ? 0 : 2];
-        const node = escortRefs.current[index];
-        if (node) node.style.transform = `translate3d(${slot.x}px, ${slot.y}px, 0)`;
+      advect(dt, speed);
+      emitClock += dt;
+      for (const point of emit) {
+        trails[point.index].push({
+          x: point.x,
+          y: point.y,
+          z: point.z,
+          age: 0,
+          seed: emitClock * 2.6 + point.index * 5.3,
+        });
       }
 
-      if (since < JOIN_MS + SETTLE_MS) {
-        setPhaseOnce("settle");
-        frame = requestAnimationFrame(tick);
-        return;
+      back?.clearRect(-CANVAS_W / 2, -CANVAS_H / 2, CANVAS_W, CANVAS_H);
+      front?.clearRect(-CANVAS_W / 2, -CANVAS_H / 2, CANVAS_W, CANVAS_H);
+      // Two passes per ribbon: a wide, faint halo and a tighter core. Together
+      // with the blur on the canvas itself that is what reads as smoke rather
+      // than as a painted stripe — and it is six fills a frame, not six
+      // hundred.
+      for (let index = 0; index < trails.length; index++) {
+        const colour = SLOTS[index === 0 ? 0 : index === 1 ? 2 : 1].smoke;
+        drawTrail(trails[index], colour, 0.13, 1);
+        drawTrail(trails[index], colour, 0.26, 0.52);
       }
 
-      const departed = since - JOIN_MS - SETTLE_MS;
-      setPhaseOnce("depart");
-      const t = clamp01(departed / DEPART_MS);
-      const scene = sceneRef.current;
-      const root = rootRef.current;
-      if (scene) scene.style.transform = `translate3d(${(easeIn(t) * 165).toFixed(2)}vw, 0, 0)`;
-      // The overlay leaves by the right edge, uncovering the application in the
-      // same direction everything else in this app travels.
-      if (root) root.style.clipPath = `inset(0 0 0 ${(easeIn(Math.max(0, t - 0.18) / 0.82) * 100).toFixed(2)}%)`;
-
-      if (t >= 1) {
-        setPhaseOnce("done");
-        finishedRef.current();
-        return;
-      }
       frame = requestAnimationFrame(tick);
     };
 
@@ -271,6 +572,9 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({ ready, onFinished,
       <div className="boot-sky" aria-hidden="true" />
       <div className="boot-stage" aria-hidden="true">
         <div className="boot-scene" ref={sceneRef}>
+          {/* The smoke laid down on the far side of the lead. */}
+          <canvas ref={backRef} className="boot-smoke boot-smoke-back" style={{ width: CANVAS_W, height: CANVAS_H }} />
+
           {/*
             The third jet exists in the DOM from the start and is invisible
             until it is wanted: creating it at the moment it appears would
@@ -278,8 +582,8 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({ ready, onFinished,
             one frame everybody sees.
           */}
           {SLOTS.map((slot, index) => {
-            // Slots 0 and 2 belong to the two orbiting jets; slot 1 is the
-            // one that joins, and is the only one placed by CSS.
+            // Slots 0 and 2 belong to the two orbiting jets; slot 1 is the one
+            // that joins, and is the only one placed by CSS until it does.
             const orbiting = index !== 1;
             const escortIndex = index === 0 ? 0 : index === 2 ? 1 : 2;
             return (
@@ -289,16 +593,8 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({ ready, onFinished,
                   escortRefs.current[escortIndex] = node;
                 }}
                 className={`boot-escort boot-escort-${slot.key}${orbiting ? "" : " boot-escort-late"}${joined ? " is-joined" : ""}`}
-                style={
-                  orbiting
-                    ? { ["--trail-colour" as string]: slot.colour }
-                    : {
-                        ["--trail-colour" as string]: slot.colour,
-                        transform: `translate3d(${slot.x}px, ${slot.y}px, 0)`,
-                      }
-                }
+                style={orbiting ? undefined : { transform: `translate3d(${slot.x - 210}px, ${slot.y + 96}px, 0)` }}
               >
-                <span className="boot-trail" />
                 <AircraftArt id={ESCORT_AIRCRAFT.id} size={64} className="boot-escort-art" />
               </div>
             );
@@ -307,6 +603,9 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({ ready, onFinished,
           <div className="boot-lead">
             <AircraftArt id={lead.id} size={200} className="boot-lead-art" />
           </div>
+
+          {/* And the smoke on this side of it. */}
+          <canvas ref={frontRef} className="boot-smoke boot-smoke-front" style={{ width: CANVAS_W, height: CANVAS_H }} />
         </div>
       </div>
 

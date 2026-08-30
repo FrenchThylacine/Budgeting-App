@@ -306,7 +306,7 @@ export const CategoryManager: React.FC = () => {
           className="item-row editable-row"
           role="button"
           tabIndex={0}
-          aria-label={`Edit ${cat.name}`}
+          aria-label={t("common.editNamed", { name: cat.name })}
           onClick={(event) => {
             const target = event.target as HTMLElement;
             if (target.closest("button, a, input, select, textarea")) return;
@@ -380,8 +380,8 @@ export const CategoryManager: React.FC = () => {
                 variant="ghost"
                 icon
                 onClick={() => (isEditing ? cancelEdit() : beginEdit(cat))}
-                aria-label={isEditing ? "Cancel edit" : "Edit category"}
-                title={isEditing ? "Cancel" : "Edit"}
+                aria-label={t(isEditing ? "categories.cancelEdit" : "categories.editCategory")}
+                title={t(isEditing ? "common.cancel" : "common.edit")}
               >
                 {isEditing ? <X size={14} /> : <Pencil size={14} />}
               </Button>
@@ -415,7 +415,7 @@ export const CategoryManager: React.FC = () => {
             which pushed every category below it out of view. */}
         {isEditing && editDraft && (
           <EditorSheet
-            title={`Edit ${cat.name}`}
+            title={t("common.editNamed", { name: cat.name })}
             subtitle={t("categories.bucketAndCapAreLocked")}
             onClose={cancelEdit}
             footer={
@@ -478,7 +478,7 @@ export const CategoryManager: React.FC = () => {
       {/* Archived section */}
       {archivedCategories.length > 0 && (
         <Section
-          title={`Archived (${archivedCategories.length})`}
+          title={t("categories.archivedCount", { count: archivedCategories.length })}
         >
           <div style={{ marginBottom: 8 }}>
             <button

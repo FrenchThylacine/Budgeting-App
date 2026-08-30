@@ -181,38 +181,14 @@ for (const { source, out, width } of craft) {
     resolve(craftDir, out),
   ]);
   /*
-   * The same shape as a flat white icon, for the full-screen transition.
+   * No silhouette derived from this artwork any more.
    *
-   * Derived from the artwork's own alpha rather than redrawn: the brief asked
-   * for the supplied aircraft treated as white silhouettes, and tracing them by
-   * hand would produce a *different* aeroplane that merely resembled the one
-   * that was supplied. `-alpha extract` is the outline the cut-out already
-   * found; levelling it clips the feathered rim so the icon has a hard edge,
-   * and it is then used as the alpha of a solid white fill.
+   * The transition used to fly a white outline traced from these three
+   * drawings, which meant the whole application had exactly three aeroplanes.
+   * It now flies the twenty-two cut from the Flightradar24 icon sheet — see
+   * `scripts/extract-craft.mjs` — so these files are the loading sequence's
+   * illustrations and nothing else.
    */
-  magick([
-    cleaned,
-    "-rotate", "90",
-    "-fuzz", "4%",
-    "-trim", "+repage",
-    "-filter", "Lanczos",
-    "-resize", "192x",
-    "-alpha", "extract",
-    // Blur-then-level closes the one-pixel nicks JPEG noise leaves along a
-    // drawn outline, without rounding off a winglet or a tailplane.
-    "-blur", "0x1.2",
-    "-level", "42%,58%",
-    "-write", "mpr:mask",
-    "+delete",
-    "(", "mpr:mask", "-fill", "white", "-colorize", "100", ")",
-    "mpr:mask",
-    "-alpha", "off",
-    "-compose", "copy_opacity",
-    "-composite",
-    "-strip",
-    resolve(craftDir, out.replace(".png", "-silhouette.png")),
-  ]);
-
   rmSync(cleaned);
   const size = magick([resolve(craftDir, out), "-format", "%w×%h", "info:"]).toString();
   console.log(`craft ${out}: ${size} (source ${result.cropped} nose-up)`);

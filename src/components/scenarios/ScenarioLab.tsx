@@ -93,7 +93,7 @@ export const ScenarioLab: React.FC = () => {
                   className={`scenario-card${active ? " scenario-card-active" : ""}${mutable ? " editable-row" : ""}`}
                   role={mutable ? "button" : undefined}
                   tabIndex={mutable ? 0 : undefined}
-                  aria-label={mutable ? `Edit ${preset.name}` : undefined}
+                  aria-label={mutable ? t("common.editNamed", { name: preset.name }) : undefined}
                   onClick={(event) => {
                     if (!mutable) return;
                     const target = event.target as HTMLElement;
@@ -224,12 +224,9 @@ export const ScenarioLab: React.FC = () => {
             variant="secondary"
             size="sm"
             disabled={!mutable || activities.length === 0}
-            title={activities.length === 0 ? "Add some activities first" : undefined}
+            title={activities.length === 0 ? t("scenario.addActivitiesFirst") : undefined}
             onClick={() => {
-              const name = window.prompt(
-                `Name this arrangement of your ${activities.length} activities:`,
-                "Summer",
-              );
+              const name = window.prompt(t("scenario.nameThisArrangement", { count: activities.length }));
               if (!name?.trim()) return;
               captureSeason(name.trim(), name.trim().toLowerCase());
             }}
@@ -299,7 +296,7 @@ export const ScenarioLab: React.FC = () => {
                         }
                       }}
                     >
-                      Apply to {covered} activit{covered === 1 ? "y" : "ies"}
+                      {t("scenario.applyToActivities", { count: covered })}
                     </Button>
                     {confirmSeason === season.id ? (
                       <span className="scenario-confirm">

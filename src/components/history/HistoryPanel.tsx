@@ -187,7 +187,7 @@ export const HistoryPanel: React.FC = () => {
                         setNoteDraft(stored?.note ?? "");
                       }}
                     >
-                      <StickyNote size={13} /> {stored ? "Edit note" : "Add note"}
+                      <StickyNote size={13} /> {t(stored ? "history.editNote" : "history.addNote")}
                     </button>
                   )}
                 </div>
@@ -218,7 +218,7 @@ export const HistoryPanel: React.FC = () => {
                     >
                       {monthName(record.month)} {record.year}
                       <Badge tone={blocked ? "warning" : withRollover ? "success" : "neutral"}>
-                        {blocked ? "Blocked" : withRollover ? "Rollover applied" : "Closed"}
+                        {t(blocked ? "history.blocked" : withRollover ? "history.rolloverApplied" : "history.closed")}
                       </Badge>
                     </div>
                     <div className="text-footnote">
@@ -240,8 +240,8 @@ export const HistoryPanel: React.FC = () => {
                       }}
                     >
                       {record.delta == null
-                        ? "Delta unavailable"
-                        : `${formatDualMoney(record.delta, snapshot.settings, { showSign: true })} delta`}
+                        ? t("history.deltaUnavailable")
+                        : t("history.delta", { amount: formatDualMoney(record.delta, snapshot.settings, { showSign: true }) })}
                     </div>
                   </div>
                 </div>
@@ -272,20 +272,22 @@ export const HistoryPanel: React.FC = () => {
                         <AlertTriangle size={15} style={{ color: "var(--text-tertiary)" }} />
                       )}
                       {monthName(approval.month)} {approval.year}
-                      <Badge tone={isApproved ? "success" : "neutral"}>{isApproved ? "Approved" : "Rejected"}</Badge>
+                      <Badge tone={isApproved ? "success" : "neutral"}>{t(isApproved ? "common.approved" : "common.rejected")}</Badge>
                       <span
                         className="text-footnote"
                         style={{ display: "inline-flex", alignItems: "center", gap: 4, color: "var(--text-tertiary)" }}
                         title={t("history.approvalsArePermanentDecisionRecords")}
                       >
-                        <Lock size={11} /> immutable
+                        <Lock size={11} /> {t("history.immutable")}
                       </span>
                     </div>
                     <div className="text-footnote">
-                      Decided {formatDateTime(approval.decidedAt)} · suggested{" "}
-                      {formatDualMoney(approval.suggestedAmount, snapshot.settings)} from{" "}
-                      {formatDualMoney(approval.recurringTotal, snapshot.settings)} recurring
-                      {approval.note ? ` · ${approval.note}` : ""}
+                      {t("history.decidedOn", { when: formatDateTime(approval.decidedAt) })} ·{" "}
+                      {t("history.suggestedFrom", {
+                        suggested: formatDualMoney(approval.suggestedAmount, snapshot.settings),
+                        recurring: formatDualMoney(approval.recurringTotal, snapshot.settings),
+                      })}
+                      {approval.note ? ` · ${resolveStoredText(approval.note, t)}` : ""}
                     </div>
                   </div>
                   <div style={{ textAlign: "right", flexShrink: 0 }}>
@@ -294,7 +296,7 @@ export const HistoryPanel: React.FC = () => {
                         ? formatDualMoney(approval.approvedAmount, snapshot.settings)
                         : "—"}
                     </strong>
-                    <div className="text-footnote">{isApproved ? "Approved amount" : "Not approved"}</div>
+                    <div className="text-footnote">{t(isApproved ? "history.approvedAmount" : "history.notApproved")}</div>
                   </div>
                 </div>
               );
@@ -339,7 +341,7 @@ export const HistoryPanel: React.FC = () => {
 
           {auditEntries.length > 200 && (
             <div className="text-note" style={{ textAlign: "center" }}>
-              Showing the 200 most recent of {auditEntries.length} entries.
+              {t("history.showingRecent", { shown: 200, total: auditEntries.length })}
             </div>
           )}
         </>

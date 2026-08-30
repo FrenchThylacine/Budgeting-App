@@ -76,7 +76,7 @@ export const FUNDING_META: Record<FundingKind, FundingKindMeta> = {
     label: "Paid by me — in budget",
     shortLabel: "Paid by me",
     hint: "Counts against your budget.",
-    color: "var(--accent)",
+    color: "var(--funding-personal)",
     glyph: "●",
   },
   other: {
@@ -85,7 +85,7 @@ export const FUNDING_META: Record<FundingKind, FundingKindMeta> = {
     label: "Paid by other",
     shortLabel: "Paid by other",
     hint: "Recorded in full. Somebody else's money, so it never touches your budget.",
-    color: "var(--teal)",
+    color: "var(--funding-other)",
     glyph: "◆",
   },
   outside: {
@@ -94,7 +94,7 @@ export const FUNDING_META: Record<FundingKind, FundingKindMeta> = {
     label: "Outside budget",
     shortLabel: "Outside budget",
     hint: "Recorded in full. Your money, deliberately kept out of this budget.",
-    color: "var(--warning)",
+    color: "var(--funding-outside)",
     glyph: "▲",
   },
 };

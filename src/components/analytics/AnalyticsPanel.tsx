@@ -53,21 +53,33 @@ import {
 
 // ─── Local layout primitives ─────────────────────────────────────────────────
 
+/**
+ * `note` is a chip, not a sentence.
+ *
+ * The thing it exists for — "3 activities are not yours to pay" — is a
+ * qualification on a chart, and a qualification that takes a paragraph gets
+ * skipped by everybody who is reading the chart. Six words in a pill beside
+ * the title is read.
+ */
 const ChartCard: React.FC<{
   title: string;
   subtitle?: string;
+  note?: string;
   children: React.ReactNode;
-}> = ({ title, subtitle, children }) => (
+}> = ({ title, subtitle, note, children }) => (
   <div className="card" style={{ padding: 16, display: "grid", gap: 14, minWidth: 0 }}>
-    <div style={{ display: "grid", gap: 2, minWidth: 0 }}>
-      <span className="text-callout" style={{ fontWeight: 600 }}>
-        {title}
-      </span>
-      {subtitle && (
-        <span className="text-caption" style={{ color: "var(--text-tertiary)" }}>
-          {subtitle}
+    <div className="chart-card-head">
+      <div style={{ display: "grid", gap: 2, minWidth: 0 }}>
+        <span className="text-callout" style={{ fontWeight: 600 }}>
+          {title}
         </span>
-      )}
+        {subtitle && (
+          <span className="text-caption" style={{ color: "var(--text-tertiary)" }}>
+            {subtitle}
+          </span>
+        )}
+      </div>
+      {note && <span className="chip chip-muted">{note}</span>}
     </div>
     {children}
   </div>
@@ -153,7 +165,7 @@ export const AnalyticsPanel: React.FC = () => {
   const pacing = useMemo(() => budgetPacing(snapshot, includedEntries), [snapshot, includedEntries]);
   const categories = useMemo(() => categoryBreakdown(includedEntries, snapshot), [includedEntries, snapshot]);
   const overCap = useMemo(() => categoriesOverCap(categories), [categories]);
-  const comparison = useMemo(() => periodComparison(snapshot, settings), [snapshot, settings]);
+  const comparison = useMemo(() => periodComparison(snapshot, settings, language), [snapshot, settings, language]);
   const window = useMemo(() => selectedPeriodWindow(settings), [settings]);
   const health = useMemo(
     () => financialHealth({ pacing, categories, comparison, stats }),
@@ -224,7 +236,7 @@ export const AnalyticsPanel: React.FC = () => {
   const budgetBase = calc.monthlyBudgetBase;
   const budgetReference: ChartReferenceLine[] =
     mode !== "week" && budgetBase > 0
-      ? [{ value: budgetBase, label: `Budget ${money(budgetBase)}` }]
+      ? [{ value: budgetBase, label: t("chart.budgetLine", { amount: money(budgetBase) }) }]
       : [];
 
   const heatmapCells: HeatmapCell[] = (calendar ?? []).map((cell) => ({
@@ -246,7 +258,7 @@ export const AnalyticsPanel: React.FC = () => {
 
     return {
       id: entry.categoryId,
-      label: entry.category?.name ?? "Uncategorized",
+      label: entry.category?.name ?? t("common.uncategorised"),
       value: entry.total,
       color: entry.category?.color ?? "#64748B",
       caption,
@@ -338,7 +350,7 @@ export const AnalyticsPanel: React.FC = () => {
           <StatRow
             items={[
               {
-                label: "Transactions",
+                label: t("stats.transactions"),
                 value: String(stats.count),
                 detail: window.elapsedDays > 0 ? t("stats.overDays", { count: window.elapsedDays }) : t("stats.periodNotStarted"),
               },
@@ -356,9 +368,9 @@ export const AnalyticsPanel: React.FC = () => {
                 tone:
                   utilisation == null ? undefined : utilisation >= 100 ? "negative" : utilisation >= 80 ? "warning" : "positive",
               },
-              { label: "Wallet", value: money(calc.wallet.walletTotal) },
+              { label: t("nav.wallet"), value: money(calc.wallet.walletTotal) },
               {
-                label: "Wishlist",
+                label: t("nav.wishlist"),
                 value: money(calc.wishlist.activeTotal),
                 detail: t("stats.activeItems", { count: calc.wishlist.activeCount }),
               },
@@ -413,7 +425,7 @@ export const AnalyticsPanel: React.FC = () => {
                 series={[
                   {
                     id: "spend",
-                    name: "Spend",
+                    name: t("chart.spend"),
                     color: "var(--accent)",
                     values: trendBars.map((bar) => bar.value),
                     area: true,
@@ -432,7 +444,6 @@ export const AnalyticsPanel: React.FC = () => {
           {calendar && (
             <ChartCard
               title={mode === "week" ? t("stats.dailyThisWeek") : t("stats.daily")}
-              subtitle={t("stats.darkerDaysCostMoreDashed")}
             >
               <Heatmap
                 cells={heatmapCells}
@@ -449,7 +460,7 @@ export const AnalyticsPanel: React.FC = () => {
                   { label: t("report.averageTransaction"), value: money(stats.average) },
                   { label: t("stats.medianTransaction"), value: money(stats.median) },
                   { label: t("report.largestTransaction"), value: money(stats.largest) },
-                  { label: "Transactions", value: String(stats.count) },
+                  { label: t("stats.transactions"), value: String(stats.count) },
                 ]}
               />
             </div>
@@ -478,7 +489,7 @@ export const AnalyticsPanel: React.FC = () => {
                   value: bar.value,
                   highlight: bar.highlight,
                 }))}
-                referenceLines={budgetBase > 0 ? [{ value: budgetBase, label: `Budget ${money(budgetBase)}` }] : []}
+                referenceLines={budgetBase > 0 ? [{ value: budgetBase, label: t("chart.budgetLine", { amount: money(budgetBase) }) }] : []}
                 formatValue={money}
                 formatTick={tick}
                 height={200}
@@ -489,7 +500,6 @@ export const AnalyticsPanel: React.FC = () => {
           {forecast ? (
             <ChartCard
               title={t("dashboard.forecast")}
-              subtitle={t("stats.cumulativeSpendSoFarExtended")}
             >
               <LineChart
                 title={t("stats.ariaForecast", { currency: settings.baseCurrency })}
@@ -511,7 +521,7 @@ export const AnalyticsPanel: React.FC = () => {
                   },
                 ]}
                 referenceLines={
-                  forecast.budget != null ? [{ value: forecast.budget, label: `Budget ${money(forecast.budget)}` }] : []
+                  forecast.budget != null ? [{ value: forecast.budget, label: t("chart.budgetLine", { amount: money(forecast.budget) }) }] : []
                 }
                 formatValue={money}
                 formatTick={tick}
@@ -569,7 +579,6 @@ export const AnalyticsPanel: React.FC = () => {
         <div style={{ display: "grid", gap: 16, minWidth: 0 }}>
           <ChartCard
             title={t("dashboard.whereTheMoneyWent")}
-            subtitle={t("stats.categoriesHint")}
           >
             {categoryRows.length === 0 ? (
               <EmptyState
@@ -634,8 +643,8 @@ export const AnalyticsPanel: React.FC = () => {
             <DonutChart
               title={t("stats.ariaRecurring", { period: currentPeriodLabel })}
               segments={[
-                { id: "recurring", label: "Recurring", value: stats.recurringTotal, color: recurringTone },
-                { id: "oneoff", label: "One-off", value: stats.oneOffTotal, color: oneOffTone },
+                { id: "recurring", label: t("common.recurring"), value: stats.recurringTotal, color: recurringTone },
+                { id: "oneoff", label: t("common.oneOff"), value: stats.oneOffTotal, color: oneOffTone },
               ]}
               centerValue={total != null ? money(total) : "—"}
               centerLabel="total spend"
@@ -647,16 +656,16 @@ export const AnalyticsPanel: React.FC = () => {
               <StatRow
                 items={[
                   {
-                    label: "Recurring",
+                    label: t("common.recurring"),
                     value: money(stats.recurringTotal),
-                    detail: `${stats.recurringCount} transaction${stats.recurringCount !== 1 ? "s" : ""}${
+                    detail: `${t("dashboard.transactionCount", { count: stats.recurringCount })}${
                       stats.recurringShare != null ? ` · ${stats.recurringShare.toFixed(0)}%` : ""
                     }`,
                   },
                   {
-                    label: "One-off",
+                    label: t("common.oneOff"),
                     value: money(stats.oneOffTotal),
-                    detail: `${stats.oneOffCount} transaction${stats.oneOffCount !== 1 ? "s" : ""}${
+                    detail: `${t("dashboard.transactionCount", { count: stats.oneOffCount })}${
                       stats.recurringShare != null ? ` · ${(100 - stats.recurringShare).toFixed(0)}%` : ""
                     }`,
                   },
@@ -677,11 +686,11 @@ export const AnalyticsPanel: React.FC = () => {
                 title={t("stats.ariaCommitment", { currency: settings.baseCurrency })}
                 labels={recurringSplit.labels}
                 series={[
-                  { id: "recurring", name: "Recurring", color: recurringTone, values: recurringSplit.recurring },
-                  { id: "oneoff", name: "One-off", color: oneOffTone, values: recurringSplit.oneOff },
+                  { id: "recurring", name: t("common.recurring"), color: recurringTone, values: recurringSplit.recurring },
+                  { id: "oneoff", name: t("common.oneOff"), color: oneOffTone, values: recurringSplit.oneOff },
                 ]}
                 emphasisIndex={mode === "year" ? undefined : settings.selectedMonth - 1}
-                referenceLines={budgetBase > 0 ? [{ value: budgetBase, label: `Budget ${money(budgetBase)}` }] : []}
+                referenceLines={budgetBase > 0 ? [{ value: budgetBase, label: t("chart.budgetLine", { amount: money(budgetBase) }) }] : []}
                 formatValue={money}
                 formatTick={tick}
                 height={220}
@@ -700,28 +709,30 @@ export const AnalyticsPanel: React.FC = () => {
             <>
               <ChartCard
                 title={t("stats.activityShare")}
-                subtitle={`${money(activityCosts.yearly.gross)} ${t("common.perYear")} · ${t("stats.grossCostHint")}`}
+                subtitle={`${money(activityCosts.yearly.personal)} ${t("common.perYear")}`}
+                note={
+                  activityCosts.externallyFundedCount > 0
+                    ? t("stats.notYours", { count: activityCosts.externallyFundedCount })
+                    : undefined
+                }
               >
-                {/* Each activity against the *gross* yearly total, so the
-                    percentages describe one whole and add up to it. Sharing a
-                    denominator with the funding split below is what keeps the
-                    two readings consistent. */}
+                {/* The user's own activities against the user's own yearly
+                    total. An activity somebody else pays for costs this budget
+                    nothing, so it has no share of it — it appears in the
+                    funding split below, where the question is who paid. */}
                 <HorizontalBarChart
                   title={t("stats.activityShare")}
                   rows={activityCosts.shares.slice(0, 12).map((share) => ({
                     id: share.activity.id,
                     label: share.activity.name,
                     value: share.yearlyBase,
-                    color: share.activity.color ?? FUNDING_META[share.funding].color,
+                    color: share.activity.color ?? FUNDING_META.personal.color,
                     caption: [
                       share.share != null ? `${share.share.toFixed(1)}%` : null,
                       `${money(share.monthlyBase)} ${t("common.perMonth")}`,
-                      share.funding === "personal" ? null : t(`funding.${share.funding}.short`),
                     ]
                       .filter(Boolean)
                       .join(" · "),
-                    badge: share.funding === "personal" ? undefined : FUNDING_META[share.funding].glyph,
-                    badgeTone: "neutral" as const,
                   }))}
                   formatValue={money}
                 />

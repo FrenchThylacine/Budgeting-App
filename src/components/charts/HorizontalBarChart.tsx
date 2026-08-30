@@ -1,4 +1,5 @@
 import React from "react";
+import { useTranslation } from "../../i18n/useTranslation";
 import { ChartFrame, ChartPlaceholder, chartName, useChartTooltip, type ChartName } from "./ChartFrame";
 import { compactNumber, hBarPath, linearScale, niceDomain, textWidth, truncateToWidth } from "./scale";
 
@@ -50,6 +51,7 @@ export const HorizontalBarChart: React.FC<HorizontalBarChartProps> = ({
   emptyMessage = "No spending recorded for this period.",
   ...naming
 }) => {
+  const { t } = useTranslation();
   const { tooltip, show, hide } = useChartTooltip();
 
   if (rows.length === 0) return <ChartPlaceholder height={120} message={emptyMessage} />;
@@ -96,7 +98,7 @@ export const HorizontalBarChart: React.FC<HorizontalBarChartProps> = ({
                       y: top + 18,
                       title: row.label,
                       rows: [
-                        { label: "Amount", value: valueText, color },
+                        { label: t("chart.amount"), value: valueText, color },
                         ...(row.marker ? [{ label: row.marker.label, value: formatValue(row.marker.value) }] : []),
                         ...(caption ? [{ label: caption, value: "" }] : []),
                       ],

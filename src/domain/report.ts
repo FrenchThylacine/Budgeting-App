@@ -78,6 +78,16 @@ export interface PeriodReport {
   /** True when the language is written right to left. */
   rtl: boolean;
   summary: ReportSection[];
+  /**
+   * The budget, as a proportion rather than as two numbers.
+   *
+   * A report's first question is "how did I do against the budget", and the
+   * honest answer to it is a length: a bar the reader measures by eye in less
+   * time than it takes to subtract 516 from 1,400. Null when no monthly budget
+   * is set, or when the range is a custom one — prorating a monthly budget
+   * across six weeks would invent a figure.
+   */
+  budgetBar: { usedPercent: number; overspent: boolean; spentLabel: string; budgetLabel: string } | null;
   categories: CategoryStat[];
   monthly: { label: string; value: number | null }[];
   health: { score: number | null; grade: string | null; factors: { label: string; score: number; detail?: string }[] };
@@ -191,7 +201,7 @@ export function buildPeriodReport(
    */
   const pacing = custom ? null : budgetPacing(scoped, entries, now);
   const categories = categoryBreakdown(entries, scoped, custom ? false : undefined);
-  const comparison = custom ? rangeComparison(scoped, custom, locale) : periodComparison(scoped, settings);
+  const comparison = custom ? rangeComparison(scoped, custom, locale) : periodComparison(scoped, settings, locale);
   const health = financialHealth({ pacing, categories, comparison, stats });
 
   const money = (value: number | null | undefined) =>
@@ -246,32 +256,19 @@ export function buildPeriodReport(
     { label: t("report.oneOff"), value: money(stats.oneOffTotal) },
   );
 
-  // Named only when there is something to name, so an ordinary month is not
-  // padded with a line reading "—".
-  if (funding.otherFundedCount > 0) {
-    summary.push({
-      label: t("funding.other"),
-      value: money(funding.otherFunded),
-      detail: t("report.neverChargedToYou", { count: funding.otherFundedCount }),
-    });
-  }
-  if (funding.outsideBudgetCount > 0) {
-    summary.push({
-      label: t("funding.outside"),
-      value: money(funding.outsideBudget),
-      detail: t("report.keptOffBudget", { count: funding.outsideBudgetCount }),
-    });
-  }
-  if (funding.externalCount > 0) {
-    summary.push({
-      label: t("report.allTransactions"),
-      value: money(funding.transactions),
-      detail: t("report.everyKind"),
-    });
-  }
+  /*
+   * Money somebody else paid is *not* repeated here.
+   *
+   * It was: three more cards saying what the "who paid" table two sections
+   * above already gives with its amounts, its counts and its shares. The
+   * report is read top to bottom, and a figure that appears twice makes the
+   * reader stop to work out whether it is the same figure.
+   */
 
   summary.push(
-    // The three treasury figures, never collapsed into one. See domain/wallet.ts.
+    // The three treasury figures, never collapsed into one — and these keep
+    // their captions, because three balances in a row is exactly the case
+    // where a label alone does not say which is which. See domain/wallet.ts.
     { label: t("report.walletBalance"), value: money(calc.wallet.walletTotal), detail: t("report.actualMoneyHeld") },
     {
       label: t("report.remainingBudget"),
@@ -421,6 +418,15 @@ export function buildPeriodReport(
     language: locale,
     rtl: t.rtl,
     summary,
+    budgetBar:
+      pacing && pacing.budget > 0 && stats.total != null
+        ? {
+            usedPercent: (stats.total / pacing.budget) * 100,
+            overspent: stats.total > pacing.budget,
+            spentLabel: money(stats.total),
+            budgetLabel: money(pacing.budget),
+          }
+        : null,
     categories,
     monthly,
     health: {
@@ -482,8 +488,17 @@ function escapeHtml(value: string): string {
 
 /** The three funding colours, as real values: a printed page has no CSS variables. */
 const FUNDING_COLOUR: Record<FundingKind, string> = {
-  personal: "#1E5AA8",
-  other: "#0B7C8C",
+  /*
+   * Three inks that stay three inks in greyscale.
+   *
+   * "Paid by me" and "paid by other" are both blue on screen, which is the
+   * vocabulary the interface uses — but two blues of the same weight print as
+   * one grey. These are separated by *lightness* rather than by hue: a deep
+   * navy, a mid sky blue and an amber convert to three visibly different
+   * greys. The glyphs and the written labels carry it the rest of the way.
+   */
+  personal: "#1B4B8F",
+  other: "#2E8BD8",
   outside: "#B45309",
 };
 
@@ -642,6 +657,31 @@ export function reportHtml(
       </div>`;
 
   const heroCards = lead.map((item, index) => card(item, index === 0)).join("");
+
+  /*
+   * The budget, at a glance.
+   *
+   * A length, not a subtraction. It is also the one place in the report where
+   * a proportion is drawn rather than tabulated, which is what makes the first
+   * screenful read as a dashboard instead of as a list of numbers.
+   *
+   * Printed in black and white the fill is still a length, and the figures on
+   * either end still say what it is — the colour is the fastest channel, never
+   * the only one.
+   */
+  const budgetBar = report.budgetBar
+    ? `<div class="budget-bar">
+        <div class="budget-track"><div class="budget-fill${
+          report.budgetBar.overspent ? " is-over" : ""
+        }" style="width:${Math.min(100, Math.max(1, report.budgetBar.usedPercent)).toFixed(1)}%"></div></div>
+        <div class="budget-ends">
+          <span>${escapeHtml(report.budgetBar.spentLabel)} · ${escapeHtml(
+            t("report.used", { percent: percent(report.budgetBar.usedPercent) }),
+          )}</span>
+          <span>${escapeHtml(report.budgetBar.budgetLabel)}</span>
+        </div>
+      </div>`
+    : "";
   const summaryCards = rest.map((item) => card(item)).join("");
 
   const factors = report.health.factors
@@ -682,7 +722,7 @@ export function reportHtml(
         t("report.requiredIn", { month: report.activities.monthLabel }),
       )}</div><div class="card-value">${escapeHtml(
         moneyFormatter(report.activities.requiredThisMonth.personal),
-      )}</div><div class="card-detail">${escapeHtml(t("report.requiredHint"))}</div></div>
+      )}</div></div>
     </div>`;
 
   return `<!doctype html>
@@ -734,10 +774,49 @@ export function reportHtml(
 
   h2 {
     font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.09em;
-    color: var(--navy); margin: 26px 0 9px; padding-bottom: 4px;
+    color: var(--navy); margin: 26px 0 9px; padding: 0 0 4px 10px;
     border-bottom: 1px solid var(--rule); font-weight: 700;
+    position: relative;
+  }
+  /* A coloured tab on each heading: the page gets a rhythm to scan by, and
+     the rule underneath keeps the structure when the colour is not printed. */
+  h2::before {
+    content: ""; position: absolute; inset-inline-start: 0; top: 1px; bottom: 5px;
+    width: 3px; border-radius: 2px; background: var(--accent);
   }
   .lede { font-size: 11.5px; color: var(--ink-soft); margin: -2px 0 10px; }
+
+  /* The first screenful, set apart. A tint rather than a border: the page is
+     mostly white and mostly ruled, so a warm ground is the cheapest way to
+     make the four figures that matter read first. Printers that drop
+     backgrounds lose the tint and keep every number. */
+  .hero {
+    background: linear-gradient(180deg, #F5F8FD, #FFFFFF);
+    border: 1px solid var(--rule);
+    border-radius: 10px;
+    padding: 12px;
+    margin-top: 14px;
+  }
+
+  .budget-bar { margin-top: 11px; }
+  .budget-track {
+    height: 9px;
+    border-radius: 999px;
+    background: #E4EAF3;
+    border: 1px solid var(--rule);
+    overflow: hidden;
+  }
+  .budget-fill { height: 100%; background: var(--blue); }
+  /* Over budget is a different colour *and* a hatch, so the two states are
+     still two states on a monochrome printer. */
+  .budget-fill.is-over {
+    background: repeating-linear-gradient(135deg, var(--accent), var(--accent) 5px, #A50D24 5px, #A50D24 10px);
+  }
+  .budget-ends {
+    display: flex; justify-content: space-between; gap: 12px;
+    font-size: 10.5px; color: var(--ink-soft); margin-top: 5px;
+    font-variant-numeric: tabular-nums;
+  }
 
   .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 9px; }
   .grid-hero { grid-template-columns: repeat(auto-fit, minmax(168px, 1fr)); margin-top: 4px; }
@@ -826,15 +905,18 @@ export function reportHtml(
   </header>
   <div class="tricolour" aria-hidden="true"><i></i><i></i><i></i></div>
 
-  <div class="grid grid-hero">
-    ${heroCards}
-    <div class="card">
-      <div class="card-label">${escapeHtml(t("report.health"))}</div>
-      <div class="card-value">${report.health.score != null ? escapeHtml(count(Math.round(report.health.score))) : "—"}</div>
-      <div class="card-detail">${escapeHtml(
-        report.health.grade ? t(`health.grade.${report.health.grade}`) : t("report.notEnoughData"),
-      )}</div>
+  <div class="hero">
+    <div class="grid grid-hero">
+      ${heroCards}
+      <div class="card">
+        <div class="card-label">${escapeHtml(t("report.health"))}</div>
+        <div class="card-value">${report.health.score != null ? escapeHtml(count(Math.round(report.health.score))) : "—"}</div>
+        <div class="card-detail">${escapeHtml(
+          report.health.grade ? t(`health.grade.${report.health.grade}`) : t("report.notEnoughData"),
+        )}</div>
+      </div>
     </div>
+    ${budgetBar}
   </div>
 
   <h2>${escapeHtml(t("report.funding"))}</h2>
@@ -866,8 +948,19 @@ export function reportHtml(
       : `<div class="grade">${escapeHtml(t("report.noActivities"))}</div>`
   }
 
-  <h2>${escapeHtml(t("report.trend"))}</h2>
-  <div class="chart">${monthlyBars}</div>
+  ${
+    /*
+     * A chart, only when there is a shape to see.
+     *
+     * A new account's first report drew one bar and eleven question marks —
+     * a chart whose entire content was "we have no history", taking a fifth
+     * of the page to say it. Two months of data is the floor for a trend.
+     */
+    report.monthly.filter((month) => month.value != null).length >= 2
+      ? `<h2>${escapeHtml(t("report.trend"))}</h2>
+         <div class="chart">${monthlyBars}</div>`
+      : ""
+  }
 
   <h2>${escapeHtml(t("report.categories"))}</h2>
   ${

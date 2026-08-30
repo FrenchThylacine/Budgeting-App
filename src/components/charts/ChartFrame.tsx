@@ -27,6 +27,11 @@ export type ChartName =
   | { title?: string; ariaLabel: string };
 
 export function chartName(props: { title?: string; ariaLabel?: string }): string {
+  // A last-resort accessible name, in English, for a chart that was given
+  // neither a title nor a label. Not translated deliberately: reaching the
+  // dictionary from this pure helper would give every chart module a
+  // dependency on the translator to name a case that should not occur, and
+  // the fix for seeing it is to name the chart.
   return props.ariaLabel ?? props.title ?? "Chart";
 }
 

@@ -1,5 +1,5 @@
 import React from "react";
-import { aircraftFor, type AircraftId } from "../../domain/aircraft";
+import { aircraftFor, fitWithin, fleetCraftFor, fleetSilhouette, type AircraftId } from "../../domain/aircraft";
 
 interface AircraftProps {
   /** Which aeroplane. An unknown id falls back to the first. */
@@ -90,26 +90,31 @@ export const AircraftArt: React.FC<AircraftProps> = ({ id, size = 180, className
 };
 
 /**
- * The flat white silhouette, for the tab transition.
+ * One of the fleet, in flat white, for the tab transition and its picker.
  *
  * White is baked into the asset rather than applied as a filter: `filter:
  * brightness(0) invert(1)` on an image is a per-frame composite of a bitmap,
  * and this one is animated across the whole viewport on every navigation.
+ *
+ * `size` is the box, not the width. The twenty-two shapes range from a needle
+ * to a balloon, and sizing them all by width would fly a glider the length of
+ * a runway; each is fitted to the same square instead.
  */
 export const AircraftSilhouette: React.FC<AircraftProps> = ({ id, size = 30, className = "", style, title }) => {
-  const craft = aircraftFor(id);
+  const craft = fleetCraftFor(id);
   const [failed, setFailed] = React.useState(false);
   React.useEffect(() => setFailed(false), [craft.id]);
 
   if (failed) return <AircraftGlyph size={size} className={className} style={style} title={title} fill="#FFFFFF" />;
 
+  const box = fitWithin(craft, size);
   return (
     <img
-      src={craft.silhouette}
+      src={fleetSilhouette(craft)}
       alt={title ?? ""}
       aria-hidden={title ? undefined : true}
-      width={Math.round(size)}
-      height={Math.round(size / craft.aspect)}
+      width={box.width}
+      height={box.height}
       className={className}
       style={{ display: "block", ...style }}
       draggable={false}

@@ -46,6 +46,7 @@ export const Heatmap: React.FC<HeatmapProps> = ({
   color = "var(--accent)",
   ...naming
 }) => {
+  const { t } = useTranslation();
   const { tooltip, show, hide } = useChartTooltip();
 
   const leadingBlanks = cells.length > 0 ? clamp(cells[0].weekday - 1, 0, 6) : 0;
@@ -112,8 +113,8 @@ export const Heatmap: React.FC<HeatmapProps> = ({
                       title: cell.label,
                       rows: [
                         {
-                          label: known ? "Spend" : "Status",
-                          value: known ? formatValue(cell.value as number) : "Not recorded",
+                          label: t(known ? "chart.spend" : "chart.status"),
+                          value: known ? formatValue(cell.value as number) : t("chart.notRecorded"),
                           color: known ? color : undefined,
                         },
                       ],

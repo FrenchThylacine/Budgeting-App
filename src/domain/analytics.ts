@@ -374,6 +374,15 @@ export interface PeriodComparison {
 export function periodComparison(
   snapshot: BudgetSnapshot,
   settings: Settings,
+  /*
+   * The reader's language, not the browser's.
+   *
+   * Omitting it hands `Intl` the browser locale, which is how an English
+   * interface came to head a card "VS JUILLET 2026". The parameter is optional
+   * only so the server and the tests can call this without a language; every
+   * caller that has one passes it.
+   */
+  locale?: string,
 ): PeriodComparison {
   const previousSettings: Settings = { ...settings, ...movePeriod(settings, -1) };
 
@@ -393,7 +402,7 @@ export function periodComparison(
   return {
     currentTotal,
     previousTotal,
-    previousLabel: periodLabel(previousSettings),
+    previousLabel: periodLabel(previousSettings, locale),
     deltaAbs: comparable ? currentTotal - previousTotal : null,
     deltaPct: comparable && previousTotal !== 0 ? ((currentTotal - previousTotal) / previousTotal) * 100 : null,
   };

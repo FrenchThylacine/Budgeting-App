@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { currencyOptionsFor, formatMoney, numberLocale } from "../../domain/currency";
 import { SwipeRow } from "../ui/SwipeRow";
+import { RowMenu } from "../ui/RowMenu";
 import { gesturesFor } from "../../domain/gestures";
 import { AdvancedFields, EditorSheet } from "../ui/EditorSheet";
 import { monthName } from "../../domain/dates";
@@ -108,7 +109,8 @@ export const ActivityPanel: React.FC = () => {
   const month = snapshot.settings.selectedMonth;
   const activities = snapshot.years[String(year)]?.activities ?? [];
   const categories = snapshot.categories.filter((category) => !category.archived);
-  const categoryName = (id: string) => snapshot.categories.find((category) => category.id === id)?.name ?? "Uncategorised";
+  const categoryName = (id: string) =>
+    snapshot.categories.find((category) => category.id === id)?.name ?? t("common.uncategorised");
 
   const patch = (changes: Partial<ActivityDraft>) => setForm((current) => ({ ...current, ...changes }));
 
@@ -208,12 +210,12 @@ export const ActivityPanel: React.FC = () => {
           onAction: () => update(activity.id, { visible: !activity.visible }),
         }];
       case "edit":
-        return [{ label: "Edit", icon: <Pencil size={18} />, onAction: () => begin(activity) }];
+        return [{ label: t("common.edit"), icon: <Pencil size={18} />, onAction: () => begin(activity) }];
       case "duplicate":
-        return [{ label: "Duplicate", icon: <Copy size={18} />, onAction: () => duplicate(activity.id) }];
+        return [{ label: t("common.duplicate"), icon: <Copy size={18} />, onAction: () => duplicate(activity.id) }];
       case "delete":
         return [{
-          label: "Delete", icon: <Trash2 size={18} />, destructive: true,
+          label: t("common.delete"), icon: <Trash2 size={18} />, destructive: true,
           onAction: () => confirmDelete(activity),
         }];
       default:
@@ -827,15 +829,17 @@ export const ActivityPanel: React.FC = () => {
                 bought, which no recurrence rule can know. */}
             <FieldGroup
               title={
-                form.costModel === "sessionPack"
-                  ? "Next payment"
-                  : form.costModel === "fixedYearly"
-                    ? "Renewal date"
-                    : "Next renewal"
+                t(
+                  form.costModel === "sessionPack"
+                    ? "activities.nextPayment"
+                    : form.costModel === "fixedYearly"
+                      ? "activities.renewalDate"
+                      : "activities.nextRenewal",
+                )
               }
             >
               <Field
-                label={form.costModel === "sessionPack" ? "Next payment falls on" : "Renews on"}
+                label={t(form.costModel === "sessionPack" ? "activities.nextPaymentFallsOn" : "activities.renewsOn")}
                 span
                 hint={renewalHint}
               >
@@ -1026,7 +1030,11 @@ export const ActivityPanel: React.FC = () => {
                     </div>
                     <div className="text-caption" style={{ marginTop: 2 }}>
                       {categoryName(activity.categoryId)}
-                      {activity.seasonalTag ? ` · ${activity.seasonalTag}` : ""}
+                      {/* The seasonal tag, only when it is not the default:
+                          "normal" on every row is a column of the same word. */}
+                      {activity.seasonalTag && activity.seasonalTag !== "normal"
+                        ? ` · ${activity.seasonalTag}`
+                        : ""}
                     </div>
                     {/* What this month actually requires from this activity —
                         which for eleven months of a yearly subscription is
@@ -1076,77 +1084,67 @@ export const ActivityPanel: React.FC = () => {
                   </div>
                   {mutable && (
                     <div className="row-actions">
-                      {canReorder && (
-                        <>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            icon
-                            disabled={orderIndex <= 0}
-                            onClick={() => move(activity, -1)}
-                            aria-label={t("a11y.moveUp", { name: activity.name })}
-                          >
-                            <ArrowUp size={15} />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            icon
-                            disabled={orderIndex < 0 || orderIndex >= orderedAll.length - 1}
-                            onClick={() => move(activity, 1)}
-                            aria-label={t("a11y.moveDown", { name: activity.name })}
-                          >
-                            <ArrowDown size={15} />
-                          </Button>
-                        </>
-                      )}
-                      {/* Deactivate, not Hide.
+                      {/* One visible action, and one door to the rest.
 
-                          The desktop equivalent of the mobile swipe used to be
-                          an eye icon that only changed whether the activity
-                          appeared in summaries — a presentation toggle sitting
-                          where people reach for "stop paying for this". It is
-                          now the real action: a power control, labelled, that
-                          switches the activity off and takes it out of every
-                          total. Hiding is still available, in the editor's
-                          visibility checkbox and as a configurable swipe. */}
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => toggleActive(activity)}
-                        aria-label={
-                          activity.active
-                            ? t("a11y.deactivateActivity", { name: activity.name })
-                            : t("a11y.reactivateActivity", { name: activity.name })
-                        }
-                        title={t("activities.deactivateHint")}
-                      >
-                        <Power size={15} />
-                        <span className="row-action-label">
-                          {activity.active ? t("activities.deactivate") : t("activities.reactivate")}
-                        </span>
-                      </Button>
+                          This row used to carry six buttons — up, down,
+                          deactivate, duplicate, edit, delete — every one of
+                          them, on every row, always. Editing is the thing
+                          people come here to do; reordering and deleting are
+                          things they do occasionally, and an occasional action
+                          is worth one press. */}
                       <Button
                         variant="ghost"
                         size="sm"
                         icon
-                        onClick={() => duplicate(activity.id)}
-                        aria-label={t("a11y.duplicateActivity", { name: activity.name })}
+                        onClick={() => begin(activity)}
+                        aria-label={t("a11y.editActivity", { name: activity.name })}
+                        title={t("common.edit")}
                       >
-                        <Copy size={15} />
-                      </Button>
-                      <Button variant="ghost" size="sm" icon onClick={() => begin(activity)} aria-label={t("a11y.editActivity", { name: activity.name })}>
                         <Pencil size={15} />
                       </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        icon
-                        onClick={() => confirmDelete(activity)}
-                        aria-label={t("a11y.deleteActivity", { name: activity.name })}
-                      >
-                        <Trash2 size={15} />
-                      </Button>
+                      <RowMenu
+                        label={t("a11y.moreActions", { name: activity.name })}
+                        items={[
+                          {
+                            id: "deactivate",
+                            label: activity.active ? t("activities.deactivate") : t("activities.reactivate"),
+                            icon: <Power size={15} />,
+                            title: t("activities.deactivateHint"),
+                            onSelect: () => toggleActive(activity),
+                          },
+                          {
+                            id: "duplicate",
+                            label: t("common.duplicate"),
+                            icon: <Copy size={15} />,
+                            onSelect: () => duplicate(activity.id),
+                          },
+                          ...(canReorder
+                            ? [
+                                {
+                                  id: "up",
+                                  label: t("common.moveUp"),
+                                  icon: <ArrowUp size={15} />,
+                                  disabled: orderIndex <= 0,
+                                  onSelect: () => move(activity, -1),
+                                },
+                                {
+                                  id: "down",
+                                  label: t("common.moveDown"),
+                                  icon: <ArrowDown size={15} />,
+                                  disabled: orderIndex < 0 || orderIndex >= orderedAll.length - 1,
+                                  onSelect: () => move(activity, 1),
+                                },
+                              ]
+                            : []),
+                          {
+                            id: "delete",
+                            label: t("common.delete"),
+                            icon: <Trash2 size={15} />,
+                            destructive: true,
+                            onSelect: () => confirmDelete(activity),
+                          },
+                        ]}
+                      />
                     </div>
                   )}
                 </div>
@@ -1193,11 +1191,18 @@ const ActivitySummary: React.FC<{
       <h2 className="text-title activity-summary-title">{t("activities.summaryTitle")}</h2>
 
       <div className="activity-summary-grid">
+        {/* The captions carry data now, not explanation. "Every active
+            activity, whoever pays" and "the payments that actually fall due
+            this month" were true and were read once; they moved into the
+            labels' tooltips, where they are available to anyone who wonders
+            and invisible to everyone who does not. */}
         <div className="activity-summary-figure activity-summary-gross">
-          <div className="text-footnote">{t("activities.totalCost")}</div>
+          <div className="text-footnote" title={t("activities.totalCostHint")}>
+            {t("activities.totalCost")}
+          </div>
           <div className="money activity-summary-value">{money(summary.monthly.gross)}</div>
           <div className="text-caption">
-            {money(summary.yearly.gross)} {t("common.perYear")} · {t("activities.totalCostHint")}
+            {money(summary.yearly.gross)} {t("common.perYear")}
           </div>
         </div>
 
@@ -1220,13 +1225,14 @@ const ActivitySummary: React.FC<{
         {/* The figure this whole module exists for. Its caption names the
             month so it can never be mistaken for a monthly average. */}
         <div className="activity-summary-figure activity-summary-required">
-          <div className="text-footnote">{t("activities.requiredThisMonth", { month: monthLabel })}</div>
+          <div className="text-footnote" title={t("activities.requiredThisMonthHint")}>
+            {t("activities.requiredThisMonth", { month: monthLabel })}
+          </div>
           <div className="money activity-summary-value">{money(required.personal)}</div>
           <div className="text-caption">
-            {t("activities.requiredThisMonthHint")}
             {required.gross !== required.personal
-              ? ` · ${money(required.gross)} ${t("funding.gross").toLowerCase()}`
-              : ""}
+              ? `${money(required.gross)} ${t("funding.gross").toLowerCase()}`
+              : "\u00A0"}
           </div>
         </div>
       </div>
@@ -1267,13 +1273,17 @@ const ActivitySummary: React.FC<{
  * One-line summary of how an activity recurs and what drives its price.
  *
  * Built from keys with named values rather than by concatenation: the pieces
- * are a schedule, a count, a month and a state, and every language puts them in
- * its own order. The translator comes in as an argument because this is a
- * module-level helper, not a component.
+ * are a schedule, a count and a month, and every language puts them in its own
+ * order. The translator comes in as an argument because this is a module-level
+ * helper, not a component.
+ *
+ * It no longer ends with the activity's state. Every line read "· active", on
+ * every row, for ever — a word that is true of all but a handful of rows and
+ * says nothing about any of them. The handful it *is* about carry a
+ * "Deactivated" badge beside their name, which is where a state belongs.
  */
 function describeActivity(activity: Activity, year: number, month: number, t: Translator, months: string[]): string {
   const model = activity.costModel ?? "auto";
-  const state = t(activity.active ? "activity.stateActive" : "activity.statePaused");
   const monthLabel = months[month - 1] ?? String(month);
 
   if (model === "schedule" && hasSchedule(activity)) {
@@ -1281,11 +1291,10 @@ function describeActivity(activity: Activity, year: number, month: number, t: Tr
       schedule: describeSchedule(activity, t),
       count: occurrencesInMonth(activity, year, month),
       month: monthLabel,
-      state,
     });
   }
   if (model === "perSession") {
-    return t("activity.summaryPerSession", { count: activity.sessionsPerMonth ?? 0, state });
+    return t("activity.summaryPerSession", { count: activity.sessionsPerMonth ?? 0 });
   }
   if (model === "sessionPack") {
     // Both facts, in that order: what happens, and what is paid. The card is
@@ -1293,23 +1302,24 @@ function describeActivity(activity: Activity, year: number, month: number, t: Tr
     // the impression that a €200 charge lands twice a week.
     const sessions = sessionsInMonth(activity, year, month);
     const cycle = describePaymentCycle(activity, t) ?? t("activity.summaryPack");
+    // No key for the bare cycle: a "translation" whose whole value is
+    // `{cycle}` is a pass-through, and the test that forbids fragments is
+    // right to reject it.
     return sessions == null
-      ? t("activity.summaryPackPlain", { cycle, state })
+      ? cycle
       : t("activity.summaryPackWithCount", {
           // A string, deliberately: the count can be fractional ("8.67 in
           // August") and the plural rule must not fire on a rounded integer.
           sessions: trimNumber(sessions),
           month: monthLabel,
           cycle,
-          state,
         });
   }
-  if (model === "fixedYearly") return t("activity.summaryYearly", { state });
-  if (model === "fixed") return t("activity.summaryFixed", { state });
+  if (model === "fixedYearly") return t("activity.summaryYearly");
+  if (model === "fixed") return t("activity.summaryFixed");
   return t("activity.summaryAuto", {
     recurrence: t(`recurrence.${activity.recurrenceType}`),
     interval: activity.recurrenceInterval,
-    state,
   });
 }
 

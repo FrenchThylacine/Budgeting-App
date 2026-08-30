@@ -62,9 +62,9 @@ export function createAuthRoutes(): Router {
         throw new AppError(403, "This deployment requires an invite code to sign up.", "invite_required");
       }
 
-      if (!isPlausibleEmail(email)) throw new AppError(400, "Enter a valid email address.");
+      if (!isPlausibleEmail(email)) throw new AppError(400, "Enter a valid email address.", "invalid_email");
       const passwordProblem = validatePassword(password);
-      if (passwordProblem) throw new AppError(400, passwordProblem);
+      if (passwordProblem) throw new AppError(400, passwordProblem, "weak_password");
 
       const repo = getRepo();
       const snapshotId = await repo.snapshotIdForNewUser();
@@ -92,7 +92,7 @@ export function createAuthRoutes(): Router {
     asyncHandler(async (req: Request, res: Response) => {
       const { email, password } = req.body ?? {};
       if (typeof email !== "string" || typeof password !== "string") {
-        throw new AppError(400, "Email and password are required.");
+        throw new AppError(400, "Email and password are required.", "missing_credentials");
       }
 
       const repo = getRepo();
@@ -226,7 +226,7 @@ export function createAuthRoutes(): Router {
         throw new AppError(400, "This reset link is invalid or has expired.", "invalid_token");
       }
       const passwordProblem = validatePassword(password);
-      if (passwordProblem) throw new AppError(400, passwordProblem);
+      if (passwordProblem) throw new AppError(400, passwordProblem, "weak_password");
 
       const repo = getRepo();
       const userId = await repo.consumeResetToken(hashToken(token));
@@ -258,10 +258,10 @@ export function createAuthRoutes(): Router {
     asyncHandler(async (req: Request, res: Response) => {
       const { currentPassword, newPassword } = req.body ?? {};
       if (typeof currentPassword !== "string") {
-        throw new AppError(400, "Your current password is required.");
+        throw new AppError(400, "Your current password is required.", "password_required");
       }
       const passwordProblem = validatePassword(newPassword);
-      if (passwordProblem) throw new AppError(400, passwordProblem);
+      if (passwordProblem) throw new AppError(400, passwordProblem, "weak_password");
 
       const repo = getRepo();
       const user = await repo.findUserById(req.auth!.userId);
@@ -297,10 +297,10 @@ export function createAuthRoutes(): Router {
     asyncHandler(async (req: Request, res: Response) => {
       const { currentPassword, email } = req.body ?? {};
       if (typeof currentPassword !== "string") {
-        throw new AppError(400, "Your current password is required.");
+        throw new AppError(400, "Your current password is required.", "password_required");
       }
       if (typeof email !== "string" || !isPlausibleEmail(email)) {
-        throw new AppError(400, "Enter a valid email address.");
+        throw new AppError(400, "Enter a valid email address.", "invalid_email");
       }
 
       const repo = getRepo();

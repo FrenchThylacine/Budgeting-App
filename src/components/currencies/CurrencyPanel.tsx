@@ -15,8 +15,6 @@ import {
 import {
   applyRatesToSettings,
   fetchExchangeRates,
-  isDueForScheduledRefresh,
-  nextScheduledRefresh,
   noteRateFailure,
   rateFreshness,
 } from "../../domain/exchangeRates";
@@ -344,15 +342,28 @@ export const CurrencyPanel: React.FC = () => {
             </div>
           )}
           {freshness.state === "failed" && (
-            <div className="text-caption" style={{ color: "var(--warning-text)" }}>
-              {t("currencies.ratesFailed")} {settings.exchangeRates.ratesLastError}
+            /* The provider's reason is English and technical — "Provider
+               returned no usable USD rate" — and printing it after a
+               translated sentence produced half a sentence in each language.
+               It is diagnosis, so it goes where diagnosis goes. */
+            <div
+              className="text-caption"
+              style={{ color: "var(--warning-text)" }}
+              title={settings.exchangeRates.ratesLastError}
+            >
+              {t("currencies.ratesFailed")}
             </div>
           )}
 
+          {/* What actually happens, not the provider's release schedule.
+              This said "Rates refresh daily at 12:00 UTC" followed by a
+              timestamp — a clock nobody wants to plan around, describing an
+              internal rule. Rates refresh when the app is opened; the 12:00
+              boundary is one of two triggers behind that and is not a thing to
+              tell anybody about. */}
           <div className="text-note">
-            {t("currencies.ratesSchedule")}{" "}
-            {formatDate(nextScheduledRefresh(), { dateStyle: "medium", timeStyle: "short" } as Intl.DateTimeFormatOptions)}
-            {isDueForScheduledRefresh(settings.exchangeRates.ratesUpdatedAt) ? " · " + t("currencies.ratesStale") : ""}
+            {t("currencies.ratesSchedule")}
+            {freshness.state === "stale" ? ` · ${t("currencies.ratesStale")}` : ""}
           </div>
 
           {message && (
