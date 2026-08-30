@@ -10,6 +10,26 @@ This is the active engineering tracker. A checkbox is ticked only after implemen
 
 ## How this session verified things
 
+**V4, 2026-08-30.** Three things this pass added to the method, each because
+something had slipped through the previous one:
+
+- **Look at the page, not at the dictionaries.** Every translation check ran
+  against the five dictionaries, and a sentence written straight into the JSX
+  passes all of them. `tests/no-hardcoded-english.test.ts` reads the components
+  instead. It found 106 on its first run — and then seven more the moment it
+  learned to see a sentence spread over three lines.
+- **Measure the picture.** The claims this pass makes about the loading screen
+  are not "the code looks right": the harness records the z-index an escort was
+  drawn at to prove it passed behind the lead, and reads the smoke canvas's
+  pixels along a vertical cut to prove the bands are blue, white and red in
+  that order.
+- **Build both projects.** `npx tsc -b` compiles the frontend; the server is a
+  separate TypeScript project that compiles `src/domain` with no DOM library,
+  and it caught a defect the frontend build is structurally incapable of
+  seeing.
+
+
+
 - **A browser harness instead of a habit.** `scripts/lib/cdp.mjs` speaks the Chrome DevTools Protocol over Node 22's built-in WebSocket — about two hundred lines, no browser-automation dependency, and no Playwright. `scripts/verify-browser.mjs` creates its own account and drives the loading sequence, all six themes, the three aircraft, the transition's direction, the period selector's layering, the second currency, the specification's own gym, the funding split, the wallet and its reset, and the report.
 - **It found four defects on its first pass**, every one of which had passed the unit suite: `/month avg.` and `/year` hardcoded on the activity card; the loose English word "per" wedged between two controls where no translation could move it; "August 2026" printed directly above "1 août 2026 – 31 août 2026"; and "Mois En Cours", from three CSS rules applying `text-transform: capitalize` to text that used to be an interpolated lower-case English word.
 - **Then a fifth, and a sixth**, on the second pass: "8.86" with a full stop in a French sentence otherwise full of commas, and "tous les 5 semaines" — an article glued in front of a noun whose gender the sentence could not know.
@@ -176,9 +196,9 @@ This is the active engineering tracker. A checkbox is ticked only after implemen
 
 ## In progress / next — current
 
-- [ ] Exercise the Neon HTTP driver's `sql.transaction([...])` specifically. Production runs on it; the integration suite drives an adapter with the same interface, not the driver itself.
-- [x] Extend the browser harness to 390px and 320px, and to the dark themes, so the responsive and contrast sweeps are automated rather than repeated by hand. *(Done 2026-08-29: both widths sweep all eight tabs for overflow and sub-24px targets, and the contrast sweep runs over Air France and Deep black.)*
-- [ ] Deploy, and re-verify in production. Everything from 2026-08-17 onward is unverified there.
+- [ ] **Exercise the Neon HTTP driver's `sql.transaction([...])` specifically.** Production runs on it; the integration suite drives an adapter with the same interface, not the driver itself. *Not attempted in this pass on purpose: the only Neon instance available here is the owner's production database, and the suites drop and recreate their schemas. It needs a disposable Neon branch, which is the owner's to create.*
+- [ ] **Deploy, and re-verify in production.** Everything from 2026-08-17 onward is unverified there. The Vercel check on a pull request from a fork reports "Authorization required to deploy" until the repository owner authorises it, and production tracks upstream `main` — so merging is the deploy.
+- [x] Extend the browser harness to 390px and 320px, and to the dark themes. *(Done 2026-08-29.)*
 
 ## Discovered issues — open, current
 
@@ -188,6 +208,29 @@ This is the active engineering tracker. A checkbox is ticked only after implemen
 - [ ] **The wallet does not model transfers between currencies.** A movement has one currency and converts for display; moving €100 into a dollar wallet is two entries, not one.
 - [ ] **Notifications are permission-only.** Nothing yet *schedules* a reminder: a real push pipeline needs VAPID keys and a server endpoint, and inventing one would be the "fake permission request" the brief forbids in another form.
 - [ ] `xlsx@0.18.5` carries two high-severity advisories with no registry fix.
+
+## Verified in a browser — 2026-08-30 (V4)
+
+`node scripts/verify-browser.mjs` against a freshly started dev server and a
+real PostgreSQL 17 database, on a brand-new account. **48/48.**
+
+| Group | What it drives |
+| --- | --- |
+| Loading sequence | The five phases in order; an escort drawn **both** behind and in front of the lead; the smoke canvases sampled along a cut behind the formation and the bands read **blue, white, red** top to bottom; Concorde as the default lead |
+| A brand-new account | The mark decodes on the sign-in card; an account is created through the real form; the store the checks read is the one the page is using; the tour opens by itself at step 1 |
+| The tour | A task step refuses to advance until the task is genuinely done, and still offers a way past; "Decide later" leaves a reminder that survives a reload; dismissing it ends it; Skip leaves none, reached through the replay button in Settings |
+| Themes | All six presets applied and the painted background measured; the deep-black theme refusing a light appearance; the choice surviving a reload |
+| Aircraft | Three drawings for the loading screen; **22 fleet silhouettes**, all distinct, all decoding, all from `/craft/fleet/`, all named for a screen reader, and over 98% of the opaque pixels measured white; choosing one changes the transition; both preferences default to Concorde |
+| Transition | Left to right whichever way the tabs move |
+| Period selector | Its popover on top of everything; the historical banner unable to steal a press; one press back to today |
+| Second currency | Off until chosen; present under an amount in another currency and never under one already in it |
+| Exchange rates | Fetched on open without anyone asking, or reported as failed; unconvertible currencies marked rather than silently dashed; exchange mode announced in words as well as colour; two presses showing the rate both ways; closing clearing the picks |
+| Building a budget | The specification's gym — €20/session, 2 a week, paid every 10 — created through the real editor; the card stating the payment cycle; the total reaching the summary; a transaction landing in the period; money somebody else paid recorded in full and charged to nothing |
+| Wallet | A budget allocation; three balances, not one; a reset that zeroes the money and keeps the records |
+| Report | Generated, self-contained, in the interface's language |
+| Small screens | No horizontal overflow and no target under 24px, on all eight tabs, at 390px and 320px |
+| Contrast | Every text node against its real composited background on every tab, in Air France and Deep black: 0 failures |
+| Console | 0 uncaught errors across the whole run |
 
 ## Verified in a browser, against real PostgreSQL — 2026-08-27
 
