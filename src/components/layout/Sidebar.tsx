@@ -5,8 +5,9 @@ import {
   LayoutDashboard, ListTodo, Receipt, Gift, Wallet, BarChart3,
   FlaskConical, History, Settings, Tags, ChevronLeft, ChevronRight,
   FileSpreadsheet, Download, FileJson, RefreshCw, FileText,
-  LogOut, UserRound, Upload, CalendarRange, Coins
+  LogOut, UserRound, Upload, CalendarRange, Coins, ChevronDown
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { exportCurrentYearToExcel, exportAllYearsToExcel, exportJson } from "../../domain/importExport";
 import { AppMark } from "../ui/AppMark";
 import { ImportControl } from "../data/ImportControl";
@@ -61,6 +62,31 @@ async function openPeriodReport(snapshot: BudgetSnapshot, scope: ReportScope, t:
   win.document.write(html);
   win.document.close();
 }
+
+/**
+ * A collapsed group of actions in the navigation.
+ *
+ * Deliberately not the page-level `Disclosure`: that one is a section heading
+ * with a summary and a `text-title`, sized for a panel. This is a navigation
+ * row that happens to open.
+ */
+const NavGroup: React.FC<{ title: string; icon: LucideIcon; children: React.ReactNode }> = ({
+  title,
+  icon: Icon,
+  children,
+}) => {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className={`nav-group${open ? " is-open" : ""}`}>
+      <button type="button" className="nav-group-trigger" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
+        <Icon size={16} />
+        <span>{title}</span>
+        <ChevronDown size={15} aria-hidden="true" className="nav-group-chevron" />
+      </button>
+      {open && <div className="nav-group-body">{children}</div>}
+    </div>
+  );
+};
 
 type TabKey =
   | "dashboard"
@@ -201,8 +227,18 @@ export const Sidebar: React.FC<{
 
       {!collapsed && (
         <div className="nav-section" style={{ marginTop: "auto" }}>
-          <div className="nav-section-title">{t("nav.reports")}</div>
-          <div style={{ display: "grid", gap: 8, marginBottom: 16 }}>
+          {/* Two doors where there were nine buttons.
+
+              Reports and data used to sit permanently open at the bottom of
+              the navigation: three report buttons, three exports, an import
+              and a red **Reset** — nine controls, on every screen, for actions
+              taken monthly at most. The reset in particular had no business
+              being one press from every page in the application.
+
+              Both groups are closed by default and one press from open, which
+              is the right distance for something used occasionally and the
+              wrong distance for nothing at all. */}
+          <NavGroup title={t("nav.reports")} icon={FileText}>
             <button className="btn btn-secondary btn-sm" onClick={() => void openPeriodReport(snapshot, "month", t)}>
               <FileText size={14} /> {t("reports.monthly")}
             </button>
@@ -214,10 +250,9 @@ export const Sidebar: React.FC<{
             <button className="btn btn-secondary btn-sm" onClick={() => setRangeOpen(true)}>
               <CalendarRange size={14} /> {t("reports.custom")}
             </button>
-          </div>
+          </NavGroup>
 
-          <div className="nav-section-title">{t("nav.data")}</div>
-          <div style={{ display: "grid", gap: 8 }}>
+          <NavGroup title={t("nav.data")} icon={Download}>
             <button className="btn btn-secondary btn-sm" onClick={() => exportCurrentYearToExcel(snapshot)}>
               <FileSpreadsheet size={14} /> {t("nav.exportYear")}
             </button>
@@ -231,12 +266,12 @@ export const Sidebar: React.FC<{
             <button
               className="btn btn-danger btn-sm"
               onClick={() => {
-                if (window.confirm("Reset all data to seed budget? This cannot be undone.")) void resetToSeed();
+                if (window.confirm(t("nav.resetConfirm"))) void resetToSeed();
               }}
             >
-              <RefreshCw size={14} /> Reset
+              <RefreshCw size={14} /> {t("nav.reset")}
             </button>
-          </div>
+          </NavGroup>
 
           <div className="nav-section-title" style={{ marginTop: 16 }}>{t("nav.account")}</div>
           <div style={{ display: "grid", gap: 8 }}>
@@ -244,7 +279,7 @@ export const Sidebar: React.FC<{
                 it is the only way to tell whose budget is on screen. */}
             <div className="auth-account text-footnote" title={user?.email ?? ""}>
               <UserRound size={14} aria-hidden="true" />
-              <span className="auth-account-email">{user?.email ?? "Signed in"}</span>
+              <span className="auth-account-email">{user?.email ?? t("nav.signedIn")}</span>
             </div>
             <button className="btn btn-secondary btn-sm" onClick={() => void signOut()}>
               <LogOut size={14} /> {t("nav.signOut")}

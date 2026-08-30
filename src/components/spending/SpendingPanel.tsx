@@ -224,10 +224,10 @@ export const SpendingPanel: React.FC = () => {
   const spendingSwipe = (action: SwipeActionId, entry: SpendingEntry) => {
     if (!mutable || action === "none") return [];
     if (action === "delete") {
-      return [{ label: "Delete", icon: <Trash2 size={18} />, destructive: true, onAction: () => confirmDelete(entry) }];
+      return [{ label: t("common.delete"), icon: <Trash2 size={18} />, destructive: true, onAction: () => confirmDelete(entry) }];
     }
     if (action === "edit") {
-      return [{ label: "Edit", icon: <Pencil size={18} />, onAction: () => beginEdit(entry) }];
+      return [{ label: t("common.edit"), icon: <Pencil size={18} />, onAction: () => beginEdit(entry) }];
     }
     return [];
   };
@@ -290,7 +290,7 @@ export const SpendingPanel: React.FC = () => {
       const previous = editing.wishlistItemId ?? "";
       if (draft.wishlistItemId !== previous) {
         const result = linkToWishlistItem(editing.id, draft.wishlistItemId || null);
-        const name = wishlistById.get(draft.wishlistItemId)?.name ?? "That item";
+        const name = wishlistById.get(draft.wishlistItemId)?.name ?? t("common.thatItem");
         if (!reportLinkResult(result, name)) return;
       } else {
         setNotice(null);
@@ -312,7 +312,7 @@ export const SpendingPanel: React.FC = () => {
         source: draft.source,
         recurrenceType: draft.recurrenceType,
       });
-      if (!reportLinkResult(result, item?.name ?? "That item")) return;
+      if (!reportLinkResult(result, item?.name ?? t("common.thatItem"))) return;
       reset();
       return;
     }
@@ -697,7 +697,7 @@ export const SpendingPanel: React.FC = () => {
                         flexShrink: 0,
                       }}
                     />
-                    {category?.name ?? "Uncategorized"}
+                    {category?.name ?? t("common.uncategorised")}
                     {isRecurring && (
                       <span className="badge badge-info" style={{ textTransform: "capitalize" }}>
                         {entry.recurrenceType}
@@ -728,7 +728,7 @@ export const SpendingPanel: React.FC = () => {
                         title={t("spending.linkedWishlistItem")}
                       >
                         <ShoppingBag size={11} />{" "}
-                        {wishlistById.get(entry.wishlistItemId)?.name ?? "Wishlist item"}
+                        {wishlistById.get(entry.wishlistItemId)?.name ?? t("spending.wishlistItem")}
                       </span>
                     )}
                   </div>

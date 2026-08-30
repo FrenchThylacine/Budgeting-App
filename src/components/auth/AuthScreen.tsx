@@ -126,10 +126,10 @@ export const AuthScreen: React.FC = () => {
   }
 
   const copy = {
-    signin: { title: t("auth.welcomeBack"), sub: "Sign in to your budget.", action: "Sign in" },
-    signup: { title: t("auth.createYourAccount"), sub: "Your budget stays private to you.", action: "Create account" },
-    forgot: { title: t("auth.resetYourPassword"), sub: "We'll email you a link.", action: "Send reset link" },
-    reset: { title: t("auth.chooseANewPassword"), sub: "This link works once.", action: "Update password" },
+    signin: { title: t("auth.welcomeBack"), sub: t("auth.signInSub"), action: t("auth.signIn") },
+    signup: { title: t("auth.createYourAccount"), sub: t("auth.signUpSub"), action: t("auth.createAccount") },
+    forgot: { title: t("auth.resetYourPassword"), sub: t("auth.forgotSub"), action: t("auth.sendResetLink") },
+    reset: { title: t("auth.chooseANewPassword"), sub: t("auth.resetSub"), action: t("auth.updatePassword") },
   }[mode];
 
   return (
@@ -180,7 +180,7 @@ export const AuthScreen: React.FC = () => {
         {mode !== "forgot" && (
           <label className="auth-field">
             <span className="text-caption">
-              {mode === "signin" ? "Password" : "New password"}
+              {t(mode === "signin" ? "auth.password" : "auth.newPassword")}
             </span>
             <div className="auth-password">
               <input
@@ -199,7 +199,7 @@ export const AuthScreen: React.FC = () => {
                 type="button"
                 className="btn btn-ghost btn-icon auth-eye"
                 onClick={() => setShowPassword((v) => !v)}
-                aria-label={showPassword ? "Hide password" : "Show password"}
+                aria-label={t(showPassword ? "auth.hidePassword" : "auth.showPassword")}
               >
                 {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
               </button>

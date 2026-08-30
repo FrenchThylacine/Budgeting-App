@@ -41,6 +41,8 @@ import {
 } from "lucide-react";
 import { EditorSheet } from "../ui/EditorSheet";
 import { useTranslation } from "../../i18n/useTranslation";
+import { storedText } from "../../domain/storedText";
+import { FUNDING_META } from "../../domain/funding";
 import {
   dashboardWidgets,
   moveWidget,
@@ -156,7 +158,7 @@ export const Dashboard: React.FC<{ onNavigate?: (tab: "spending" | "activities" 
   const stats = useMemo(() => spendingStats(periodEntries, snapshot), [periodEntries, snapshot]);
   const pacing = useMemo(() => budgetPacing(snapshot, periodEntries), [snapshot, periodEntries]);
   const categories = useMemo(() => categoryBreakdown(periodEntries, snapshot), [periodEntries, snapshot]);
-  const comparison = useMemo(() => periodComparison(snapshot, settings), [snapshot, settings]);
+  const comparison = useMemo(() => periodComparison(snapshot, settings, language), [snapshot, settings, language]);
   const overCap = useMemo(() => categoriesOverCap(categories), [categories]);
   const health = useMemo(
     () => financialHealth({ pacing, categories, comparison, stats }),
@@ -190,7 +192,7 @@ export const Dashboard: React.FC<{ onNavigate?: (tab: "spending" | "activities" 
 
   const categoryRows: HorizontalBarRow[] = categories.slice(0, 6).map((stat) => ({
     id: stat.categoryId,
-    label: stat.category?.name ?? "Uncategorized",
+    label: stat.category?.name ?? t("common.uncategorised"),
     value: stat.total,
     color: stat.category?.color ?? "var(--series-1)",
     caption:
@@ -202,7 +204,7 @@ export const Dashboard: React.FC<{ onNavigate?: (tab: "spending" | "activities" 
         ? `${stat.share.toFixed(0)}% of spending`
         : undefined,
     marker: stat.cap != null ? { value: stat.cap, label: `Cap ${money(stat.cap)}` } : undefined,
-    badge: stat.overCap ? "Over cap" : undefined,
+    badge: stat.overCap ? t("dashboard.overCap") : undefined,
     badgeTone: stat.overCap ? ("danger" as const) : undefined,
   }));
 
@@ -219,7 +221,7 @@ export const Dashboard: React.FC<{ onNavigate?: (tab: "spending" | "activities" 
       currency: settings.baseCurrency,
       status,
       recurringTotal: suggestion.recurringTotal,
-      note: status === "approved" ? "Approved from dashboard" : "Rejected from dashboard",
+      note: storedText(status === "approved" ? "approval.approvedHere" : "approval.rejectedHere"),
     });
   };
 
@@ -316,7 +318,7 @@ export const Dashboard: React.FC<{ onNavigate?: (tab: "spending" | "activities" 
                   </div>
                   <div className="text-caption" style={{ marginTop: 4 }}>
                     {overCap
-                      .map((s) => `${s.category?.name ?? "Uncategorized"} (${money(s.total - (s.cap ?? 0))} over)`)
+                      .map((s) => `${s.category?.name ?? t("common.uncategorised")} (${t("dashboard.overBy", { amount: money(s.total - (s.cap ?? 0)) })})`)
                       .join(" · ")}
                   </div>
                 </div>
@@ -409,8 +411,8 @@ export const Dashboard: React.FC<{ onNavigate?: (tab: "spending" | "activities" 
                     {pacing != null
                       ? `${Math.round(pacing.utilisation ?? 0)}% of ${money(pacing.budget)} used`
                       : mode !== "month"
-                      ? "Budget applies to month view"
-                      : "No monthly budget set"}
+                      ? t("dashboard.budgetIsMonthly")
+                      : t("dashboard.noMonthlyBudget")}
                   </div>
                   {pacing != null && (
                     <div className="progress-track" style={{ marginTop: 10 }}>
@@ -432,28 +434,35 @@ export const Dashboard: React.FC<{ onNavigate?: (tab: "spending" | "activities" 
               <Card>
                 <CardBody>
                   <div className="text-footnote" style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
-                    <Zap size={14} /> {mode === "week" ? "Week" : mode === "year" ? "Year" : "Month"} spending
+                    <Zap size={14} />{" "}
+                    {t(mode === "week" ? "dashboard.weekSpending" : mode === "year" ? "dashboard.yearSpending" : "dashboard.monthSpending")}
                   </div>
-                  <div className="text-headline money">{stats.total != null ? money(stats.total) : "No data"}</div>
+                  <div className="text-headline money">{stats.total != null ? money(stats.total) : t("common.noData")}</div>
                   <div className="text-caption" style={{ marginTop: 4 }}>
-                    {stats.count} transaction{stats.count !== 1 ? "s" : ""}
-                    {stats.average != null ? ` · ${money(stats.average)} average` : ""}
+                    {t("dashboard.transactionCount", { count: stats.count })}
+                    {stats.average != null ? ` · ${t("dashboard.averageAmount", { amount: money(stats.average) })}` : ""}
                   </div>
-                  {/* Money this budget did not pay for is recorded but not
-                      charged here, so the card says so rather than leaving a
-                      gap between this figure and the transaction list.
-
-                      Two lines rather than one: "somebody else paid" and "my
-                      money, kept off this budget" are different facts, and a
-                      single merged line answers neither question. */}
-                  {funding.otherFundedCount > 0 && (
-                    <div className="text-caption" style={{ marginTop: 6, color: "var(--warning-text)" }}>
-                      Plus {money(funding.otherFunded)} paid by others — recorded, not charged to your budget.
-                    </div>
-                  )}
-                  {funding.outsideBudgetCount > 0 && (
-                    <div className="text-caption" style={{ marginTop: 4, color: "var(--warning-text)" }}>
-                      Plus {money(funding.outsideBudget)} you keep outside this budget — recorded, not charged to it.
+                  {/* Money this budget did not pay for, in the vocabulary the
+                      rest of the application uses for it: the glyph, the
+                      colour and the amount. It used to be two sentences
+                      explaining, on every visit, a rule that the badge beside
+                      every such transaction already states. */}
+                  {(funding.otherFundedCount > 0 || funding.outsideBudgetCount > 0) && (
+                    <div className="funding-chips">
+                      {funding.otherFundedCount > 0 && (
+                        <span className="funding-chip" data-funding="other" title={t("funding.other.hint")}>
+                          <span className="funding-glyph" aria-hidden="true">{FUNDING_META.other.glyph}</span>
+                          {money(funding.otherFunded)}
+                          <span className="funding-chip-label">{t("funding.other.short")}</span>
+                        </span>
+                      )}
+                      {funding.outsideBudgetCount > 0 && (
+                        <span className="funding-chip" data-funding="outside" title={t("funding.outside.hint")}>
+                          <span className="funding-glyph" aria-hidden="true">{FUNDING_META.outside.glyph}</span>
+                          {money(funding.outsideBudget)}
+                          <span className="funding-chip-label">{t("funding.outside.short")}</span>
+                        </span>
+                      )}
                     </div>
                   )}
                 </CardBody>
@@ -480,8 +489,10 @@ export const Dashboard: React.FC<{ onNavigate?: (tab: "spending" | "activities" 
                   </div>
                   <div className="text-caption" style={{ marginTop: 4 }}>
                     {comparison.deltaPct != null
-                      ? `${comparison.deltaPct > 0 ? "+" : ""}${comparison.deltaPct.toFixed(1)}% vs previous ${mode}`
-                      : "Previous period has no recorded data"}
+                      ? t("dashboard.vsPrevious", {
+                          delta: `${comparison.deltaPct > 0 ? "+" : ""}${comparison.deltaPct.toFixed(1)}%`,
+                        })
+                      : t("dashboard.noPreviousData")}
                   </div>
                 </CardBody>
               </Card>
@@ -499,8 +510,7 @@ export const Dashboard: React.FC<{ onNavigate?: (tab: "spending" | "activities" 
                 <EmptyState title={t("dashboard.noSpendingData")} description={t("dashboard.recordTransactionsToSeeThe")} />
               ) : (
                 <BarChart
-                  title={mode === "week" ? "Weekly trend" : "Monthly trend"}
-                  description={mode === "week" ? "Spending per ISO week" : "Spending per month, against your budget"}
+                  title={t(mode === "week" ? "dashboard.trendWeekly" : "dashboard.trendMonthly")}
                   bars={trendBars.map((bar) => ({ label: bar.label, value: bar.value, highlight: bar.highlight }))}
                   height={190}
                   referenceLines={budgetReference}
@@ -519,11 +529,10 @@ export const Dashboard: React.FC<{ onNavigate?: (tab: "spending" | "activities" 
                 <>
                   <LineChart
                     title={t("dashboard.forecast")}
-                    description={t("dashboard.cumulativeSpendProjectedToThe")}
                     labels={forecast.labels}
                     series={[
-                      { id: "actual", name: "Actual", color: "var(--series-1)", values: forecast.actual, area: true },
-                      { id: "projected", name: "Projected", color: "var(--series-2)", values: forecast.projected, dashed: true },
+                      { id: "actual", name: t("chart.actual"), color: "var(--series-1)", values: forecast.actual, area: true },
+                      { id: "projected", name: t("chart.projected"), color: "var(--series-2)", values: forecast.projected, dashed: true },
                     ]}
                     referenceLines={
                       forecast.budget != null
@@ -555,7 +564,7 @@ export const Dashboard: React.FC<{ onNavigate?: (tab: "spending" | "activities" 
         {/* Everything below is reference rather than answer: it explains figures
             already stated above. Collapsed by default on a phone, where it is
             several screens of scrolling past the part people came for. */}
-        <Disclosure title={t("report.detail")} summary={t("dashboard.categorySplitAndRecurringShare")}>
+        <Disclosure title={t("report.detail")}>
         <div className="dashboard-row">
           <Card>
             <CardBody>
@@ -575,8 +584,8 @@ export const Dashboard: React.FC<{ onNavigate?: (tab: "spending" | "activities" 
                 title={t("dashboard.recurringVsOneOff")}
                 description={t("dashboard.howMuchOfThisPeriod")}
                 segments={[
-                  { id: "recurring", label: "Recurring", value: stats.recurringTotal, color: "var(--series-1)" },
-                  { id: "oneoff", label: "One-off", value: stats.oneOffTotal, color: "var(--series-2)" },
+                  { id: "recurring", label: t("common.recurring"), value: stats.recurringTotal, color: "var(--series-1)" },
+                  { id: "oneoff", label: t("common.oneOff"), value: stats.oneOffTotal, color: "var(--series-2)" },
                 ]}
                 centerValue={stats.total != null ? money(stats.total) : "—"}
                 centerLabel="total"
@@ -645,7 +654,7 @@ export const Dashboard: React.FC<{ onNavigate?: (tab: "spending" | "activities" 
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
                   <div>
                     <div className="text-title">
-                      {existingApproval.status === "approved" ? "Budget approved" : "Budget suggestion rejected"}
+                      {t(existingApproval.status === "approved" ? "dashboard.budgetApproved" : "dashboard.budgetRejected")}
                     </div>
                     <div className="text-caption" style={{ marginTop: 4 }}>
                       {monthName(existingApproval.month)} {existingApproval.year} · suggested{" "}
@@ -653,7 +662,7 @@ export const Dashboard: React.FC<{ onNavigate?: (tab: "spending" | "activities" 
                     </div>
                   </div>
                   <Badge tone={existingApproval.status === "approved" ? "success" : "neutral"}>
-                    {existingApproval.status === "approved" ? "Approved" : "Rejected"}
+                    {t(existingApproval.status === "approved" ? "common.approved" : "common.rejected")}
                   </Badge>
                 </div>
               </CardBody>
@@ -675,10 +684,9 @@ export const Dashboard: React.FC<{ onNavigate?: (tab: "spending" | "activities" 
     ),
     savings: (
       <>
-        <Disclosure title={t("dashboard.savingsAndWallet")} summary={t("dashboard.personalWalletRolloverWishlistYear")}>
+        <Disclosure title={t("dashboard.savingsAndWallet")}>
           <Card>
             <CardBody>
-              <h2 className="text-title" style={{ margin: "0 0 12px" }}>{t("dashboard.savingsAndWallet")}</h2>
               <div style={{ display: "grid", gap: 14 }}>
                 <div>
                   <div className="text-footnote" style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>

@@ -1,4 +1,5 @@
 import React from "react";
+import { useTranslation } from "../../i18n/useTranslation";
 import {
   CategoryAxis,
   ChartFrame,
@@ -57,6 +58,7 @@ export const StackedBarChart: React.FC<StackedBarChartProps> = ({
   emphasisIndex,
   ...naming
 }) => {
+  const { t } = useTranslation();
   const { tooltip, show, hide } = useChartTooltip();
   const tickFormat = formatTick ?? formatValue;
 
@@ -175,7 +177,7 @@ export const StackedBarChart: React.FC<StackedBarChartProps> = ({
                           value: item.values[index] == null ? "No data" : formatValue(item.values[index] as number),
                           color: item.color,
                         })),
-                        { label: "Total", value: formatValue(total) },
+                        { label: t("chart.total"), value: formatValue(total) },
                       ],
                     })
                   }

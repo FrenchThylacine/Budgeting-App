@@ -380,8 +380,8 @@ export const CategoryManager: React.FC = () => {
                 variant="ghost"
                 icon
                 onClick={() => (isEditing ? cancelEdit() : beginEdit(cat))}
-                aria-label={isEditing ? "Cancel edit" : "Edit category"}
-                title={isEditing ? "Cancel" : "Edit"}
+                aria-label={t(isEditing ? "categories.cancelEdit" : "categories.editCategory")}
+                title={t(isEditing ? "common.cancel" : "common.edit")}
               >
                 {isEditing ? <X size={14} /> : <Pencil size={14} />}
               </Button>

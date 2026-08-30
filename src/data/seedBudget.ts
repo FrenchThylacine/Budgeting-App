@@ -198,7 +198,18 @@ export function createSeedBudgetSnapshot(
       selectedPeriodMode: "month",
       selectedSeason: "normal",
       baseCurrency: "EUR",
-      currencyDisplayMode: "both",
+      /*
+       * The symbol alone.
+       *
+       * This was "both", so every figure in the application read "€ EUR
+       * 1,400" — the symbol and its own ISO code, side by side, on a screen
+       * where the display currency is stated once at the top and never
+       * changes. It made every number a third wider, and the widths were what
+       * pushed the summary cards into the wrapping that made them look like
+       * paragraphs. "Both" is still offered, for a budget that genuinely runs
+       * in two currencies whose symbols collide ($ and $).
+       */
+      currencyDisplayMode: "symbol",
       roundingRule: "nearest-1",
       autoWishlistFlushEnabled: true,
       liveClockEnabled: true,

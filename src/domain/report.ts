@@ -191,7 +191,7 @@ export function buildPeriodReport(
    */
   const pacing = custom ? null : budgetPacing(scoped, entries, now);
   const categories = categoryBreakdown(entries, scoped, custom ? false : undefined);
-  const comparison = custom ? rangeComparison(scoped, custom, locale) : periodComparison(scoped, settings);
+  const comparison = custom ? rangeComparison(scoped, custom, locale) : periodComparison(scoped, settings, locale);
   const health = financialHealth({ pacing, categories, comparison, stats });
 
   const money = (value: number | null | undefined) =>
@@ -482,8 +482,17 @@ function escapeHtml(value: string): string {
 
 /** The three funding colours, as real values: a printed page has no CSS variables. */
 const FUNDING_COLOUR: Record<FundingKind, string> = {
-  personal: "#1E5AA8",
-  other: "#0B7C8C",
+  /*
+   * Three inks that stay three inks in greyscale.
+   *
+   * "Paid by me" and "paid by other" are both blue on screen, which is the
+   * vocabulary the interface uses — but two blues of the same weight print as
+   * one grey. These are separated by *lightness* rather than by hue: a deep
+   * navy, a mid sky blue and an amber convert to three visibly different
+   * greys. The glyphs and the written labels carry it the rest of the way.
+   */
+  personal: "#1B4B8F",
+  other: "#2E8BD8",
   outside: "#B45309",
 };
 

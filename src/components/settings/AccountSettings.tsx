@@ -171,7 +171,7 @@ export const AccountSettings: React.FC = () => {
                 Cancel
               </Button>
               <Button type="submit" variant="primary" size="sm" disabled={busy || mismatch}>
-                {busy ? "Saving…" : mode === "email" ? "Change email" : "Change password"}
+                {busy ? t("common.saving") : t(mode === "email" ? "account.changeEmail" : "account.changePassword")}
               </Button>
             </div>
           </form>

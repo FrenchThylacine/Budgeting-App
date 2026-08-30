@@ -277,7 +277,10 @@ export function numberLocale(): string | undefined {
 export function formatMoney(
   amount: number | null | undefined,
   currency: CurrencyCode,
-  mode: CurrencyDisplayMode = "both",
+  // The same default as a new budget's setting, so a caller that does not
+  // thread the preference through does not silently print a different format
+  // from the rest of the application.
+  mode: CurrencyDisplayMode = "symbol",
   options: { compact?: boolean; showSign?: boolean } = {},
 ): string {
   if (amount == null || Number.isNaN(amount)) return "NaN";

@@ -108,8 +108,7 @@ export const ScenarioApplyDialog: React.FC<ScenarioApplyDialogProps> = ({
         ) : (
           <>
             <p className="text-note" style={{ margin: "0 0 14px" }}>
-              {changes.length === 1 ? "One setting changes" : `${changes.length} settings change`}. Nothing
-              you have recorded is touched — spending, activities and history stay exactly as they are.
+              {t("scenario.settingsChange", { count: changes.length })}
             </p>
 
             <ul className="scenario-diff">

@@ -224,12 +224,9 @@ export const ScenarioLab: React.FC = () => {
             variant="secondary"
             size="sm"
             disabled={!mutable || activities.length === 0}
-            title={activities.length === 0 ? "Add some activities first" : undefined}
+            title={activities.length === 0 ? t("scenario.addActivitiesFirst") : undefined}
             onClick={() => {
-              const name = window.prompt(
-                `Name this arrangement of your ${activities.length} activities:`,
-                "Summer",
-              );
+              const name = window.prompt(t("scenario.nameThisArrangement", { count: activities.length }));
               if (!name?.trim()) return;
               captureSeason(name.trim(), name.trim().toLowerCase());
             }}

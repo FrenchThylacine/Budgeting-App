@@ -1,4 +1,5 @@
 import React from "react";
+import { useTranslation } from "../../i18n/useTranslation";
 import {
   ChartFrame,
   ChartPlaceholder,
@@ -46,6 +47,7 @@ export const DonutChart: React.FC<DonutChartProps> = ({
   emptyMessage = "No spending recorded for this period.",
   ...naming
 }) => {
+  const { t } = useTranslation();
   const { tooltip, show, hide } = useChartTooltip();
   const drawable = segments.filter((segment) => segment.value > 0);
   const total = drawable.reduce((sum, segment) => sum + segment.value, 0);
@@ -124,8 +126,8 @@ export const DonutChart: React.FC<DonutChartProps> = ({
                       y: anchor.y,
                       title: segment.label,
                       rows: [
-                        { label: "Amount", value: formatValue(segment.value), color: segment.color },
-                        { label: "Share", value: `${pct.toFixed(1)}%` },
+                        { label: t("chart.amount"), value: formatValue(segment.value), color: segment.color },
+                        { label: t("chart.share"), value: `${pct.toFixed(1)}%` },
                       ],
                     })
                   }

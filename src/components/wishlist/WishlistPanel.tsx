@@ -300,7 +300,7 @@ const EditForm: React.FC<EditFormProps> = ({ title, categories, currencies, draf
 // ─── Main panel ───────────────────────────────────────────────────────────────
 
 export const WishlistPanel: React.FC = () => {
-  const { t } = useTranslation();
+  const { t, formatDate } = useTranslation();
   const snapshot = useBudgetStore((s) => s.snapshot);
   const add = useBudgetStore((s) => s.addWishlistItem);
   const update = useBudgetStore((s) => s.updateWishlistItem);
@@ -329,13 +329,13 @@ export const WishlistPanel: React.FC = () => {
         // at and no undo on a phone — deleted without the confirmation, and
         // without the warning that a linked transaction stays behind, that the
         // deliberate button click showed.
-        return [{ label: "Delete", icon: <Trash2 size={18} />, destructive: true, onAction: () => handleDelete(item) }];
+        return [{ label: t("common.delete"), icon: <Trash2 size={18} />, destructive: true, onAction: () => handleDelete(item) }];
       case "buy":
         // Buying something already bought is not an action, so the panel is
         // simply absent rather than present and inert.
-        return item.bought ? [] : [{ label: "Buy", icon: <ShoppingBag size={18} />, onAction: () => startPurchase(item) }];
+        return item.bought ? [] : [{ label: t("wishlist.buy"), icon: <ShoppingBag size={18} />, onAction: () => startPurchase(item) }];
       case "edit":
-        return [{ label: "Edit", icon: <Pencil size={18} />, onAction: () => startEdit(item) }];
+        return [{ label: t("common.edit"), icon: <Pencil size={18} />, onAction: () => startEdit(item) }];
       default:
         return [];
     }
@@ -648,14 +648,14 @@ export const WishlistPanel: React.FC = () => {
       {/* The one editor, at the panel root rather than inside a card. */}
       {mutable && editorId && draft && (
         <EditForm
-          title={editorId === "new" ? "New wishlist item" : `Edit ${editingItem?.name ?? "item"}`}
+          title={editorId === "new" ? t("wishlist.newItem") : t("common.editNamed", { name: editingItem?.name ?? t("common.thatItem") })}
           categories={categoryOptions}
           currencies={currencyOptionsFor(settings, draft.currency as CurrencyCode)}
           draft={draft}
           onChange={(patch) => setDraft((current) => (current ? { ...current, ...patch } : current))}
           onSave={saveEditor}
           onCancel={resetForms}
-          submitLabel={editorId === "new" ? "Add item" : "Save changes"}
+          submitLabel={t(editorId === "new" ? "wishlist.addItem" : "common.saveChanges")}
         />
       )}
 
@@ -735,10 +735,10 @@ export const WishlistPanel: React.FC = () => {
         <EmptyState
           title={
             view === "active"
-              ? "No active wishlist items"
+              ? t("wishlist.noneActive")
               : view === "bought"
-                ? "Nothing bought yet"
-                : "Your wishlist is empty"
+                ? t("wishlist.noneBought")
+                : t("wishlist.empty")
           }
           description={t("wishlist.saveFuturePurchasesWithoutMixing")}
         />
@@ -911,8 +911,8 @@ export const WishlistPanel: React.FC = () => {
                   {item.bought && (
                     <span className="badge badge-success">
                       {item.datePurchased
-                        ? `Bought ${new Date(item.datePurchased).toLocaleDateString()}`
-                        : "Bought"}
+                        ? t("wishlist.boughtOn", { date: formatDate(item.datePurchased) })
+                        : t("wishlist.bought")}
                     </span>
                   )}
                   {linked && (
@@ -923,7 +923,7 @@ export const WishlistPanel: React.FC = () => {
                       style={{ border: "none", cursor: "pointer", fontFamily: "inherit" }}
                       aria-expanded={showLink}
                     >
-                      <Receipt size={11} /> {showLink ? "Hide transaction" : "View transaction"}
+                      <Receipt size={11} /> {t(showLink ? "wishlist.hideTransaction" : "wishlist.viewTransaction")}
                     </button>
                   )}
                   {!item.inWishlist && <span className="badge badge-neutral">{t("wishlist.notInWishlist")}</span>}
