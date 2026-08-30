@@ -451,6 +451,29 @@ describe("share of the yearly total", () => {
     expect(summary.shares.map((share) => share.activity.name)).toEqual(["Gym", "Arabic"]);
   });
 
+  it("answers the specification's own worked example", () => {
+    /*
+     * Gym €600 and Tennis €300 out of the user's pocket; Navigraph €140 paid
+     * by somebody else. The whole is €900, not €1,040, so the two shares are
+     * two thirds and one third — and the €140 is nowhere in either figure.
+     */
+    const tennis = activity({ name: "Tennis", costModel: "fixedYearly", yearlyEstimate: 300, nextRenewalDate: "2026-06-01" });
+    const navigraph = activity({
+      name: "Navigraph",
+      costModel: "fixedYearly",
+      yearlyEstimate: 140,
+      nextRenewalDate: "2026-09-14",
+      fundingSource: "other",
+      fundedBy: "Dad",
+    });
+    const summary = activityBudgetSummary(snapshotWith([mine, tennis, navigraph]), 2026, 8);
+    expect(summary.shares.map((share) => share.activity.name)).toEqual(["Gym", "Tennis"]);
+    expect(summary.shares[0].share).toBeCloseTo(66.6667, 3);
+    expect(summary.shares[1].share).toBeCloseTo(33.3333, 3);
+    expect(summary.yearly.personal).toBeCloseTo(900, 6);
+    expect(summary.externallyFundedCount).toBe(1);
+  });
+
   it("reports how many were left out, so the omission is visible", () => {
     const summary = activityBudgetSummary(snapshotWith([mine, dads, elsewhere]), 2026, 8);
     expect(summary.externallyFundedCount).toBe(2);

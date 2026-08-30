@@ -70,6 +70,7 @@ import { Button } from "../ui/Button";
 import { EmptyState } from "../ui/EmptyState";
 import { Field, FieldGroup } from "../ui/Field";
 import { Section } from "../ui/Section";
+import { FundingMark } from "../ui/FundingMark";
 import { activityBudgetSummary, fundingShares, type ActivityMonthCost } from "../../domain/activityBudget";
 import { FUNDING_KINDS, FUNDING_META, FUNDING_SOURCES, activityFundingKind, fundedByName, type FundingKind } from "../../domain/funding";
 import { useTranslation } from "../../i18n/useTranslation";
@@ -1118,15 +1119,10 @@ export const ActivityPanel: React.FC = () => {
                           default. "Paid by me" on every card would be noise;
                           the other two change what the totals mean. */}
                       {activityFundingKind(activity) !== "personal" && (
-                        <span
-                          className="funding-badge"
-                          data-funding={activityFundingKind(activity)}
-                          title={t(`funding.${activityFundingKind(activity)}.hint`)}
-                        >
-                          <span aria-hidden="true">{FUNDING_META[activityFundingKind(activity)].glyph}</span>
-                          {t(`funding.${activityFundingKind(activity)}.short`)}
-                          {fundedByName(activity) ? ` · ${fundedByName(activity)}` : ""}
-                        </span>
+                        <FundingMark
+                          kind={activityFundingKind(activity)}
+                          detail={fundedByName(activity) || undefined}
+                        />
                       )}
                     </div>
                     {/* One meta line, not three.

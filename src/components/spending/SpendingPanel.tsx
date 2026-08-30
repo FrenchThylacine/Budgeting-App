@@ -29,6 +29,7 @@ import { EmptyState } from "../ui/EmptyState";
 import { Section } from "../ui/Section";
 import { EditorSheet } from "../ui/EditorSheet";
 import { SwipeRow } from "../ui/SwipeRow";
+import { FundingMark } from "../ui/FundingMark";
 import { gesturesFor } from "../../domain/gestures";
 import type { SwipeActionId } from "../../domain/types";
 
@@ -243,14 +244,18 @@ export const SpendingPanel: React.FC = () => {
         .flatMap((record) => record.spendingEntries)
         .find((entry) => entry.id === result.spendingId);
       setNotice(
-        `"${itemName}" is already linked to a transaction${
-          other ? ` of ${formatMoney(other.amount, other.currency, snapshot.settings.currencyDisplayMode)} on ${other.date}` : ""
-        }. Unlink that one first if this is the real purchase.`,
+        other
+          ? t("spending.alreadyLinkedWithDetail", {
+              name: itemName,
+              amount: formatMoney(other.amount, other.currency, snapshot.settings.currencyDisplayMode),
+              date: other.date,
+            })
+          : t("spending.alreadyLinkedPlain", { name: itemName }),
       );
       return false;
     }
     if (result.status === "locked") {
-      setNotice("This period is historical and read-only.");
+      setNotice(t("common.readOnly"));
       return false;
     }
     if (result.status === "not-found") {
@@ -344,7 +349,7 @@ export const SpendingPanel: React.FC = () => {
   const confirmDelete = (entry: SpendingEntry) => {
     const linkedItem = entry.wishlistItemId ? wishlistById.get(entry.wishlistItemId) : undefined;
     const warning = linkedItem
-      ? `\n\n"${linkedItem.name}" will be unlinked from it and stays in your wishlist.`
+      ? `\n\n${t("spending.deleteUnlinkWarning", { name: linkedItem.name })}`
       : "";
     if (window.confirm(`${t("spending.confirmDelete")}${warning}`)) {
       remove(entry.id);
@@ -708,14 +713,7 @@ export const SpendingPanel: React.FC = () => {
                         is one. "Paid by other" and "Outside budget" behave the
                         same against the budget and mean different things. */}
                     {isExternallyFunded(entry) && (
-                      <span
-                        className="funding-badge"
-                        data-funding={entryFundingKind(entry)}
-                        title={t(`funding.${entryFundingKind(entry)}.hint`)}
-                      >
-                        <span aria-hidden="true">{FUNDING_META[entryFundingKind(entry)].glyph}</span>
-                        {t(`funding.${entryFundingKind(entry)}.short`)}
-                      </span>
+                      <FundingMark kind={entryFundingKind(entry)} />
                     )}
                     {entry.activityId && activityById.get(entry.activityId) && (
                       <span className="badge badge-info" title={t("spending.activity")}>

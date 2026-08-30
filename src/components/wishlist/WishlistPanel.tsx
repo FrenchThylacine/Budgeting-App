@@ -475,9 +475,12 @@ export const WishlistPanel: React.FC = () => {
   const handleDelete = (item: WishlistItem) => {
     const linked = findLinkedEntry(item.id);
     const warning = linked
-      ? `\n\nThe linked transaction (${formatMoney(linked.amount, linked.currency, settings.currencyDisplayMode)} on ${linked.date}) stays in your spending.`
+      ? `\n\n${t("wishlist.deleteLinkedWarning", {
+          amount: formatMoney(linked.amount, linked.currency, settings.currencyDisplayMode),
+          date: linked.date,
+        })}`
       : "";
-    if (window.confirm(`Delete "${item.name}" from your wishlist?${warning}`)) {
+    if (window.confirm(`${t("wishlist.deleteConfirm", { name: item.name })}${warning}`)) {
       remove(item.id);
       resetForms();
     }
@@ -493,7 +496,7 @@ export const WishlistPanel: React.FC = () => {
       case "already-linked":
         setNotice({
           tone: "warning",
-          message: `${item.name} is already linked to a transaction — showing it instead of adding a second one.`,
+          message: t("wishlist.alreadyLinkedNotice", { name: item.name }),
         });
         setExpandedLinkId(item.id);
         resetForms();
@@ -502,15 +505,15 @@ export const WishlistPanel: React.FC = () => {
         setNotice({
           tone: "info",
           message: result.spendingId
-            ? `${item.name} is no longer marked bought. The transaction it was linked to is still in your spending — delete it there if it was a mistake.`
-            : `${item.name} is no longer marked bought.`,
+            ? t("wishlist.unlinkedWithTransaction", { name: item.name })
+            : t("wishlist.unlinkedPlain", { name: item.name }),
         });
         break;
       case "locked":
-        setNotice({ tone: "warning", message: "This period is historical and read-only." });
+        setNotice({ tone: "warning", message: t("common.readOnly") });
         break;
       case "invalid-amount":
-        setNotice({ tone: "warning", message: "Enter an amount before recording this purchase (0 is allowed)." });
+        setNotice({ tone: "warning", message: t("wishlist.enterAmountFirst") });
         break;
       case "not-found":
         setNotice({ tone: "warning", message: t("wishlist.itemGone") });
@@ -543,7 +546,7 @@ export const WishlistPanel: React.FC = () => {
     if (!purchaseDraft) return;
     const amount = parseAmount(purchaseDraft.amount);
     if (amount == null) {
-      setNotice({ tone: "warning", message: "Enter an amount before recording this purchase (0 is allowed)." });
+      setNotice({ tone: "warning", message: t("wishlist.enterAmountFirst") });
       return;
     }
     reportResult(
@@ -562,7 +565,7 @@ export const WishlistPanel: React.FC = () => {
     const result = setBought(item.id, true);
     resetForms();
     if (result.status === "updated") {
-      setNotice({ tone: "info", message: `${item.name} is marked bought. No transaction was recorded.` });
+      setNotice({ tone: "info", message: t("wishlist.markedBoughtNoTransaction", { name: item.name }) });
     } else {
       reportResult(result, item);
     }
@@ -573,7 +576,11 @@ export const WishlistPanel: React.FC = () => {
     if (
       linked &&
       !window.confirm(
-        `"${item.name}" is linked to a transaction of ${formatMoney(linked.amount, linked.currency, settings.currencyDisplayMode)} on ${linked.date}.\n\nUnmark it as bought and unlink them? The transaction stays in your spending — delete it there if it never happened.`,
+        `${t("wishlist.unmarkConfirm", {
+          name: item.name,
+          amount: formatMoney(linked.amount, linked.currency, settings.currencyDisplayMode),
+          date: linked.date,
+        })}\n\n${t("wishlist.unmarkConfirmQuestion")}`,
       )
     ) {
       return;

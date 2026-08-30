@@ -289,7 +289,10 @@ export const ScenarioLab: React.FC = () => {
                       onClick={() => {
                         if (
                           window.confirm(
-                            `Apply "${season.name}"?\n\nThis changes whether ${covered} activit${covered === 1 ? "y is" : "ies are"} running, and what they cost. Your transactions are untouched, and you can undo it.`,
+                            `${t("scenario.applySeasonConfirm", { name: season.name })}\n\n${t(
+                              "scenario.applySeasonEffect",
+                              { count: covered },
+                            )}`,
                           )
                         ) {
                           applySeason(season.id);

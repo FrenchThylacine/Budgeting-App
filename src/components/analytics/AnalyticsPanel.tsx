@@ -317,7 +317,7 @@ export const AnalyticsPanel: React.FC = () => {
             />
 
             <div style={{ display: "grid", gap: 8, minWidth: 0 }}>
-              <span className="text-footnote">Spent · {currentPeriodLabel}</span>
+              <span className="text-footnote">{t("stats.spentPeriod", { period: currentPeriodLabel })}</span>
               <span style={{ fontSize: "clamp(1.75rem, 7vw, 2.5rem)", fontWeight: 700, lineHeight: 1.1 }}>
                 {total != null ? money(total) : t("common.noData")}
               </span>
@@ -334,16 +334,28 @@ export const AnalyticsPanel: React.FC = () => {
                 }}
               >
                 {comparison.deltaAbs != null
-                  ? `${comparison.deltaAbs > 0 ? "▲" : "▼"} ${money(Math.abs(comparison.deltaAbs))} vs ${comparison.previousLabel}`
+                  ? t("stats.deltaVsPrevious", {
+                      arrow: comparison.deltaAbs > 0 ? "▲" : "▼",
+                      amount: money(Math.abs(comparison.deltaAbs)),
+                      period: comparison.previousLabel,
+                    })
                   : t("stats.noComparable", { period: comparison.previousLabel })}
               </span>
-              <Sparkline
-                values={recentBars.map((bar) => bar.value)}
-                ariaLabel={t("stats.ariaRecent", { count: recentBars.length, period: t(`period.${mode}`) })}
-                fluid
-                height={38}
-              />
-              <span className="text-footnote">Last {recentBars.length} {mode}s</span>
+              {/* A sparkline needs two points to be a line, and the caption
+                  under it said "Last 8 months" in English on every one of the
+                  five languages — the period word was the raw enum with an "s"
+                  glued on. The line carries its own accessible name, which is
+                  where that sentence belongs, so the caption is gone rather
+                  than translated: it repeated what the axis of the chart above
+                  already shows. */}
+              {recentBars.length > 1 && (
+                <Sparkline
+                  values={recentBars.map((bar) => bar.value)}
+                  ariaLabel={t("stats.ariaRecent", { count: recentBars.length, period: t(`period.${mode}`) })}
+                  fluid
+                  height={38}
+                />
+              )}
             </div>
           </div>
 
@@ -364,7 +376,7 @@ export const AnalyticsPanel: React.FC = () => {
               {
                 label: t("stats.burnRate"),
                 value: utilisation != null ? `${utilisation.toFixed(0)}%` : "—",
-                detail: "of monthly budget",
+                detail: t("stats.ofMonthlyBudget"),
                 tone:
                   utilisation == null ? undefined : utilisation >= 100 ? "negative" : utilisation >= 80 ? "warning" : "positive",
               },
@@ -828,7 +840,7 @@ export const AnalyticsPanel: React.FC = () => {
             <StatRow
               items={[
                 {
-                  label: `vs ${comparison.previousLabel}`,
+                  label: t("dashboard.versus", { period: comparison.previousLabel }),
                   value:
                     comparison.deltaAbs != null
                       ? formatDualMoney(comparison.deltaAbs, settings, { showSign: true })
@@ -858,7 +870,7 @@ export const AnalyticsPanel: React.FC = () => {
                 {
                   label: t("stats.rolloverToDate"),
                   value: formatDualMoney(calc.wallet.rolloverTotal, settings, { showSign: true }),
-                  detail: "accumulated month-end rollovers",
+                  detail: t("stats.rolloverDetail"),
                   tone: calc.wallet.rolloverTotal >= 0 ? "positive" : "negative",
                 },
               ]}

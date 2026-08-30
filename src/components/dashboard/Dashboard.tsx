@@ -40,10 +40,10 @@ import {
   PiggyBank, SlidersHorizontal, TrendingDown, TrendingUp, Zap,
 } from "lucide-react";
 import { EditorSheet } from "../ui/EditorSheet";
+import { FundingMark } from "../ui/FundingMark";
 import { useTranslation } from "../../i18n/useTranslation";
 import type { Translator } from "../../domain/i18n";
 import { storedText } from "../../domain/storedText";
-import { FUNDING_META } from "../../domain/funding";
 import {
   dashboardWidgets,
   moveWidget,
@@ -203,10 +203,10 @@ export const Dashboard: React.FC<{ onNavigate?: (tab: "spending" | "activities" 
     caption:
       stat.cap != null
         ? stat.overCap
-          ? `${money(stat.total - stat.cap)} over cap`
-          : `${money(stat.cap - stat.total)} left of cap`
+          ? t("dashboard.overCapBy", { amount: money(stat.total - stat.cap) })
+          : t("dashboard.leftOfCap", { amount: money(stat.cap - stat.total) })
         : stat.share != null
-        ? `${stat.share.toFixed(0)}% of spending`
+        ? t("dashboard.percentOfSpending", { percent: stat.share.toFixed(0) })
         : undefined,
     marker: stat.cap != null ? { value: stat.cap, label: t("chart.capLine", { amount: money(stat.cap) }) } : undefined,
     badge: stat.overCap ? t("dashboard.overCap") : undefined,
@@ -415,12 +415,15 @@ export const Dashboard: React.FC<{ onNavigate?: (tab: "spending" | "activities" 
               <Card className={pacing && pacing.remaining < 0 ? "tone-card-danger" : "tone-card-accent"}>
                 <CardBody>
                   <div className="text-footnote" style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
-                    <PiggyBank size={14} /> Remaining
+                    <PiggyBank size={14} /> {t("wallet.remaining")}
                   </div>
                   <div className="text-headline money">{pacing != null ? money(pacing.remaining) : "—"}</div>
                   <div className="text-caption" style={{ marginTop: 4 }}>
                     {pacing != null
-                      ? `${Math.round(pacing.utilisation ?? 0)}% of ${money(pacing.budget)} used`
+                      ? t("dashboard.percentOfBudgetUsed", {
+                          percent: Math.round(pacing.utilisation ?? 0),
+                          amount: money(pacing.budget),
+                        })
                       : mode !== "month"
                       ? t("dashboard.budgetIsMonthly")
                       : t("dashboard.noMonthlyBudget")}
@@ -461,52 +464,48 @@ export const Dashboard: React.FC<{ onNavigate?: (tab: "spending" | "activities" 
                   {(funding.otherFundedCount > 0 || funding.outsideBudgetCount > 0) && (
                     <div className="funding-chips">
                       {funding.otherFundedCount > 0 && (
-                        <span className="funding-chip" data-funding="other" title={t("funding.other.hint")}>
-                          <span className="funding-glyph" aria-hidden="true">{FUNDING_META.other.glyph}</span>
-                          {money(funding.otherFunded)}
-                          <span className="funding-chip-label">{t("funding.other.short")}</span>
-                        </span>
+                        <FundingMark kind="other" variant="chip">{money(funding.otherFunded)}</FundingMark>
                       )}
                       {funding.outsideBudgetCount > 0 && (
-                        <span className="funding-chip" data-funding="outside" title={t("funding.outside.hint")}>
-                          <span className="funding-glyph" aria-hidden="true">{FUNDING_META.outside.glyph}</span>
-                          {money(funding.outsideBudget)}
-                          <span className="funding-chip-label">{t("funding.outside.short")}</span>
-                        </span>
+                        <FundingMark kind="outside" variant="chip">{money(funding.outsideBudget)}</FundingMark>
                       )}
                     </div>
                   )}
                 </CardBody>
               </Card>
 
-              <Card>
-                <CardBody>
-                  <div className="text-footnote" style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
-                    {comparison.deltaAbs != null && comparison.deltaAbs > 0 ? <TrendingUp size={14} /> : <TrendingDown size={14} />}
-                    vs {comparison.previousLabel}
-                  </div>
-                  <div
-                    className="text-headline money"
-                    style={{
-                      color:
-                        comparison.deltaAbs == null ? undefined
-                        : comparison.deltaAbs > 0 ? "var(--danger-text)"
-                        : "var(--success-text)",
-                    }}
-                  >
-                    {comparison.deltaAbs != null
-                      ? formatDualMoney(comparison.deltaAbs, settings, { showSign: true })
-                      : "No data"}
-                  </div>
-                  <div className="text-caption" style={{ marginTop: 4 }}>
-                    {comparison.deltaPct != null
-                      ? t("dashboard.vsPrevious", {
+              {/* Only when there is something to compare against.
+
+                  A first month has no month before it, and this card spent
+                  the whole of one saying so: a heading, the words "No data" at
+                  headline size, and a sentence explaining that nothing was
+                  recorded earlier. That is the same rule the trend chart below
+                  already follows — a card whose entire content is "we have no
+                  history" has no reason to exist — and it was not being
+                  applied here. */}
+              {comparison.deltaAbs != null && (
+                <Card>
+                  <CardBody>
+                    <div className="text-footnote" style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
+                      {comparison.deltaAbs > 0 ? <TrendingUp size={14} /> : <TrendingDown size={14} />}
+                      {t("dashboard.versus", { period: comparison.previousLabel })}
+                    </div>
+                    <div
+                      className="text-headline money"
+                      style={{ color: comparison.deltaAbs > 0 ? "var(--danger-text)" : "var(--success-text)" }}
+                    >
+                      {formatDualMoney(comparison.deltaAbs, settings, { showSign: true })}
+                    </div>
+                    {comparison.deltaPct != null && (
+                      <div className="text-caption" style={{ marginTop: 4 }}>
+                        {t("dashboard.vsPrevious", {
                           delta: `${comparison.deltaPct > 0 ? "+" : ""}${comparison.deltaPct.toFixed(1)}%`,
-                        })
-                      : t("dashboard.noPreviousData")}
-                  </div>
-                </CardBody>
-              </Card>
+                        })}
+                      </div>
+                    )}
+                  </CardBody>
+                </Card>
+              )}
             </div>
           </div>
       </>
@@ -558,16 +557,6 @@ export const Dashboard: React.FC<{ onNavigate?: (tab: "spending" | "activities" 
                     formatValue={(v) => money(v)}
                     formatTick={compactNumber}
                   />
-                  {pacing?.projectedRemaining != null && (
-                    <div
-                      className="text-caption"
-                      style={{ marginTop: 10, color: pacing.projectedRemaining < 0 ? "var(--danger-text)" : "var(--success-text)" }}
-                    >
-                      {pacing.projectedRemaining < 0
-                        ? `On this pace you end ${money(Math.abs(pacing.projectedRemaining))} over budget.`
-                        : `On this pace you end with ${money(pacing.projectedRemaining)} left.`}
-                    </div>
-                  )}
                 </>
               )}
             </CardBody>
@@ -612,7 +601,11 @@ export const Dashboard: React.FC<{ onNavigate?: (tab: "spending" | "activities" 
                 <Figure
                   label={t("report.recurring")}
                   value={money(stats.recurringTotal)}
-                  detail={stats.recurringShare != null ? `${stats.recurringShare.toFixed(0)}% of spend` : undefined}
+                  detail={
+                    stats.recurringShare != null
+                      ? t("dashboard.percentOfSpend", { percent: stats.recurringShare.toFixed(0) })
+                      : undefined
+                  }
                 />
                 {/* The commitment this budget has to carry, not the gross.
                     An activity somebody else pays for costs real money and
@@ -739,10 +732,10 @@ export const Dashboard: React.FC<{ onNavigate?: (tab: "spending" | "activities" 
                       calculation.otherFundedYtdTotal > 0 || calculation.outsideBudgetYtdTotal > 0
                         ? [
                             calculation.otherFundedYtdTotal > 0
-                              ? `${money(calculation.otherFundedYtdTotal)} by others`
+                              ? t("dashboard.amountByOthers", { amount: money(calculation.otherFundedYtdTotal) })
                               : null,
                             calculation.outsideBudgetYtdTotal > 0
-                              ? `${money(calculation.outsideBudgetYtdTotal)} outside`
+                              ? t("dashboard.amountOutside", { amount: money(calculation.outsideBudgetYtdTotal) })
                               : null,
                           ]
                             .filter(Boolean)

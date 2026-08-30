@@ -112,6 +112,21 @@ type TabKey =
   | "categories"
   | "currencies";
 
+/**
+ * The tabs the period does not govern.
+ *
+ * Everything else on the shell reads the selected week, month or year:
+ * the dashboard and the statistics obviously, but also the wallet's month, the
+ * wishlist's and the scenario lab's year, and the history's notes. These three
+ * do not. A category is a category in August and in December; so is a
+ * currency; so is the dark-mode switch.
+ *
+ * A control that changes nothing on the screen it is on is worse than a
+ * missing one — it invites the reader to try it, and then teaches them that
+ * the app's controls are decoration.
+ */
+const PERIODLESS_TABS = new Set<TabKey>(["categories", "currencies", "settings"]);
+
 /*
  * The tab transition no longer takes a direction.
  *
@@ -450,7 +465,7 @@ export default function App() {
               `.period-bar` in the stylesheet: the fix was removing the blanket
               `z-index: 1` from every child of the main area, not adding a
               larger number here. */}
-          <PeriodSelector />
+          {PERIODLESS_TABS.has(activeTab) ? null : <PeriodSelector />}
 
           {isHistorical && (
             historicalEditUnlocked ? (

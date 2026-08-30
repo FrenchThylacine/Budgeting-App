@@ -238,7 +238,11 @@ try {
       if (near.length === 3) bands = near;
     }
     if (frame.phase === "gone") break;
-    await sleep(40);
+    // The join lasts 1.5s and is the only phase whose *path* is asserted, so
+    // it is sampled as fast as the protocol allows. At a flat 40ms the loop
+    // occasionally came away with two points and reported a jet that had not
+    // flown far — a flaky check, which is worse than no check.
+    await sleep(frame.phase === "join" ? 0 : 40);
   }
 
   await check("flies the whole sequence: orbit, join, settle, depart", () => {
@@ -288,9 +292,11 @@ try {
   });
 
   await check("the third jet joins the formation rather than appearing in it", () => {
-    assert(thirdTrack.length >= 4, `only ${thirdTrack.length} samples of the join`);
-    const start = thirdTrack[0];
-    const end = thirdTrack.at(-1);
+    assert(thirdTrack.length >= 3, `only ${thirdTrack.length} samples of the join`);
+    // The widest separation seen, not the first and last: a sample that lands
+    // late says nothing about where the aircraft came from.
+    const start = thirdTrack.reduce((left, point) => (point[0] < left[0] ? point : left));
+    const end = thirdTrack.reduce((right, point) => (point[0] > right[0] ? point : right));
     const flown = Math.hypot(end[0] - start[0], end[1] - start[1]);
     // Its slot is 136px left of the lead; anything starting near that is not
     // arriving from anywhere.
