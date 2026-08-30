@@ -1418,11 +1418,32 @@
   will-change: transform;
 }
 
-/* No transform of its own: the escort is a zero-sized grid box centring its
-   children on the point the script positions, so the artwork is already
-   centred. Translating it by half its size again would put the aeroplane up and
-   to the left of the position its trail is drawn from. */
-.boot-escort-art { filter: drop-shadow(0 3px 10px rgba(0, 0, 0, 0.45)); }
+/*
+ * Centred on the point the script positions — by arithmetic, not by hope.
+ *
+ * This used to carry a comment saying the zero-sized grid box above already
+ * centred it and that translating by half its size would push the aeroplane up
+ * and to the left. Both halves of that were wrong. A grid container with no
+ * height gives its item a zero-height area, and an item that overflows its area
+ * is aligned to the *start* of it, not the centre: measured on the page,
+ * `offsetTop` was 0 and the artwork's top-left corner sat exactly on the
+ * origin. So every escort was drawn about forty pixels from the point all the
+ * arithmetic used — and because the parent's `rotate` turns that offset with
+ * the heading, the aeroplane also swung around its own flight path as it
+ * turned.
+ *
+ * That is the whole of "the smoke is detached from the aircraft". The smoke was
+ * always at the exhaust; the aeroplane was not where the exhaust was. Absolute
+ * positioning and a half-size translate leave nothing for an alignment rule to
+ * decide.
+ */
+.boot-escort-art {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform: translate(-50%, -50%);
+  filter: drop-shadow(0 3px 10px rgba(0, 0, 0, 0.45));
+}
 
 /* The third jet is in the DOM from the first frame — decoding an image in the
    middle of the join is a dropped frame nobody misses — and is simply

@@ -113,6 +113,8 @@ try {
   const radii = [];
   /** Where the third jet was, sample by sample, while it was joining. */
   const thirdTrack = [];
+  /** The worst distance seen between an escort's artwork and its own origin. */
+  let spriteOffset = null;
   const deadline = Date.now() + 20000;
   while (Date.now() < deadline) {
     const frame = await page.evaluate(`
@@ -143,13 +145,19 @@ try {
              ever sees the regex. The file header warns about exactly this; it
              caught the project out once before and it has just done it again.
              (And no backticks in here either — they would end the literal.) */
-          const m = /translate3d\\(([-\\d.]+)px, ([-\\d.]+)px[^)]*\\)\\s*rotate\\(([-\\d.]+)deg\\)\\s*scale\\(([\\d.]+)\\)/.exec(escort.style.transform ?? '');
+          const m = /translate3d\\(([-\\d.]+)px, ([-\\d.]+)px[^)]*\\)\\s*rotate\\(([-\\d.]+)deg\\)\\s*scale\\(([\\d.]+)\\)\\s*scaleX\\(([\\d.]+)\\)/.exec(escort.style.transform ?? '');
           if (!m) continue;
-          const [cx, cy, deg, scale] = [Number(m[1]), Number(m[2]), Number(m[3]), Number(m[4])];
+          const [cx, cy, deg, scale, pitch] = [1, 2, 3, 4, 5].map((g) => Number(m[g]));
           track.push(Math.hypot(cx, cy));
           const rad = (deg * Math.PI) / 180;
-          const tx = cx - Math.cos(rad) * 28.16 * scale;
-          const ty = cy - Math.sin(rad) * 28.16 * scale;
+          /* The same chain the application uses, scaleX included: it is
+             applied after the rotate, so it shortens the sprite along its own
+             nose-to-tail axis and the exhaust moves with it. Leaving it out
+             here measured a tailpipe up to fourteen pixels from the drawn one
+             and called the result zero. */
+          const reach = 28.16 * scale * pitch;
+          const tx = cx - Math.cos(rad) * reach;
+          const ty = cy - Math.sin(rad) * reach;
           /*
            * A window around the tailpipe, not the whole canvas.
            *
@@ -189,6 +197,22 @@ try {
        * joining it. What is asserted below is that it comes from outside the
        * frame and covers real distance on the way in.
        */
+      /*
+       * How far the drawn artwork is from the point the script positions.
+       * getBoundingClientRect returns the axis-aligned box of the rotated
+       * element, and the centre of that box is the centre of the rotated
+       * rectangle — so this is exact whatever the heading.
+       */
+      let offset = null;
+      if (phase === 'orbit') {
+        const escort = document.querySelector('.boot-escort');
+        const art = escort?.firstElementChild;
+        if (escort && art) {
+          const eb = escort.getBoundingClientRect();
+          const ab = art.getBoundingClientRect();
+          offset = Math.round(Math.hypot(ab.x + ab.width / 2 - eb.x, ab.y + ab.height / 2 - eb.y));
+        }
+      }
       let third = null;
       const late = document.querySelector('.boot-escort-late');
       if (late && phase === 'join') {
@@ -225,13 +249,14 @@ try {
           bands = runs.filter((r) => r.to - r.from >= 4);
         }
       }
-      return { phase, layers, bands, gap, track, third };
+      return { phase, layers, bands, gap, track, third, offset };
     `);
     if (phases.at(-1) !== frame.phase) phases.push(frame.phase);
     for (const layer of frame.layers) depth.add(layer);
     if (frame.gap != null) emitterGap = emitterGap == null ? frame.gap : Math.min(emitterGap, frame.gap);
     for (const radius of frame.track ?? []) radii.push(radius);
     if (frame.third) thirdTrack.push(frame.third);
+    if (frame.offset != null) spriteOffset = spriteOffset == null ? frame.offset : Math.max(spriteOffset, frame.offset);
     // The three ribbons nearest the slots, once all three are laid down.
     if (frame.bands) {
       const near = frame.bands.filter((band) => band.from >= -80 && band.to <= 80);
@@ -289,6 +314,27 @@ try {
     const max = Math.max(...radii);
     assert(max - min > 40, `the track varies by only ${Math.round(max - min)}px — that is a ring`);
     return `${Math.round(min)}–${Math.round(max)}px from the lead`;
+  });
+
+  await check("the aeroplane is drawn where the arithmetic puts it", () => {
+    /*
+     * The defect that survived three passes of "the smoke is detached".
+     *
+     * The smoke was always at the exhaust. The *aeroplane* was not: the escort
+     * artwork is a child of a zero-sized box, and a grid item that overflows a
+     * zero-height area is aligned to the start of it, not centred — so the
+     * image's top-left corner sat on the origin and the aircraft was drawn
+     * about forty pixels from every position the maths computed. Because the
+     * parent's rotate turns that offset with the heading, it also swung the
+     * aeroplane around its own flight path as it manoeuvred.
+     *
+     * Nothing measured it, because every check compared numbers the script had
+     * produced with other numbers the script had produced. This one compares
+     * the script's origin with the pixels.
+     */
+    assert(spriteOffset != null, "never caught an escort in the routine");
+    assert(spriteOffset <= 6, `the artwork sits ${spriteOffset}px from the point it is positioned at`);
+    return `${spriteOffset}px between the sprite's centre and its origin`;
   });
 
   await check("the third jet joins the formation rather than appearing in it", () => {
