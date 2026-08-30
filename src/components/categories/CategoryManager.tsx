@@ -434,7 +434,7 @@ export const CategoryManager: React.FC = () => {
               }
               onSave={saveEdit}
               onCancel={cancelEdit}
-              submitLabel="Save changes"
+              submitLabel={t("common.saveChanges")}
               hideActions
             />
           </EditorSheet>
@@ -460,7 +460,7 @@ export const CategoryManager: React.FC = () => {
             onChange={(patch) => setAddDraft((d) => ({ ...d, ...patch }))}
             onSave={handleAdd}
             onCancel={() => { setShowAdd(false); setAddDraft(emptyDraft()); }}
-            submitLabel="Create category"
+            submitLabel={t("categories.createCategory")}
           />
         )}
       </Section>
@@ -493,7 +493,7 @@ export const CategoryManager: React.FC = () => {
               }}
               onClick={() => setShowArchived((v) => !v)}
             >
-              {showArchived ? "▾ Hide archived" : "▸ Show archived"}
+              {showArchived ? `▾ ${t("categories.hideArchived")}` : `▸ ${t("categories.showArchived")}`}
             </button>
           </div>
           {showArchived && (

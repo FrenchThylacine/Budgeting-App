@@ -74,8 +74,8 @@ export const ScenarioApplyDialog: React.FC<ScenarioApplyDialogProps> = ({
    * currency amount before.
    */
   const format = (value: number | boolean | string | null): string => {
-    if (value == null) return "not set";
-    if (typeof value === "boolean") return value ? "enabled" : "disabled";
+    if (value == null) return t("common.notSet");
+    if (typeof value === "boolean") return value ? t("common.enabled") : t("common.disabled");
     if (typeof value === "string") return value;
     return formatMoney(value, snapshot.settings.baseCurrency, snapshot.settings.currencyDisplayMode);
   };

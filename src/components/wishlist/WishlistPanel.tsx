@@ -198,7 +198,7 @@ const EditForm: React.FC<EditFormProps> = ({ title, categories, currencies, draf
             urlError ? (
               <span style={{ color: "var(--danger-text)" }}>{t("wishlist.enterAValidWebAddress")}</span>
             ) : (
-              "The shop this is bought from. Opened by the link on the card."
+              t("wishlist.sellerLinkHint")
             )
           }
         >

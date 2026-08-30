@@ -410,7 +410,7 @@ export const SpendingPanel: React.FC = () => {
         {mutable && open && (
           <EditorSheet
             title={editing ? t("spending.edit") : t("spending.new")}
-            subtitle={editing ? "Recorded on " + editing.date : undefined}
+            subtitle={editing ? t("spending.recordedOn", { date: editing.date }) : undefined}
             onClose={reset}
             footer={
               <>

@@ -48,13 +48,13 @@ export const HorizontalBarChart: React.FC<HorizontalBarChartProps> = ({
   description,
   formatValue = compactNumber,
   footer,
-  emptyMessage = "No spending recorded for this period.",
+  emptyMessage,
   ...naming
 }) => {
   const { t } = useTranslation();
   const { tooltip, show, hide } = useChartTooltip();
 
-  if (rows.length === 0) return <ChartPlaceholder height={120} message={emptyMessage} />;
+  if (rows.length === 0) return <ChartPlaceholder height={120} message={emptyMessage ?? t("report.noSpending")} />;
 
   const height = rows.length * ROW_HEIGHT;
   const valueTextOf = (row: HorizontalBarRow) => row.valueLabel ?? formatValue(row.value);
