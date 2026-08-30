@@ -187,7 +187,7 @@ export const Dashboard: React.FC<{ onNavigate?: (tab: "spending" | "activities" 
 
   const budgetReference: ChartReferenceLine[] =
     mode !== "week" && calculation.monthlyBudgetBase > 0
-      ? [{ value: calculation.monthlyBudgetBase, label: `Budget ${money(calculation.monthlyBudgetBase)}` }]
+      ? [{ value: calculation.monthlyBudgetBase, label: t("chart.budgetLine", { amount: money(calculation.monthlyBudgetBase) }) }]
       : [];
 
   const categoryRows: HorizontalBarRow[] = categories.slice(0, 6).map((stat) => ({
@@ -203,7 +203,7 @@ export const Dashboard: React.FC<{ onNavigate?: (tab: "spending" | "activities" 
         : stat.share != null
         ? `${stat.share.toFixed(0)}% of spending`
         : undefined,
-    marker: stat.cap != null ? { value: stat.cap, label: `Cap ${money(stat.cap)}` } : undefined,
+    marker: stat.cap != null ? { value: stat.cap, label: t("chart.capLine", { amount: money(stat.cap) }) } : undefined,
     badge: stat.overCap ? t("dashboard.overCap") : undefined,
     badgeTone: stat.overCap ? ("danger" as const) : undefined,
   }));
@@ -536,7 +536,7 @@ export const Dashboard: React.FC<{ onNavigate?: (tab: "spending" | "activities" 
                     ]}
                     referenceLines={
                       forecast.budget != null
-                        ? [{ value: forecast.budget, label: `Budget ${money(forecast.budget)}` }]
+                        ? [{ value: forecast.budget, label: t("chart.budgetLine", { amount: money(forecast.budget) }) }]
                         : []
                     }
                     formatValue={(v) => money(v)}

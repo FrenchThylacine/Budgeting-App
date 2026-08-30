@@ -126,7 +126,7 @@ export const UpcomingSchedule: React.FC<UpcomingScheduleProps> = ({ snapshot, mo
                           type="button"
                           className="btn btn-ghost btn-sm btn-icon upcoming-action"
                           onClick={() => setEditing({ activity: item.activity, date: item.date })}
-                          aria-label={`Change ${item.activity.name} on ${item.date.toLocaleDateString()}`}
+                          aria-label={t("dashboard.changeOccurrence", { name: item.activity.name, date: formatDate(item.date) })}
                           title={t("upcoming.skipMoveOrRepriceJust")}
                         >
                           <MoreHorizontal size={15} />
@@ -183,7 +183,7 @@ export const UpcomingSchedule: React.FC<UpcomingScheduleProps> = ({ snapshot, mo
           <CalendarClock size={12} aria-hidden="true" />
           {hiddenOccurrences > 0
             ? `${hiddenOccurrences} more in the next ${horizonDays} days`
-            : `Next ${horizonDays} days`}
+            : t("dashboard.nextDays", { count: horizonDays })}
         </p>
       )}
       {editing && (

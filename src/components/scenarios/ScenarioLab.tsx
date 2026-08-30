@@ -93,7 +93,7 @@ export const ScenarioLab: React.FC = () => {
                   className={`scenario-card${active ? " scenario-card-active" : ""}${mutable ? " editable-row" : ""}`}
                   role={mutable ? "button" : undefined}
                   tabIndex={mutable ? 0 : undefined}
-                  aria-label={mutable ? `Edit ${preset.name}` : undefined}
+                  aria-label={mutable ? t("common.editNamed", { name: preset.name }) : undefined}
                   onClick={(event) => {
                     if (!mutable) return;
                     const target = event.target as HTMLElement;

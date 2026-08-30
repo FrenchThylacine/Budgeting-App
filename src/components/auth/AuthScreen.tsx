@@ -87,7 +87,7 @@ export const AuthScreen: React.FC = () => {
 
     if (mode === "signup") {
       if (password.length < MIN_PASSWORD_LENGTH) {
-        setLocalError(`Use at least ${MIN_PASSWORD_LENGTH} characters.`);
+        setLocalError(t("auth.passwordTooShort", { count: MIN_PASSWORD_LENGTH }));
         return;
       }
       if (password !== confirmPassword) {
@@ -108,7 +108,7 @@ export const AuthScreen: React.FC = () => {
 
     if (mode === "reset" && resetToken) {
       if (password.length < MIN_PASSWORD_LENGTH) {
-        setLocalError(`Use at least ${MIN_PASSWORD_LENGTH} characters.`);
+        setLocalError(t("auth.passwordTooShort", { count: MIN_PASSWORD_LENGTH }));
         return;
       }
       if (password !== confirmPassword) {

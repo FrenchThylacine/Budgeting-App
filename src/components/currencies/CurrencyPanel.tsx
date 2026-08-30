@@ -15,8 +15,6 @@ import {
 import {
   applyRatesToSettings,
   fetchExchangeRates,
-  isDueForScheduledRefresh,
-  nextScheduledRefresh,
   noteRateFailure,
   rateFreshness,
 } from "../../domain/exchangeRates";
@@ -349,10 +347,15 @@ export const CurrencyPanel: React.FC = () => {
             </div>
           )}
 
+          {/* What actually happens, not the provider's release schedule.
+              This said "Rates refresh daily at 12:00 UTC" followed by a
+              timestamp — a clock nobody wants to plan around, describing an
+              internal rule. Rates refresh when the app is opened; the 12:00
+              boundary is one of two triggers behind that and is not a thing to
+              tell anybody about. */}
           <div className="text-note">
-            {t("currencies.ratesSchedule")}{" "}
-            {formatDate(nextScheduledRefresh(), { dateStyle: "medium", timeStyle: "short" } as Intl.DateTimeFormatOptions)}
-            {isDueForScheduledRefresh(settings.exchangeRates.ratesUpdatedAt) ? " · " + t("currencies.ratesStale") : ""}
+            {t("currencies.ratesSchedule")}
+            {freshness.state === "stale" ? ` · ${t("currencies.ratesStale")}` : ""}
           </div>
 
           {message && (

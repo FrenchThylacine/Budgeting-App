@@ -70,11 +70,6 @@ export function lastScheduledRefresh(now: number = Date.now()): Date {
   return new Date(boundary <= now ? boundary : boundary - 86_400_000);
 }
 
-/** The next 12:00 UTC strictly after `now`, for "next update" captions. */
-export function nextScheduledRefresh(now: number = Date.now()): Date {
-  return new Date(lastScheduledRefresh(now).getTime() + 86_400_000);
-}
-
 /**
  * True when the stored rates predate the most recent 12:00 UTC publication.
  *

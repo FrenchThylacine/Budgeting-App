@@ -245,7 +245,7 @@ export const ScenarioEditor: React.FC<ScenarioEditorProps> = ({ preset, snapshot
                   step="0.01"
                   value={caps[category.id] ?? ""}
                   onChange={(event) => setCaps((current) => ({ ...current, [category.id]: event.target.value }))}
-                  aria-label={`Cap for ${category.name}`}
+                  aria-label={t("scenario.capFor", { name: category.name })}
                   placeholder="—"
                 />
               </label>

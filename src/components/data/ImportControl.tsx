@@ -10,6 +10,7 @@ import { importJsonBackup, exportJson } from "../../domain/importExport";
 import { ImportPreviewDialog, type ImportPreview } from "../modals/ImportPreviewDialog";
 import { useBudgetStore } from "../../store/budgetStore";
 import { useTranslation } from "../../i18n/useTranslation";
+import { storedText } from "../../domain/storedText";
 
 interface ImportControlProps {
   /** `full` gives the button a label and room to breathe; `compact` fits the sidebar. */
@@ -114,7 +115,7 @@ export const ImportControl: React.FC<ImportControlProps> = ({ variant = "full", 
           onConfirm={() => {
             // Goes through importSnapshot, so the change lands on the undo
             // stack and can be reversed without re-selecting the file.
-            importSnapshot(preview.snapshot, `Imported ${preview.fileName}.`);
+            importSnapshot(preview.snapshot, storedText("audit.importedFile", { file: preview.fileName }));
             setPreview(null);
           }}
         />

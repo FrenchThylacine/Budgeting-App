@@ -202,8 +202,8 @@ export const OccurrenceOverrideDialog: React.FC<OccurrenceOverrideDialogProps> =
               step="0.01"
               value={amount}
               onChange={(event) => setAmount(event.target.value)}
-              placeholder={`Amount in ${currency}`}
-              aria-label={`Amount in ${currency}`}
+              placeholder={t("common.amountIn", { currency })}
+              aria-label={t("common.amountIn", { currency })}
             />
           )}
 

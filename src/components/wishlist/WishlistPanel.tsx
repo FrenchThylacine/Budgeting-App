@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Check, ExternalLink, Link2Off, Pencil, Plus, Receipt, ShoppingBag, Trash2, X } from "lucide-react";
 import { currencyOptionsFor, formatMoney, normalizeAmount } from "../../domain/currency";
 import { todayDateInput } from "../../domain/dates";
@@ -375,6 +375,21 @@ export const WishlistPanel: React.FC = () => {
   const activeItems = useMemo(() => allItems.filter((item) => wishlistViewMatches(item, "active")), [allItems]);
   const boughtItems = useMemo(() => allItems.filter((item) => item.bought), [allItems]);
 
+  /*
+   * Do not open on an empty tab while another one has items.
+   *
+   * "Active (0) · All (2)" put the reader on an empty state on arrival, next
+   * to a tab saying there are two things to look at. Once only: after this it
+   * is the user's choice which view they are in, and moving them again would
+   * be the interface arguing with them.
+   */
+  const landed = useRef(false);
+  useEffect(() => {
+    if (landed.current || allItems.length === 0) return;
+    landed.current = true;
+    if (activeItems.length === 0) setView(boughtItems.length > 0 ? "bought" : "all");
+  }, [allItems.length, activeItems.length, boughtItems.length]);
+
   /**
    * Converted to the base currency before adding up.
    *
@@ -472,7 +487,7 @@ export const WishlistPanel: React.FC = () => {
   const reportResult = (result: WishlistLinkResult, item: WishlistItem): void => {
     switch (result.status) {
       case "created":
-        setNotice({ tone: "success", message: `Recorded the purchase of ${item.name} in your spending.` });
+        setNotice({ tone: "success", message: t("wishlist.purchaseRecorded", { name: item.name }) });
         resetForms();
         break;
       case "already-linked":
@@ -602,10 +617,10 @@ export const WishlistPanel: React.FC = () => {
             {(["active", "all", "bought"] as ViewFilter[]).map((tab) => (
               <button key={tab} type="button" style={viewTabStyle(tab)} onClick={() => setView(tab)}>
                 {tab === "active"
-                  ? `Active (${activeItems.length})`
+                  ? t("wishlist.tabActive", { count: activeItems.length })
                   : tab === "bought"
-                    ? `Bought (${boughtItems.length})`
-                    : `All (${allItems.length})`}
+                    ? t("wishlist.tabBought", { count: boughtItems.length })
+                    : t("wishlist.tabAll", { count: allItems.length })}
               </button>
             ))}
           </div>
@@ -662,8 +677,8 @@ export const WishlistPanel: React.FC = () => {
       {/* Recording a purchase is its own task, so it gets the same shell. */}
       {mutable && purchasingItem && purchaseDraft && (
         <EditorSheet
-          title={`Buy ${purchasingItem.name}`}
-          subtitle={`Records a transaction in ${purchasingItem.currency} and marks the item bought.`}
+          title={t("wishlist.buyNamed", { name: purchasingItem.name })}
+          subtitle={t("wishlist.buySubtitle", { currency: purchasingItem.currency })}
           onClose={resetForms}
           footer={
             <>
@@ -691,7 +706,7 @@ export const WishlistPanel: React.FC = () => {
               gap: 12,
             }}
           >
-            <Field label={`Amount (${purchasingItem.currency})`}>
+            <Field label={t("common.amountIn", { currency: purchasingItem.currency })}>
               <input
                 className="input"
                 type="number"
@@ -787,7 +802,7 @@ export const WishlistPanel: React.FC = () => {
                 className={mutable ? "editable-row" : undefined}
                 role={mutable ? "button" : undefined}
                 tabIndex={mutable ? 0 : undefined}
-                aria-label={mutable ? `Edit ${item.name}` : undefined}
+                aria-label={mutable ? t("common.editNamed", { name: item.name }) : undefined}
                 onClick={(event) => {
                   if (!mutable) return;
                   const target = event.target as HTMLElement;
@@ -853,7 +868,7 @@ export const WishlistPanel: React.FC = () => {
                           href={href}
                           target="_blank"
                           rel="noreferrer noopener"
-                          title={`Buy from ${sellerDomain}`}
+                          title={t("wishlist.buyFrom", { domain: sellerDomain })}
                           style={{
                             display: "inline-flex",
                             alignItems: "center",
@@ -1000,7 +1015,7 @@ export const WishlistPanel: React.FC = () => {
                       variant="ghost"
                       icon
                       onClick={() => startEdit(item)}
-                      aria-label={`Edit ${item.name}`}
+                      aria-label={t("common.editNamed", { name: item.name })}
                       title={t("common.edit")}
                     >
                       <Pencil size={14} />

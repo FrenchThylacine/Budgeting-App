@@ -344,7 +344,7 @@ export const SpendingPanel: React.FC = () => {
     const warning = linkedItem
       ? `\n\n"${linkedItem.name}" will be unlinked from it and stays in your wishlist.`
       : "";
-    if (window.confirm(`Delete this transaction?${warning}`)) {
+    if (window.confirm(`${t("spending.confirmDelete")}${warning}`)) {
       remove(entry.id);
       setNotice(null);
     }
@@ -667,7 +667,7 @@ export const SpendingPanel: React.FC = () => {
                 className={`item-row${mutable ? " editable-row" : ""}`}
                 role={mutable ? "button" : undefined}
                 tabIndex={mutable ? 0 : undefined}
-                aria-label={mutable ? `Edit transaction` : undefined}
+                aria-label={mutable ? t("spending.editTransaction") : undefined}
                 onClick={(event) => {
                   if (!mutable) return;
                   const target = event.target as HTMLElement;

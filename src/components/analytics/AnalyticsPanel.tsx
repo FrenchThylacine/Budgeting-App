@@ -236,7 +236,7 @@ export const AnalyticsPanel: React.FC = () => {
   const budgetBase = calc.monthlyBudgetBase;
   const budgetReference: ChartReferenceLine[] =
     mode !== "week" && budgetBase > 0
-      ? [{ value: budgetBase, label: `Budget ${money(budgetBase)}` }]
+      ? [{ value: budgetBase, label: t("chart.budgetLine", { amount: money(budgetBase) }) }]
       : [];
 
   const heatmapCells: HeatmapCell[] = (calendar ?? []).map((cell) => ({
@@ -489,7 +489,7 @@ export const AnalyticsPanel: React.FC = () => {
                   value: bar.value,
                   highlight: bar.highlight,
                 }))}
-                referenceLines={budgetBase > 0 ? [{ value: budgetBase, label: `Budget ${money(budgetBase)}` }] : []}
+                referenceLines={budgetBase > 0 ? [{ value: budgetBase, label: t("chart.budgetLine", { amount: money(budgetBase) }) }] : []}
                 formatValue={money}
                 formatTick={tick}
                 height={200}
@@ -521,7 +521,7 @@ export const AnalyticsPanel: React.FC = () => {
                   },
                 ]}
                 referenceLines={
-                  forecast.budget != null ? [{ value: forecast.budget, label: `Budget ${money(forecast.budget)}` }] : []
+                  forecast.budget != null ? [{ value: forecast.budget, label: t("chart.budgetLine", { amount: money(forecast.budget) }) }] : []
                 }
                 formatValue={money}
                 formatTick={tick}
@@ -690,7 +690,7 @@ export const AnalyticsPanel: React.FC = () => {
                   { id: "oneoff", name: t("common.oneOff"), color: oneOffTone, values: recurringSplit.oneOff },
                 ]}
                 emphasisIndex={mode === "year" ? undefined : settings.selectedMonth - 1}
-                referenceLines={budgetBase > 0 ? [{ value: budgetBase, label: `Budget ${money(budgetBase)}` }] : []}
+                referenceLines={budgetBase > 0 ? [{ value: budgetBase, label: t("chart.budgetLine", { amount: money(budgetBase) }) }] : []}
                 formatValue={money}
                 formatTick={tick}
                 height={220}

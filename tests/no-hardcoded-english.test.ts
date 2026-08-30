@@ -106,6 +106,19 @@ function scan(): Finding[] {
          * element, and this line is prose — words, punctuation and possibly
          * an interpolation, but no tag and no code.
          */
+        /*
+         * A template literal with English in it.
+         *
+         * `` `Active (${n})` `` is a sentence with a hole in it, and the three
+         * wishlist tabs sat in exactly that shape through two audits — invisible
+         * to the quote-based rules above because it uses backticks, and to the
+         * JSX-text rule because it is an expression.
+         */
+        for (const match of line.matchAll(/`([^`$]*[A-Z][a-z]{2,}[^`]*)`/g)) {
+          const literal = match[1].replace(/\$\{[^}]*\}/g, "…").trim();
+          if (/^[A-Z][A-Za-z ,.'’!?%()…-]{3,}$/.test(literal)) push(literal);
+        }
+
         const previous = index > 0 ? lines[index - 1].trim() : "";
         // Interpolations are removed first: a sentence with a value in the
         // middle of it is still a sentence, and leaving the braces in is what
@@ -134,6 +147,27 @@ describe("the components carry no English of their own", () => {
       ...line.matchAll(/\btitle=["']([A-Za-z][A-Za-z ,.'’!?%-]{3,})["']/g),
     ];
     expect(matches.map((m) => m[1])).toEqual(["Save changes", "Delete everything"]);
+  });
+
+  it("catches English inside a template literal", () => {
+    /*
+     * The third shape, and the one that hid thirty of them: backticks. Not a
+     * quoted string, not JSX text, not a ternary between two words — a
+     * sentence with a hole in it, which every rule written before this one
+     * looked straight past.
+     */
+    const literal = (line: string) =>
+      [...line.matchAll(/`([^`$]*[A-Z][a-z]{2,}[^`]*)`/g)]
+        .map((match) => match[1].replace(/\$\{[^}]*\}/g, "…").trim())
+        .filter((text) => /^[A-Z][A-Za-z ,.'’!?%()…-]{3,}$/.test(text));
+
+    expect(literal("label: `Budget ${money(base)}`")).toEqual(["Budget …"]);
+    expect(literal("title={`Buy ${item.name}`}")).toEqual(["Buy …"]);
+    expect(literal("title={`Archived (${n})`}")).toEqual(["Archived (…)"]);
+
+    // Not a template literal of code, a path, or a class list.
+    expect(literal("className={`card ${active ? \"is-active\" : \"\"}`}")).toEqual([]);
+    expect(literal("`/craft/fleet/${craft.id}.png`")).toEqual([]);
   });
 
   it("catches a sentence on its own line, which the first rules cannot see", () => {

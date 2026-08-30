@@ -18,7 +18,6 @@ import {
   fetchExchangeRates,
   isDueForScheduledRefresh,
   lastScheduledRefresh,
-  nextScheduledRefresh,
   noteRateFailure,
   rateFreshness,
   refreshRatesOnOpen,
@@ -71,10 +70,13 @@ describe("the publication boundary", () => {
     expect(lastScheduledRefresh(at("2026-08-20T09:00:00Z")).toISOString()).toBe("2026-08-19T12:00:00.000Z");
   });
 
-  it("names the next one, for a caption that can say when", () => {
-    expect(nextScheduledRefresh(at("2026-08-20T09:00:00Z")).toISOString()).toBe("2026-08-20T12:00:00.000Z");
-    expect(nextScheduledRefresh(at("2026-08-20T13:00:00Z")).toISOString()).toBe("2026-08-21T12:00:00.000Z");
-  });
+  /*
+   * There was a `nextScheduledRefresh` here, and a caption in the Currencies
+   * tab that read "Rates refresh daily at 12:00 UTC" followed by the next one.
+   * Both are gone: the schedule is an upper bound on how often the provider is
+   * asked, not a thing to plan a day around, and the behaviour worth stating
+   * is "they update when you open the app".
+   */
 });
 
 describe("whether a stored set is due for refresh", () => {
