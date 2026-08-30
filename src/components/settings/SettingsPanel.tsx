@@ -16,7 +16,7 @@ import { trackedCurrencies } from "../../domain/currency";
 import { formatDateTime } from "../../domain/dates";
 import { LANGUAGES, findLanguage, searchLanguages } from "../../domain/languages";
 import { resolveLanguage } from "../../domain/i18n";
-import { AIRCRAFT } from "../../domain/aircraft";
+import { AIRCRAFT, DEFAULT_AIRCRAFT, DEFAULT_FLEET_CRAFT, FLEET } from "../../domain/aircraft";
 import { THEME_PRESETS, themeFor } from "../../domain/theme";
 import {
   declineNotifications,
@@ -28,7 +28,7 @@ import { restartedOnboarding } from "../../domain/tutorial";
 import { useTranslation } from "../../i18n/useTranslation";
 import { Button } from "../ui/Button";
 import { EditorSheet } from "../ui/EditorSheet";
-import { AircraftSilhouette } from "../ui/Aircraft";
+import { AircraftArt, AircraftSilhouette } from "../ui/Aircraft";
 import { useBudgetStore } from "../../store/budgetStore";
 import type { Appearance } from "../../domain/theme";
 import type { CurrencyCode, CurrencyDisplayMode, RoundingRule } from "../../domain/types";
@@ -187,26 +187,61 @@ const GeneralSettings: React.FC = () => {
         </div>
       </Section>
 
+      {/* Two aeroplanes, two questions, no prose.
+          The pictures are the explanation: one row shows the drawings the
+          loading sequence flies, the other the silhouettes the transition
+          flies. The paragraph that used to sit above them said, in a sentence,
+          what a thumbnail says instantly. */}
       <Section title={t("settings.aircraft")}>
         <div className="card card-body settings-card">
-          <p className="text-note settings-note">{t("settings.aircraftHint")}</p>
-          <div className="aircraft-grid" role="radiogroup" aria-label={t("settings.aircraft")}>
-            {AIRCRAFT.map((craft) => {
-              const active = (settings.aircraft ?? AIRCRAFT[0].id) === craft.id;
-              return (
-                <button
-                  key={craft.id}
-                  type="button"
-                  role="radio"
-                  aria-checked={active}
-                  className={`aircraft-choice${active ? " is-active" : ""}`}
-                  onClick={() => update({ aircraft: craft.id })}
-                >
-                  <AircraftSilhouette id={craft.id} size={72} />
-                  <span className="text-caption">{t(craft.labelKey)}</span>
-                </button>
-              );
-            })}
+          <div className="settings-stack">
+            <span className="text-footnote">{t("settings.aircraftLoading")}</span>
+            <div className="aircraft-grid" role="radiogroup" aria-label={t("settings.aircraftLoading")}>
+              {AIRCRAFT.map((craft) => {
+                const active = (settings.aircraft ?? DEFAULT_AIRCRAFT) === craft.id;
+                return (
+                  <button
+                    key={craft.id}
+                    type="button"
+                    role="radio"
+                    aria-checked={active}
+                    className={`aircraft-choice${active ? " is-active" : ""}`}
+                    data-aircraft={craft.id}
+                    onClick={() => update({ aircraft: craft.id })}
+                  >
+                    <AircraftArt id={craft.id} size={92} />
+                    <span className="text-caption">{t(craft.labelKey)}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="settings-stack">
+            <span className="text-footnote">{t("settings.aircraftTransition")}</span>
+            {/* Twenty-two tiles, named only to a screen reader. A grid of
+                shapes is read by looking at it; twenty-two captions would be a
+                wall of words describing pictures that are already there. */}
+            <div className="fleet-grid" role="radiogroup" aria-label={t("settings.aircraftTransition")}>
+              {FLEET.map((craft) => {
+                const active = (settings.transitionAircraft ?? DEFAULT_FLEET_CRAFT) === craft.id;
+                return (
+                  <button
+                    key={craft.id}
+                    type="button"
+                    role="radio"
+                    aria-checked={active}
+                    aria-label={t(craft.labelKey)}
+                    title={t(craft.labelKey)}
+                    className={`fleet-choice${active ? " is-active" : ""}`}
+                    data-fleet={craft.id}
+                    onClick={() => update({ transitionAircraft: craft.id })}
+                  >
+                    <AircraftSilhouette id={craft.id} size={34} />
+                  </button>
+                );
+              })}
+            </div>
           </div>
         </div>
       </Section>

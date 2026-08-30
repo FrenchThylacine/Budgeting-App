@@ -1434,31 +1434,23 @@
 
 .boot-escort-late.is-joined { opacity: 1; }
 
-/* The smoke. A tapering ribbon behind the tail, drawn from the aircraft's own
-   frame so it banks with it for free. */
-.boot-trail {
+/* ── The smoke ────────────────────────────────────────────────────────────────
+   Two canvases, one on each side of the lead aircraft, so a ribbon laid down
+   behind it stays behind it while the jet that drew it comes round the front.
+   The blur is on the element rather than in the drawing: one GPU pass over a
+   finished bitmap costs nothing, where `ctx.filter` would re-blur every one of
+   the six polygons on every frame. */
+.boot-smoke {
   position: absolute;
-  right: 22px;
-  top: -3px;
-  height: 6px;
-  width: 90px;
-  border-radius: 6px;
-  transform-origin: right center;
-  background: linear-gradient(270deg, var(--trail-colour) 0%, color-mix(in srgb, var(--trail-colour) 55%, transparent) 45%, transparent 100%);
-  filter: blur(1.5px);
-  opacity: 0.85;
-  transition: width 520ms var(--ease-out), opacity 320ms linear;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  filter: blur(3px);
 }
 
-/* Once in formation the ribbons run long and level: three parallel bands, blue
-   over white over red. */
-.boot-escort.is-joined .boot-trail { width: 300px; }
-
-.boot-phase-depart .boot-trail {
-  /* The blast: the ribbons stretch as the formation accelerates away. */
-  width: 720px;
-  transition: width 720ms cubic-bezier(0.4, 0, 1, 1);
-}
+.boot-smoke-back { z-index: 0; }
+.boot-smoke-front { z-index: 4; }
 
 .boot-caption-block {
   grid-row: 2;
@@ -1492,7 +1484,6 @@
 
 @media (prefers-reduced-motion: reduce) {
   .boot-lead-art { animation: none; }
-  .boot-trail { transition: none; }
   .boot-escort-late { transition: none; opacity: 1; }
 }
 
@@ -3262,3 +3253,61 @@ label:has(> input[type="radio"]) {
   font-size: var(--text-footnote);
   color: var(--text-tertiary);
 }
+
+/* ── V4: chips that state rather than invite ──────────────────────────────────
+   `.chip` is a control — pointer cursor, hover state, pressed appearance. A
+   qualification on a chart is none of those things, and a static label that
+   looks pressable is a small lie the reader tests by clicking it. */
+.chip-muted {
+  cursor: default;
+  background: var(--bg-subtle);
+  border-color: transparent;
+  color: var(--text-tertiary);
+  font-weight: 500;
+  white-space: nowrap;
+}
+.chip-muted:hover { border-color: transparent; color: var(--text-tertiary); }
+
+.chart-card-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+/* ── V4: the fleet picker ─────────────────────────────────────────────────────
+   Twenty-two shapes, so the tiles are small, square and unlabelled: the name
+   reaches a screen reader through `aria-label` and a mouse through `title`,
+   and the eye reads the aeroplane. A dark tile because the silhouettes are
+   white — on a light card they would be invisible, which is the one thing a
+   picker cannot be. */
+.fleet-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(52px, 1fr));
+  gap: 8px;
+}
+
+.fleet-choice {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 1;
+  padding: 6px;
+  border-radius: var(--radius-md);
+  border: 1px solid transparent;
+  background: #101724;
+  cursor: pointer;
+  transition: border-color var(--duration-fast) var(--ease-out), transform var(--duration-fast) var(--ease-out);
+}
+
+.fleet-choice:hover { transform: translateY(-1px); }
+.fleet-choice:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.fleet-choice.is-active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+.settings-stack { display: grid; gap: 8px; }
+.settings-stack + .settings-stack { margin-top: 16px; }

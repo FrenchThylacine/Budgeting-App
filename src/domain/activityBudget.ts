@@ -104,8 +104,8 @@ export interface ActivityShare {
   yearlyBase: number;
   monthlyBase: number;
   /**
-   * This activity's percentage of the gross yearly total, or null when the
-   * total is zero — a share of nothing is not 0%, it is undefined.
+   * This activity's percentage of the **personal** yearly total, or null when
+   * that total is zero — a share of nothing is not 0%, it is undefined.
    */
   share: number | null;
 }
@@ -134,8 +134,20 @@ export interface ActivityBudgetSummary {
   unscheduled: ActivityMonthCost[];
   /** The unscheduled activities' monthly accrual, split by funding. */
   unscheduledMonthly: FundingTotals;
-  /** Each activity's share of the gross yearly total, largest first. */
+  /**
+   * What the user's own year is made of: the activities **they** pay for,
+   * largest first, each as a percentage of the personal yearly total.
+   *
+   * Activities somebody else pays for, and activities deliberately kept
+   * outside this budget, are not in this list. They belong to the record and
+   * to the funding split — but a chart headed "share of the yearly total"
+   * answers *where does my money go*, and an activity that costs the user
+   * nothing has no share of that. Including them once made a subscription a
+   * parent pays look like a fifth of the user's spending.
+   */
   shares: ActivityShare[];
+  /** How many active activities are funded by somebody else or kept outside. */
+  externallyFundedCount: number;
   /** Activities that exist but are switched off, for an honest empty state. */
   inactiveCount: number;
   year: number;
@@ -410,14 +422,18 @@ export function activityBudgetSummary(
     addTo(requiredThisMonth, item.funding, item.dueBase ?? 0);
   }
 
-  const grossYearly = yearly.gross;
+  // The denominator is the personal total, and the list is the personal
+  // activities — the two have to agree, or the percentages describe a whole
+  // that is not on screen.
+  const personalYearly = yearly.personal;
   const shares: ActivityShare[] = items
+    .filter((item) => item.funding === "personal")
     .map((item) => ({
       activity: item.activity,
       funding: item.funding,
       yearlyBase: item.yearlyBase,
       monthlyBase: item.monthlyBase,
-      share: grossYearly > 0 ? (item.yearlyBase / grossYearly) * 100 : null,
+      share: personalYearly > 0 ? (item.yearlyBase / personalYearly) * 100 : null,
     }))
     .sort((a, b) => b.yearlyBase - a.yearlyBase || a.activity.name.localeCompare(b.activity.name));
 
@@ -429,6 +445,7 @@ export function activityBudgetSummary(
     unscheduled,
     unscheduledMonthly,
     shares,
+    externallyFundedCount: items.filter((item) => item.funding !== "personal").length,
     inactiveCount: all.length - active.length,
     year,
     month,

@@ -399,3 +399,80 @@ describe("the year boundary", () => {
     expect(activityMonthCost(january, snapshot, 2027, 1).dueBase).toBeCloseTo(90, 6);
   });
 });
+
+/**
+ * "Share of the yearly total" is a question about the user's own money
+ * ====================================================================
+ *
+ * The bug this suite exists to prevent: an activity a parent pays for was
+ * listed in "share of the yearly total" alongside the user's own, taking a
+ * percentage of a whole it contributes nothing to. A €1,200 subscription
+ * somebody else funds made the user's own €600 gym look like a third of their
+ * year rather than all of it.
+ *
+ * Both halves have to move together — the list *and* the denominator. Filtering
+ * the list while dividing by the gross is the same error wearing a different
+ * hat: the bars stop summing to 100% and nothing on screen says why.
+ */
+describe("share of the yearly total", () => {
+  const mine = activity({ name: "Gym", costModel: "fixedYearly", yearlyEstimate: 600, nextRenewalDate: "2026-03-01" });
+  const dads = activity({
+    name: "Navigraph",
+    costModel: "fixedYearly",
+    yearlyEstimate: 1200,
+    nextRenewalDate: "2026-09-14",
+    fundingSource: "other",
+    fundedBy: "Dad",
+  });
+  const elsewhere = activity({
+    name: "Business phone",
+    costModel: "fixedYearly",
+    yearlyEstimate: 300,
+    nextRenewalDate: "2026-05-01",
+    fundingSource: "outside",
+  });
+
+  it("lists only the activities the user actually pays for", () => {
+    const summary = activityBudgetSummary(snapshotWith([mine, dads, elsewhere]), 2026, 8);
+    expect(summary.shares.map((share) => share.activity.name)).toEqual(["Gym"]);
+  });
+
+  it("divides by the personal total, not the gross", () => {
+    const summary = activityBudgetSummary(snapshotWith([mine, dads, elsewhere]), 2026, 8);
+    // 600 of 600, not 600 of 2,100.
+    expect(summary.shares[0].share).toBeCloseTo(100, 6);
+  });
+
+  it("still sums to 100% across several personal activities", () => {
+    const second = activity({ name: "Arabic", costModel: "fixedYearly", yearlyEstimate: 200, nextRenewalDate: "2026-04-01" });
+    const summary = activityBudgetSummary(snapshotWith([mine, second, dads]), 2026, 8);
+    const total = summary.shares.reduce((sum, share) => sum + (share.share ?? 0), 0);
+    expect(total).toBeCloseTo(100, 6);
+    expect(summary.shares.map((share) => share.activity.name)).toEqual(["Gym", "Arabic"]);
+  });
+
+  it("reports how many were left out, so the omission is visible", () => {
+    const summary = activityBudgetSummary(snapshotWith([mine, dads, elsewhere]), 2026, 8);
+    expect(summary.externallyFundedCount).toBe(2);
+  });
+
+  it("has no share at all when every activity is funded by somebody else", () => {
+    const summary = activityBudgetSummary(snapshotWith([dads, elsewhere]), 2026, 8);
+    expect(summary.shares).toEqual([]);
+    expect(summary.externallyFundedCount).toBe(2);
+    // And the gross totals still carry them: they are excluded from the
+    // *share*, not from the record.
+    expect(summary.yearly.gross).toBeCloseTo(1500, 6);
+    expect(summary.yearly.personal).toBe(0);
+  });
+
+  it("keeps the three-way funding split reading the gross", () => {
+    // The split answers "who paid", so its whole is everything. Only the
+    // share-of-my-year chart narrows to the personal total.
+    const summary = activityBudgetSummary(snapshotWith([mine, dads, elsewhere]), 2026, 8);
+    const split = fundingShares(summary.yearly);
+    expect(split.personal).toBeCloseTo((600 / 2100) * 100, 6);
+    expect(split.other).toBeCloseTo((1200 / 2100) * 100, 6);
+    expect(split.outside).toBeCloseTo((300 / 2100) * 100, 6);
+  });
+});

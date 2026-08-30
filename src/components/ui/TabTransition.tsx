@@ -70,7 +70,7 @@ export const TabTransition: React.FC<TabTransitionProps> = ({ tabKey, children }
    * financial edit would restart nothing but would cost a render of the whole
    * panel tree beneath it.
    */
-  const aircraft = useBudgetStore((state) => state.snapshot.settings.aircraft);
+  const aircraft = useBudgetStore((state) => state.snapshot.settings.transitionAircraft);
 
   /**
    * The tree currently on screen, and the newest one the parent has produced.

@@ -5,7 +5,7 @@ import { snapshotIdFor } from "../auth/middleware.js";
 import { asyncHandler, AppError } from "../middleware/errorHandler.js";
 import { ALL_CURRENCY_CODES } from "../../../src/domain/currencies.js";
 import { LANGUAGES } from "../../../src/domain/languages.js";
-import { AIRCRAFT_IDS } from "../../../src/domain/aircraft.js";
+import { AIRCRAFT_IDS, FLEET_IDS } from "../../../src/domain/aircraft.js";
 import { APPEARANCES, THEME_IDS } from "../../../src/domain/theme.js";
 
 /**
@@ -94,6 +94,7 @@ const SETTINGS_FIELDS: Record<string, SettingsFieldCheck> = {
   appearance: isOneOf(APPEARANCES),
   themePreset: isOneOf(THEME_IDS),
   aircraft: isOneOf(AIRCRAFT_IDS),
+  transitionAircraft: isOneOf(FLEET_IDS),
   roundingRule: isOneOf(["none", "nearest-1", "nearest-5", "nearest-10", "ceil-10"]),
   monthlyBudget: isFiniteNumber,
   autoWishlistFlushEnabled: isBoolean,

@@ -9,7 +9,7 @@
 export type { CurrencyCode } from "./currencies";
 import type { CurrencyCode } from "./currencies";
 import type { FundingKind } from "./funding";
-import type { AircraftId } from "./aircraft";
+import type { AircraftId, FleetId } from "./aircraft";
 import type { Appearance } from "./theme";
 
 export type CurrencyDisplayMode = "symbol" | "code" | "both";
@@ -260,13 +260,25 @@ export interface Settings {
    */
   themePreset?: string;
   /**
-   * The aircraft flown by the loading sequence and by the tab transition.
+   * The aircraft the **loading sequence** flies: one of the three drawn for it.
    *
-   * One preference, not two: they are the same aeroplane seen twice, and
-   * offering a Concorde that turns into an A350 halfway through a session is a
-   * setting nobody wants. Absent means the Concorde. See `domain/aircraft.ts`.
+   * Absent means the Concorde. See `domain/aircraft.ts`.
    */
   aircraft?: AircraftId;
+  /**
+   * The silhouette the **tab transition** flies: one of the twenty-two.
+   *
+   * Two settings rather than one. They were one — the same aeroplane seen
+   * twice — and that was only defensible while both lists were the same three
+   * aircraft. The transition now draws from the whole Flightradar24 fleet,
+   * which has no illustrated Alpha Jet and no drawn A350, so a single
+   * preference would either shrink the transition back to three shapes or
+   * offer the loading screen nineteen aircraft it cannot render.
+   *
+   * Absent means the Concorde, exactly as above: an account that has never
+   * chosen sees the same aeroplane in both places.
+   */
+  transitionAircraft?: FleetId;
   /**
    * @deprecated Externally funded spending is now always excluded from the
    * personal budget — see `domain/funding.ts`. Nothing reads this. The field is
