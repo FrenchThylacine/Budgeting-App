@@ -1351,4 +1351,6 @@ export const en = {
   "auth.error.passwordRequired": "Your current password is required.",
   "auth.error.network": "Cannot reach the server. Check your connection.",
   "auth.error.passwordMismatch": "The two passwords do not match.",
+  "health.outOf100": "out of 100",
+  "a11y.budgetHealth": "Budget health {score} out of 100",
 } as const;

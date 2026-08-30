@@ -1391,4 +1391,6 @@ export const ar: Dictionary = {
   "auth.error.passwordRequired": "كلمة مرورك الحالية مطلوبة.",
   "auth.error.network": "تعذّر الوصول إلى الخادم. تحقّق من اتصالك.",
   "auth.error.passwordMismatch": "كلمتا المرور غير متطابقتين.",
+  "health.outOf100": "من 100",
+  "a11y.budgetHealth": "صحة الميزانية {score} من 100",
 };

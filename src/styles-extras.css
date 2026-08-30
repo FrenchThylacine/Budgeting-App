@@ -3465,3 +3465,7 @@ label:has(> input[type="radio"]) {
 .about-facts dd { margin: 2px 0 0; font-size: var(--text-footnote); color: var(--text-secondary); }
 
 .about-links { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* ── V4: the health card fills its own card ───────────────────────────────── */
+.health-card { display: grid; }
+.health-card-body { height: 100%; display: grid; align-content: center; }

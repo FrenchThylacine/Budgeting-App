@@ -1315,4 +1315,6 @@ export const fr: Dictionary = {
   "auth.error.passwordRequired": "Votre mot de passe actuel est requis.",
   "auth.error.network": "Serveur injoignable. Vérifiez votre connexion.",
   "auth.error.passwordMismatch": "Les deux mots de passe ne correspondent pas.",
+  "health.outOf100": "sur 100",
+  "a11y.budgetHealth": "Santé du budget {score} sur 100",
 };

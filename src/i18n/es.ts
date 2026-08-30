@@ -1307,4 +1307,6 @@ export const es: Dictionary = {
   "auth.error.passwordRequired": "Se requiere tu contraseña actual.",
   "auth.error.network": "No se puede conectar al servidor. Comprueba tu conexión.",
   "auth.error.passwordMismatch": "Las dos contraseñas no coinciden.",
+  "health.outOf100": "sobre 100",
+  "a11y.budgetHealth": "Salud del presupuesto {score} sobre 100",
 };

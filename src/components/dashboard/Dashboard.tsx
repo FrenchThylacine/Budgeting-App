@@ -332,15 +332,21 @@ export const Dashboard: React.FC<{ onNavigate?: (tab: "spending" | "activities" 
       <>
           {/* Health gauge — the centrepiece. */}
           <div className="dashboard-row">
-            <Card>
-              <CardBody>
+            {/* The card fills the height of the column of figures beside it,
+                so its body has to fill the card — otherwise the gauge sits at
+                the top of a 440px box with 200px of nothing under it, which is
+                what it did. */}
+            <Card className="health-card">
+              <CardBody className="health-card-body">
                 <div className="health-layout">
                   <ProgressRing
                     value={health.score}
                     valueText={health.score != null ? String(Math.round(health.score)) : "—"}
                     label={health.grade ? t(`health.grade.${health.grade}`) : t("health.notEnoughData")}
-                    caption={health.score != null ? "out of 100" : undefined}
-                    ariaLabel={`Budget health ${health.score != null ? Math.round(health.score) : "unavailable"} out of 100`}
+                    caption={health.score != null ? t("health.outOf100") : undefined}
+                    ariaLabel={t("a11y.budgetHealth", {
+                      score: health.score != null ? Math.round(health.score) : t("common.unknown"),
+                    })}
                     size={230}
                     thickness={16}
                     color={healthColor}
@@ -506,7 +512,12 @@ export const Dashboard: React.FC<{ onNavigate?: (tab: "spending" | "activities" 
         <div className="dashboard-row">
           <Card>
             <CardBody>
-              {trendBars.every((bar) => bar.value == null) ? (
+              {/* A chart, only when there is a shape to see.
+                  One bar and eleven question marks is a chart whose whole
+                  content is "we have no history", and it took a third of the
+                  first screen to say it. Two months is the floor for a trend;
+                  below that the empty state says the same thing in a line. */}
+              {trendBars.filter((bar) => bar.value != null).length < 2 ? (
                 <EmptyState title={t("dashboard.noSpendingData")} description={t("dashboard.recordTransactionsToSeeThe")} />
               ) : (
                 <BarChart

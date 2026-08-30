@@ -58,6 +58,19 @@ export function isProse(line: string): boolean {
   );
 }
 
+/**
+ * English inside a template literal, with its interpolations elided.
+ *
+ * Exported for the same reason `isProse` is: the test that proves this rule
+ * works has to run the rule, not a copy of it. A copy is what let the digit
+ * case slip past — the scanner was fixed and its test was not.
+ */
+export function templateEnglish(line: string): string[] {
+  return [...line.matchAll(/`([^`$]*[A-Z][a-z]{2,}[^`]*)`/g)]
+    .map((match) => match[1].replace(/\$\{[^}]*\}/g, "…").trim())
+    .filter((text) => /^[A-Z][A-Za-z0-9 ,.'’!?%()…-]{3,}$/.test(text));
+}
+
 interface Finding {
   file: string;
   line: number;
@@ -89,7 +102,7 @@ function scan(): Finding[] {
         for (const match of line.matchAll(/>\s*([A-Z][A-Za-z][A-Za-z ,.'’!?%-]{2,})\s*</g)) push(match[1]);
         // A visible attribute given a literal.
         for (const match of line.matchAll(
-          /\b(title|label|placeholder|aria-label|description|subtitle|alt|caption|note)=["']([A-Za-z][A-Za-z ,.'’!?%-]{3,})["']/g,
+          /\b(title|label|placeholder|aria-label|ariaLabel|description|subtitle|alt|caption|note|valueText)=["']([A-Za-z][A-Za-z0-9 ,.'’!?%-]{3,})["']/g,
         )) {
           push(match[2]);
         }
@@ -114,10 +127,7 @@ function scan(): Finding[] {
          * to the quote-based rules above because it uses backticks, and to the
          * JSX-text rule because it is an expression.
          */
-        for (const match of line.matchAll(/`([^`$]*[A-Z][a-z]{2,}[^`]*)`/g)) {
-          const literal = match[1].replace(/\$\{[^}]*\}/g, "…").trim();
-          if (/^[A-Z][A-Za-z ,.'’!?%()…-]{3,}$/.test(literal)) push(literal);
-        }
+        for (const literal of templateEnglish(line)) push(literal);
 
         const previous = index > 0 ? lines[index - 1].trim() : "";
         // Interpolations are removed first: a sentence with a value in the
@@ -156,14 +166,13 @@ describe("the components carry no English of their own", () => {
      * sentence with a hole in it, which every rule written before this one
      * looked straight past.
      */
-    const literal = (line: string) =>
-      [...line.matchAll(/`([^`$]*[A-Z][a-z]{2,}[^`]*)`/g)]
-        .map((match) => match[1].replace(/\$\{[^}]*\}/g, "…").trim())
-        .filter((text) => /^[A-Z][A-Za-z ,.'’!?%()…-]{3,}$/.test(text));
+    const literal = templateEnglish;
 
     expect(literal("label: `Budget ${money(base)}`")).toEqual(["Budget …"]);
     expect(literal("title={`Buy ${item.name}`}")).toEqual(["Buy …"]);
     expect(literal("title={`Archived (${n})`}")).toEqual(["Archived (…)"]);
+    // A digit at the end used to stop the match dead.
+    expect(literal("ariaLabel={`Budget health ${score} out of 100`}")).toEqual(["Budget health … out of 100"]);
 
     // Not a template literal of code, a path, or a class list.
     expect(literal("className={`card ${active ? \"is-active\" : \"\"}`}")).toEqual([]);

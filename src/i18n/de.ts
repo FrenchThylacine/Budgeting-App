@@ -1307,4 +1307,6 @@ export const de: Dictionary = {
   "auth.error.passwordRequired": "Ihr aktuelles Passwort ist erforderlich.",
   "auth.error.network": "Server nicht erreichbar. Prüfen Sie Ihre Verbindung.",
   "auth.error.passwordMismatch": "Die beiden Passwörter stimmen nicht überein.",
+  "health.outOf100": "von 100",
+  "a11y.budgetHealth": "Budget-Gesundheit {score} von 100",
 };
