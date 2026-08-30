@@ -978,7 +978,7 @@ try {
     return preview.slice(0, 90);
   });
 
-  await check("saves it, and the card states the payment cycle rather than the sessions", async () => {
+  await check("saves it, and the payment cycle is one press away rather than printed", async () => {
     await page.click(".sheet-footer .btn-primary");
     await page.waitFor('!document.querySelector(\'[data-field="name"]\')', { label: "the editor to close" });
     await sleep(500);
@@ -987,13 +987,65 @@ try {
       return card ? card.textContent.replace(/\\s+/g, ' ').trim() : 'not found';
     `);
     assert(row !== "not found", "the activity did not appear in the list");
-    // The card's job is the *cadence* and the accrual — that a €200 charge does
-    // not land twice a week. The amount itself belongs on the timeline, where
-    // it is a dated payment rather than a monthly figure.
-    assert(/10/.test(row), `the card does not state the pack size: ${row}`);
+    // The accrual is the figure somebody came to read, so it stays on the row.
     assert(/177/.test(row), `the card does not state the monthly accrual: ${row}`);
     assert(!/\bavg\.|\/year\b|\/month\b/.test(row), `the card carries an untranslated unit: ${row}`);
-    return row.slice(0, 120);
+    /*
+     * The pack size used to be printed on the row, inside a sentence nobody
+     * reads twice: "2 / week · pay every 10 sessions (≈ every 5 weeks)". The
+     * assertion is not that it is gone — it is that it is still *reachable*,
+     * which is the part a reduction like this can quietly get wrong.
+     */
+    assert(!/every 10|toutes les 10/.test(row), `the schedule sentence is still printed on the row: ${row}`);
+    const explained = await page.evaluate(`
+      const card = Array.from(document.querySelectorAll('.item-row, .activity-row')).find((node) => /Gym/.test(node.textContent));
+      const dot = card?.querySelector('.info-dot');
+      if (!dot) return 'no mark on the row';
+      dot.click();
+      return new Promise((resolve) => setTimeout(() => {
+        const bubble = document.querySelector('.info-bubble');
+        resolve(bubble ? bubble.textContent.replace(/\\s+/g, ' ').trim() : 'the mark opened nothing');
+      }, 120));
+    `);
+    assert(/10/.test(explained), `the mark does not explain the pack: ${explained}`);
+    await page.evaluate("document.querySelector('.info-dot')?.click(); return 1;");
+    return explained.slice(0, 100);
+  });
+
+  await check("the row menu opens where it is aimed", async () => {
+    /*
+     * It did not. Measured on a row two-thirds down the list, the menu opened
+     * at (1483, 1386) in a 1440x950 viewport — off the right edge and below the
+     * bottom, invisible. `position: fixed` is relative to the viewport only
+     * while no ancestor has a transform, a filter, or will-change naming one,
+     * and rows here have two: the swipe surface and the tab panel.
+     *
+     * Nothing measured it because nothing compared a computed position with
+     * where the browser actually put the element.
+     */
+    const placed = await page.evaluate(`
+      const trigger = document.querySelector('[aria-haspopup="menu"]');
+      if (!trigger) return { error: 'no row menu on the page' };
+      trigger.click();
+      return new Promise((resolve) => setTimeout(() => {
+        const menu = document.querySelector('[role="menu"]');
+        if (!menu) return resolve({ error: 'the trigger opened nothing' });
+        const m = menu.getBoundingClientRect();
+        const t = trigger.getBoundingClientRect();
+        const hit = document.elementFromPoint(m.left + m.width / 2, m.top + 12);
+        resolve({
+          inside: m.left >= 0 && m.top >= 0 && m.right <= innerWidth && m.bottom <= innerHeight,
+          gap: Math.round(Math.min(Math.abs(m.top - t.bottom), Math.abs(t.top - m.bottom))),
+          onTop: !!hit && menu.contains(hit),
+        });
+      }, 150));
+    `);
+    assert(!placed.error, placed.error ?? "");
+    assert(placed.inside, "the menu opened outside the viewport");
+    assert(placed.gap <= 24, `the menu opened ${placed.gap}px from its trigger`);
+    assert(placed.onTop, "something is painted over the menu");
+    await page.evaluate("document.querySelector('[aria-haspopup=\"menu\"]')?.click(); return 1;");
+    return `${placed.gap}px from the trigger, on top, inside the viewport`;
   });
 
   await check("the activity total reaches the summary", async () => {
