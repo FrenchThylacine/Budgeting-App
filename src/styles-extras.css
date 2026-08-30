@@ -3744,3 +3744,76 @@ label:has(> input[type="radio"]) {
    sit in a container with two other numbers that the filter chips above it
    already printed. */
 .wishlist-total { margin: 12px 2px 0; }
+
+/* ── The information dot ──────────────────────────────────────────────────────
+   A mark, not a sentence. It has to be reachable on a phone — 24px of target
+   around a 13px glyph — while reading as punctuation rather than as a control,
+   so the box is transparent until it is hovered or focused. */
+.info-dot {
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  flex: 0 0 auto;
+  vertical-align: -3px;
+}
+
+.info-dot:hover,
+.info-dot:focus-visible {
+  background: var(--bg-inset);
+  color: var(--text-secondary);
+}
+
+/* Amber, and only this variant draws attention: it marks a fact that changes
+   what a figure means. */
+.info-dot[data-tone="warning"] { color: var(--warning-text); }
+.info-dot[data-tone="warning"]:hover,
+.info-dot[data-tone="warning"]:focus-visible { background: var(--warning-soft); }
+
+.info-bubble {
+  position: fixed;
+  z-index: 1250;
+  max-width: 280px;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  box-shadow: var(--shadow-lg, 0 10px 30px rgba(0, 0, 0, 0.18));
+  font-size: 0.8rem;
+  line-height: 1.45;
+}
+
+.info-bubble[data-tone="warning"] {
+  border-color: var(--warning);
+  background: var(--warning-soft);
+  color: var(--warning-text);
+}
+
+.info-bubble strong { color: var(--text-primary); }
+.info-bubble[data-tone="warning"] strong { color: var(--warning-text); }
+
+/* ── Funding as a state on the figure ─────────────────────────────────────────
+   The classification changes what an amount *means* — this is money the reader
+   will not be spending — so it colours the amount rather than sitting beside
+   the name as a pill. `-text` variants throughout: the fill colours are for
+   shapes and do not clear AA as text. */
+.activity-amount[data-funding="other"] strong,
+.activity-amount[data-funding="other"] .text-caption { color: var(--funding-other-text); }
+.activity-amount[data-funding="outside"] strong,
+.activity-amount[data-funding="outside"] .text-caption { color: var(--funding-outside-text); }
+
+.info-funding[data-funding="other"] { color: var(--funding-other-text); }
+.info-funding[data-funding="outside"] { color: var(--funding-outside-text); }
+
+/* The transaction's figure takes the same funding tone as an activity's. */
+.row-trailing[data-funding="other"] .money-pair > strong,
+.row-trailing[data-funding="other"] > strong { color: var(--funding-other-text); }
+.row-trailing[data-funding="outside"] .money-pair > strong,
+.row-trailing[data-funding="outside"] > strong { color: var(--funding-outside-text); }

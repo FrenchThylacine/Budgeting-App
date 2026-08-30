@@ -14,7 +14,7 @@ import {
   Power,
   Trash2,
 } from "lucide-react";
-import { currencyOptionsFor, formatMoney, numberLocale } from "../../domain/currency";
+import { currencyOptionsFor, formatMoney, numberLocale, displayEquivalent } from "../../domain/currency";
 import { SwipeRow } from "../ui/SwipeRow";
 import { RowMenu } from "../ui/RowMenu";
 import { CadenceMark } from "../ui/CadenceMark";
@@ -72,6 +72,7 @@ import { Field, FieldGroup } from "../ui/Field";
 import { Section } from "../ui/Section";
 import { FundingMark } from "../ui/FundingMark";
 import { MarkLegend } from "../ui/MarkLegend";
+import { InfoDot } from "../ui/InfoDot";
 import { activityBudgetSummary, fundingShares, type ActivityMonthCost } from "../../domain/activityBudget";
 import { FUNDING_KINDS, FUNDING_META, FUNDING_SOURCES, activityFundingKind, fundedByName, type FundingKind } from "../../domain/funding";
 import { useTranslation } from "../../i18n/useTranslation";
@@ -1116,14 +1117,18 @@ export const ActivityPanel: React.FC = () => {
                           the card rather than a faded row somebody has to
                           infer. */}
                       {!activity.active && <span className="badge badge-neutral">{t("activities.deactivated")}</span>}
-                      {/* The funding classification, whenever it is not the
-                          default. "Paid by me" on every card would be noise;
-                          the other two change what the totals mean. */}
+                      {/* Who pays, as a state rather than as a label.
+
+                          This was a pill reading "◆ Paid by other · Dad" —
+                          twenty-odd characters of chrome beside a name, on a
+                          row whose job is to say what the activity is and what
+                          it costs. The same fact is now carried by the glyph
+                          here and by the colour of the figure on the right,
+                          which is the number the classification actually
+                          changes the meaning of. The words are in the
+                          accessible name and in the mark's own tooltip. */}
                       {activityFundingKind(activity) !== "personal" && (
-                        <FundingMark
-                          kind={activityFundingKind(activity)}
-                          detail={fundedByName(activity) || undefined}
-                        />
+                        <FundingMark kind={activityFundingKind(activity)} variant="glyph" />
                       )}
                     </div>
                     {/* One meta line, not three.
@@ -1136,15 +1141,29 @@ export const ActivityPanel: React.FC = () => {
                     <div className="activity-meta">
                       <CadenceMark cadence={activityCadence(activity)} />
                       <span className="activity-meta-category">{categoryName(activity.categoryId)}</span>
+                      {/* The schedule, one press away.
+
+                          This was printed on the row: "≈ 8.86 in August · 2 /
+                          week · pay every 10 sessions (≈ every 5 weeks)". It
+                          is a real answer to a question somebody asks once,
+                          and it was on a line they read every time they came
+                          to see what their activities cost. */}
                       {describeActivity(activity, year, month, t, monthNames()) && (
-                        <span className="activity-meta-detail">
-                          {describeActivity(activity, year, month, t, monthNames())}
-                        </span>
-                      )}
-                      {/* The seasonal tag, only when it is not the default:
-                          "normal" on every row is a column of the same word. */}
-                      {activity.seasonalTag && activity.seasonalTag !== "normal" && (
-                        <span className="activity-meta-detail">{activity.seasonalTag}</span>
+                        <InfoDot label={t("activities.scheduleDetail", { name: activity.name })}>
+                          <strong>{activity.name}</strong>
+                          {activityFundingKind(activity) !== "personal" && (
+                            <div data-funding={activityFundingKind(activity)} className="info-funding">
+                              {t(`funding.${activityFundingKind(activity)}.short`)}
+                              {fundedByName(activity) ? ` · ${fundedByName(activity)}` : ""}
+                              {" — "}
+                              {t(`funding.${activityFundingKind(activity)}.hint`)}
+                            </div>
+                          )}
+                          <div>{describeActivity(activity, year, month, t, monthNames())}</div>
+                          {activity.seasonalTag && activity.seasonalTag !== "normal" && (
+                            <div className="text-caption">{activity.seasonalTag}</div>
+                          )}
+                        </InfoDot>
                       )}
                       {/* What this month actually requires from this activity —
                           which for eleven months of a yearly subscription is
@@ -1163,7 +1182,21 @@ export const ActivityPanel: React.FC = () => {
                               that *is* — so the quiet case keeps its glyph, its
                               tooltip and its accessible name, and gives up its
                               line. */}
-                          <span className={due.status === "not-due" ? "sr-only" : undefined}>
+                          {due.status === "unknown" && due.unknownReason && (
+                            /* Amber, and it explains itself when asked.
+
+                               This activity's cost is in no month's total,
+                               which changes what the figure above means — so
+                               it is the one row state that draws attention to
+                               itself, and it does so with a mark rather than
+                               with a paragraph in a box at the top of the
+                               tab. */
+                            <InfoDot tone="warning" label={t("activities.whyNoDate", { name: activity.name })}>
+                              <strong>{t("activities.dateUnknown")}</strong>
+                              <div>{t(due.unknownReason)}</div>
+                            </InfoDot>
+                          )}
+                          <span className={due.status !== "due" ? "sr-only" : undefined}>
                             {due.status === "unknown"
                               ? t("activities.dateUnknown")
                               : due.status === "not-due"
@@ -1174,12 +1207,6 @@ export const ActivityPanel: React.FC = () => {
                                     })}`
                                   : `${baseMoney(due.dueBase)} · ${t("activities.dueThisMonth")}`}
                           </span>
-                          {due.status === "unknown" && due.unknownReason && (
-                            <span title={t(due.unknownReason)} className="activity-due-why">
-                              <HelpCircle size={12} aria-hidden="true" />
-                              <span className="sr-only">{t(due.unknownReason)}</span>
-                            </span>
-                          )}
                         </span>
                       )}
                     </div>
@@ -1187,7 +1214,10 @@ export const ActivityPanel: React.FC = () => {
                 </div>
 
                 <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginLeft: "auto" }}>
-                  <div style={{ textAlign: "right", minWidth: 0 }}>
+                  {/* The figure carries the funding state, because the figure
+                      is what the classification changes the meaning of: this
+                      amount is money the reader will not be spending. */}
+                  <div className="activity-amount" data-funding={activityFundingKind(activity)} style={{ textAlign: "right", minWidth: 0 }}>
                     <strong style={{ whiteSpace: "nowrap" }}>
                       {formatMoney(estimate?.monthlyNative ?? 0, activity.currency, snapshot.settings.currencyDisplayMode)}
                       {/* An annual charge divided by twelve is an average, not
@@ -1202,6 +1232,33 @@ export const ActivityPanel: React.FC = () => {
                       {formatMoney(estimate?.yearlyNative ?? 0, activity.currency, snapshot.settings.currencyDisplayMode)}{" "}
                       {t("common.perYear")}
                     </div>
+                    {/* The equivalent in the currency every total on this tab
+                        is already in.
+
+                        An activity priced in dollars showed only dollars,
+                        beside a summary in euros — so the one figure on the
+                        row that could be compared with the budget was the one
+                        the reader had to convert in their head. `Money` does
+                        this for a transaction; nothing did it here. */}
+                    {(() => {
+                      const equivalent = displayEquivalent(
+                        estimate?.monthlyNative ?? 0,
+                        activity.currency,
+                        snapshot.settings,
+                      );
+                      if (!equivalent) return null;
+                      return (
+                        <div className="money-secondary" style={{ whiteSpace: "nowrap" }}>
+                          <span aria-hidden="true">≈ </span>
+                          <span className="sr-only">{t("common.approximately")} </span>
+                          {formatMoney(equivalent.amount, equivalent.currency, snapshot.settings.currencyDisplayMode)}
+                          <span className="text-caption">
+                            {" "}
+                            {isAveragedMonthly(activity) ? t("common.perMonthAverage") : t("common.perMonth")}
+                          </span>
+                        </div>
+                      );
+                    })()}
                   </div>
                   {mutable && (
                     <div className="row-actions">
@@ -1400,27 +1457,16 @@ const ActivitySummary: React.FC<{
         </div>
       </div>
 
-      {/* Activities the app cannot place in a month, named rather than
-          silently folded into the figure above. This is the difference
-          between a budget requirement and a guess. */}
+      {/* The list of activities with no known payment date used to be here, as
+          a boxed note with a heading, a sentence and a bullet per activity —
+          the tallest thing on the tab, restating a fact each affected row can
+          carry itself. The rows now carry an amber mark that explains itself
+          when it is asked to, and the count stays only as a quiet line so the
+          figure above is not silently short. */}
       {summary.unscheduled.length > 0 && (
-        <div className="activity-summary-note" role="note">
-          <HelpCircle size={14} aria-hidden="true" />
-          <div>
-            <strong>{t("activities.unscheduled", { count: summary.unscheduled.length })}</strong>
-            <div className="text-caption">{t("activities.unscheduledBody", { month: monthLabel })}</div>
-            <ul className="activity-unscheduled-list">
-              {summary.unscheduled.map((item) => (
-                <li key={item.activity.id}>
-                  <span className="activity-unscheduled-name">{item.activity.name}</span>
-                  <span className="text-caption">
-                    {money(item.monthlyBase)} {t("common.perMonthAverage")} · {t(item.unknownReason ?? "")}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        </div>
+        <p className="text-caption activity-summary-inactive">
+          {t("activities.unscheduled", { count: summary.unscheduled.length })}
+        </p>
       )}
 
       {summary.inactiveCount > 0 && (

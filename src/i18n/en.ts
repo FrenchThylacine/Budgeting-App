@@ -244,7 +244,6 @@ export const en = {
   "activities.requiredThisMonthHint": "The payments that actually fall due this month.",
   "activities.unscheduled_one": "{count} activity has no known payment date",
   "activities.unscheduled_other": "{count} activities have no known payment date",
-  "activities.unscheduledBody": "Add a renewal or start date and they will appear in “{month}”.",
   "activities.dueThisMonth": "Due this month",
   "activities.notDueThisMonth": "Nothing due this month",
   "activities.dueOn": "Due {date}",
@@ -299,7 +298,7 @@ export const en = {
 
   // ── Statistics ────────────────────────────────────────────────────────────
   "stats.activityCost": "What your activities cost",
-  "stats.activityShare": "Share of the yearly total",
+  "stats.activityShare": "What you pay for, by activity",
   "stats.notYours_one": "1 not yours to pay",
   "stats.notYours_other": "{count} not yours to pay",
   "stats.fundingSplit": "Who funds your activities",
@@ -1043,6 +1042,8 @@ export const en = {
   "stats.rolloverDetail": "accumulated month-end rollovers",
   "stats.spentPeriod": "Spent · {period}",
   "legend.title": "What the symbols mean",
+  "activities.scheduleDetail": "How {name} is scheduled",
+  "activities.whyNoDate": "Why {name} has no payment date",
   "wishlist.sellerLinkHint": "The shop this is bought from. Opened by the link on the card.",
   "activity.yearlyDateSet": "The charge repeats on this day every year. Change it and every future date follows.",
   "activity.yearlyDateMissing": "Set the day this renews. Without it, the yearly charge cannot be placed on a calendar at all — and the app will not invent a date for it.",
