@@ -296,7 +296,7 @@ export const ScenarioLab: React.FC = () => {
                         }
                       }}
                     >
-                      Apply to {covered} activit{covered === 1 ? "y" : "ies"}
+                      {t("scenario.applyToActivities", { count: covered })}
                     </Button>
                     {confirmSeason === season.id ? (
                       <span className="scenario-confirm">

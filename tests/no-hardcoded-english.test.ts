@@ -45,6 +45,19 @@ const ALLOWED = new Map<string, string>([
 /** The icon library's 244 keyword labels are a search index, not prose. */
 const EXEMPT_FILES = [/IconPicker/];
 
+/**
+ * Does this line read as a sentence rather than as code?
+ *
+ * Shared by the scanner and by the test that checks the scanner, so the two
+ * cannot drift — which is the failure mode a heuristic guard actually has.
+ */
+export function isProse(line: string): boolean {
+  return (
+    /^[A-Z][^<>=;(){}[\]]*[A-Za-z.!?”"…']$/.test(line) &&
+    /[A-Za-z]{3,}\s+[A-Za-z]{2,}/.test(line)
+  );
+}
+
 interface Finding {
   file: string;
   line: number;
@@ -56,9 +69,8 @@ function scan(): Finding[] {
   for (const file of componentFiles()) {
     if (EXEMPT_FILES.some((pattern) => pattern.test(file))) continue;
     let inComment = false;
-    readFileSync(file, "utf8")
-      .split("\n")
-      .forEach((line, index) => {
+    const lines = readFileSync(file, "utf8").split("\n");
+    lines.forEach((line, index) => {
         const trimmed = line.trim();
         if (inComment) {
           if (trimmed.includes("*/")) inComment = false;
@@ -84,6 +96,23 @@ function scan(): Finding[] {
         // The shape almost every one of them actually took: a ternary picking
         // between two English words rather than between two keys.
         for (const match of line.matchAll(/[?:]\s*"([A-Z][a-z]{2,}(?: [A-Za-z]+)*)"/g)) push(match[1]);
+
+        /*
+         * A sentence on its own line, between an opening and a closing tag.
+         *
+         * This is the shape the single-line rules cannot see, and it hid
+         * "No icon matches “{query}”." in the icon picker through the whole
+         * of the previous audit. The test is: the line before opened an
+         * element, and this line is prose — words, punctuation and possibly
+         * an interpolation, but no tag and no code.
+         */
+        const previous = index > 0 ? lines[index - 1].trim() : "";
+        // Interpolations are removed first: a sentence with a value in the
+        // middle of it is still a sentence, and leaving the braces in is what
+        // made an earlier version of this rule blind to the one case it was
+        // written for.
+        const bare = trimmed.replace(/\{[^}]*\}/g, "…");
+        if (previous.endsWith(">") && !previous.endsWith("/>") && isProse(bare)) push(bare);
       });
   }
   return findings;
@@ -105,5 +134,29 @@ describe("the components carry no English of their own", () => {
       ...line.matchAll(/\btitle=["']([A-Za-z][A-Za-z ,.'’!?%-]{3,})["']/g),
     ];
     expect(matches.map((m) => m[1])).toEqual(["Save changes", "Delete everything"]);
+  });
+
+  it("catches a sentence on its own line, which the first rules cannot see", () => {
+    /*
+     * The exact shape that survived the previous audit: prose alone between an
+     * opening and a closing tag, over three lines. Written as its own case
+     * because it is the one the single-line patterns are blind to, and a rule
+     * added without a test for it is a rule nobody knows is broken.
+     */
+    const strip = (line: string) => line.replace(/\{[^}]*\}/g, "…");
+
+    // The interpolation has to be removed before the shape is tested. Leaving
+    // the braces in is what made the first version of this rule blind to the
+    // one case it was written for, and this line is why the seven that came
+    // after it were found at all.
+    expect(isProse(strip("No icon matches “{query}”."))).toBe(true);
+    expect(isProse(strip("Nothing is dated in the next {horizonDays} days."))).toBe(true);
+    expect(isProse(strip("Replace your budget with {preview.fileName}?"))).toBe(true);
+
+    // And it does not fire on the ordinary case of an expression on its own
+    // line, which is most of what sits between two tags.
+    expect(isProse(strip('{t("icons.noMatch", { query })}'))).toBe(false);
+    expect(isProse(strip("{heldChildren.current}"))).toBe(false);
+    expect(isProse(strip("<Icon size={14} />"))).toBe(false);
   });
 });

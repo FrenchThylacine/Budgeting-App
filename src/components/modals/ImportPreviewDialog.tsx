@@ -128,7 +128,7 @@ export const ImportPreviewDialog: React.FC<ImportPreviewDialogProps> = ({
               <FileSpreadsheet size={20} />
             </span>
             <h2 id="import-preview-title" className="text-title" style={{ margin: 0, minWidth: 0, overflowWrap: "anywhere" }}>
-              Replace your budget with {preview.fileName}?
+              {t("import.replaceWith", { file: preview.fileName })}
             </h2>
           </div>
           <button className="btn btn-ghost btn-sm btn-icon" onClick={onCancel} aria-label={t("override.closeDialog")}>

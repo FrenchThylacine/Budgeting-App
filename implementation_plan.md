@@ -2,9 +2,11 @@
 
 This is the active engineering tracker. A checkbox is ticked only after implementation **and** the relevant verification have both succeeded. "The code exists" is never sufficient.
 
-**Last updated:** 2026-08-29 — a new identity built from the supplied artwork, a formation loading sequence, six measured themes, five genuinely complete languages including the reports, no special categories, an interactive tour, a second currency, a rebuilt report, and a browser harness that drives all of it.
+**Last updated:** 2026-08-30 — the V4 pass: the funding statistic corrected at the domain level, the whole Flightradar24 fleet extracted for the transition, a loading sequence with a genuine 3D orbit and advected smoke, a hundred and six untranslated strings found and fixed, and a broad reduction in controls and words across the application.
 
-**Verification state.** **771 unit tests across 42 files, all passing** (82 database integration tests skipped without `TEST_DATABASE_URL`), TypeScript clean for both targets, and **`scripts/verify-browser.mjs` driving a real Chrome against a throwaway PostgreSQL 17 database on a brand-new account each run**. Nothing from 2026-08-17 onward is verified in production.
+**Version:** 4.0.0. See `CHANGELOG.md` for what each version was.
+
+**Verification state.** **789 unit tests across 44 files, all passing** (82 database integration tests skipped without `TEST_DATABASE_URL`), TypeScript clean for **both** targets — the frontend project and the server's, which compiles `src/domain` without a DOM library — and **`scripts/verify-browser.mjs` driving a real Chrome on a brand-new account each run: 48 checks, all passing.** Nothing from 2026-08-17 onward is verified in production.
 
 ## How this session verified things
 
@@ -13,6 +15,74 @@ This is the active engineering tracker. A checkbox is ticked only after implemen
 - **Then a fifth, and a sixth**, on the second pass: "8.86" with a full stop in a French sentence otherwise full of commas, and "tous les 5 semaines" — an article glued in front of a noun whose gender the sentence could not know.
 - **Contrast is measured, not eyeballed.** The themes are data, so `tests/theme-contrast.test.ts` walks every preset in both appearances and asserts every text token against every surface. Thirty assertions, and a theme that fails one fails the build.
 - **Translation completeness is a test, not a claim.** `tests/i18n.test.ts` asserts both directions: every key the source asks for exists in English, and every language marked *translated* covers the whole English key set. 1,054 keys × 5 languages.
+
+## Completed — 2026-08-30 (V4)
+
+### The funding statistic was wrong, at the domain level
+
+- [x] **"Share of the yearly total" counted activities the user does not pay for.** `activityBudgetSummary` divided every activity by the *gross* yearly total, so a €1,200 subscription a parent funds took 58% of a chart headed "share of the yearly total" and made the user's own €600 gym look like a third of their year. The list and the denominator now move together: personal activities, personal total. Fixed where the figure is computed, so the statistics page, the report and anything downstream inherit it (`domain/activityBudget.ts`).
+- [x] **The omission is visible rather than silent.** A chip on the chart says how many activities were left out, and the funding split directly below still answers "who paid" against the gross.
+- [x] **Six regression tests**, where the previous pass had none for this figure: the list, the denominator, that the shares still sum to 100, the count of exclusions, the all-external case, and that the three-way split keeps reading the gross (`tests/activity-budget.test.ts`).
+- [x] **The rest of the statistics audited for the same class of error.** Every spending figure already flows through `personalEntries`; the activity side was the only place a gross total was used as a personal denominator.
+
+### The transition flies the supplied fleet
+
+- [x] **Twenty-two aircraft, cut from the sheet.** `scripts/extract-craft.mjs` flood-fills the paper *and its drop shadows* from the border, labels what survives, and regroups the components into icons by the layout's own geometry — a measured 12-pixel merge gap, because the widest gap *inside* an icon on this sheet is one pixel and the narrowest gap *between* two is seventeen. The four shapes that are not aircraft are named `null` and not shipped.
+- [x] **White, nose-right, one size.** Each is painted flat white from its own mask, rotated a quarter turn (the sheet draws nose-up; this application's convention is nose-right, so a rotation of zero means "the way this app moves"), and fitted to one 160px box so a glider does not fly the length of a runway.
+- [x] **Two preferences, not one.** `settings.aircraft` chooses the loading screen's aeroplane from the three illustrations; `settings.transitionAircraft` chooses the transition's from the twenty-two silhouettes. Concorde is the default in both. They were one setting, which was only defensible while both lists were the same three aircraft.
+- [x] **Verified in the browser**: 22 distinct tiles, every one decoding, every one from `/craft/fleet/`, every one named for a screen reader, and the pixels measured — over 98% of the opaque area of a silhouette is white.
+- [x] **The old silhouettes are gone**, and `build-icons.mjs` no longer generates them.
+
+### A loading sequence with depth
+
+- [x] **The orbit is in three dimensions.** The escorts fly a circle in a plane tilted 56° out of the screen, so they pass above the lead, below it, in front of its nose and away behind its tail. Perspective (`D / (D − z)`), occlusion (the sign of `z` chooses the layer) and aerial perspective all come off the same coordinate. Verified: the harness records that an escort is drawn *both* behind and in front of the lead during the sequence.
+- [x] **The smoke is advected, not drawn.** Each jet emits a particle a frame at its tailpipe; from then on the particle belongs to the air — drifting back at the airspeed, spreading on a square root, wandering on two slow frequencies and fading. The ribbon is the polygon through those particles, smoothed with quadratic curves through the midpoints so a turn is a curve rather than a chain of corners.
+- [x] **Two canvases, one either side of the lead**, with each run of particles drawn on the layer its own `z` chooses — which is what lets a ribbon stay behind the aircraft while the jet that drew it comes round the front.
+- [x] **The tricolour is measured, not asserted.** The harness samples the smoke canvases along a vertical cut just behind the formation and checks the bands read blue, white, red from top to bottom.
+- [x] **Performance**: median frame 8.3ms, worst 10.4ms, over 355 frames. Six filled polygons a frame, no layout.
+
+### A hundred and six sentences that were never translated
+
+- [x] **Found by looking at the components rather than at the dictionaries.** Every previous check ran against the five dictionaries — no missing keys, no untranslated values, no unused keys — and a sentence written directly in the JSX passes all three. 106 user-facing English strings were still in the source: every swipe-action label, the whole sign-in screen, chart tooltips, editor titles, empty states, and "immutable" on a history row.
+- [x] **`tests/no-hardcoded-english.test.ts`** now scans the components and fails on a new one, with an allowlist of three entries, each of them a decision rather than an exemption.
+- [x] **A locale bug the dictionaries could not catch**: an English interface headed a card "VS JUILLET 2026", because `periodComparison` built its label with no locale and `Intl` fell back to the browser's.
+- [x] **~90 new keys across five languages**, and eight dropped as documentation.
+
+### Less of everything
+
+- [x] **Every figure read "€ EUR 1,400"** — the symbol *and* its ISO code, on a screen that names the display currency once at the top. The default is now the symbol.
+- [x] **Six buttons per activity row became one and a menu** (`ui/RowMenu.tsx`: keyboard-driven, positioned `fixed` so a row's swipe overflow cannot clip it, destructive item separated). Nothing was removed — reordering, duplicating, deactivating and deleting are one press away, which is the right distance for a monthly action.
+- [x] **Nine permanent controls at the foot of the navigation became two closed groups**, including a red *Reset all data* that had been one press from every page in the application.
+- [x] **"· active" left every row that is not deactivated** (the deactivated ones carry a badge), and "· normal" left every row whose season is the default.
+- [x] **Four chart subtitles that described the chart above them**, two section summaries and a heading printed twice twelve pixels apart, all removed.
+- [x] **The dashboard's two sentences about money somebody else paid became two chips.**
+
+### One vocabulary for who paid
+
+- [x] **Named tokens** (`--funding-personal|other|outside`, each with `-text` and `-soft`) replace ad-hoc `--teal` and `--warning` at the call sites. Paid-by-other is now **blue**; it was teal, which reads as turquoise and says nothing.
+- [x] **Three channels, always**: colour, glyph (● ◆ ▲) and word — so the states survive greyscale and colour blindness.
+- [x] **The print inks are separated by lightness as well as hue**, because two blues of the same weight are one grey on a laser printer, and `tests/report-presentation.test.ts` measures the separation.
+
+### The report reads like a dashboard
+
+- [x] **A tinted hero band with the budget drawn as a length** — the one proportion on the page, and the reason it scans as a dashboard rather than as a list of numbers. Over-budget is a different colour *and* a hatch.
+- [x] **The trend chart is hidden below two months of data.** A new account's first report drew one bar and eleven question marks, taking a fifth of the page to say it had no history.
+- [x] **The detail grid went from thirteen cards to nine**, by removing the three that repeated the funding table two sections above; the treasury trio keeps its captions, because three balances in a row is exactly where a label alone does not say which is which.
+- [x] **A coloured tab on every section heading**, with the rule underneath kept for when the colour is not printed.
+
+### The tour, and "decide later"
+
+- [x] **"Decide later" is offered on every card**, not only the first. Four steps in was exactly when there was a place worth returning to, and the only exit on offer was the one that discarded it.
+- [x] **Closing the card postpones rather than refuses.** × and Escape mean "not now"; ending the offer is a decision with a labelled button.
+- [x] **Verified end to end in the browser**: a task step refuses to advance until the task is genuinely done and still offers a way past; Later leaves a resumable reminder that survives a reload; dismissing the reminder ends it for good; and Skip leaves no reminder at all.
+
+### Also
+
+- [x] **About**, in Settings: name, version (substituted from `package.json` at build time, so it cannot drift), what it was built with, and a link to the source.
+- [x] **Coherent versions.** The changelog had twenty date-headed sections and no numbers; it now has both, coarse on purpose, with a table saying what each release was for. `package.json` is 4.0.0.
+- [x] **Exchange rates refresh when the application opens** — the fetch existed, was tested, and had no caller anywhere in `src/`. Age-based *and* publication-anchored, so opening the app is enough without hammering the provider.
+- [x] **A CI failure the frontend build is structurally blind to**: `applyTheme` took an `HTMLElement`, and the API validates theme ids from that same module, so the server's TypeScript project compiles it — with no DOM library.
+- [x] **Cleanup**: one orphan component, two unused dependencies, the old per-aircraft silhouettes, and eight documentation keys.
 
 ## Completed — 2026-08-29
 
@@ -112,7 +182,7 @@ This is the active engineering tracker. A checkbox is ticked only after implemen
 
 ## Discovered issues — open, current
 
-- [ ] **The icon library's 244 labels are English.** They are a data table rather than prose — the picker searches English keywords as well — and translating them is 244 nouns × 4 languages for a searchable index. The picker's own interface (search, close, the colour controls) is translated.
+- [ ] **The icon library's 244 icon *names* are English.** They are a search index rather than prose — the picker matches typed English keywords against them — and translating them is 244 nouns × 4 languages for something nobody reads as a sentence. *(Narrowed 2026-08-30: the sixteen category headings above them, and the "no icon matches" message, are translated. What is left is the index itself.)*
 - [ ] **The Excel import's warnings are English.** They name English cell labels from the workbook they are describing ("the Budget sheet has no \"Activities\" header cell"), and the dialog is reached only when the user chooses a file. Recorded rather than silently accepted.
 - [ ] **`sessionsPerMonth` and `sessionsPerPeriod` both describe a frequency.** Merging them would migrate every existing `perSession` activity, which is not worth doing for tidiness alone.
 - [ ] **The wallet does not model transfers between currencies.** A movement has one currency and converts for display; moving €100 into a dollar wallet is two entries, not one.

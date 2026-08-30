@@ -341,7 +341,7 @@ export const HistoryPanel: React.FC = () => {
 
           {auditEntries.length > 200 && (
             <div className="text-note" style={{ textAlign: "center" }}>
-              Showing the 200 most recent of {auditEntries.length} entries.
+              {t("history.showingRecent", { shown: 200, total: auditEntries.length })}
             </div>
           )}
         </>

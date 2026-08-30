@@ -350,7 +350,7 @@ export const Dashboard: React.FC<{ onNavigate?: (tab: "spending" | "activities" 
 
                   <div style={{ display: "grid", gap: 12, minWidth: 0, alignContent: "center" }}>
                     <h2 className="text-title" style={{ margin: 0 }}>
-                      Budget health · {periodLabel(settings, language)}
+                      {t("dashboard.budgetHealthFor", { period: periodLabel(settings, language) })}
                     </h2>
                     {/* One sentence saying what the number means, so the gauge is
                         not a score with no explanation attached to it. */}
@@ -631,9 +631,11 @@ export const Dashboard: React.FC<{ onNavigate?: (tab: "spending" | "activities" 
                   <div>
                     <div className="text-title">{t("dashboard.suggestedMonthlyBudget")}</div>
                     <div className="text-caption" style={{ marginTop: 4 }}>
-                      Based on {calculation.activityEstimates.filter((a) => a.activity.active && a.activity.visible).length} active
-                      recurring expenses
-                      {suggestion.recurringTotal > 0 && ` · total recurring ${money(suggestion.recurringTotal)}`}
+                      {t("dashboard.basedOnActive", {
+                        count: calculation.activityEstimates.filter((a) => a.activity.active && a.activity.visible).length,
+                      })}
+                      {suggestion.recurringTotal > 0 &&
+                        ` · ${t("dashboard.totalRecurring", { amount: money(suggestion.recurringTotal) })}`}
                     </div>
                   </div>
                   <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>

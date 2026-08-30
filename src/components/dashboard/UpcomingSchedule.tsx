@@ -142,9 +142,7 @@ export const UpcomingSchedule: React.FC<UpcomingScheduleProps> = ({ snapshot, mo
       )}
 
       {days.length === 0 && undated.length > 0 && (
-        <p className="text-caption upcoming-note">
-          Nothing is dated in the next {horizonDays} days.
-        </p>
+        <p className="text-caption upcoming-note">{t("dashboard.nothingDated", { count: horizonDays })}</p>
       )}
 
       {undated.length > 0 && (
