@@ -3444,3 +3444,24 @@ label:has(> input[type="radio"]) {
   gap: 8px;
   padding: 6px 0 12px;
 }
+
+/* ── V4: About ────────────────────────────────────────────────────────────── */
+.about-card { gap: 16px; }
+
+.about-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.about-version { margin-inline-start: auto; font-variant-numeric: tabular-nums; }
+
+.about-facts {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+}
+.about-facts dd { margin: 2px 0 0; font-size: var(--text-footnote); color: var(--text-secondary); }
+
+.about-links { display: flex; gap: 8px; flex-wrap: wrap; }

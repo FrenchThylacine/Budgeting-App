@@ -1,8 +1,21 @@
+import { readFileSync } from "node:fs";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
+/**
+ * The version, from the one place that has it.
+ *
+ * `package.json` is the version of record — it is what `npm version` writes
+ * and what a release tag matches. Substituting it at build time means the
+ * About panel cannot drift from it, and costs the bundle a string.
+ */
+const { version } = JSON.parse(readFileSync(new URL("./package.json", import.meta.url), "utf8"));
+
 export default defineConfig({
   base: process.env.GITHUB_ACTIONS ? "/Budgeting-App/" : "/",
+  define: {
+    __APP_VERSION__: JSON.stringify(version),
+  },
   plugins: [react()],
   server: {
     host: true,

@@ -10,6 +10,7 @@ import {
   RefreshCw,
   Search,
   UserRound,
+  ExternalLink,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { trackedCurrencies } from "../../domain/currency";
@@ -29,6 +30,7 @@ import { useTranslation } from "../../i18n/useTranslation";
 import { Button } from "../ui/Button";
 import { EditorSheet } from "../ui/EditorSheet";
 import { AircraftArt, AircraftSilhouette } from "../ui/Aircraft";
+import { AppMark } from "../ui/AppMark";
 import { useBudgetStore } from "../../store/budgetStore";
 import type { Appearance } from "../../domain/theme";
 import type { CurrencyCode, CurrencyDisplayMode, RoundingRule } from "../../domain/types";
@@ -586,7 +588,59 @@ const AccountGroup: React.FC = () => {
           </div>
         </div>
       </Section>
+
+      <About />
     </>
+  );
+};
+
+/**
+ * About: what this is, which build, and who made it.
+ *
+ * Deliberately short. An About page is read once, by somebody checking a
+ * version number before reporting something — so the version is the first
+ * thing on it and the prose is four lines. The credits are there because the
+ * application was genuinely built with those tools and saying so is more
+ * honest than an empty "© 2026".
+ */
+const About: React.FC = () => {
+  const { t } = useTranslation();
+  // Substituted at build time from `package.json`; falls back rather than
+  // throwing in a context that has no define (a test renderer, say).
+  const version = typeof __APP_VERSION__ === "string" ? __APP_VERSION__ : "—";
+
+  return (
+    <Section title={t("settings.about")}>
+      <div className="card card-body settings-card about-card">
+        <div className="about-head">
+          <AppMark size={40} />
+          <div>
+            <div className="text-callout" style={{ fontWeight: 600 }}>
+              Budget OS
+            </div>
+            <div className="text-caption">{t("about.tagline")}</div>
+          </div>
+          <span className="chip chip-muted about-version">v{version}</span>
+        </div>
+
+        <dl className="about-facts">
+          <div>
+            <dt className="text-footnote">{t("about.builtWith")}</dt>
+            <dd>Claude · Codex · ChatGPT · Gemini · Copilot</dd>
+          </div>
+          <div>
+            <dt className="text-footnote">{t("about.yourData")}</dt>
+            <dd>{t("about.yourDataValue")}</dd>
+          </div>
+        </dl>
+
+        <div className="about-links">
+          <a className="btn btn-secondary btn-sm" href="https://github.com/FrenchThylacine/Budgeting-App" target="_blank" rel="noreferrer noopener">
+            <ExternalLink size={14} /> {t("about.source")}
+          </a>
+        </div>
+      </div>
+    </Section>
   );
 };
 

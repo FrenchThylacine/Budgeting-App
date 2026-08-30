@@ -121,12 +121,21 @@ describe("the funding breakdown", () => {
     expect(new Set(glyphs).size).toBe(3);
   });
 
-  it("says beside each figure that it was not charged to the budget", () => {
-    // Stated where the number is, rather than in a paragraph at the foot of
-    // the report: the reader who needs it is looking at the amount.
-    const detail = (label: string) => report.summary.find((item) => item.label === label)?.detail ?? "";
-    expect(detail("Paid by other")).toMatch(/never charged to you/i);
-    expect(detail("Outside budget")).toMatch(/kept off this budget/i);
+  it("states each kind once, where the reader is already looking", () => {
+    /*
+     * This used to check for a sentence under each of two extra cards in the
+     * detail grid — cards that repeated, with a caption, what this table
+     * gives with an amount, a count and a share. A figure that appears twice
+     * in one report makes the reader stop to work out whether it is the same
+     * figure, so the cards went and the table stayed.
+     */
+    const byKind = Object.fromEntries(report.funding.lines.map((line) => [line.kind, line]));
+    expect(byKind.other.count).toBe(1);
+    expect(byKind.outside.count).toBe(1);
+    // And nothing restates them further down the page.
+    const labels = report.summary.map((item) => item.label);
+    expect(labels).not.toContain("Paid by other");
+    expect(labels).not.toContain("Outside budget");
   });
 });
 
@@ -308,5 +317,58 @@ describe("the report is written in the reader's language", () => {
     const arabic = createTranslator("ar");
     const html = reportHtml(buildPeriodReport(reportSnapshot(), "month", NOW, arabic), money, arabic);
     expect(html).toContain('dir="rtl"');
+  });
+});
+
+/**
+ * The page has to survive a monochrome printer
+ * ============================================
+ *
+ * Every rule the project has about colour comes down to one sentence: colour
+ * is the fastest channel and never the only one. On paper that is not a
+ * principle, it is arithmetic — two inks of the same lightness are one grey,
+ * however different their hues.
+ *
+ * Two of the three funding states are blue by design: "paid by me" is the
+ * budget's own accent and "paid by other" is the blue the whole interface uses
+ * for somebody else's money. Printed at the same weight they would merge, so
+ * they are separated by lightness as well as hue, and this measures it.
+ */
+describe("printed in black and white", () => {
+  const html = reportHtml(buildPeriodReport(reportSnapshot(), "month", NOW), money);
+
+  /** Relative luminance, per WCAG. */
+  const luminance = (hex: string): number => {
+    const channel = (value: number) => {
+      const v = value / 255;
+      return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+    };
+    const [r, g, b] = [1, 3, 5].map((offset) => parseInt(hex.slice(offset, offset + 2), 16));
+    return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
+  };
+
+  it("gives the three funding inks three different greys", () => {
+    // Taken from the rendered document rather than from a constant, so the
+    // test measures what is printed.
+    const inks = [...html.matchAll(/class="glyph" style="color:(#[0-9A-Fa-f]{6})/g)].map((m) => m[1]);
+    const distinct = [...new Set(inks)];
+    expect(distinct.length).toBe(3);
+    const greys = distinct.map(luminance).sort((a, b) => a - b);
+    // Adjacent inks differ by at least a fifth of the available range. Below
+    // roughly this the two are the same grey on a laser printer.
+    expect(greys[1] - greys[0]).toBeGreaterThan(0.05);
+    expect(greys[2] - greys[1]).toBeGreaterThan(0.05);
+  });
+
+  it("says which state each figure is in, in words as well as in ink", () => {
+    // The glyphs are the second channel; these are the third. A reader who
+    // sees neither colour nor shape still gets the answer.
+    expect(html).toContain("Paid by other");
+    expect(html).toContain("Outside budget");
+  });
+
+  it("draws the budget as a length, which greyscale cannot take away", () => {
+    expect(html).toContain("budget-fill");
+    expect(html).toMatch(/budget-fill[^"]*" style="width:\d/);
   });
 });
