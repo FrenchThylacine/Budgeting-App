@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import type { TabKey } from "../../domain/tabs";
 import { useAuthStore } from "../../store/authStore";
 import { useBudgetStore } from "../../store/budgetStore";
 import {
@@ -88,18 +89,6 @@ const NavGroup: React.FC<{ title: string; icon: LucideIcon; children: React.Reac
   );
 };
 
-type TabKey =
-  | "dashboard"
-  | "activities"
-  | "spending"
-  | "wishlist"
-  | "wallet"
-  | "analytics"
-  | "scenarios"
-  | "history"
-  | "settings"
-  | "categories"
-  | "currencies";
 
 /**
  * Navigation carries translation *keys*, not words.
@@ -117,6 +106,7 @@ const navItems: { key: TabKey; labelKey: string; icon: React.ElementType }[] = [
   { key: "analytics", labelKey: "nav.analytics", icon: BarChart3 },
   { key: "scenarios", labelKey: "nav.scenarios", icon: FlaskConical },
   { key: "history", labelKey: "nav.history", icon: History },
+  { key: "report", labelKey: "nav.report", icon: FileText },
   { key: "categories", labelKey: "nav.categories", icon: Tags },
   { key: "currencies", labelKey: "nav.currencies", icon: Coins },
   { key: "settings", labelKey: "nav.settings", icon: Settings },

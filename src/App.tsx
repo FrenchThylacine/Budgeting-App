@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect, useRef, Suspense, lazy } from "react";
 import { useBudgetStore } from "./store/budgetStore";
+import type { TabKey } from "./domain/tabs";
 import { calculateYear } from "./domain/calculations";
 import { Sidebar } from "./components/layout/Sidebar";
 import { MobileNav } from "./components/layout/MobileNav";
@@ -38,6 +39,11 @@ const loadCurrencies = () => import("./components/currencies/CurrencyPanel");
 const AnalyticsPanel = lazy(() => loadAnalytics().then((m) => ({ default: m.AnalyticsPanel })));
 const ScenarioLab = lazy(() => loadScenarios().then((m) => ({ default: m.ScenarioLab })));
 const HistoryPanel = lazy(() => loadHistory().then((m) => ({ default: m.HistoryPanel })));
+/* Split like the rest: the report module and its stylesheet are fifteen
+   kilobytes nothing needs until somebody asks for a report. */
+const ReportPanel = lazy(() =>
+  import("./components/report/ReportPanel").then((m) => ({ default: m.ReportPanel })),
+);
 const SettingsPanel = lazy(() => loadSettings().then((m) => ({ default: m.SettingsPanel })));
 const CategoryManager = lazy(() => loadCategories().then((m) => ({ default: m.CategoryManager })));
 const CurrencyPanel = lazy(() => loadCurrencies().then((m) => ({ default: m.CurrencyPanel })));
@@ -99,18 +105,6 @@ import { useTranslation } from "./i18n/useTranslation";
 import { resolveStoredText } from "./domain/storedText";
 import { refreshRatesOnOpen } from "./domain/exchangeRates";
 
-type TabKey =
-  | "dashboard"
-  | "activities"
-  | "spending"
-  | "wishlist"
-  | "wallet"
-  | "analytics"
-  | "scenarios"
-  | "history"
-  | "settings"
-  | "categories"
-  | "currencies";
 
 /**
  * The tabs the period does not govern.
@@ -418,6 +412,7 @@ export default function App() {
     analytics: <AnalyticsPanel />,
     scenarios: <ScenarioLab />,
     history: <HistoryPanel />,
+    report: <ReportPanel />,
     settings: <SettingsPanel />,
     categories: <CategoryManager />,
     currencies: <CurrencyPanel />,
