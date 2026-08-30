@@ -828,7 +828,6 @@ export const en = {
   "mark.startAgain": "Start again",
   "mark.useAnImageOrA": "Use an image or a website instead",
   "mark.imageLink": "Image link",
-  "mark.searchableGroupedAndAlwaysAvailable": "Searchable, grouped, and always available offline — unlike anything fetched from a website.",
   "mark.exampleComLogoPng": "example.com/logo.png",
   "mark.icon": "Icon",
   "mark.customIcon": "Custom icon",
@@ -1365,4 +1364,6 @@ export const en = {
   "wishlist.itemGone": "That item no longer exists.",
   "stats.overview": "Overview",
   "dashboard.topCategories": "Top categories",
+  "activity.appearance": "Colour and icon",
+  "activity.otherPrices": "Other prices",
 } as const;

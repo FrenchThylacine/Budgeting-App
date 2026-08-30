@@ -806,7 +806,6 @@ export const es: Dictionary = {
   "mark.startAgain": "Empezar de nuevo",
   "mark.useAnImageOrA": "Usar una imagen o un sitio web en su lugar",
   "mark.imageLink": "Enlace de la imagen",
-  "mark.searchableGroupedAndAlwaysAvailable": "Buscables, agrupados y siempre disponibles sin conexión, a diferencia de lo que se descarga de un sitio web.",
   "mark.exampleComLogoPng": "ejemplo.com/logo.png",
   "mark.icon": "Icono",
   "mark.customIcon": "Icono personalizado",
@@ -1321,4 +1320,6 @@ export const es: Dictionary = {
   "wishlist.itemGone": "Ese elemento ya no existe.",
   "stats.overview": "Resumen",
   "dashboard.topCategories": "Principales categorías",
+  "activity.appearance": "Color e icono",
+  "activity.otherPrices": "Otros precios",
 };

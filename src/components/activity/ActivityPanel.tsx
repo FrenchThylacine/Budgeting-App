@@ -117,6 +117,27 @@ export const ActivityPanel: React.FC = () => {
 
   const patch = (changes: Partial<ActivityDraft>) => setForm((current) => ({ ...current, ...changes }));
 
+  /**
+   * Which price field the chosen cost model actually reads.
+   *
+   * The editor showed all five at once — monthly, per session, per purchase,
+   * yearly and a fallback estimate — of which exactly one is ever used. Four
+   * empty boxes beside the one that matters is not a form, it is a quiz. The
+   * rest are still there, one press behind, because `auto` genuinely can read
+   * whichever is filled in.
+   */
+  const relevantPrice = (field: "pricePerMonth" | "pricePerSession" | "pricePerPurchase" | "yearlyEstimate"): boolean => {
+    const model = form.costModel ?? "auto";
+    if (model === "fixed") return field === "pricePerMonth";
+    if (model === "perSession" || model === "sessionPack" || model === "schedule") return field === "pricePerSession";
+    if (model === "fixedYearly") return field === "yearlyEstimate";
+    // `auto` follows the recurrence type, which is what it is documented to do.
+    if (form.recurrenceType === "yearly") return field === "yearlyEstimate";
+    if (form.recurrenceType === "session") return field === "pricePerSession";
+    if (form.recurrenceType === "purchase") return field === "pricePerPurchase";
+    return field === "pricePerMonth";
+  };
+
   const begin = (activity: Activity | null) => {
     setEditing(activity);
     setForm(activityToDraft(activity, snapshot));
@@ -476,9 +497,6 @@ export const ActivityPanel: React.FC = () => {
                   ))}
                 </select>
               </Field>
-              <Field label={t("activity.colour")} span group>
-                <ColorPicker value={form.color || undefined} onChange={(color) => patch({ color: color ?? "" })} />
-              </Field>
             </FieldGroup>
 
             {/* Who pays.
@@ -493,7 +511,11 @@ export const ActivityPanel: React.FC = () => {
                 label={t("funding.label")}
                 name="funding"
                 span={form.fundingSource !== "other"}
-                hint={t(`funding.${form.fundingSource}.hint`)}
+                /* The hint explains what the choice *does* to the budget,
+                   which is only worth saying for the two that do something
+                   unexpected. "Counts against your budget" under the default
+                   is a sentence explaining the absence of a surprise. */
+                hint={form.fundingSource === "personal" ? undefined : t(`funding.${form.fundingSource}.hint`)}
               >
                 <select
                   className="select"
@@ -522,25 +544,6 @@ export const ActivityPanel: React.FC = () => {
               )}
             </FieldGroup>
 
-            {/* The same icon controls the wishlist uses, from the same module:
-                a library icon and a live preview in view, an image link and a
-                site to take the icon from one tap behind. Activities used to
-                have the library and nothing else. */}
-            <MarkFields
-              source={{ icon: form.icon, iconUrl: form.iconUrl, sourceUrl: form.iconSourceUrl }}
-              accent={draftAccent || "var(--accent)"}
-              fallback={<Circle size={20} color={draftAccent || "var(--accent)"} />}
-              sourceLabel={t("activity.iconFromAWebsite")}
-              sourcePlaceholder="navigraph.com"
-              sourceHint={t("activity.theDeveloperPublisherOrClub")}
-              onChange={(next) =>
-                patch({
-                  ...(next.icon !== undefined ? { icon: next.icon } : {}),
-                  ...(next.iconUrl !== undefined ? { iconUrl: next.iconUrl } : {}),
-                  ...(next.sourceUrl !== undefined ? { iconSourceUrl: next.sourceUrl } : {}),
-                })
-              }
-            />
 
             <FieldGroup title={t("activities.groupRecurrence")}>
               <Field label={t("activity.recurrenceType")}>
@@ -739,64 +742,134 @@ export const ActivityPanel: React.FC = () => {
             )}
 
             <FieldGroup title={t("activities.groupPrices")}>
+              {relevantPrice("pricePerMonth") && (
               <Field label={t("activity.monthlyCost")} name="pricePerMonth" emphasised={form.costModel === "fixed"}>
-                <input
-                  className="input"
-                  type="number"
-                  step="any"
-                  placeholder="—"
-                  value={form.pricePerMonth}
-                  onChange={(event) => patch({ pricePerMonth: event.target.value })}
-                />
-              </Field>
+                  <input
+                    className="input"
+                    type="number"
+                    step="any"
+                    placeholder="—"
+                    value={form.pricePerMonth}
+                    onChange={(event) => patch({ pricePerMonth: event.target.value })}
+                  />
+                </Field>
+              )}
+              {relevantPrice("pricePerSession") && (
               <Field
-                label={t("activity.sessionCost")}
-                emphasised={form.costModel === "perSession" || form.costModel === "schedule" || form.costModel === "sessionPack"}
-              >
-                <input
-                  className="input"
-                  type="number"
-                  step="any"
-                  placeholder="—"
-                  value={form.pricePerSession}
-                  onChange={(event) => patch({ pricePerSession: event.target.value })}
-                />
-              </Field>
+                  label={t("activity.sessionCost")}
+                  emphasised={form.costModel === "perSession" || form.costModel === "schedule" || form.costModel === "sessionPack"}
+                >
+                  <input
+                    className="input"
+                    type="number"
+                    step="any"
+                    placeholder="—"
+                    value={form.pricePerSession}
+                    onChange={(event) => patch({ pricePerSession: event.target.value })}
+                  />
+                </Field>
+              )}
+              {relevantPrice("pricePerPurchase") && (
               <Field label={t("activity.purchaseCost")} emphasised={form.recurrenceType === "purchase"}>
-                <input
-                  className="input"
-                  type="number"
-                  step="any"
-                  placeholder="—"
-                  value={form.pricePerPurchase}
-                  onChange={(event) => patch({ pricePerPurchase: event.target.value })}
-                />
-              </Field>
+                  <input
+                    className="input"
+                    type="number"
+                    step="any"
+                    placeholder="—"
+                    value={form.pricePerPurchase}
+                    onChange={(event) => patch({ pricePerPurchase: event.target.value })}
+                  />
+                </Field>
+              )}
+              {relevantPrice("yearlyEstimate") && (
               <Field
-                label={t("activity.yearlyEstimate")}
-                emphasised={form.recurrenceType === "yearly" || form.costModel === "fixedYearly"}
-                hint={form.costModel === "fixedYearly" ? t("activity.sameAsYearlyCharge") : undefined}
-              >
-                <input
-                  className="input"
-                  type="number"
-                  step="any"
-                  placeholder="—"
-                  value={form.yearlyEstimate}
-                  onChange={(event) => patch({ yearlyEstimate: event.target.value })}
-                />
-              </Field>
-              <Field label={t("activity.estimatedCost")} hint={t("activity.fallbackUsedByTheAutomatic")}>
-                <input
-                  className="input"
-                  type="number"
-                  step="any"
-                  placeholder="—"
-                  value={form.estimatedCost}
-                  onChange={(event) => patch({ estimatedCost: event.target.value })}
-                />
-              </Field>
+                  label={t("activity.yearlyEstimate")}
+                  emphasised={form.recurrenceType === "yearly" || form.costModel === "fixedYearly"}
+                  hint={form.costModel === "fixedYearly" ? t("activity.sameAsYearlyCharge") : undefined}
+                >
+                  <input
+                    className="input"
+                    type="number"
+                    step="any"
+                    placeholder="—"
+                    value={form.yearlyEstimate}
+                    onChange={(event) => patch({ yearlyEstimate: event.target.value })}
+                  />
+                </Field>
+              )}
             </FieldGroup>
+
+            {/* The prices this model does not read, and the fallback the
+                automatic model uses when none of them is filled in. */}
+            <AdvancedFields label={t("activity.otherPrices")}>
+              <FieldGroup title={t("activity.otherPrices")}>
+                {!relevantPrice("pricePerMonth") && (
+              <Field label={t("activity.monthlyCost")} name="pricePerMonth" emphasised={form.costModel === "fixed"}>
+                    <input
+                      className="input"
+                      type="number"
+                      step="any"
+                      placeholder="—"
+                      value={form.pricePerMonth}
+                      onChange={(event) => patch({ pricePerMonth: event.target.value })}
+                    />
+                  </Field>
+                )}
+                {!relevantPrice("pricePerSession") && (
+              <Field
+                    label={t("activity.sessionCost")}
+                    emphasised={form.costModel === "perSession" || form.costModel === "schedule" || form.costModel === "sessionPack"}
+                  >
+                    <input
+                      className="input"
+                      type="number"
+                      step="any"
+                      placeholder="—"
+                      value={form.pricePerSession}
+                      onChange={(event) => patch({ pricePerSession: event.target.value })}
+                    />
+                  </Field>
+                )}
+                {!relevantPrice("pricePerPurchase") && (
+              <Field label={t("activity.purchaseCost")} emphasised={form.recurrenceType === "purchase"}>
+                    <input
+                      className="input"
+                      type="number"
+                      step="any"
+                      placeholder="—"
+                      value={form.pricePerPurchase}
+                      onChange={(event) => patch({ pricePerPurchase: event.target.value })}
+                    />
+                  </Field>
+                )}
+                {!relevantPrice("yearlyEstimate") && (
+              <Field
+                    label={t("activity.yearlyEstimate")}
+                    emphasised={form.recurrenceType === "yearly" || form.costModel === "fixedYearly"}
+                    hint={form.costModel === "fixedYearly" ? t("activity.sameAsYearlyCharge") : undefined}
+                  >
+                    <input
+                      className="input"
+                      type="number"
+                      step="any"
+                      placeholder="—"
+                      value={form.yearlyEstimate}
+                      onChange={(event) => patch({ yearlyEstimate: event.target.value })}
+                    />
+                  </Field>
+                )}
+              <Field label={t("activity.estimatedCost")} hint={t("activity.fallbackUsedByTheAutomatic")}>
+                  <input
+                    className="input"
+                    type="number"
+                    step="any"
+                    placeholder="—"
+                    value={form.estimatedCost}
+                    onChange={(event) => patch({ estimatedCost: event.target.value })}
+                  />
+                </Field>
+              </FieldGroup>
+            </AdvancedFields>
 
             <div
               aria-live="polite"
@@ -862,6 +935,38 @@ export const ActivityPanel: React.FC = () => {
                 </Field>
               )}
             </FieldGroup>
+
+            {/* How it looks, put away.
+
+                Colour and icon opened the editor — eleven swatches and an
+                icon library, above the question of what the thing costs. They
+                are worth having and they are never the reason somebody opened
+                this sheet. */}
+            <AdvancedFields label={t("activity.appearance")}>
+              <FieldGroup title={t("activity.appearance")}>
+                <Field label={t("activity.colour")} span group>
+                  <ColorPicker value={form.color || undefined} onChange={(color) => patch({ color: color ?? "" })} />
+                </Field>
+              </FieldGroup>
+              {/* The same icon controls the wishlist uses, from the same
+                  module: a library icon and a live preview in view, an image
+                  link and a site to take the icon from one tap behind. */}
+              <MarkFields
+                source={{ icon: form.icon, iconUrl: form.iconUrl, sourceUrl: form.iconSourceUrl }}
+                accent={draftAccent || "var(--accent)"}
+                fallback={<Circle size={20} color={draftAccent || "var(--accent)"} />}
+                sourceLabel={t("activity.iconFromAWebsite")}
+                sourcePlaceholder="navigraph.com"
+                sourceHint={t("activity.theDeveloperPublisherOrClub")}
+                onChange={(next) =>
+                  patch({
+                    ...(next.icon !== undefined ? { icon: next.icon } : {}),
+                    ...(next.iconUrl !== undefined ? { iconUrl: next.iconUrl } : {}),
+                    ...(next.sourceUrl !== undefined ? { iconSourceUrl: next.sourceUrl } : {}),
+                  })
+                }
+              />
+            </AdvancedFields>
 
             <AdvancedFields label={t("activity.seasonNotesAndVisibility")}>
             <FieldGroup title={t("activities.groupDetails")}>

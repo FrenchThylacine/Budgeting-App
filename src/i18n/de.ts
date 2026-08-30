@@ -806,7 +806,6 @@ export const de: Dictionary = {
   "mark.startAgain": "Neu beginnen",
   "mark.useAnImageOrA": "Stattdessen ein Bild oder eine Website verwenden",
   "mark.imageLink": "Bildlink",
-  "mark.searchableGroupedAndAlwaysAvailable": "Durchsuchbar, gruppiert und immer offline verfügbar — anders als alles, was von einer Website geholt wird.",
   "mark.exampleComLogoPng": "beispiel.de/logo.png",
   "mark.icon": "Symbol",
   "mark.customIcon": "Eigenes Symbol",
@@ -1321,4 +1320,6 @@ export const de: Dictionary = {
   "wishlist.itemGone": "Dieser Eintrag existiert nicht mehr.",
   "stats.overview": "Überblick",
   "dashboard.topCategories": "Top-Kategorien",
+  "activity.appearance": "Farbe und Symbol",
+  "activity.otherPrices": "Weitere Preise",
 };

@@ -838,7 +838,6 @@ export const ar: Dictionary = {
   "mark.startAgain": "البدء من جديد",
   "mark.useAnImageOrA": "استخدام صورة أو موقع بدلًا من ذلك",
   "mark.imageLink": "رابط الصورة",
-  "mark.searchableGroupedAndAlwaysAvailable": "قابلة للبحث ومجمّعة ومتاحة دائمًا دون اتصال — بخلاف أي شيء يُجلب من موقع.",
   "mark.exampleComLogoPng": "example.com/logo.png",
   "mark.icon": "أيقونة",
   "mark.customIcon": "أيقونة مخصّصة",
@@ -1405,4 +1404,6 @@ export const ar: Dictionary = {
   "wishlist.itemGone": "لم يعد هذا العنصر موجودًا.",
   "stats.overview": "نظرة عامة",
   "dashboard.topCategories": "أعلى الفئات",
+  "activity.appearance": "اللون والأيقونة",
+  "activity.otherPrices": "أسعار أخرى",
 };

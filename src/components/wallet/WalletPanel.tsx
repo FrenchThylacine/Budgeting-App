@@ -175,7 +175,10 @@ export const WalletPanel: React.FC = () => {
         </div>
 
         {/* The planning figure, kept visually apart from the three balances so
-            it can never be read as money in hand. */}
+            it can never be read as money in hand — and absent when there is
+            nothing to plan. A card reading "planned: €0.00, a plan, not money
+            you have" is three lines about the absence of a number. */}
+        {(plan.suggested > 0 || plan.requirement > 0 || plan.unscheduledCount > 0) && (
         <div className="wallet-plan">
           <div>
             <div className="text-footnote">{t("wallet.plannedBudget", { month: monthLabel })}</div>
@@ -189,6 +192,7 @@ export const WalletPanel: React.FC = () => {
           </div>
           <p className="text-note wallet-plan-note">{t("wallet.plannedBudgetHint")}</p>
         </div>
+        )}
 
         {/* Leftover budget, surfaced rather than swept away. */}
         {leftover > 0 && !leftoverDismissed && mutable && (
