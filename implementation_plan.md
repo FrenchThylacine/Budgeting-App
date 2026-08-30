@@ -6,7 +6,7 @@ This is the active engineering tracker. A checkbox is ticked only after implemen
 
 **Version:** 4.0.0. See `CHANGELOG.md` for what each version was.
 
-**Verification state.** **872 tests across 46 files, all passing** — 790 unit and 82 against a real PostgreSQL 17 database. TypeScript clean for **both** targets: the frontend project and the server's, which compiles `src/domain` with no DOM library and caught a defect the frontend build is structurally blind to. **`scripts/verify-browser.mjs` drives a real Chrome on a brand-new account each run: 48 checks, all passing.** Both bundles build clean. Nothing from 2026-08-17 onward is verified in production.
+**Verification state.** **872 tests across 46 files, all passing** — 790 unit and 82 against a real PostgreSQL 17 database. TypeScript clean for **both** targets: the frontend project and the server's, which compiles `src/domain` with no DOM library and caught a defect the frontend build is structurally blind to. **`scripts/verify-browser.mjs` drives a real Chrome on a brand-new account each run: 49 checks, all passing.** Both bundles build clean. Nothing from 2026-08-17 onward is verified in production.
 
 ## How this session verified things
 
@@ -66,7 +66,10 @@ something had slipped through the previous one:
 - [x] **Found by looking at the components rather than at the dictionaries.** Every previous check ran against the five dictionaries — no missing keys, no untranslated values, no unused keys — and a sentence written directly in the JSX passes all three. 106 user-facing English strings were still in the source: every swipe-action label, the whole sign-in screen, chart tooltips, editor titles, empty states, and "immutable" on a history row.
 - [x] **`tests/no-hardcoded-english.test.ts`** now scans the components and fails on a new one, with an allowlist of three entries, each of them a decision rather than an exemption.
 - [x] **A locale bug the dictionaries could not catch**: an English interface headed a card "VS JUILLET 2026", because `periodComparison` built its label with no locale and `Intl` fell back to the browser's.
-- [x] **~90 new keys across five languages**, and eight dropped as documentation.
+- [x] **Then thirty more, in backticks.** The guard reads quoted strings, JSX text and ternaries; a template literal is none of those. `` `Budget ${money}` `` on every chart's reference line, the wishlist's three view tabs, "Cap €200", "Buy {item}", "Amount in USD", "Edit {name}" on four kinds of row, and the whole of `describeMarkSource`.
+- [x] **And the sign-in screen's errors.** The API's own English sentences were shown verbatim — and the session-expired banner printed a raw `@auth.sessionExpired`, because the store writes a key so the message can be said in whatever language is chosen when it is *read*, and the card rendered it unresolved. The API answers with a stable code; the client now says it. Four uncoded server errors that users actually meet were given codes. Verified in the browser, in French.
+- [x] **Each of the three shapes the guard knows about has its own test**, with a case that must match and a case that must not, so a rule cannot quietly stop working.
+- [x] **~130 new keys across five languages**, and nine dropped as documentation.
 
 ### Less of everything
 
@@ -212,12 +215,12 @@ something had slipped through the previous one:
 ## Verified in a browser — 2026-08-30 (V4)
 
 `node scripts/verify-browser.mjs` against a freshly started dev server and a
-real PostgreSQL 17 database, on a brand-new account. **48/48.**
+real PostgreSQL 17 database, on a brand-new account. **49/49.**
 
 | Group | What it drives |
 | --- | --- |
 | Loading sequence | The five phases in order; an escort drawn **both** behind and in front of the lead; the smoke canvases sampled along a cut behind the formation and the bands read **blue, white, red** top to bottom; Concorde as the default lead |
-| A brand-new account | The mark decodes on the sign-in card; an account is created through the real form; the store the checks read is the one the page is using; the tour opens by itself at step 1 |
+| A brand-new account | The mark decodes on the sign-in card; a failed sign-in is reported in the reader's language rather than the server's English or a raw key; an account is created through the real form; the store the checks read is the one the page is using; the tour opens by itself at step 1 |
 | The tour | A task step refuses to advance until the task is genuinely done, and still offers a way past; "Decide later" leaves a reminder that survives a reload; dismissing it ends it; Skip leaves none, reached through the replay button in Settings |
 | Themes | All six presets applied and the painted background measured; the deep-black theme refusing a light appearance; the choice surviving a reload |
 | Aircraft | Three drawings for the loading screen; **22 fleet silhouettes**, all distinct, all decoding, all from `/craft/fleet/`, all named for a screen reader, and over 98% of the opaque pixels measured white; choosing one changes the transition; both preferences default to Concorde |

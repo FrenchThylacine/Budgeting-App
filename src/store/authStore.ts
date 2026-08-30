@@ -161,7 +161,35 @@ export const useAuthStore = create<AuthStore>((set) => ({
   clearError: () => set({ error: null }),
 }));
 
+/**
+ * The codes the API answers with, and the key each one is said in.
+ *
+ * Matching on `code` rather than on the message text is the whole point: the
+ * server's wording is English, it is written for a log as much as for a
+ * person, and a client that displays it verbatim shows an English sentence to
+ * a reader who chose German. Anything without a known code falls back to the
+ * server's own text — which is honest about the fact that it is not
+ * translated, and better than a generic "something went wrong" that hides
+ * what actually happened. See `AppError` in `server/src/middleware`.
+ */
+const ERROR_KEYS: Record<string, string> = {
+  invalid_credentials: "auth.error.invalidCredentials",
+  email_taken: "auth.error.emailTaken",
+  rate_limited: "auth.error.rateLimited",
+  invalid_token: "auth.error.invalidToken",
+  invite_required: "auth.error.inviteRequired",
+  invalid_email: "auth.error.invalidEmail",
+  missing_credentials: "auth.error.missingCredentials",
+  weak_password: "auth.error.weakPassword",
+  password_required: "auth.error.passwordRequired",
+  network: "auth.error.network",
+  unauthenticated: "auth.sessionExpired",
+};
+
 function messageFor(error: unknown): string {
-  if (error instanceof AuthError) return error.message;
+  if (error instanceof AuthError) {
+    const key = error.code ? ERROR_KEYS[error.code] : undefined;
+    return key ? storedText(key) : error.message;
+  }
   return storedText("auth.genericError");
 }

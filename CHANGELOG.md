@@ -68,7 +68,7 @@ It is drawn on two canvases, one behind the lead aircraft and one in front, so
 a ribbon laid down behind it stays behind it while the jet that drew it comes
 round the front. Median frame 8.3ms.
 
-### A hundred and six sentences that were never translated
+### A hundred and forty-three sentences that were never translated
 
 The previous release reported the application translated. It was not. A hundred
 and six user-facing strings were written in English directly in the JSX: every
@@ -80,6 +80,23 @@ They survived because nothing looked for them — every check ran against the
 them. There is now a test that reads the components instead, with an allowlist
 of three: the product's name, one last-resort chart label, and a theme id in a
 comment.
+
+Then it learned two more shapes and found thirty-seven more. A sentence alone
+between an opening and a closing tag over three lines — the password hint, the
+suggested-budget caption, "Nothing is dated in the next 14 days", the import
+dialog's own title. And a **template literal**, which is none of the shapes the
+earlier rules look for: every chart's "Budget €1,400" reference line, the
+wishlist's three view tabs, "Buy {item}", "Edit {name}" on four kinds of row.
+
+The sign-in screen was showing the API's own English sentences verbatim, and
+the session-expired banner was printing a raw `@auth.sessionExpired` — the
+store writes a key rather than a sentence so the message can be said in
+whatever language is chosen when it is *read*, and the card rendered it
+unresolved. The API answers with a stable code; the client says it.
+
+Each of the three shapes the guard knows about now has its own test, with a
+case that must match and a case that must not, because a heuristic's real
+failure mode is quietly matching nothing.
 
 An English interface also headed a card **"VS JUILLET 2026"**: `periodComparison`
 built its label without a locale, so `Intl` used the browser's.

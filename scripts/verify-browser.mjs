@@ -195,6 +195,28 @@ try {
     return src;
   });
 
+  /*
+   * The server's errors, in the reader's language.
+   *
+   * They were the server's own English sentences, shown verbatim — and the
+   * session-expired banner was worse: the store writes a key rather than a
+   * sentence so it can be said in whatever language is chosen when it is
+   * *read*, and the sign-in card rendered the key. The API answers with a
+   * stable code; the client says it.
+   */
+  await check("a failed sign-in is reported in the reader's language", async () => {
+    await page.setValue("input[type=email]", `nobody-${stamp}@example.test`);
+    await page.setValue("input[type=password]", "definitely-not-the-password");
+    await page.click(".auth-submit");
+    await page.waitFor("!!document.querySelector('.auth-banner-error')", { timeoutMs: 9000, label: "the error banner" });
+    const banner = await page.evaluate("document.querySelector('.auth-banner-error')?.innerText.trim() ?? ''");
+    assert(banner.length > 0, "a failed sign-in said nothing");
+    assert(!banner.includes("@auth."), `a raw translation key reached the screen: ${banner}`);
+    // The harness runs in French; the English wording must not be what shows.
+    assert(!/incorrect email or password/i.test(banner), `the server's English reached the screen: ${banner}`);
+    return banner;
+  });
+
   await check("creates an account through the form", async () => {
     await page.evaluate(`
       const create = document.querySelector('[data-auth="signup"]');

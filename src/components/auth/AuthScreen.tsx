@@ -4,6 +4,7 @@ import { useAuthStore } from "../../store/authStore";
 import { AppMark } from "../ui/AppMark";
 import { Tricolour } from "../ui/Tricolour";
 import { useTranslation } from "../../i18n/useTranslation";
+import { resolveStoredText } from "../../domain/storedText";
 
 type Mode = "signin" | "signup" | "forgot" | "reset";
 
@@ -63,7 +64,15 @@ export const AuthScreen: React.FC = () => {
     if (initialToken) clearTokenFromLocation();
   }, [initialToken]);
 
-  const error = localError ?? storeError;
+  /*
+   * The store carries keys, not sentences.
+   *
+   * `messageFor` writes a `storedText` sigil so the message is said in
+   * whatever language is chosen at the moment it is read, rather than the one
+   * that was chosen when the request failed. Rendering it raw printed
+   * "@auth.sessionExpired" on the sign-in card.
+   */
+  const error = localError ?? (storeError ? resolveStoredText(storeError, t) : null);
 
   function switchMode(next: Mode): void {
     setMode(next);
@@ -91,7 +100,7 @@ export const AuthScreen: React.FC = () => {
         return;
       }
       if (password !== confirmPassword) {
-        setLocalError("The two passwords do not match.");
+        setLocalError(t("auth.error.passwordMismatch"));
         return;
       }
       await signUp(email, password, inviteCode.trim() || undefined);
@@ -112,7 +121,7 @@ export const AuthScreen: React.FC = () => {
         return;
       }
       if (password !== confirmPassword) {
-        setLocalError("The two passwords do not match.");
+        setLocalError(t("auth.error.passwordMismatch"));
         return;
       }
       const ok = await resetPassword(resetToken, password);
