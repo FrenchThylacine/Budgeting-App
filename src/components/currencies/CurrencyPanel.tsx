@@ -342,8 +342,16 @@ export const CurrencyPanel: React.FC = () => {
             </div>
           )}
           {freshness.state === "failed" && (
-            <div className="text-caption" style={{ color: "var(--warning-text)" }}>
-              {t("currencies.ratesFailed")} {settings.exchangeRates.ratesLastError}
+            /* The provider's reason is English and technical — "Provider
+               returned no usable USD rate" — and printing it after a
+               translated sentence produced half a sentence in each language.
+               It is diagnosis, so it goes where diagnosis goes. */
+            <div
+              className="text-caption"
+              style={{ color: "var(--warning-text)" }}
+              title={settings.exchangeRates.ratesLastError}
+            >
+              {t("currencies.ratesFailed")}
             </div>
           )}
 

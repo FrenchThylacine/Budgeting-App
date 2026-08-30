@@ -206,6 +206,7 @@ something had slipped through the previous one:
 ## Discovered issues — open, current
 
 - [ ] **The icon library's 244 icon *names* are English.** They are a search index rather than prose — the picker matches typed English keywords against them — and translating them is 244 nouns × 4 languages for something nobody reads as a sentence. *(Narrowed 2026-08-30: the sixteen category headings above them, and the "no icon matches" message, are translated. What is left is the index itself.)*
+- [ ] **The Excel export's sheet headers are English** ("Total activity cost", "Charged to this budget"). They are column names in a data-interchange file that the app also re-imports, where a stable header is worth more than a translated one — but a reader who opens the workbook meets English. Recorded rather than silently accepted.
 - [ ] **The Excel import's warnings are English.** They name English cell labels from the workbook they are describing ("the Budget sheet has no \"Activities\" header cell"), and the dialog is reached only when the user chooses a file. Recorded rather than silently accepted.
 - [ ] **`sessionsPerMonth` and `sessionsPerPeriod` both describe a frequency.** Merging them would migrate every existing `perSession` activity, which is not worth doing for tidiness alone.
 - [ ] **The wallet does not model transfers between currencies.** A movement has one currency and converts for display; moving €100 into a dollar wallet is two entries, not one.
