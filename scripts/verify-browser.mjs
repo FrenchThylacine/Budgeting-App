@@ -1503,7 +1503,11 @@ try {
   const failed = results.filter((result) => !result.ok);
   console.log(
     `\n\x1b[1m${results.length - failed.length}/${results.length} checks passed\x1b[0m` +
-      (failed.length ? `\n\x1b[31m${failed.map((f) => `  ${f.group} → ${f.name}`).join("\n")}\x1b[0m` : ""),
+      // The reason, not just the name: a summary that says which check failed
+      // and not why is a summary you have to re-run the suite to act on.
+      (failed.length
+        ? `\n\x1b[31m${failed.map((f) => `  ${f.group} → ${f.name}\n      ${f.detail ?? "(no reason recorded)"}`).join("\n")}\x1b[0m`
+        : ""),
   );
   if (fatal) console.log(`\x1b[31mthe run itself failed: ${fatal?.stack ?? fatal}\x1b[0m`);
   // A floor, not the exact count: adding checks is routine, but finishing with

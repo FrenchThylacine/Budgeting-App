@@ -3752,8 +3752,12 @@ label:has(> input[type="radio"]) {
 .info-dot {
   display: inline-grid;
   place-items: center;
-  width: 24px;
-  height: 24px;
+  /* 26, not 24. The guideline minimum is 24, and a control laid out at exactly
+     24 measures 23.99 often enough that a target-size sweep fails on two runs
+     in three — sub-pixel layout, not a rounding bug in the sweep. A control
+     sitting on a threshold is a control that is sometimes under it. */
+  width: 26px;
+  height: 26px;
   padding: 0;
   border: 0;
   border-radius: 999px;
