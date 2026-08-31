@@ -261,7 +261,10 @@ describe("applying a scenario", () => {
 
   it("does not touch the Piloting setting, even when a legacy scenario stores one", () => {
     const snapshot = budget([gym]);
-    snapshot.settings.pilotIncludedInBudget = true;
+    // Still a real key in stored JSON, and no longer a declared setting:
+    // the guarantee under test is that applying a legacy scenario does not
+    // write it back into settings the reader was never shown.
+    (snapshot.settings as unknown as Record<string, unknown>).pilotIncludedInBudget = true;
     snapshot.scenarioPresets = [preset({ pilotIncludedInBudget: false })];
     useBudgetStore.setState({ snapshot, hydrated: true, undoStack: [], redoStack: [] });
 
@@ -269,7 +272,9 @@ describe("applying a scenario", () => {
 
     // The preview does not list it, so applying it would change a setting the
     // user was never shown.
-    expect(useBudgetStore.getState().snapshot.settings.pilotIncludedInBudget).toBe(true);
+    expect(
+      (useBudgetStore.getState().snapshot.settings as unknown as Record<string, unknown>).pilotIncludedInBudget,
+    ).toBe(true);
   });
 });
 

@@ -1,6 +1,7 @@
 import { estimateActivity } from "./calculations";
 import { activityFundingKind, FUNDING_META, type FundingKind } from "./funding";
 import type { Activity, BudgetSnapshot, ScenarioActivityState, ScenarioPreset } from "./types";
+import { roundUpToHundred } from "./wallet";
 
 /**
  * Scenarios
@@ -177,6 +178,30 @@ export function scenarioProjection(snapshot: BudgetSnapshot, preset: ScenarioPre
     monthlyBudget,
     headroom: monthlyBudget - personalMonthly,
   };
+}
+
+/**
+ * What this scenario's activities actually require from the personal budget.
+ *
+ * A scenario's monthly budget was a number somebody typed. That is the one
+ * figure in a scenario that can be *derived*: the activities are known, so is
+ * which of them the scenario runs, so is who pays for each, and so is what
+ * each costs a month. Typing it means the reader does the arithmetic the
+ * application is already doing three lines above, and gets it wrong when they
+ * change an activity later and forget the scenario.
+ *
+ * `personalMonthly` is the right basis rather than the gross, and this is the
+ * whole reason to derive it: an activity somebody else pays for costs real
+ * money and costs *this budget* nothing, so a scenario that turns a parent's
+ * subscription into your own must move the budget and one that merely renames
+ * it must not. `scenarioProjection` already applies the funding overrides.
+ *
+ * Rounded up to a hundred, exactly as the application's own suggested budget
+ * is: a budget is a decision, and a decision of €1,247.83 is a calculation
+ * wearing a decision's clothes.
+ */
+export function scenarioSuggestedBudget(snapshot: BudgetSnapshot, preset: ScenarioPreset): number {
+  return roundUpToHundred(scenarioProjection(snapshot, preset).personalMonthly);
 }
 
 /** Values that differ. A scenario restating what is already true is not a change. */

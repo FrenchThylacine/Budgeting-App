@@ -2,11 +2,12 @@
 
 This is the active engineering tracker. A checkbox is ticked only after implementation **and** the relevant verification have both succeeded. "The code exists" is never sufficient.
 
-**Last updated:** 2026-08-30 (V4.4) — the correction pass: the aeroplane was being drawn forty pixels from the point every calculation used, the routine is choreographed rather than generated, and the visual vocabulary has a key instead of a paragraph.
+**Last updated:** 2026-08-31 (V5) — ten destinations instead of eleven, a report you can read before you print it, colour and typeface as the reader's choice, and three bugs that were quietly costing an account every write it made.
 
-**Version:** 4.4.0. See `CHANGELOG.md` for what each version was.
 
-**Verification state.** **900 tests across 49 files, all passing** — 818 unit and 82 against a real PostgreSQL 17.5 database. TypeScript clean for **both** targets. **`scripts/verify-browser.mjs` drives a real Chrome on a brand-new account each run: 59 checks, all passing**, including six phone widths, two themes, and measurements of the loading animation rather than assertions about it. Both bundles build clean. Nothing from 2026-08-17 onward is verified in production.
+**Version:** 5.0.0. See `CHANGELOG.md` for what each version was.
+
+**Verification state.** **934 tests across 53 files, all passing** — 852 unit and 82 against a real PostgreSQL 17.5 database. TypeScript clean for **both** targets. **`scripts/verify-browser.mjs` drives a real Chrome on a brand-new account each run: 60 checks, all passing**, including six phone widths, two themes, and measurements of the loading animation rather than assertions about it. Both bundles build clean. Nothing from 2026-08-17 onward is verified in production.
 
 ## How this session verified things
 
@@ -115,6 +116,108 @@ something had slipped through the previous one:
 - **Then a fifth, and a sixth**, on the second pass: "8.86" with a full stop in a French sentence otherwise full of commas, and "tous les 5 semaines" — an article glued in front of a noun whose gender the sentence could not know.
 - **Contrast is measured, not eyeballed.** The themes are data, so `tests/theme-contrast.test.ts` walks every preset in both appearances and asserts every text token against every surface. Thirty assertions, and a theme that fails one fails the build.
 - **Translation completeness is a test, not a claim.** `tests/i18n.test.ts` asserts both directions: every key the source asks for exists in English, and every language marked *translated* covers the whole English key set. 1,054 keys × 5 languages.
+
+## Completed — 2026-08-31 (V5)
+
+### Data that was not being saved
+
+- [x] **One malformed row was disabling an account's persistence entirely.**
+      `wishlist_items.date_added` is NOT NULL and was passed through raw while
+      every neighbour on its row is coerced, so a single item without it failed
+      the *whole snapshot write* — and the interface reported that as "Offline
+      — this device only". Then the same shape twice more in `wallet_entries`
+      (`month`, then `source`). Every NOT NULL column on both rows is coerced
+      now, at both ends, with a database test that pushes an undated item and
+      asserts the budget still saves.
+- [x] **A rejected hydration could land after a successful one**, leaving the
+      application on a default snapshot with the session intact. A generation
+      counter drops results from superseded attempts.
+
+### Fewer destinations
+
+- [x] **Currencies → Settings.** Configuration, not a place to go.
+- [x] **History → a collapsed section on Statistics.** A record is consulted
+      while looking at the numbers.
+- [x] **A Report tab**, replacing three navigation buttons that each opened a
+      finished document in a new window.
+- [x] `TabKey` is declared once. It was written out three times and drifted the
+      first time a tab was added.
+
+### The report
+
+- [x] **The preview is the report** — the same `reportHtml`, in an iframe. A
+      second renderer of the same model drifts, and a preview that lies is
+      worse than no preview.
+- [x] **Responsive below 720px**: card grids collapse, type stays readable,
+      tables scroll inside themselves, `@media print` untouched. Measured at
+      390px: no horizontal overflow, 18 cards, 3 tables.
+- [x] **Status colours and the typeface reach the printed document**, from the
+      same functions the application uses.
+
+### Choice, safely
+
+- [x] **Three status colours in Settings.** A chosen colour is a *fill*; the
+      text shade is derived by mixing toward the theme's foreground, so a pale
+      one stays readable. An unchosen kind emits no variable at all, so the
+      theme stays switchable.
+- [x] **Six typefaces**, all locally available. One token carries it — and
+      `button`, `input`, `select` and `textarea` do not inherit `font-family`,
+      which is why the navigation alone stayed in Arial until this pass named
+      them. Verified across every element on all ten tabs.
+
+### Less text
+
+- [x] **The `...` menu opened off-screen** — measured at (1483, 1386) in a
+      1440×950 viewport. Two ancestors carry a transform, so `position: fixed`
+      was relative to the row. Portalled, with a check that compares the aimed
+      position with the browser's.
+- [x] **`InfoDot`**: the schedule sentence, the reason an activity has no
+      payment date, and who pays are one press away instead of printed.
+- [x] **The unscheduled banner** is an amber mark on the affected rows.
+- [x] **Funding is a glyph and the colour of the figure**, not a pill.
+- [x] **The activity figure carries its display-currency equivalent.**
+
+### Money
+
+- [x] **A scenario's budget is derived** from `personalMonthly`; typing one is
+      an override and the only case where a figure is stored.
+- [x] **The projection uses the schedule**: recurring and activity-linked
+      charges are events rather than rates, and personal payments falling later
+      this month are added.
+- [x] **Rates refresh on open**, with a two-minute debounce rather than a daily
+      schedule.
+- [x] **"Decide later" is remembered** against its month; the leftover offer is
+      made on the last day of the month only. `isLastDayOfMonth` is local and
+      tested for February, leap years and the century rule.
+
+### Verified, and already correct
+
+- [x] **Paid-by-other is excluded from the yearly share** — rendered, it reads
+      69.9 / 20.1 / 10.0 of the personal total with both externally funded
+      activities absent. The *heading* misled: "Share of the yearly total"
+      named the gross. It is "What you pay for, by activity".
+- [x] **The wallet keeps its principal**: 200 USD entered against a EUR display
+      currency stores 200 USD and still does after the rate moves.
+- [x] **Dashboard, Wallet and Statistics read one selector** — €1,375 in all
+      three.
+
+## Discovered issues — open as of 2026-08-31
+
+- [ ] **Writes made before hydration completes can be lost.** Hydration
+      legitimately replaces the snapshot, so a setting changed in the moments
+      before a load lands is overwritten. The generation counter fixes
+      out-of-order *hydrations*; it does not merge a concurrent local edit.
+      Reproducible by driving the browser harness immediately after a reload.
+- [ ] **The animation was not revisited in this pass.** V4.4 rebuilt it —
+      authored waypoints, centripetal Catmull-Rom, arc-length traversal, a
+      cubic rejoin, smoke turbulence, and the fix for the sprite being drawn
+      forty pixels from its own position. The V5 brief asks for further
+      refinement of the choreography, which has not been done.
+- [ ] **Icon customisation (V5 §25) is not implemented.** Activity icons come
+      from the shared picker; the one-off cadence still uses a dot.
+- [ ] **The tutorial is partly interactive.** Task steps already refuse to
+      advance until the action is performed — the harness asserts it — but not
+      every step has a task.
 
 ## Completed — 2026-08-30 (V4.4)
 

@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from "react";
-import { ArrowDownLeft, ArrowUpRight, Info, Plus, RotateCcw, Trash2, Wallet as WalletIcon } from "lucide-react";
+import { ArrowDownLeft, ArrowUpRight, Info, Plus, RotateCcw, Trash2, Wallet as WalletIcon, AlertTriangle } from "lucide-react";
 import { currencyOptionsFor, formatMoney } from "../../domain/currency";
-import { monthName, todayDateInput } from "../../domain/dates";
+import { monthName, todayDateInput, isLastDayOfMonth, monthKey } from "../../domain/dates";
 import { useBudgetStore } from "../../store/budgetStore";
 import { formatDualMoney } from "../../utils/formatters";
 import {
@@ -72,6 +72,7 @@ const TYPE_TONE: Record<WalletEntryType | "spending", "neutral" | "info" | "succ
 export const WalletPanel: React.FC = () => {
   const { t, formatDate, monthNames } = useTranslation();
   const snapshot = useBudgetStore((s) => s.snapshot);
+  const updateSettings = useBudgetStore((state) => state.updateSettings);
   const add = useBudgetStore((s) => s.addWalletEntry);
   const remove = useBudgetStore((s) => s.removeWalletEntry);
   const resetWallet = useBudgetStore((s) => s.resetWallet);
@@ -90,13 +91,30 @@ export const WalletPanel: React.FC = () => {
   const [leftoverOpen, setLeftoverOpen] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   /**
-   * "Decide later" is a real answer.
+   * "Decide later" is a real answer, and it is remembered.
    *
-   * Dismissing the leftover prompt hides it for the session and changes
-   * nothing about the money — which is the whole promise: leftover budget is
-   * never swept away, and never nagged about twice in one sitting.
+   * It used to be component state, so the banner came back on the next reload
+   * — which is the opposite of remembering a decision. It is stored against
+   * the *month* it was given for, because deferring is an answer about this
+   * month's leftover and next month's is a new question.
    */
-  const [leftoverDismissed, setLeftoverDismissed] = useState(false);
+  const deferredFor = snapshot.settings.leftoverDeferredFor;
+  const thisMonth = monthKey();
+  const deferred = deferredFor === thisMonth;
+
+  /*
+   * And it is only asked on the day it is live.
+   *
+   * The offer to move leftover budget into personal money used to sit on the
+   * wallet all month, which makes it a permanent notice rather than a
+   * decision. The month's leftover is only final on the month's last day, so
+   * that is the day it asks. On any other day the money is simply still
+   * budget, and there is nothing to decide.
+   */
+  const monthEnds = isLastDayOfMonth();
+  const hasLeftover = leftover > 0 && mutable;
+  const askNow = hasLeftover && monthEnds && !deferred;
+  const deferredMark = hasLeftover && monthEnds && deferred;
 
   const money = (value: number | null | undefined) => formatDualMoney(value, snapshot.settings);
   // Through `Intl`, not the English-only `monthName()`: "Prévu pour August"
@@ -194,8 +212,9 @@ export const WalletPanel: React.FC = () => {
         </div>
         )}
 
-        {/* Leftover budget, surfaced rather than swept away. */}
-        {leftover > 0 && !leftoverDismissed && mutable && (
+        {/* Leftover budget, surfaced rather than swept away — on the day the
+            question is live, and once. */}
+        {askNow && (
           <div className="wallet-leftover" role="status">
             <div>
               <strong>{t("wallet.leftoverTitle", { amount: money(leftover) })}</strong>
@@ -205,11 +224,31 @@ export const WalletPanel: React.FC = () => {
               <Button variant="secondary" size="sm" onClick={() => setLeftoverOpen(true)}>
                 {t("wallet.leftoverTransfer")}
               </Button>
-              <Button variant="ghost" size="sm" onClick={() => setLeftoverDismissed(true)}>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => updateSettings({ leftoverDeferredFor: thisMonth })}
+              >
                 {t("wallet.leftoverLater")}
               </Button>
             </div>
           </div>
+        )}
+
+        {/* Deferred, not forgotten.
+
+            The banner is gone for the month, and the decision is still one
+            press away — an amber mark rather than a notice that reappears
+            every time the tab is opened. */}
+        {deferredMark && (
+          <p className="wallet-deferred">
+            <button type="button" className="info-dot" data-tone="warning" onClick={() => setLeftoverOpen(true)}>
+              <AlertTriangle size={13} aria-hidden="true" />
+            </button>
+            <button type="button" className="wallet-deferred-text" onClick={() => setLeftoverOpen(true)}>
+              {t("wallet.leftoverDeferred", { amount: money(leftover) })}
+            </button>
+          </p>
         )}
 
         <div className="wallet-flows">
@@ -326,7 +365,9 @@ export const WalletPanel: React.FC = () => {
           }}
           onKeep={() => {
             setLeftoverOpen(false);
-            setLeftoverDismissed(true);
+            // Keeping it as budget is the same answer as "decide later": the
+            // money does not move, and the question is settled for this month.
+            updateSettings({ leftoverDeferredFor: thisMonth });
             setAllocationOpen(true);
           }}
         />

@@ -100,3 +100,26 @@ export function formatDateTime(value: string | Date): string {
     timeStyle: "short",
   }).format(date);
 }
+
+/**
+ * Is `now` the last day of its own month, in the reader's own time zone?
+ *
+ * Asked by the wallet, which offers to move leftover budget into personal
+ * money and should offer it on the one day the question is actually live.
+ * Adding a day and seeing whether the month changed is the only version of
+ * this that does not need a table of month lengths and a leap-year rule — the
+ * platform already has both.
+ *
+ * Local, deliberately. A budget month ends when the reader's calendar says it
+ * does, not when UTC agrees: on the 31st at 23:00 in Beirut it is still the
+ * 31st for the person looking at the screen, and that is whose month it is.
+ */
+export function isLastDayOfMonth(now = new Date()): boolean {
+  const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+  return tomorrow.getMonth() !== now.getMonth();
+}
+
+/** The month a deferral belongs to, as a stable key: "2026-08". */
+export function monthKey(now = new Date()): string {
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+}

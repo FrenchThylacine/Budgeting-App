@@ -72,8 +72,15 @@ export const HistoryPanel: React.FC = () => {
   ];
 
   return (
-    <div className="page-enter" style={{ display: "grid", gap: 20 }}>
-      <Section title={t("history.financialHistory")}>
+    /* A section on the Statistics tab rather than a destination of its own.
+
+       Closed periods, month closes, budget approvals and the audit trail are a
+       *record*, and a record is something you consult while looking at the
+       numbers — not a fourth thing in the navigation competing with the
+       dashboard. Collapsed by default: it is the least-read and longest thing
+       on the tab, and the one most people never open. */
+    <div style={{ display: "grid", gap: 20 }}>
+      <Section title={t("history.financialHistory")} collapsible defaultOpen={false}>
         <div className="text-caption" style={{ marginBottom: 12 }}>
           {t("history.closedPeriodsRetain")}
         </div>

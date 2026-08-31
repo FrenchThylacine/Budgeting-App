@@ -1,6 +1,7 @@
 import type { BudgetSnapshot, Settings } from "./types";
 import { activityBudgetSummary, type FundingTotals } from "./activityBudget";
 import { FUNDING_KINDS, FUNDING_META, type FundingKind } from "./funding";
+import { sanitiseStatusColours, type StatusColours } from "./statusColours";
 import { createTranslator, formatDate, formatNumber, formatPercent, monthNames, type Translator } from "./i18n";
 import { calculateYear, normalizeEntry } from "./calculations";
 import { formatMoney } from "./currency";
@@ -534,11 +535,47 @@ const FUNDING_COLOUR: Record<FundingKind, string> = {
  * `print-color-adjust: exact` is deliberately not used. The layout works
  * without it, which is the only way to know that it works.
  */
+export interface ReportHtmlOptions {
+  /**
+   * Rendered into the application's own preview rather than opened as a
+   * document of its own.
+   *
+   * Two things change: the document's own Print button is dropped, because the
+   * panel around it has one and two buttons that do the same thing is exactly
+   * the kind of duplication this pass is removing; and the screen rules below
+   * are allowed to reflow the page for a narrow viewport. `@media print` is
+   * untouched either way — what comes out of the printer is the same document.
+   */
+  screen?: boolean;
+  /**
+   * The reader's own status colours, if they have chosen any.
+   *
+   * A printed page has no CSS variables, so these are merged over the default
+   * ink table below rather than being emitted as custom properties. The
+   * defaults are chosen to stay three distinguishable *greys* on a monochrome
+   * printer; a reader who picks their own accepts that trade, which is why the
+   * glyphs and the written labels are on every row either way.
+   */
+  statusColours?: StatusColours;
+  /**
+   * The reader's typeface, as a CSS stack.
+   *
+   * The report is a document of its own with its own stylesheet, so it does
+   * not inherit the application's token — and a report in a different face
+   * from the screen it was previewed on is exactly the kind of small
+   * inconsistency this pass exists to remove.
+   */
+  fontStack?: string | null;
+}
+
 export function reportHtml(
   report: PeriodReport,
   moneyFormatter: (value: number) => string,
   t: Translator = createTranslator("en"),
+  options: ReportHtmlOptions = {},
 ): string {
+  const chosen = sanitiseStatusColours(options.statusColours);
+  const ink: Record<FundingKind, string> = { ...FUNDING_COLOUR, ...chosen };
   const maxMonthly = Math.max(...report.monthly.map((m) => m.value ?? 0), 1);
   const maxCategory = Math.max(...report.categories.map((c) => c.total), 1);
   const maxActivity = Math.max(...report.activities.lines.map((line) => line.yearly), 1);
@@ -598,7 +635,7 @@ export function reportHtml(
           .filter((line) => (line.amount ?? 0) > 0)
           .map((line) => {
             const share = ((line.amount ?? 0) / gross) * 100;
-            const colour = FUNDING_COLOUR[line.kind];
+            const colour = ink[line.kind];
             return `<div class="split-part" style="width:${share}%;background:${colour};border-color:${colour}">
               <span class="split-label">${escapeHtml(line.glyph)} ${escapeHtml(percent(share))}</span>
             </div>`;
@@ -609,7 +646,7 @@ export function reportHtml(
   const fundingRows = report.funding.lines
     .map(
       (line) => `<tr>
-        <td><span class="glyph" style="color:${FUNDING_COLOUR[line.kind]}" aria-hidden="true">${escapeHtml(
+        <td><span class="glyph" style="color:${ink[line.kind]}" aria-hidden="true">${escapeHtml(
           line.glyph,
         )}</span>${escapeHtml(line.label)}</td>
         <td class="num">${line.amount != null ? escapeHtml(moneyFormatter(line.amount)) : "—"}</td>
@@ -622,7 +659,7 @@ export function reportHtml(
   const activityRows = report.activities.lines
     .map((line) => {
       const width = Math.max(1, (line.yearly / maxActivity) * 100);
-      const colour = FUNDING_COLOUR[line.funding];
+      const colour = ink[line.funding];
       return `<tr>
         <td>
           <span class="glyph" style="color:${colour}" aria-hidden="true">${escapeHtml(line.glyph)}</span>${escapeHtml(
@@ -707,7 +744,7 @@ export function reportHtml(
       )}</div></div>
       ${FUNDING_KINDS.map(
         (kind) => `<div class="card"><div class="card-label"><span class="glyph" style="color:${
-          FUNDING_COLOUR[kind]
+          ink[kind]
         }">${FUNDING_META[kind].glyph}</span>${escapeHtml(t(`funding.${kind}.short`))}</div><div class="card-value">${escapeHtml(
           moneyFormatter(report.activities.monthly[kind === "personal" ? "personal" : kind === "other" ? "other" : "outside"]),
         )}</div><div class="card-detail">${escapeHtml(
@@ -745,7 +782,7 @@ export function reportHtml(
   body {
     /* Sans throughout: this is a dashboard on paper, not a broadsheet. Figures
        are tabular so a column of amounts lines up. */
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    font-family: ${options.fontStack ?? '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif'};
     color: var(--ink);
     margin: 0;
     padding: 26px 30px 34px;
@@ -892,6 +929,45 @@ export function reportHtml(
     h2 { break-after: avoid; }
     thead { display: table-header-group; }
   }
+
+  /*
+   * On a screen narrower than a sheet of paper, this stops being a sheet of
+   * paper.
+   *
+   * A preview that is an A4 page scaled to fit a phone is not a preview: it is
+   * a picture of a document, at four-point type. So the grids collapse to one
+   * column and the tables — which are the part that cannot simply shrink —
+   * become one block per row, each cell labelled from the header it belonged
+   * to. Nothing is dropped; the same figures are in the same order.
+   *
+   * The print rules above are untouched, so the page that comes out of a
+   * printer is the A4 one whatever screen it was previewed on.
+   */
+  @media screen and (max-width: 720px) {
+    body { padding: 16px 14px 22px; font-size: 13px; }
+    header { flex-direction: column; align-items: flex-start; gap: 10px; }
+    .grid, .cards, .split-figures, .two-col { display: block !important; }
+    .grid > * + *, .cards > * + * { margin-top: 10px; }
+    .card { break-inside: auto; }
+
+    /*
+     * The tables scroll rather than reflow.
+     *
+     * Turning each row into a labelled block reads well and needs a
+     * data-label attribute on all twenty-five cells — a second copy of every column
+     * heading, in a document whose headings are already translated once. Two
+     * copies of a heading is two things to keep in step, and the one that is
+     * only visible on a phone is the one that would fall behind.
+     *
+     * So the type stays at a readable size and the table keeps its header,
+     * inside its own scroller. Nothing about the figures changes; the reader
+     * drags a table sideways instead of reading it at four points.
+     */
+    table { display: block; overflow-x: auto; white-space: nowrap; }
+    table th, table td { white-space: nowrap; }
+    /* The first column is the name, and a name may wrap. */
+    table td:first-child { white-space: normal; min-width: 9rem; }
+  }
 </style></head>
 <body>
   <header>
@@ -901,7 +977,11 @@ export function reportHtml(
         t("report.amountsIn", { currency: report.currency }),
       )}</div>
     </div>
-    <button class="no-print print-btn" onclick="window.print()">${escapeHtml(t("report.print"))}</button>
+    ${
+      options.screen
+        ? ""
+        : `<button class="no-print print-btn" onclick="window.print()">${escapeHtml(t("report.print"))}</button>`
+    }
   </header>
   <div class="tricolour" aria-hidden="true"><i></i><i></i><i></i></div>
 
@@ -993,7 +1073,7 @@ export function reportHtml(
   <p class="legend">
     ${FUNDING_KINDS.map(
       (kind) =>
-        `<span><span class="glyph" style="color:${FUNDING_COLOUR[kind]}">${FUNDING_META[kind].glyph}</span>${escapeHtml(
+        `<span><span class="glyph" style="color:${ink[kind]}">${FUNDING_META[kind].glyph}</span>${escapeHtml(
           t(`funding.${kind}`),
         )}</span>`,
     ).join("")}

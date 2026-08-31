@@ -53,7 +53,7 @@ function budget(): BudgetSnapshot {
   snapshot.settings.selectedYear = 2026;
   snapshot.settings.selectedMonth = 8;
   snapshot.settings.selectedPeriodMode = "month";
-  snapshot.settings.pilotIncludedInBudget = true;
+  (snapshot.settings as unknown as Record<string, unknown>).pilotIncludedInBudget = true;
   snapshot.years["2026"] = emptyYear(2026);
   return snapshot;
 }

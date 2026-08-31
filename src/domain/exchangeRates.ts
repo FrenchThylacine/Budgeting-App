@@ -32,8 +32,26 @@ import type { CurrencyCode, ExchangeRates } from "./types";
 const PROVIDER_URL = "https://open.er-api.com/v6/latest/EUR";
 const CACHE_KEY = "exchange-rates-cache-v1";
 
-/** Rates older than this are refetched; younger ones are reused. */
+/**
+ * Rates older than this are stale wherever staleness is *displayed*.
+ *
+ * No longer the trigger for refreshing on open — see `RATE_OPEN_DEBOUNCE_MS`.
+ * It still answers "are these rates old enough to say so", which the currency
+ * panel asks.
+ */
 export const RATE_MAX_AGE_MS = 6 * 60 * 60 * 1000;
+
+/**
+ * How long after a fetch opening the application will not fetch again.
+ *
+ * The rule is now "refresh whenever the application is opened", so this is not
+ * a refresh *interval*: it is a debounce, and it exists for one case — a reload
+ * loop, or two tabs opening together, should not become two requests a second
+ * to somebody else's free API. Two minutes is short enough that no human opens
+ * the app twice inside it on purpose and long enough to stop a hot reload
+ * hammering the provider.
+ */
+export const RATE_OPEN_DEBOUNCE_MS = 2 * 60 * 1000;
 
 /**
  * The daily publication moment: 12:00 UTC.
@@ -138,15 +156,29 @@ export function isStale(snapshot: RateSnapshot | null, now = Date.now()): boolea
  * callers get `unavailable` and keep using whatever rates they already hold.
  */
 export async function fetchExchangeRates(
-  options: { force?: boolean; now?: number; fetchImpl?: typeof fetch } = {},
+  options: { force?: boolean; onOpen?: boolean; now?: number; fetchImpl?: typeof fetch } = {},
 ): Promise<RateFetchResult> {
   const now = options.now ?? Date.now();
   const cached = readCachedRates(now);
 
-  // Two independent reasons to refetch, and a fresh cache must satisfy both:
-  // the daily 12:00 UTC publication is what makes a set today's, and the age
-  // guard catches a set older than that boundary can express.
-  const due = isStale(cached, now) || isDueForScheduledRefresh(cached?.fetchedAt, now);
+  /*
+   * When a refresh is due.
+   *
+   * This used to be a schedule: the provider's 12:00 UTC publication, plus a
+   * six-hour age guard. Both are defensible and neither is what was asked for
+   * — the requirement is that rates are current *for the session the reader is
+   * in*, which means fetching when the application opens rather than when a
+   * clock says a new set exists. An app opened at 11:00 UTC held yesterday's
+   * numbers all morning under the old rule.
+   *
+   * So `onOpen` fetches unless something else already did within the debounce,
+   * `force` is the manual button, and a caller that passes neither still gets
+   * the old schedule — which is what the currency panel's background checks
+   * want.
+   */
+  const due = options.onOpen
+    ? now - new Date(cached?.fetchedAt ?? 0).getTime() > RATE_OPEN_DEBOUNCE_MS
+    : isStale(cached, now) || isDueForScheduledRefresh(cached?.fetchedAt, now);
   if (!options.force && !due) {
     return { status: "cached", snapshot: cached };
   }
@@ -271,12 +303,13 @@ export function applyRatesToSettings(current: ExchangeRates, snapshot: RateSnaps
 /**
  * The whole "refresh on open" decision, in one testable function.
  *
- * The brief is that rates update whenever the application is opened. Taken
- * literally that is a network request on every navigation and a database write
- * on every load, so what "opened" has to mean is: *once per session, and only
- * when a refresh is genuinely due.* `fetchExchangeRates` already owns "due" —
- * the 12:00 UTC publication boundary and the age guard — and answers `cached`
- * without touching the network when it is not.
+ * Rates update whenever the application is opened. Not "when the provider has
+ * published a new set", which is what this used to mean and which left an app
+ * opened at 11:00 UTC holding yesterday's numbers all morning — the reader's
+ * session is the unit that matters, so opening it is the trigger.
+ *
+ * The only thing between that and a request per navigation is a two-minute
+ * debounce, which is a guard against a reload loop rather than a schedule.
  *
  * Returns the rates to store, or **null when there is nothing to store**. That
  * distinction is the point: writing an identical rate set on every load would
@@ -288,7 +321,7 @@ export async function refreshRatesOnOpen(
   options: { now?: number; fetchImpl?: typeof fetch } = {},
 ): Promise<{ rates: ExchangeRates; outcome: "updated" | "failed" } | null> {
   const now = options.now ?? Date.now();
-  const result = await fetchExchangeRates({ now, fetchImpl: options.fetchImpl });
+  const result = await fetchExchangeRates({ now, onOpen: true, fetchImpl: options.fetchImpl });
 
   if (result.status === "unavailable") {
     // A failure is only worth recording if we did not already record one for

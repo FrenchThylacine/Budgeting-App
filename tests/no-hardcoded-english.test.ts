@@ -187,11 +187,19 @@ function scan(): Finding[] {
     const lines = readFileSync(file, "utf8").split("\n");
     lines.forEach((line, index) => {
         const trimmed = line.trim();
+        /*
+         * A JSX comment is `{/* … *\/}`, and this only knew about `/*`.
+         *
+         * So the body of every multi-line comment written inside JSX was being
+         * scanned as if it were markup — and the rules duly reported the
+         * component names being discussed in the prose. A guard that fires on
+         * its own documentation is a guard people learn to silence.
+         */
         if (inComment) {
           if (trimmed.includes("*/")) inComment = false;
           return;
         }
-        if (trimmed.startsWith("/*")) {
+        if (trimmed.startsWith("/*") || trimmed.startsWith("{/*")) {
           if (!trimmed.includes("*/")) inComment = true;
           return;
         }

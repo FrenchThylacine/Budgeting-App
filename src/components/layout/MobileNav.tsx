@@ -1,22 +1,10 @@
 import React, { useState } from "react";
+import type { TabKey } from "../../domain/tabs";
 import {
   LayoutDashboard, Receipt, Wallet, BarChart3, MoreHorizontal,
-  ListTodo, Gift, FlaskConical, Clock, Tags, Settings, Coins, X,
-} from "lucide-react";
+  ListTodo, Gift, FlaskConical, Clock, Tags, Settings, Coins, X, FileText } from "lucide-react";
 import { useTranslation } from "../../i18n/useTranslation";
 
-type TabKey =
-  | "dashboard"
-  | "activities"
-  | "spending"
-  | "wishlist"
-  | "wallet"
-  | "analytics"
-  | "scenarios"
-  | "history"
-  | "settings"
-  | "categories"
-  | "currencies";
 
 const mobileTabs: { key: TabKey; labelKey: string; icon: React.ElementType }[] = [
   { key: "dashboard", labelKey: "nav.home", icon: LayoutDashboard },
@@ -29,8 +17,7 @@ const moreTabs: { key: TabKey; labelKey: string; icon: React.ElementType }[] = [
   { key: "activities", labelKey: "nav.activities", icon: ListTodo },
   { key: "wishlist", labelKey: "nav.wishlist", icon: Gift },
   { key: "categories", labelKey: "nav.categories", icon: Tags },
-  { key: "currencies", labelKey: "nav.currencies", icon: Coins },
-  { key: "history", labelKey: "nav.history", icon: Clock },
+  { key: "report", labelKey: "nav.report", icon: FileText },
   { key: "scenarios", labelKey: "nav.scenarios", icon: FlaskConical },
   { key: "settings", labelKey: "nav.settings", icon: Settings },
 ];

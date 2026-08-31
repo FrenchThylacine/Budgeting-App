@@ -214,6 +214,27 @@
   --header-height: 64px;
 }
 
+/* ── Form controls inherit the page's typeface ────────────────────────────────
+   `button`, `input`, `select` and `textarea` do not inherit `font-family` from
+   their parent: the user agent gives them its own. Every one of them was
+   covered by a rule somewhere, except the ones that were not — the navigation
+   items are buttons, and with a chosen typeface applied they alone stayed in
+   the platform's Arial while headings, labels and figures changed.
+
+   Naming them once here is the difference between "the typeface applies
+   everywhere" being a property of the stylesheet and being a list of places
+   somebody has to remember. `font-family` rather than the `font` shorthand:
+   the shorthand also resets size, weight and line-height, which these controls
+   set for themselves. */
+button,
+input,
+select,
+textarea,
+optgroup {
+  font-family: inherit;
+}
+
+
 /* Dark mode — deep, calm */
 :root.dark {
   /* The same navy family, pulled toward blue-black rather than neutral grey. */
@@ -639,10 +660,9 @@ strong {
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   color: var(--text-primary);
-  /* Form controls do not inherit the page font: a `<textarea>` falls back to
-     the user agent's monospace, so every notes field in the app was set in a
-     typewriter face next to sans-serif labels. `inherit` is not enough for
-     `<select>` on some engines, so the stack is named. */
+  /* See the reset below: form controls do not inherit the page font. Named
+     here as well as there because `inherit` is not enough for `<select>` on
+     some engines. */
   font-family: var(--font-sans);
   font-size: 0.9375rem;
   line-height: 1.45;

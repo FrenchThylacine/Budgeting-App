@@ -3744,3 +3744,206 @@ label:has(> input[type="radio"]) {
    sit in a container with two other numbers that the filter chips above it
    already printed. */
 .wishlist-total { margin: 12px 2px 0; }
+
+/* ── The information dot ──────────────────────────────────────────────────────
+   A mark, not a sentence. It has to be reachable on a phone — 24px of target
+   around a 13px glyph — while reading as punctuation rather than as a control,
+   so the box is transparent until it is hovered or focused. */
+.info-dot {
+  display: inline-grid;
+  place-items: center;
+  /* 26, not 24. The guideline minimum is 24, and a control laid out at exactly
+     24 measures 23.99 often enough that a target-size sweep fails on two runs
+     in three — sub-pixel layout, not a rounding bug in the sweep. A control
+     sitting on a threshold is a control that is sometimes under it. */
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  flex: 0 0 auto;
+  vertical-align: -3px;
+}
+
+.info-dot:hover,
+.info-dot:focus-visible {
+  background: var(--bg-inset);
+  color: var(--text-secondary);
+}
+
+/* Amber, and only this variant draws attention: it marks a fact that changes
+   what a figure means. */
+.info-dot[data-tone="warning"] { color: var(--warning-text); }
+.info-dot[data-tone="warning"]:hover,
+.info-dot[data-tone="warning"]:focus-visible { background: var(--warning-soft); }
+
+.info-bubble {
+  position: fixed;
+  z-index: 1250;
+  max-width: 280px;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  box-shadow: var(--shadow-lg, 0 10px 30px rgba(0, 0, 0, 0.18));
+  font-size: 0.8rem;
+  line-height: 1.45;
+}
+
+.info-bubble[data-tone="warning"] {
+  border-color: var(--warning);
+  background: var(--warning-soft);
+  color: var(--warning-text);
+}
+
+.info-bubble strong { color: var(--text-primary); }
+.info-bubble[data-tone="warning"] strong { color: var(--warning-text); }
+
+/* ── Funding as a state on the figure ─────────────────────────────────────────
+   The classification changes what an amount *means* — this is money the reader
+   will not be spending — so it colours the amount rather than sitting beside
+   the name as a pill. `-text` variants throughout: the fill colours are for
+   shapes and do not clear AA as text. */
+.activity-amount[data-funding="other"] strong,
+.activity-amount[data-funding="other"] .text-caption { color: var(--funding-other-text); }
+.activity-amount[data-funding="outside"] strong,
+.activity-amount[data-funding="outside"] .text-caption { color: var(--funding-outside-text); }
+
+.info-funding[data-funding="other"] { color: var(--funding-other-text); }
+.info-funding[data-funding="outside"] { color: var(--funding-outside-text); }
+
+/* The transaction's figure takes the same funding tone as an activity's. */
+.row-trailing[data-funding="other"] .money-pair > strong,
+.row-trailing[data-funding="other"] > strong { color: var(--funding-other-text); }
+.row-trailing[data-funding="outside"] .money-pair > strong,
+.row-trailing[data-funding="outside"] > strong { color: var(--funding-outside-text); }
+
+/* ── The report tab ───────────────────────────────────────────────────────────
+   The preview is the real document in a frame, so almost nothing here styles
+   the report itself — this is the chrome around it. */
+.report-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+.report-scope {
+  display: inline-flex;
+  padding: 3px;
+  gap: 2px;
+  border-radius: var(--radius-md);
+  background: var(--bg-inset);
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.report-scope-option {
+  border: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  padding: 7px 14px;
+  min-height: 32px;
+  border-radius: calc(var(--radius-md) - 3px);
+  font: inherit;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
+.report-scope-option.is-active {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  font-weight: 600;
+  box-shadow: var(--shadow-sm, 0 1px 3px rgba(0, 0, 0, 0.1));
+}
+
+.report-range { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+.report-range label { display: grid; gap: 4px; }
+
+.report-preview {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: #fff;
+}
+
+/* Tall enough to read a page of, and it scrolls inside itself: the report is a
+   document, and a document has its own scrollbar. */
+.report-frame {
+  display: block;
+  width: 100%;
+  height: min(78vh, 900px);
+  border: 0;
+  background: #fff;
+}
+
+@media (max-width: 720px) {
+  .report-frame { height: 70vh; }
+  .report-actions { width: 100%; }
+  .report-actions .btn { flex: 1 1 auto; }
+}
+
+/* ── Status colours in Settings ───────────────────────────────────────────────
+   Three swatches, not a palette editor. */
+.status-colour-row { display: flex; gap: 20px; flex-wrap: wrap; }
+.status-colour-field { display: grid; gap: 6px; }
+.status-colour-controls { display: flex; align-items: center; gap: 8px; }
+.status-colour-controls input[type="color"] {
+  width: 44px;
+  height: 32px;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: none;
+  cursor: pointer;
+}
+
+/* A deferred decision: a mark and a line, not a notice. */
+.wallet-deferred { display: flex; align-items: center; gap: 4px; margin: 10px 0 0; }
+.wallet-deferred-text {
+  border: 0;
+  background: none;
+  padding: 4px 2px;
+  min-height: 26px;
+  font: inherit;
+  font-size: 0.8rem;
+  color: var(--warning-text);
+  cursor: pointer;
+  text-align: left;
+}
+.wallet-deferred-text:hover { text-decoration: underline; }
+
+/* The scenario's budget: a figure and a way out of it. */
+.scenario-budget-derived { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.scenario-budget-derived .input { flex: 1 1 130px; }
+
+/* ── The typeface picker ──────────────────────────────────────────────────────
+   Each option is set in itself: a list of names tells somebody what a face is
+   called and not what it looks like. */
+.font-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+}
+
+.font-option {
+  display: grid;
+  gap: 2px;
+  padding: 12px 14px;
+  min-height: 62px;
+  text-align: left;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.font-option:hover { border-color: var(--border-strong); }
+
+.font-option.is-active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+.font-option-name { font-weight: 600; font-size: 0.95rem; }
+.font-option-sample { font-size: 0.78rem; color: var(--text-secondary); }

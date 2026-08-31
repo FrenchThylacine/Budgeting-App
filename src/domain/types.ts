@@ -184,6 +184,30 @@ export interface Settings {
    */
   secondaryCurrency?: CurrencyCode;
   /**
+   * The reader's own colours for the three funding states.
+   *
+   * Only the kinds they actually changed; an absent kind is the theme's. Fills
+   * rather than text colours — see `domain/statusColours.ts`, which derives a
+   * readable foreground from whatever is chosen.
+   */
+  statusColours?: Partial<Record<"personal" | "other" | "outside", string>>;
+  /**
+   * The month in which the reader said "decide later" about leftover budget.
+   *
+   * A month key rather than a boolean: deferring is an answer about *this*
+   * month's leftover, and next month's is a new question. It used to be
+   * component state, so the banner came back on every reload — which is the
+   * opposite of remembering a decision.
+   */
+  leftoverDeferredFor?: string;
+  /**
+   * The reader's typeface. See `domain/fonts.ts`.
+   *
+   * Absent means the stylesheet's own, which is the platform's — so leaving it
+   * unset is a real answer rather than a missing value.
+   */
+  fontChoice?: string;
+  /**
    * The interface language, as a BCP 47 tag ("en", "fr", "pt-BR").
    *
    * Absent means "follow the browser", which is what every budget written
@@ -198,18 +222,23 @@ export interface Settings {
   /** First-run tutorial state. Absent means never started. */
   onboarding?: OnboardingSettings;
   autoWishlistFlushEnabled: boolean;
-  /**
-   * @deprecated Piloting is no longer a concept the application knows about.
+  /*
+   * `pilotIncludedInBudget` used to be declared here and is gone.
    *
-   * It was a category bucket with powers no other category had: its activities
-   * were counted in a separate total, this setting decided whether that total
-   * joined the budget, and its spending was kept out of every category share.
-   * All of that assumed a budget with a "Piloting" category in it, and asked one
-   * hard-coded question the funding classification already answers for every
-   * activity. Nothing reads this. It is still declared so a snapshot written
-   * before the change round-trips unchanged rather than losing a key on save.
+   * Piloting was a category bucket with powers no other category had: its
+   * activities were counted in a separate total, this setting decided whether
+   * that total joined the budget, and its spending was kept out of every
+   * category share. All of that assumed a budget with a "Piloting" category in
+   * it, and asked one hard-coded question the funding classification already
+   * answers for every activity.
+   *
+   * It has read nothing since. Keeping it declared preserved a key on save,
+   * which is a reason to keep a *column*, not a reason to keep a setting: the
+   * snapshot is stored as JSON, so an old key simply travels along untouched,
+   * and a declared field that nothing reads is a setting to whoever meets it
+   * next. The scenario preset's own copy stays — that one backs a database
+   * column and round-trips real stored scenarios.
    */
-  pilotIncludedInBudget?: boolean;
   /**
    * Whether the period widget shows today's date and a live wall clock.
    *

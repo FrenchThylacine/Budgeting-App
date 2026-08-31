@@ -18,7 +18,7 @@ const NOW = new Date(2026, 7, 16);
 function base(): BudgetSnapshot {
   const snapshot = createSeedBudgetSnapshot(NOW);
   snapshot.settings.monthlyBudget = 500;
-  snapshot.settings.pilotIncludedInBudget = true;
+  (snapshot.settings as unknown as Record<string, unknown>).pilotIncludedInBudget = true;
   for (const category of snapshot.categories) category.monthlyCap = undefined;
   return snapshot;
 }

@@ -55,6 +55,63 @@ beforeEach(() => {
   localStorage.clear();
 });
 
+describe("opening the application refreshes the rates", () => {
+  /*
+   * The rule this replaced was a schedule — the provider's 12:00 UTC
+   * publication plus a six-hour age guard — and it meant an application opened
+   * at 11:00 UTC held yesterday's numbers all morning. The reader's session is
+   * the unit that matters, so opening it is the trigger.
+   */
+  it("fetches on open even when the cached set is minutes old and today's", async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse({ rates: { USD: 1.1, GBP: 0.85 } }));
+    const start = Date.UTC(2026, 7, 31, 13, 0, 0); // after the daily boundary
+    await fetchExchangeRates({ fetchImpl: fetchImpl as unknown as typeof fetch, now: start });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+
+    // Five minutes later: not stale, not past a new boundary — the old rule
+    // would answer from cache and this one goes back to the provider.
+    await fetchExchangeRates({
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      now: start + 5 * 60 * 1000,
+      onOpen: true,
+    });
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not fetch twice inside the debounce, which is what a reload loop is", async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse({ rates: { USD: 1.1, GBP: 0.85 } }));
+    const start = Date.UTC(2026, 7, 31, 13, 0, 0);
+    await fetchExchangeRates({ fetchImpl: fetchImpl as unknown as typeof fetch, now: start, onOpen: true });
+    const second = await fetchExchangeRates({
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      now: start + 30 * 1000,
+      onOpen: true,
+    });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(second.status).toBe("cached");
+  });
+
+  it("still answers with the cached set when the provider cannot be reached", async () => {
+    const fetchImpl = vi.fn(async () => jsonResponse({ rates: { USD: 1.1, GBP: 0.85 } }));
+    const start = Date.UTC(2026, 7, 31, 13, 0, 0);
+    await fetchExchangeRates({ fetchImpl: fetchImpl as unknown as typeof fetch, now: start });
+
+    const failing = vi.fn(async () => {
+      throw new Error("offline");
+    });
+    const result = await fetchExchangeRates({
+      fetchImpl: failing as unknown as typeof fetch,
+      now: start + 10 * 60 * 1000,
+      onOpen: true,
+    });
+    // The cache is a fallback, not a reason to skip: it tried, and it still has
+    // usable rates to hand back.
+    expect(failing).toHaveBeenCalledTimes(1);
+    expect(result.status).toBe("unavailable");
+    expect(result.snapshot?.ratesPerEur.USD).toBeGreaterThan(0);
+  });
+});
+
 describe("fetchExchangeRates", () => {
   it("stores rates it fetched and reports them as updated", async () => {
     const fetchImpl = vi.fn(async () => jsonResponse({ rates: { EUR: 1, USD: 1.2, GBP: 0.85 } }));

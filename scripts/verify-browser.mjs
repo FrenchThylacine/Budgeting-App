@@ -72,6 +72,26 @@ async function waitForApp(page) {
   await page.waitFor("!document.querySelector('.boot-screen')", { timeoutMs: 20000, label: "the loading screen to leave" });
 }
 
+/**
+ * Wait until the live store has finished hydrating.
+ *
+ * Reading settings out of a store that is still loading is meaningless — it
+ * answers with the defaults — and several checks below do exactly that after a
+ * reload. This is not papering over a product problem: see the plan's open
+ * issue about writes made before hydration lands.
+ */
+async function waitForHydration(page, timeoutMs = 10000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const ready = await page.evaluate(
+      "!!window.__budgetStoreInstance && window.__budgetStoreInstance.getState().hydrated",
+    );
+    if (ready) return true;
+    await sleep(200);
+  }
+  return false;
+}
+
 /** Switch tab through the real navigation, and wait for the transition. */
 async function openTab(page, tab) {
   await page.click(`.nav-item[data-tab="${tab}"], .mobile-nav-item[data-tab="${tab}"]`);
@@ -436,12 +456,50 @@ try {
    * never will. Run against a freshly started dev server if this fails.
    */
   await check("the store the checks read is the one the page is using", async () => {
-    const live = await page.evaluate(`
+    /*
+     * Waited for, not asserted on the first frame.
+     *
+     * `hydrated` distinguishes the page's own store from a second module
+     * instance left behind by an HMR update — but it is also false for as long
+     * as hydration is still in flight, and with a real API behind the app that
+     * is a network round trip rather than an IndexedDB read. Asserting it
+     * immediately tested the backend's latency and called it a module-identity
+     * problem.
+     */
+    /*
+     * Object identity, not a proxy for it.
+     *
+     * This used to assert `hydrated` and call a false result a second module
+     * instance — but `hydrated` is also false while hydration is in flight, so
+     * a slow backend and a duplicated module looked identical. The application
+     * publishes the instance it is using (development only); this compares the
+     * two directly and reports which of the two problems it actually is.
+     */
+    const seen = await page.evaluate(`
       const { useBudgetStore } = await import('/src/store/budgetStore.ts');
-      return useBudgetStore.getState().hydrated;
+      const live = window.__budgetStoreInstance;
+      return JSON.stringify({
+        published: !!live,
+        same: live === useBudgetStore,
+        hydrated: live ? live.getState().hydrated : null,
+        syncState: live ? live.getState().syncState : null,
+      });
     `);
-    assert(live, "the imported store is a second module instance — restart the dev server");
-    return "same module instance";
+    const state = JSON.parse(seen);
+    assert(state.published, "the application never published its store — is this a development build?");
+    assert(state.same, "the import returned a second module instance — restart the dev server");
+    /*
+     * `hydrated` is deliberately *not* asserted here any more.
+     *
+     * This check is named for module identity and that is now tested exactly: the
+     * application publishes the instance it uses and this compares the two.
+     * Hydration is a different fact — it is false while a load is in flight,
+     * and it turned out to be false for a reason worth its own investigation
+     * rather than worth failing this check for. Conflating the two made a slow
+     * or unusual backend look like a duplicated module, which is what it
+     * reported for an hour.
+     */
+    return `same instance, ${state.syncState}, hydrated ${state.hydrated}`;
   });
 
   await check("the tour opens by itself, at step one", async () => {
@@ -713,15 +771,20 @@ try {
   });
 
   await check("back to the Concorde, in both places", async () => {
+    await waitForHydration(page);
     await page.click('[data-aircraft="concorde"]');
     await page.click('[data-fleet="concorde"]');
     await sleep(300);
     const stored = await page.evaluate(`
-      const { useBudgetStore } = await import('/src/store/budgetStore.ts');
-      const s = useBudgetStore.getState().snapshot.settings;
-      return [s.aircraft, s.transitionAircraft].join(",");
+      const s = window.__budgetStoreInstance.getState();
+      return JSON.stringify({
+        pair: [s.snapshot.settings.aircraft, s.snapshot.settings.transitionAircraft].join(","),
+        hydrated: s.hydrated,
+      });
     `);
-    equal(stored, "concorde,concorde", "the two aircraft preferences");
+    const read = JSON.parse(stored);
+    assert(read.hydrated, "the store had not hydrated, so its settings are the defaults rather than the account's");
+    equal(read.pair, "concorde,concorde", "the two aircraft preferences");
     return "concorde";
   });
 
@@ -849,11 +912,17 @@ try {
    * application must not claim to hold current rates that it does not hold.
    */
   await check("fetches rates on open, without anyone asking for them", async () => {
-    await openTab(page, "currencies");
+    // Currencies live in Settings now, so the tour of them starts there.
+    await openTab(page, "settings");
+    await page.click('[data-settings-group="money"]').catch(() => undefined);
+    await sleep(400);
+    await waitForHydration(page);
     const state = await page.evaluate(`
-      const { useBudgetStore } = await import('/src/store/budgetStore.ts');
       const { rateFreshness } = await import('/src/domain/exchangeRates.ts');
-      const rates = useBudgetStore.getState().snapshot.settings.exchangeRates;
+      // The published instance, not a fresh import: see the store-identity
+      // check. An import can resolve to a second copy whose settings are the
+      // defaults, and defaults have no rates in them at all.
+      const rates = window.__budgetStoreInstance.getState().snapshot.settings.exchangeRates;
       const f = rateFreshness(rates);
       return { count: Object.keys(rates.perEur ?? {}).length, source: rates.ratesSource ?? null,
                state: f.state, error: rates.ratesLastError ?? null, checked: rates.ratesCheckedAt ?? null };
@@ -978,7 +1047,7 @@ try {
     return preview.slice(0, 90);
   });
 
-  await check("saves it, and the card states the payment cycle rather than the sessions", async () => {
+  await check("saves it, and the payment cycle is one press away rather than printed", async () => {
     await page.click(".sheet-footer .btn-primary");
     await page.waitFor('!document.querySelector(\'[data-field="name"]\')', { label: "the editor to close" });
     await sleep(500);
@@ -987,13 +1056,65 @@ try {
       return card ? card.textContent.replace(/\\s+/g, ' ').trim() : 'not found';
     `);
     assert(row !== "not found", "the activity did not appear in the list");
-    // The card's job is the *cadence* and the accrual — that a €200 charge does
-    // not land twice a week. The amount itself belongs on the timeline, where
-    // it is a dated payment rather than a monthly figure.
-    assert(/10/.test(row), `the card does not state the pack size: ${row}`);
+    // The accrual is the figure somebody came to read, so it stays on the row.
     assert(/177/.test(row), `the card does not state the monthly accrual: ${row}`);
     assert(!/\bavg\.|\/year\b|\/month\b/.test(row), `the card carries an untranslated unit: ${row}`);
-    return row.slice(0, 120);
+    /*
+     * The pack size used to be printed on the row, inside a sentence nobody
+     * reads twice: "2 / week · pay every 10 sessions (≈ every 5 weeks)". The
+     * assertion is not that it is gone — it is that it is still *reachable*,
+     * which is the part a reduction like this can quietly get wrong.
+     */
+    assert(!/every 10|toutes les 10/.test(row), `the schedule sentence is still printed on the row: ${row}`);
+    const explained = await page.evaluate(`
+      const card = Array.from(document.querySelectorAll('.item-row, .activity-row')).find((node) => /Gym/.test(node.textContent));
+      const dot = card?.querySelector('.info-dot');
+      if (!dot) return 'no mark on the row';
+      dot.click();
+      return new Promise((resolve) => setTimeout(() => {
+        const bubble = document.querySelector('.info-bubble');
+        resolve(bubble ? bubble.textContent.replace(/\\s+/g, ' ').trim() : 'the mark opened nothing');
+      }, 120));
+    `);
+    assert(/10/.test(explained), `the mark does not explain the pack: ${explained}`);
+    await page.evaluate("document.querySelector('.info-dot')?.click(); return 1;");
+    return explained.slice(0, 100);
+  });
+
+  await check("the row menu opens where it is aimed", async () => {
+    /*
+     * It did not. Measured on a row two-thirds down the list, the menu opened
+     * at (1483, 1386) in a 1440x950 viewport — off the right edge and below the
+     * bottom, invisible. `position: fixed` is relative to the viewport only
+     * while no ancestor has a transform, a filter, or will-change naming one,
+     * and rows here have two: the swipe surface and the tab panel.
+     *
+     * Nothing measured it because nothing compared a computed position with
+     * where the browser actually put the element.
+     */
+    const placed = await page.evaluate(`
+      const trigger = document.querySelector('[aria-haspopup="menu"]');
+      if (!trigger) return { error: 'no row menu on the page' };
+      trigger.click();
+      return new Promise((resolve) => setTimeout(() => {
+        const menu = document.querySelector('[role="menu"]');
+        if (!menu) return resolve({ error: 'the trigger opened nothing' });
+        const m = menu.getBoundingClientRect();
+        const t = trigger.getBoundingClientRect();
+        const hit = document.elementFromPoint(m.left + m.width / 2, m.top + 12);
+        resolve({
+          inside: m.left >= 0 && m.top >= 0 && m.right <= innerWidth && m.bottom <= innerHeight,
+          gap: Math.round(Math.min(Math.abs(m.top - t.bottom), Math.abs(t.top - m.bottom))),
+          onTop: !!hit && menu.contains(hit),
+        });
+      }, 150));
+    `);
+    assert(!placed.error, placed.error ?? "");
+    assert(placed.inside, "the menu opened outside the viewport");
+    assert(placed.gap <= 24, `the menu opened ${placed.gap}px from its trigger`);
+    assert(placed.onTop, "something is painted over the menu");
+    await page.evaluate("document.querySelector('[aria-haspopup=\"menu\"]')?.click(); return 1;");
+    return `${placed.gap}px from the trigger, on top, inside the viewport`;
   });
 
   await check("the activity total reaches the summary", async () => {
@@ -1213,10 +1334,12 @@ try {
     const html = await page.evaluate(`
       const { buildPeriodReport, reportHtml } = await import('/src/domain/report.ts');
       const { createTranslator, loadDictionary } = await import('/src/domain/i18n.ts');
-      const { useBudgetStore } = await import('/src/store/budgetStore.ts');
       await loadDictionary('fr');
       const t = createTranslator('fr');
-      const snapshot = useBudgetStore.getState().snapshot;
+      // The published instance: a fresh import can be a second module copy
+      // whose snapshot is the defaults, and a report built from those is a
+      // report about nothing.
+      const snapshot = window.__budgetStoreInstance.getState().snapshot;
       const report = buildPeriodReport(snapshot, 'month', new Date(), t);
       // Not truncated: the section headings sit after several kilobytes of
       // inline stylesheet, and a slice that stopped short reported a French
@@ -1232,7 +1355,7 @@ try {
 
 
   /** Every tab the sweeps below visit. */
-  const TABS = ["dashboard", "activities", "spending", "wishlist", "wallet", "analytics", "settings", "currencies"];
+  const TABS = ["dashboard", "activities", "spending", "wishlist", "wallet", "analytics", "settings", "report"];
 
   // ── Responsive and accessible ─────────────────────────────────────────────
   group("Small screens");
@@ -1451,7 +1574,11 @@ try {
   const failed = results.filter((result) => !result.ok);
   console.log(
     `\n\x1b[1m${results.length - failed.length}/${results.length} checks passed\x1b[0m` +
-      (failed.length ? `\n\x1b[31m${failed.map((f) => `  ${f.group} → ${f.name}`).join("\n")}\x1b[0m` : ""),
+      // The reason, not just the name: a summary that says which check failed
+      // and not why is a summary you have to re-run the suite to act on.
+      (failed.length
+        ? `\n\x1b[31m${failed.map((f) => `  ${f.group} → ${f.name}\n      ${f.detail ?? "(no reason recorded)"}`).join("\n")}\x1b[0m`
+        : ""),
   );
   if (fatal) console.log(`\x1b[31mthe run itself failed: ${fatal?.stack ?? fatal}\x1b[0m`);
   // A floor, not the exact count: adding checks is routine, but finishing with

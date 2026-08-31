@@ -41,6 +41,7 @@ import {
 } from "lucide-react";
 import { EditorSheet } from "../ui/EditorSheet";
 import { FundingMark } from "../ui/FundingMark";
+import { Total } from "../ui/Money";
 import { useTranslation } from "../../i18n/useTranslation";
 import type { Translator } from "../../domain/i18n";
 import { storedText } from "../../domain/storedText";
@@ -706,7 +707,15 @@ export const Dashboard: React.FC<{ onNavigate?: (tab: "spending" | "activities" 
                   {/* The real cash figure, from the ledger — not the planning
                       budget, and not a per-year slice of it. The Wallet tab
                       breaks it into budget and personal money. */}
-                  <div className="text-headline money">{money(calculation.wallet.walletTotal)}</div>
+                  {/* `Total`, not `money()` — this is an aggregate, so it is
+                      the figure the optional second currency belongs under.
+                      `formatDualMoney` prints the display currency and stops,
+                      which meant the one balance somebody with two currencies
+                      most wants to read twice was the one that only appeared
+                      once. */}
+                  <div className="text-headline money">
+                    <Total amount={calculation.wallet.walletTotal} />
+                  </div>
                 </div>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: 12 }}>
                   <Figure
@@ -723,7 +732,7 @@ export const Dashboard: React.FC<{ onNavigate?: (tab: "spending" | "activities" 
                   <Figure
                     label={t("nav.wishlist")}
                     value={money(calculation.wishlist.activeTotal)}
-                    detail={`${calculation.wishlist.activeCount} active`}
+                    detail={t("stats.activeItems", { count: calculation.wishlist.activeCount })}
                   />
                   <Figure
                     label={t("dashboard.ytdSpend")}

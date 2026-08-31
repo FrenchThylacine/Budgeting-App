@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect, useRef, Suspense, lazy } from "react";
 import { useBudgetStore } from "./store/budgetStore";
+import type { TabKey } from "./domain/tabs";
 import { calculateYear } from "./domain/calculations";
 import { Sidebar } from "./components/layout/Sidebar";
 import { MobileNav } from "./components/layout/MobileNav";
@@ -33,14 +34,16 @@ const loadScenarios = () => import("./components/scenarios/ScenarioLab");
 const loadHistory = () => import("./components/history/HistoryPanel");
 const loadSettings = () => import("./components/settings/SettingsPanel");
 const loadCategories = () => import("./components/categories/CategoryManager");
-const loadCurrencies = () => import("./components/currencies/CurrencyPanel");
 
 const AnalyticsPanel = lazy(() => loadAnalytics().then((m) => ({ default: m.AnalyticsPanel })));
 const ScenarioLab = lazy(() => loadScenarios().then((m) => ({ default: m.ScenarioLab })));
-const HistoryPanel = lazy(() => loadHistory().then((m) => ({ default: m.HistoryPanel })));
+/* Split like the rest: the report module and its stylesheet are fifteen
+   kilobytes nothing needs until somebody asks for a report. */
+const ReportPanel = lazy(() =>
+  import("./components/report/ReportPanel").then((m) => ({ default: m.ReportPanel })),
+);
 const SettingsPanel = lazy(() => loadSettings().then((m) => ({ default: m.SettingsPanel })));
 const CategoryManager = lazy(() => loadCategories().then((m) => ({ default: m.CategoryManager })));
-const CurrencyPanel = lazy(() => loadCurrencies().then((m) => ({ default: m.CurrencyPanel })));
 /**
  * The tour is deferred too.
  *
@@ -68,7 +71,7 @@ const TutorialReminder = lazy(() =>
  * never competes with a request the user is actually waiting on.
  */
 function preloadPanels(): void {
-  const loaders = [loadAnalytics, loadSettings, loadCurrencies, loadCategories, loadHistory, loadScenarios];
+  const loaders = [loadAnalytics, loadSettings, loadCategories, loadHistory, loadScenarios];
   let index = 0;
   const next = () => {
     if (index >= loaders.length) return;
@@ -94,23 +97,13 @@ import { TabTransition } from "./components/ui/TabTransition";
 import { Tricolour } from "./components/ui/Tricolour";
 import { LoadingScreen, recallBootAircraft, rememberBootAircraft } from "./components/loading/LoadingScreen";
 import { applyTheme, clearTheme, resolveAppearance, themeFor } from "./domain/theme";
+import { sanitiseStatusColours, statusColourVariables } from "./domain/statusColours";
+import { fontStack } from "./domain/fonts";
 import { shouldAutoStartTutorial } from "./domain/tutorial";
 import { useTranslation } from "./i18n/useTranslation";
 import { resolveStoredText } from "./domain/storedText";
 import { refreshRatesOnOpen } from "./domain/exchangeRates";
 
-type TabKey =
-  | "dashboard"
-  | "activities"
-  | "spending"
-  | "wishlist"
-  | "wallet"
-  | "analytics"
-  | "scenarios"
-  | "history"
-  | "settings"
-  | "categories"
-  | "currencies";
 
 /**
  * The tabs the period does not govern.
@@ -125,7 +118,7 @@ type TabKey =
  * missing one — it invites the reader to try it, and then teaches them that
  * the app's controls are decoration.
  */
-const PERIODLESS_TABS = new Set<TabKey>(["categories", "currencies", "settings"]);
+const PERIODLESS_TABS = new Set<TabKey>(["categories", "settings"]);
 
 /*
  * The tab transition no longer takes a direction.
@@ -310,6 +303,42 @@ export default function App() {
   }, [themePreset, appearance, darkModeSetting, systemDark]);
 
   /*
+   * The reader's own status colours, over whatever the theme said.
+   *
+   * A separate effect from the theme's, and it must run *after* it: `applyTheme`
+   * writes the theme's whole palette, so setting these inside it would put the
+   * order of two effects in charge of which palette wins. Written here, they
+   * are re-applied whenever either the theme or the choice changes, and cleared
+   * kind by kind so switching one back to the theme's does not clear the other
+   * two.
+   */
+  const statusColours = snapshot.settings.statusColours;
+  useEffect(() => {
+    const root = document.documentElement;
+    const variables = statusColourVariables(sanitiseStatusColours(statusColours));
+    for (const [name, value] of Object.entries(variables)) root.style.setProperty(name, value);
+    return () => {
+      for (const name of Object.keys(variables)) root.style.removeProperty(name);
+    };
+  }, [statusColours, themePreset, appearance, darkModeSetting, systemDark]);
+
+  /*
+   * The typeface, which is one token because every rule that names a family
+   * names that token. Overriding it moves headings, figures, forms, popovers,
+   * the navigation and the report together.
+   */
+  const fontChoice = snapshot.settings.fontChoice;
+  useEffect(() => {
+    const root = document.documentElement;
+    const stack = fontStack(fontChoice);
+    if (!stack) return;
+    root.style.setProperty("--font-sans", stack);
+    return () => {
+      root.style.removeProperty("--font-sans");
+    };
+  }, [fontChoice]);
+
+  /*
    * The loading screen runs before the snapshot exists, so it cannot read the
    * chosen aircraft from it. The choice is mirrored into local storage purely
    * as a hint for the *next* cold start.
@@ -417,10 +446,9 @@ export default function App() {
     wallet: <WalletPanel />,
     analytics: <AnalyticsPanel />,
     scenarios: <ScenarioLab />,
-    history: <HistoryPanel />,
+    report: <ReportPanel />,
     settings: <SettingsPanel />,
     categories: <CategoryManager />,
-    currencies: <CurrencyPanel />,
   };
 
   const isHistorical = isViewingHistoricalPeriod(snapshot.settings);

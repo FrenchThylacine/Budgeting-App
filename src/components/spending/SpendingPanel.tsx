@@ -720,8 +720,12 @@ export const SpendingPanel: React.FC = () => {
                     {/* Which of the two exclusions it is, not merely that it
                         is one. "Paid by other" and "Outside budget" behave the
                         same against the budget and mean different things. */}
+                    {/* The glyph beside the category, and the colour on the
+                        figure — the same two channels the activity list uses,
+                        rather than a pill spelling out "Paid by other" on
+                        every affected row. */}
                     {isExternallyFunded(entry) && (
-                      <FundingMark kind={entryFundingKind(entry)} />
+                      <FundingMark kind={entryFundingKind(entry)} variant="glyph" />
                     )}
                     {entry.activityId && activityById.get(entry.activityId) && (
                       <span className="badge badge-info" title={t("spending.activity")}>
@@ -750,7 +754,7 @@ export const SpendingPanel: React.FC = () => {
                 {/* The amount sits outside `.row-actions`: that container is
                     hidden on touch, where the swipe replaces the buttons, and
                     the figure is the one thing on the row that must never go. */}
-                <div className="row-trailing">
+                <div className="row-trailing" data-funding={entryFundingKind(entry)}>
                   {/* The transaction's own currency is the figure; the
                       configured second currency, when there is one and a rate
                       exists, is a smaller line under it. */}

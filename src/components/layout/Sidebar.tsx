@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import type { TabKey } from "../../domain/tabs";
 import { useAuthStore } from "../../store/authStore";
 import { useBudgetStore } from "../../store/budgetStore";
 import {
@@ -19,6 +20,7 @@ import { todayDateInput } from "../../domain/dates";
 import { formatMoney } from "../../domain/currency";
 import type { BudgetSnapshot } from "../../domain/types";
 import type { Translator } from "../../domain/i18n";
+import { fontStack } from "../../domain/fonts";
 import { useTranslation } from "../../i18n/useTranslation";
 
 /**
@@ -45,6 +47,7 @@ async function openPeriodReport(snapshot: BudgetSnapshot, scope: ReportScope, t:
     report,
     (value) => formatMoney(value, snapshot.settings.baseCurrency, snapshot.settings.currencyDisplayMode),
     t,
+    { statusColours: snapshot.settings.statusColours, fontStack: fontStack(snapshot.settings.fontChoice) },
   );
 
   const win = window.open("", "_blank", "noopener,noreferrer,width=1024,height=768");
@@ -88,18 +91,6 @@ const NavGroup: React.FC<{ title: string; icon: LucideIcon; children: React.Reac
   );
 };
 
-type TabKey =
-  | "dashboard"
-  | "activities"
-  | "spending"
-  | "wishlist"
-  | "wallet"
-  | "analytics"
-  | "scenarios"
-  | "history"
-  | "settings"
-  | "categories"
-  | "currencies";
 
 /**
  * Navigation carries translation *keys*, not words.
@@ -116,9 +107,8 @@ const navItems: { key: TabKey; labelKey: string; icon: React.ElementType }[] = [
   { key: "wallet", labelKey: "nav.wallet", icon: Wallet },
   { key: "analytics", labelKey: "nav.analytics", icon: BarChart3 },
   { key: "scenarios", labelKey: "nav.scenarios", icon: FlaskConical },
-  { key: "history", labelKey: "nav.history", icon: History },
+  { key: "report", labelKey: "nav.report", icon: FileText },
   { key: "categories", labelKey: "nav.categories", icon: Tags },
-  { key: "currencies", labelKey: "nav.currencies", icon: Coins },
   { key: "settings", labelKey: "nav.settings", icon: Settings },
 ];
 

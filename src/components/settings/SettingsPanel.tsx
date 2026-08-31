@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { Suspense, lazy, useEffect, useMemo, useState } from "react";
 import {
   ArrowRight,
   Bell,
@@ -14,6 +14,9 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { trackedCurrencies } from "../../domain/currency";
+import { FUNDING_KINDS, type FundingKind } from "../../domain/funding";
+import { DEFAULT_FONT, FONTS } from "../../domain/fonts";
+import { isHexColour } from "../../domain/statusColours";
 import { formatDateTime } from "../../domain/dates";
 import { LANGUAGES, findLanguage, searchLanguages } from "../../domain/languages";
 import { resolveLanguage } from "../../domain/i18n";
@@ -40,6 +43,11 @@ import { AccountSettings } from "./AccountSettings";
 import { Section } from "../ui/Section";
 import { SyncStatus } from "../layout/SyncStatus";
 import { resolveStoredText } from "../../domain/storedText";
+/* Split, as it was when it was a tab: the currency dataset and the rate
+   machinery are not part of the first paint. */
+const CurrencyPanel = lazy(() =>
+  import("../currencies/CurrencyPanel").then((module) => ({ default: module.CurrencyPanel })),
+);
 
 /**
  * Settings, in five groups rather than as one column of eleven.
@@ -97,6 +105,10 @@ export const SettingsPanel: React.FC = () => {
             key={id}
             type="button"
             className={`settings-group${group === id ? " is-active" : ""}`}
+            /* A stable hook for the verification harness, like `data-tab` on
+               the navigation: the class names are styling and may change, this
+               is the group's identity. */
+            data-settings-group={id}
             aria-current={group === id ? "page" : undefined}
             onClick={() => setGroup(id)}
           >
@@ -186,6 +198,53 @@ const GeneralSettings: React.FC = () => {
             </div>
           </div>
           {theme.darkOnly && <p className="text-note settings-note">{t("settings.themeDarkOnly")}</p>}
+        </div>
+      </Section>
+
+      {/* The typeface.
+
+          Each option is drawn in itself, which is the only honest way to
+          offer a font: a list of names tells somebody what a face is called
+          and not what it looks like. */}
+      <Section title={t("settings.font")}>
+        <div className="card card-body settings-card">
+          <div className="font-grid" role="radiogroup" aria-label={t("settings.font")}>
+            {FONTS.map((font) => {
+              const active = (settings.fontChoice ?? DEFAULT_FONT) === font.id;
+              return (
+                <button
+                  key={font.id}
+                  type="button"
+                  role="radio"
+                  aria-checked={active}
+                  className={`font-option${active ? " is-active" : ""}`}
+                  style={{ fontFamily: font.stack }}
+                  onClick={() => update({ fontChoice: font.id })}
+                >
+                  <span className="font-option-name">{t(font.labelKey)}</span>
+                  <span className="font-option-sample">{t(font.hintKey)}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </Section>
+
+      {/* Who-paid, in the reader's own colours.
+
+          Three swatches rather than a palette editor: these are the states the
+          application actually uses colour to say, and every other colour in it
+          belongs to the theme. The text shade is derived rather than chosen —
+          a reader picking a pale yellow should get readable pale-yellow text,
+          not an invisible label and a support question. */}
+      <Section title={t("settings.statusColours")}>
+        <div className="card card-body settings-card">
+          <div className="status-colour-row">
+            {FUNDING_KINDS.map((kind) => (
+              <StatusColourField key={kind} kind={kind} />
+            ))}
+          </div>
+          <p className="text-note settings-note">{t("settings.statusColoursHint")}</p>
         </div>
       </Section>
 
@@ -339,13 +398,6 @@ const MoneySettings: React.FC = () => {
               <div className="text-callout">{t("currencies.pinned")}</div>
               <p className="text-note settings-note">{t("currencies.pinnedHint")}</p>
             </div>
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => window.dispatchEvent(new CustomEvent("budget-os:navigate", { detail: "currencies" }))}
-            >
-              {t("nav.currencies")} <ArrowRight size={14} />
-            </Button>
           </div>
 
           <div className="settings-pair">
@@ -447,6 +499,17 @@ const MoneySettings: React.FC = () => {
           </label>
         </div>
       </Section>
+
+      {/* Currencies, where currencies were always a preference.
+
+          This was a top-level destination beside Dashboard and Spending — a
+          permanent seat in the navigation for "which currencies do I track and
+          what are the rates". Nobody visits it to *do* anything; they visit it
+          to configure something, which is what this page is. It is the same
+          panel, unchanged, one group down. */}
+      <Suspense fallback={null}>
+        <CurrencyPanel />
+      </Suspense>
     </>
   );
 };
@@ -823,6 +886,55 @@ const NotificationSettings: React.FC = () => {
                 : status.state === "declined"
                   ? t("notifications.declined")
                   : "")}
+      </div>
+    </div>
+  );
+};
+
+
+/**
+ * One status colour.
+ *
+ * The input needs a concrete hex to show, and an unchosen kind has none —
+ * its colour is whatever the active theme defines. So the swatch reads the
+ * *computed* value off the page rather than this file keeping a second copy of
+ * every theme's palette, which is how a palette and its copy stop agreeing.
+ */
+const StatusColourField: React.FC<{ kind: FundingKind }> = ({ kind }) => {
+  const { t } = useTranslation();
+  const settings = useBudgetStore((state) => state.snapshot.settings);
+  const update = useBudgetStore((state) => state.updateSettings);
+  const chosen = settings.statusColours?.[kind];
+  const [themeValue, setThemeValue] = useState("#000000");
+
+  useEffect(() => {
+    if (chosen) return;
+    const raw = getComputedStyle(document.documentElement).getPropertyValue(`--funding-${kind}`).trim();
+    if (isHexColour(raw)) setThemeValue(raw);
+  }, [kind, chosen, settings.themePreset, settings.darkMode, settings.appearance]);
+
+  const set = (value: string | undefined) => {
+    const next: Partial<Record<FundingKind, string>> = { ...(settings.statusColours ?? {}) };
+    if (value) next[kind] = value;
+    else delete next[kind];
+    update({ statusColours: next });
+  };
+
+  return (
+    <div className="status-colour-field">
+      <span className="text-footnote">{t(`funding.${kind}.short`)}</span>
+      <div className="status-colour-controls">
+        <input
+          type="color"
+          aria-label={t(`funding.${kind}.short`)}
+          value={chosen ?? themeValue}
+          onChange={(event) => set(event.target.value)}
+        />
+        {chosen && (
+          <Button variant="ghost" size="sm" onClick={() => set(undefined)}>
+            {t("settings.resetColour")}
+          </Button>
+        )}
       </div>
     </div>
   );

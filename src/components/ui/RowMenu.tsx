@@ -1,4 +1,5 @@
 import React, { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { MoreHorizontal } from "lucide-react";
 
 export interface RowMenuItem {
@@ -41,9 +42,25 @@ interface RowMenuProps {
  *    a keyboard and not leave is worse than no menu.
  *  - **It must not close the row.** Rows are clickable — the whole card opens
  *    the editor — so every event here stops propagating.
- *  - **It must not be clipped.** The menu is positioned `fixed` against the
- *    trigger's own box rather than absolutely inside a row that has
- *    `overflow: hidden` for its swipe surface.
+ *  - **It must not be clipped, and it must land where it is aimed.** This is
+ *    the one that was broken. The menu is positioned `fixed` from the
+ *    trigger's viewport box — which is correct arithmetic and was landing the
+ *    menu 280px right and 520px below where it belonged, off the screen
+ *    entirely on a row near the bottom of the list.
+ *
+ *    `position: fixed` is only relative to the viewport while no ancestor has
+ *    a transform, a filter, a perspective, `contain`, or `will-change` naming
+ *    one of them. Any of those makes that ancestor the containing block, and
+ *    this menu had **two**: `.swipe-content`, which carries
+ *    `will-change: transform` for the swipe gesture — an identity matrix is
+ *    still a transform — and `.tab-panel`, which is mid-animation whenever a
+ *    tab has just changed. So the menu was being placed relative to its own
+ *    row.
+ *
+ *    A portal to `document.body` is the fix that cannot be re-broken by
+ *    something a parent does later. React events still propagate through the
+ *    React tree rather than the DOM, so the row's own click handler is still
+ *    reached — and still stopped.
  */
 export const RowMenu: React.FC<RowMenuProps> = ({ items, label, className }) => {
   const [open, setOpen] = useState(false);
@@ -155,7 +172,9 @@ export const RowMenu: React.FC<RowMenuProps> = ({ items, label, className }) => 
         <MoreHorizontal size={16} />
       </button>
 
-      {open && position && (
+      {open &&
+        position &&
+        createPortal(
         <div
           ref={menuRef}
           id={menuId}
@@ -184,7 +203,8 @@ export const RowMenu: React.FC<RowMenuProps> = ({ items, label, className }) => 
               <span>{item.label}</span>
             </button>
           ))}
-        </div>
+        </div>,
+        document.body,
       )}
     </>
   );
