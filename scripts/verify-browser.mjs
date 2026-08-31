@@ -1299,6 +1299,42 @@ try {
     return `${line.primary} ${line.secondary}`;
   });
 
+  /*
+   * The distribution, with two real currencies in the period.
+   *
+   * The budget above recorded €40 and 150 000 LBP, so this is the case the
+   * section exists for: two currencies whose totals cannot be compared without
+   * converting, and whose *amounts* must survive being compared. The assertion
+   * is that the recorded figures are on screen beside the converted bar —
+   * 150 000, not the €1.40-ish it is worth.
+   */
+  await check("statistics report which currencies the money was in", async () => {
+    await openTab(page, "analytics");
+    const section = await page.evaluate(`
+      const heading = [...document.querySelectorAll('.section-title, h2, h3')]
+        .find((node) => /devise|currenc|moneda|währung|عمل/i.test(node.textContent ?? ''));
+      if (!heading) return 'no currency section';
+      // Open it if it is a collapsed section.
+      const toggle = heading.closest('button') ?? heading.parentElement?.querySelector('button');
+      if (toggle && toggle.getAttribute('aria-expanded') === 'false') toggle.click();
+      return 'found';
+    `);
+    assert(section === "found", section);
+    await sleep(600);
+
+    const rows = await page.evaluate(`
+      // The chart is an SVG; its labels and captions are <text> nodes.
+      const labels = [...document.querySelectorAll('svg text')]
+        .map((n) => n.textContent.replace(/\\s+/g, ' ').trim());
+      return JSON.stringify(labels.filter((text) => /LBP|L\\.L\\.|EUR|€/.test(text)));
+    `);
+    const found = JSON.parse(rows).join(" | ");
+    assert(/LBP|L\.L\./.test(found), `the Lebanese pound is not in the distribution: ${found}`);
+    // The recorded amount, not what it converts to.
+    assert(/150[\s\u202f\u00a0.,]?000/.test(found), `the original amount is not shown: ${found}`);
+    return found.slice(0, 70);
+  });
+
   await check("the second currency is off until it is chosen", async () => {
     const totals = await page.evaluate(
       "document.querySelectorAll('.funding-split-value .money-secondary').length",

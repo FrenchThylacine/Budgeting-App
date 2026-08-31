@@ -998,3 +998,64 @@ export function financialHealth(input: {
     factors,
   };
 }
+
+// ─── Which currencies the money was actually in ──────────────────────────────
+
+/**
+ * One currency's share of what was spent.
+ *
+ * The same distinction the wallet makes, for the same reason: **`amount` is the
+ * fact and `converted` is a lens.** Somebody who paid ‎$120 and €80 did not
+ * spend "€190.45 in two currencies" — they spent a hundred and twenty dollars
+ * and eighty euros, and the euro figure exists only so the two can be put on
+ * one bar next to each other.
+ *
+ * `count` is here because a distribution without it misleads in a specific way:
+ * one $2,000 flight and forty €12 lunches make dollars look like the currency
+ * this budget lives in, and they are not.
+ */
+export interface CurrencySlice {
+  currency: string;
+  /** Spent in that currency, exactly as recorded. Never converted. */
+  amount: number;
+  /** The same total in the display currency, for comparison only. */
+  converted: number;
+  /** Its share of the converted total, 0–100, or null when the total is zero. */
+  share: number | null;
+  /** How many transactions were recorded in it. */
+  count: number;
+}
+
+/**
+ * What was spent, grouped by the currency it was spent in.
+ *
+ * Ordered by converted value so the largest reads first, which is the only
+ * ordering that survives a budget with nine currencies. A currency with a zero
+ * total is still listed if anything was recorded in it: zero is a real value
+ * here, and "you recorded three things in yen and they came to nothing" is
+ * information, while a missing row is not.
+ */
+export function currencyDistribution(entries: SpendingEntry[], snapshot: BudgetSnapshot): CurrencySlice[] {
+  const totals = new Map<string, { amount: number; count: number }>();
+  for (const entry of entries) {
+    const currency = entry.currency ?? snapshot.settings.baseCurrency;
+    const running = totals.get(currency) ?? { amount: 0, count: 0 };
+    // Accumulated in the entry's own currency: this is the number the reader
+    // typed, and it stays that number.
+    running.amount += entry.amount ?? 0;
+    running.count += 1;
+    totals.set(currency, running);
+  }
+
+  const slices = [...totals.entries()].map(([currency, { amount, count }]) => ({
+    currency,
+    amount,
+    converted: normalizeAmount(amount, currency as never, snapshot.settings),
+    share: null as number | null,
+    count,
+  }));
+
+  const total = slices.reduce((sum, slice) => sum + slice.converted, 0);
+  for (const slice of slices) slice.share = total === 0 ? null : (slice.converted / total) * 100;
+  return slices.sort((a, b) => b.converted - a.converted || a.currency.localeCompare(b.currency));
+}
