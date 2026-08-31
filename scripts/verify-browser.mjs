@@ -913,10 +913,13 @@ try {
    */
   await check("fetches rates on open, without anyone asking for them", async () => {
     await openTab(page, "currencies");
+    await waitForHydration(page);
     const state = await page.evaluate(`
-      const { useBudgetStore } = await import('/src/store/budgetStore.ts');
       const { rateFreshness } = await import('/src/domain/exchangeRates.ts');
-      const rates = useBudgetStore.getState().snapshot.settings.exchangeRates;
+      // The published instance, not a fresh import: see the store-identity
+      // check. An import can resolve to a second copy whose settings are the
+      // defaults, and defaults have no rates in them at all.
+      const rates = window.__budgetStoreInstance.getState().snapshot.settings.exchangeRates;
       const f = rateFreshness(rates);
       return { count: Object.keys(rates.perEur ?? {}).length, source: rates.ratesSource ?? null,
                state: f.state, error: rates.ratesLastError ?? null, checked: rates.ratesCheckedAt ?? null };
@@ -1328,10 +1331,12 @@ try {
     const html = await page.evaluate(`
       const { buildPeriodReport, reportHtml } = await import('/src/domain/report.ts');
       const { createTranslator, loadDictionary } = await import('/src/domain/i18n.ts');
-      const { useBudgetStore } = await import('/src/store/budgetStore.ts');
       await loadDictionary('fr');
       const t = createTranslator('fr');
-      const snapshot = useBudgetStore.getState().snapshot;
+      // The published instance: a fresh import can be a second module copy
+      // whose snapshot is the defaults, and a report built from those is a
+      // report about nothing.
+      const snapshot = window.__budgetStoreInstance.getState().snapshot;
       const report = buildPeriodReport(snapshot, 'month', new Date(), t);
       // Not truncated: the section headings sit after several kilobytes of
       // inline stylesheet, and a slice that stopped short reported a French
