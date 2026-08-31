@@ -3911,3 +3911,7 @@ label:has(> input[type="radio"]) {
   text-align: left;
 }
 .wallet-deferred-text:hover { text-decoration: underline; }
+
+/* The scenario's budget: a figure and a way out of it. */
+.scenario-budget-derived { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.scenario-budget-derived .input { flex: 1 1 130px; }

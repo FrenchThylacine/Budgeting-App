@@ -5,7 +5,8 @@ import { Button } from "../ui/Button";
 import { Field, FieldGroup } from "../ui/Field";
 import type { BudgetSnapshot, ScenarioActivityState, ScenarioPreset } from "../../domain/types";
 import { FUNDING_META, FUNDING_SOURCES, activityFundingKind, type FundingKind } from "../../domain/funding";
-import { scenarioActivityState } from "../../domain/scenarios";
+import { scenarioActivityState, scenarioSuggestedBudget } from "../../domain/scenarios";
+import { formatMoney } from "../../domain/currency";
 import { useTranslation } from "../../i18n/useTranslation";
 
 interface ScenarioEditorProps {
@@ -40,6 +41,11 @@ export const ScenarioEditor: React.FC<ScenarioEditorProps> = ({ preset, snapshot
   const [name, setName] = useState(preset?.name ?? "");
   const [notes, setNotes] = useState(preset?.notes ?? "");
   const [budget, setBudget] = useState(preset?.monthlyBudget != null ? String(preset.monthlyBudget) : "");
+  /*
+   * An existing scenario that carries a figure was overridden by whoever made
+   * it; a new one starts from what its activities actually require.
+   */
+  const [overrideBudget, setOverrideBudget] = useState(preset?.monthlyBudget != null);
 
   /**
    * Per-activity state, seeded from the scenario or from the activities
@@ -66,6 +72,20 @@ export const ScenarioEditor: React.FC<ScenarioEditorProps> = ({ preset, snapshot
     }
     return initial;
   });
+
+  /*
+   * What these activities require, recomputed as the sheet is edited.
+   *
+   * Built from the *draft* states rather than the saved preset, so switching
+   * an activity off or handing it to somebody else moves the figure while the
+   * reader is looking at it — which is the whole reason to derive it.
+   */
+  const suggested = useMemo(
+    () => scenarioSuggestedBudget(snapshot, { id: "draft", name, notes: "", activityStates }),
+    [snapshot, name, activityStates],
+  );
+
+  const budgetHint = overrideBudget ? t("scenario.overridingTheCalculated") : t("scenario.fromTheseActivities");
 
   const setActivity = (activityId: string, patch: Partial<ScenarioActivityState>) =>
     setActivityStates((current) => ({
@@ -103,7 +123,15 @@ export const ScenarioEditor: React.FC<ScenarioEditorProps> = ({ preset, snapshot
     const payload = {
       name: trimmedName,
       notes: notes.trim(),
-      monthlyBudget: numberOrUndefined(budget),
+      /*
+       * Only stored when it is an override.
+       *
+       * A scenario without a figure means "whatever these activities require",
+       * which stays true when an activity's price changes later. Storing the
+       * calculated number would freeze today's answer into the scenario and
+       * make it quietly wrong the first time anything moved.
+       */
+      monthlyBudget: overrideBudget ? numberOrUndefined(budget) : undefined,
       categoryCaps: Object.keys(categoryCaps).length > 0 ? categoryCaps : undefined,
       // Written for every activity that exists, so the scenario is a complete
       // statement rather than a set of exceptions to a state that will have
@@ -148,16 +176,48 @@ export const ScenarioEditor: React.FC<ScenarioEditorProps> = ({ preset, snapshot
               placeholder={t("scenario.tightMonth")}
             />
           </Field>
-          <Field label={t("settings.monthlyBudget")} hint={t("scenario.leaveEmptyToKeepThe")}>
-            <input
-              className="input"
-              type="number"
-              inputMode="decimal"
-              step="0.01"
-              value={budget}
-              onChange={(event) => setBudget(event.target.value)}
-              placeholder="—"
-            />
+          {/* Derived, and only typed when somebody means to.
+
+              This was a number field with "leave empty to keep the current
+              one" under it — which asks the reader to work out what their own
+              scenario costs, using figures the application has already
+              computed and is showing them elsewhere on this very sheet. The
+              budget a scenario needs *is* what its activities require from the
+              personal budget; the exception is somebody deliberately budgeting
+              more or less than that, and an exception is a control you reveal.
+              */}
+          <Field label={t("settings.monthlyBudget")} hint={budgetHint}>
+            {!overrideBudget ? (
+              <div className="scenario-budget-derived">
+                <strong>{formatMoney(suggested, snapshot.settings.baseCurrency, snapshot.settings.currencyDisplayMode)}</strong>
+                <Button type="button" variant="ghost" size="sm" onClick={() => setOverrideBudget(true)}>
+                  {t("scenario.setMyOwnBudget")}
+                </Button>
+              </div>
+            ) : (
+              <div className="scenario-budget-derived">
+                <input
+                  className="input"
+                  type="number"
+                  inputMode="decimal"
+                  step="0.01"
+                  value={budget}
+                  onChange={(event) => setBudget(event.target.value)}
+                  placeholder="—"
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setOverrideBudget(false);
+                    setBudget("");
+                  }}
+                >
+                  {t("scenario.useTheCalculated")}
+                </Button>
+              </div>
+            )}
           </Field>
           <Field label={t("activity.notes")} span hint={t("scenario.whenYouWouldUseThis")}>
             <input
