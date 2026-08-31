@@ -3915,3 +3915,35 @@ label:has(> input[type="radio"]) {
 /* The scenario's budget: a figure and a way out of it. */
 .scenario-budget-derived { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .scenario-budget-derived .input { flex: 1 1 130px; }
+
+/* ── The typeface picker ──────────────────────────────────────────────────────
+   Each option is set in itself: a list of names tells somebody what a face is
+   called and not what it looks like. */
+.font-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+}
+
+.font-option {
+  display: grid;
+  gap: 2px;
+  padding: 12px 14px;
+  min-height: 62px;
+  text-align: left;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.font-option:hover { border-color: var(--border-strong); }
+
+.font-option.is-active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+.font-option-name { font-weight: 600; font-size: 0.95rem; }
+.font-option-sample { font-size: 0.78rem; color: var(--text-secondary); }

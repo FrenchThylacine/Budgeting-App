@@ -20,6 +20,7 @@ import { todayDateInput } from "../../domain/dates";
 import { formatMoney } from "../../domain/currency";
 import type { BudgetSnapshot } from "../../domain/types";
 import type { Translator } from "../../domain/i18n";
+import { fontStack } from "../../domain/fonts";
 import { useTranslation } from "../../i18n/useTranslation";
 
 /**
@@ -46,7 +47,7 @@ async function openPeriodReport(snapshot: BudgetSnapshot, scope: ReportScope, t:
     report,
     (value) => formatMoney(value, snapshot.settings.baseCurrency, snapshot.settings.currencyDisplayMode),
     t,
-    { statusColours: snapshot.settings.statusColours },
+    { statusColours: snapshot.settings.statusColours, fontStack: fontStack(snapshot.settings.fontChoice) },
   );
 
   const win = window.open("", "_blank", "noopener,noreferrer,width=1024,height=768");

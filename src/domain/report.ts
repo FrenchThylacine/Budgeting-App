@@ -557,6 +557,15 @@ export interface ReportHtmlOptions {
    * glyphs and the written labels are on every row either way.
    */
   statusColours?: StatusColours;
+  /**
+   * The reader's typeface, as a CSS stack.
+   *
+   * The report is a document of its own with its own stylesheet, so it does
+   * not inherit the application's token — and a report in a different face
+   * from the screen it was previewed on is exactly the kind of small
+   * inconsistency this pass exists to remove.
+   */
+  fontStack?: string | null;
 }
 
 export function reportHtml(
@@ -773,7 +782,7 @@ export function reportHtml(
   body {
     /* Sans throughout: this is a dashboard on paper, not a broadsheet. Figures
        are tabular so a column of amounts lines up. */
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    font-family: ${options.fontStack ?? '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif'};
     color: var(--ink);
     margin: 0;
     padding: 26px 30px 34px;

@@ -15,6 +15,7 @@ import {
 import type { LucideIcon } from "lucide-react";
 import { trackedCurrencies } from "../../domain/currency";
 import { FUNDING_KINDS, type FundingKind } from "../../domain/funding";
+import { DEFAULT_FONT, FONTS } from "../../domain/fonts";
 import { isHexColour } from "../../domain/statusColours";
 import { formatDateTime } from "../../domain/dates";
 import { LANGUAGES, findLanguage, searchLanguages } from "../../domain/languages";
@@ -197,6 +198,35 @@ const GeneralSettings: React.FC = () => {
             </div>
           </div>
           {theme.darkOnly && <p className="text-note settings-note">{t("settings.themeDarkOnly")}</p>}
+        </div>
+      </Section>
+
+      {/* The typeface.
+
+          Each option is drawn in itself, which is the only honest way to
+          offer a font: a list of names tells somebody what a face is called
+          and not what it looks like. */}
+      <Section title={t("settings.font")}>
+        <div className="card card-body settings-card">
+          <div className="font-grid" role="radiogroup" aria-label={t("settings.font")}>
+            {FONTS.map((font) => {
+              const active = (settings.fontChoice ?? DEFAULT_FONT) === font.id;
+              return (
+                <button
+                  key={font.id}
+                  type="button"
+                  role="radio"
+                  aria-checked={active}
+                  className={`font-option${active ? " is-active" : ""}`}
+                  style={{ fontFamily: font.stack }}
+                  onClick={() => update({ fontChoice: font.id })}
+                >
+                  <span className="font-option-name">{t(font.labelKey)}</span>
+                  <span className="font-option-sample">{t(font.hintKey)}</span>
+                </button>
+              );
+            })}
+          </div>
         </div>
       </Section>
 

@@ -98,6 +98,7 @@ import { Tricolour } from "./components/ui/Tricolour";
 import { LoadingScreen, recallBootAircraft, rememberBootAircraft } from "./components/loading/LoadingScreen";
 import { applyTheme, clearTheme, resolveAppearance, themeFor } from "./domain/theme";
 import { sanitiseStatusColours, statusColourVariables } from "./domain/statusColours";
+import { fontStack } from "./domain/fonts";
 import { shouldAutoStartTutorial } from "./domain/tutorial";
 import { useTranslation } from "./i18n/useTranslation";
 import { resolveStoredText } from "./domain/storedText";
@@ -320,6 +321,22 @@ export default function App() {
       for (const name of Object.keys(variables)) root.style.removeProperty(name);
     };
   }, [statusColours, themePreset, appearance, darkModeSetting, systemDark]);
+
+  /*
+   * The typeface, which is one token because every rule that names a family
+   * names that token. Overriding it moves headings, figures, forms, popovers,
+   * the navigation and the report together.
+   */
+  const fontChoice = snapshot.settings.fontChoice;
+  useEffect(() => {
+    const root = document.documentElement;
+    const stack = fontStack(fontChoice);
+    if (!stack) return;
+    root.style.setProperty("--font-sans", stack);
+    return () => {
+      root.style.removeProperty("--font-sans");
+    };
+  }, [fontChoice]);
 
   /*
    * The loading screen runs before the snapshot exists, so it cannot read the

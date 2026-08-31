@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { Download, ExternalLink, Printer } from "lucide-react";
 import type { CustomRange, ReportScope } from "../../domain/report";
 import { formatMoney } from "../../domain/currency";
+import { fontStack } from "../../domain/fonts";
 import { useBudgetStore } from "../../store/budgetStore";
 import { useTranslation } from "../../i18n/useTranslation";
 import { Button } from "../ui/Button";
@@ -91,7 +92,11 @@ export const ReportPanel: React.FC = () => {
           report,
           (value) => formatMoney(value, snapshot.settings.baseCurrency, snapshot.settings.currencyDisplayMode),
           t,
-          { screen: true, statusColours: snapshot.settings.statusColours },
+          {
+            screen: true,
+            statusColours: snapshot.settings.statusColours,
+            fontStack: fontStack(snapshot.settings.fontChoice),
+          },
         );
         if (!cancelled) setHtml(document);
       } catch {

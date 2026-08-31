@@ -6,6 +6,7 @@ import { asyncHandler, AppError } from "../middleware/errorHandler.js";
 import { ALL_CURRENCY_CODES } from "../../../src/domain/currencies.js";
 import { LANGUAGES } from "../../../src/domain/languages.js";
 import { AIRCRAFT_IDS, FLEET_IDS } from "../../../src/domain/aircraft.js";
+import { FONT_IDS } from "../../../src/domain/fonts.js";
 import { APPEARANCES, THEME_IDS } from "../../../src/domain/theme.js";
 
 /**
@@ -115,6 +116,9 @@ const SETTINGS_FIELDS: Record<string, SettingsFieldCheck> = {
     ),
   // "YYYY-MM", the month the deferral was given for.
   leftoverDeferredFor: (value) => typeof value === "string" && /^\d{4}-(0[1-9]|1[0-2])$/.test(value),
+  // An id from the font table, never a CSS stack: this value reaches a
+  // stylesheet, and the table is the only thing allowed to say what a font is.
+  fontChoice: isOneOf(FONT_IDS),
   language: (value) => typeof value === "string" && LANGUAGE_CODES.has(value),
   appearance: isOneOf(APPEARANCES),
   themePreset: isOneOf(THEME_IDS),
@@ -123,7 +127,6 @@ const SETTINGS_FIELDS: Record<string, SettingsFieldCheck> = {
   roundingRule: isOneOf(["none", "nearest-1", "nearest-5", "nearest-10", "ceil-10"]),
   monthlyBudget: isFiniteNumber,
   autoWishlistFlushEnabled: isBoolean,
-  pilotIncludedInBudget: isBoolean,
   liveClockEnabled: isBoolean,
   saveTimestampEnabled: isBoolean,
   darkMode: isBoolean,
