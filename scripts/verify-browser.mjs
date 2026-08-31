@@ -72,6 +72,26 @@ async function waitForApp(page) {
   await page.waitFor("!document.querySelector('.boot-screen')", { timeoutMs: 20000, label: "the loading screen to leave" });
 }
 
+/**
+ * Wait until the live store has finished hydrating.
+ *
+ * Reading settings out of a store that is still loading is meaningless — it
+ * answers with the defaults — and several checks below do exactly that after a
+ * reload. This is not papering over a product problem: see the plan's open
+ * issue about writes made before hydration lands.
+ */
+async function waitForHydration(page, timeoutMs = 10000) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const ready = await page.evaluate(
+      "!!window.__budgetStoreInstance && window.__budgetStoreInstance.getState().hydrated",
+    );
+    if (ready) return true;
+    await sleep(200);
+  }
+  return false;
+}
+
 /** Switch tab through the real navigation, and wait for the transition. */
 async function openTab(page, tab) {
   await page.click(`.nav-item[data-tab="${tab}"], .mobile-nav-item[data-tab="${tab}"]`);
@@ -436,12 +456,50 @@ try {
    * never will. Run against a freshly started dev server if this fails.
    */
   await check("the store the checks read is the one the page is using", async () => {
-    const live = await page.evaluate(`
+    /*
+     * Waited for, not asserted on the first frame.
+     *
+     * `hydrated` distinguishes the page's own store from a second module
+     * instance left behind by an HMR update — but it is also false for as long
+     * as hydration is still in flight, and with a real API behind the app that
+     * is a network round trip rather than an IndexedDB read. Asserting it
+     * immediately tested the backend's latency and called it a module-identity
+     * problem.
+     */
+    /*
+     * Object identity, not a proxy for it.
+     *
+     * This used to assert `hydrated` and call a false result a second module
+     * instance — but `hydrated` is also false while hydration is in flight, so
+     * a slow backend and a duplicated module looked identical. The application
+     * publishes the instance it is using (development only); this compares the
+     * two directly and reports which of the two problems it actually is.
+     */
+    const seen = await page.evaluate(`
       const { useBudgetStore } = await import('/src/store/budgetStore.ts');
-      return useBudgetStore.getState().hydrated;
+      const live = window.__budgetStoreInstance;
+      return JSON.stringify({
+        published: !!live,
+        same: live === useBudgetStore,
+        hydrated: live ? live.getState().hydrated : null,
+        syncState: live ? live.getState().syncState : null,
+      });
     `);
-    assert(live, "the imported store is a second module instance — restart the dev server");
-    return "same module instance";
+    const state = JSON.parse(seen);
+    assert(state.published, "the application never published its store — is this a development build?");
+    assert(state.same, "the import returned a second module instance — restart the dev server");
+    /*
+     * `hydrated` is deliberately *not* asserted here any more.
+     *
+     * This check is named for module identity and that is now tested exactly: the
+     * application publishes the instance it uses and this compares the two.
+     * Hydration is a different fact — it is false while a load is in flight,
+     * and it turned out to be false for a reason worth its own investigation
+     * rather than worth failing this check for. Conflating the two made a slow
+     * or unusual backend look like a duplicated module, which is what it
+     * reported for an hour.
+     */
+    return `same instance, ${state.syncState}, hydrated ${state.hydrated}`;
   });
 
   await check("the tour opens by itself, at step one", async () => {
@@ -713,15 +771,20 @@ try {
   });
 
   await check("back to the Concorde, in both places", async () => {
+    await waitForHydration(page);
     await page.click('[data-aircraft="concorde"]');
     await page.click('[data-fleet="concorde"]');
     await sleep(300);
     const stored = await page.evaluate(`
-      const { useBudgetStore } = await import('/src/store/budgetStore.ts');
-      const s = useBudgetStore.getState().snapshot.settings;
-      return [s.aircraft, s.transitionAircraft].join(",");
+      const s = window.__budgetStoreInstance.getState();
+      return JSON.stringify({
+        pair: [s.snapshot.settings.aircraft, s.snapshot.settings.transitionAircraft].join(","),
+        hydrated: s.hydrated,
+      });
     `);
-    equal(stored, "concorde,concorde", "the two aircraft preferences");
+    const read = JSON.parse(stored);
+    assert(read.hydrated, "the store had not hydrated, so its settings are the defaults rather than the account's");
+    equal(read.pair, "concorde,concorde", "the two aircraft preferences");
     return "concorde";
   });
 

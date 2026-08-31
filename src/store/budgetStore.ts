@@ -216,6 +216,9 @@ interface BudgetStore {
   reorderCategory: (sourceId: string, targetId: string) => void;
 }
 
+/** Ticket for the newest in-flight hydration; see `hydrate`. */
+let hydrateGeneration = 0;
+
 export const useBudgetStore = create<BudgetStore>((set, get) => ({
   snapshot: createEmptyBudgetSnapshot(),
   hydrated: false,
@@ -255,9 +258,27 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
    * rather than being passed off as a normal load.
    */
   hydrate: async () => {
+    /*
+     * Only the newest hydration may write.
+     *
+     * Two can be in flight at once — a session check settles, the user signs
+     * in, and the effect that hydrates runs again — and they can finish out of
+     * order. When they do, a *rejected* earlier attempt lands after a
+     * successful later one and sets `hydrated: false` on a store that is
+     * already holding the account's real budget. The application then runs on
+     * a default snapshot with the session intact, which is the shape of the
+     * bug this guards: settings read back as empty, and nothing in the
+     * interface says why.
+     *
+     * A generation counter is the whole fix: take a ticket, and drop the
+     * result if a newer attempt started while this one was waiting.
+     */
+    const generation = ++hydrateGeneration;
+    const current = () => generation === hydrateGeneration;
     const apiClient = getApiClient();
     try {
       const remote = await apiClient.loadSnapshot();
+      if (!current()) return;
       if (remote) {
         const normalized = normalizeSnapshot(remote);
         set({
@@ -276,6 +297,7 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
       // Server reachable but empty: this device seeds it, starting from
       // whatever it already had locally so nothing is lost.
       const local = await loadIdbSnapshot().catch(() => null);
+      if (!current()) return;
       // A new account, not a demo. Its first budget is empty; the local cache
       // is used only if this device genuinely has unsynced work.
       const seeded = normalizeSnapshot(local ?? createEmptyBudgetSnapshot());
@@ -286,6 +308,7 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
       // A signed-out client has no budget. Falling through to the cache here
       // would render whatever this device last held — which, after a sign-out
       // or a session expiry, is the previous account's data.
+      if (!current()) return;
       if (error instanceof AuthRequiredError) {
         useAuthStore.getState().handleSessionExpired();
         set({ hydrated: false, syncState: "error", syncError: null });
@@ -295,6 +318,7 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
         console.error("Unexpected error while loading from the server:", error);
       }
       const local = await loadIdbSnapshot().catch(() => null);
+      if (!current()) return;
       set({
         snapshot: normalizeSnapshot(local ?? createEmptyBudgetSnapshot()),
         hydrated: true,
@@ -1756,3 +1780,22 @@ async function syncFromServer(
   }
 }
 
+
+/*
+ * The live store, published for the browser harness — development only.
+ *
+ * The harness reaches into the store with a dynamic `import()`, and after an
+ * HMR update Vite serves the same module under a `?t=` URL: the import then
+ * returns a second, empty copy, and every check that reads it reports that
+ * nothing was ever stored. The guard for that used to *infer* the problem from
+ * `hydrated` being false — which is also true while hydration is simply still
+ * in flight, so a slow backend and a duplicated module were indistinguishable.
+ * Diagnosing the difference cost an hour.
+ *
+ * This makes it exact: the application publishes the instance it is actually
+ * using, and the harness compares object identity. `import.meta.env.DEV` keeps
+ * it out of the production bundle entirely.
+ */
+if (import.meta.env.DEV && typeof window !== "undefined") {
+  (window as unknown as Record<string, unknown>).__budgetStoreInstance = useBudgetStore;
+}
