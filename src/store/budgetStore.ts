@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { calculateRolloverDelta, createNextYearRecord } from "../domain/calculations";
-import { ALLOCATION_TYPE, TRANSFER_TYPE, monthlyBudgetPlan, walletState } from "../domain/wallet";
+import { ALLOCATION_TYPE, TRANSFER_TYPE, monthlyBudgetPlan, walletState, walletComposition } from "../domain/wallet";
 import { monthFromDateInput, monthName, todayDateInput, weekFromDateInput } from "../domain/dates";
 import { isUsableAmount } from "../domain/wishlist";
 import type { WishlistLinkResult, WishlistPurchaseOverrides } from "../domain/wishlist";
@@ -936,6 +936,8 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
     if (Math.abs(balance) < 0.005) return null;
 
     const adjustment = -balance;
+    // Held currency by currency, so each can be zeroed in its own.
+    const composition = walletComposition(snapshot);
     // Budget money still claimed by the ledger. Zeroing the cash while leaving
     // this standing would assert that €600 of budget money is available in a
     // wallet the user has just declared empty — a contradiction they can see,
@@ -962,18 +964,35 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
             createdAt: new Date().toISOString(),
           });
         }
-        record.walletEntries.push({
-          id: id("wallet-reset"),
-          year,
-          month: draft.settings.selectedMonth,
-          amount: adjustment,
-          currency: draft.settings.baseCurrency,
-          date: todayDateInput(),
-          source: storedText("wallet.resetSource"),
-          type: "adjustment",
-          note: storedText("wallet.resetLedgerNote"),
-          createdAt: new Date().toISOString(),
-        });
+        /*
+         * One adjustment per currency held, each in that currency.
+         *
+         * This used to write a single entry for the whole balance in the
+         * display currency — a *converted* figure. A wallet holding 200 USD
+         * against a euro display was zeroed with −€172.43, and the moment the
+         * rate moved the ledger stopped netting to zero: the balance drifted
+         * back to a few euros out of nothing, because the two sides of the
+         * reset were denominated differently and only one of them was affected
+         * by the rate.
+         *
+         * Zeroing dollars with dollars keeps the reset true at every future
+         * rate, which is the same rule the rest of the wallet follows: an
+         * amount is an amount and a currency, and a conversion is a lens.
+         */
+        for (const slice of composition) {
+          record.walletEntries.push({
+            id: id("wallet-reset"),
+            year,
+            month: draft.settings.selectedMonth,
+            amount: -slice.amount,
+            currency: slice.currency,
+            date: todayDateInput(),
+            source: storedText("wallet.resetSource"),
+            type: "adjustment",
+            note: storedText("wallet.resetLedgerNote"),
+            createdAt: new Date().toISOString(),
+          });
+        }
       },
       "wallet",
       storedText("audit.walletReset"),
