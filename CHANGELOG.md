@@ -9,6 +9,7 @@ with one small fix gets a patch rather than a new minor.
 
 | Version | What it was |
 | --- | --- |
+| **5.0.0** | Ten destinations instead of eleven, a report you can read before you print it, and three bugs that were costing an account its data |
 | **4.4.0** | The correction pass: the aeroplane was not where the arithmetic put it, a choreographed routine, and a legend instead of a paragraph |
 | **4.3.0** | The audit pass: a rejoin that is a curve, one visual vocabulary, and twenty-three sentences nobody had translated |
 | **4.2.0** | The refinement pass: currency semantics, the funding ambiguity, a cadence vocabulary, an aerobatic routine, half the pixels |
@@ -18,6 +19,109 @@ with one small fix gets a patch rather than a new minor.
 | **2.0.0**–**2.1.0** | Accounts, Excel import, dedicated editors, scenarios, swipe, the first identity |
 | **1.0.0**–**1.1.0** | The first working budget: activities, spending, wishlist, reports |
 | **0.1.0**–**0.2.0** | Before it was an application |
+
+## 5.0.0 — 2026-08-31 — Fewer places, less text, and the data actually saving
+
+### Three bugs that were costing an account its data
+
+Found while checking that "Decide later" survives a reload. It did not, and
+neither did anything else: the API was up, and the interface said "Offline —
+this device only". It was reachable and refusing.
+
+`wishlist_items.date_added` is NOT NULL and was the one column on its row
+passed through raw while every neighbour is coerced. A single item without it —
+from an import, an older client, or any path that does not go through
+`addWishlistItem` — failed the **whole snapshot write**: every activity, every
+transaction, the settings. Then the same shape twice more in `wallet_entries`,
+found one failed write at a time: `month`, then `source`. Every NOT NULL column
+on that row is coerced now, at both ends, and a database test pushes an
+undated item and asserts the budget still saves.
+
+And a hydration race: two loads can be in flight at once, and a *rejected*
+earlier attempt could land after a successful later one, leaving the
+application running on a default snapshot with the session intact. Settings
+read back empty and nothing said why.
+
+### Ten destinations instead of eleven
+
+- **Currencies was never a place to go.** Which currencies to track and what
+  the rates are is configuration; it had a permanent seat beside Dashboard and
+  Spending. It is a group inside Settings.
+- **The financial record was competing with the dashboard.** Closed periods,
+  month closes, approvals and the audit trail are a record, and a record is
+  something you consult while looking at the numbers. It is a collapsed section
+  on Statistics.
+- **The report became a tab**, because it was three buttons that each opened a
+  finished document in a new window — commit to a window, then find out whether
+  the range was the one you meant.
+
+### The report, before it is printed
+
+The preview *is* the report: the same `reportHtml` the print and the download
+use, in an iframe. A React re-implementation of the model would be responsive
+by construction and would also be two renderers for one document, and they
+drift — a preview that lies is worse than none.
+
+So the responsiveness is the report's own. Its stylesheet reflows below 720px,
+the type stays readable, the tables scroll inside themselves, and `@media
+print` is untouched, so the page that reaches a printer is the A4 one whatever
+screen it was previewed on.
+
+### Colour, typeface, and the one component that ignored both
+
+The three funding colours and the typeface are the reader's. A chosen colour is
+a **fill**, never text: the text shade is derived by mixing toward the theme's
+foreground, so a pale yellow becomes readable pale-yellow text rather than an
+invisible label. The application and the printed report take their palette from
+one function, because two derivations is how a report prints last month's
+colours.
+
+One token carries the typeface — every rule that names a family names
+`--font-sans` — except that `button`, `input`, `select` and `textarea` do not
+inherit `font-family` at all. The navigation items are buttons, and with a face
+chosen they alone stayed in the platform's Arial. Verified by sweeping every
+element on all ten tabs.
+
+### Less text, and states you can see
+
+- **The `...` menu opened off-screen.** Measured: (1483, 1386) in a 1440×950
+  viewport, on a row two-thirds down the list. `position: fixed` is relative to
+  the viewport only while no ancestor has a transform — and rows here have two.
+  It is portalled now, and a check compares where it is aimed with where the
+  browser puts it.
+- **`InfoDot`** carries what used to be printed: the schedule sentence, the
+  reason an activity has no payment date, who pays. A fact that answers "why?"
+  is not a fact the card shows.
+- **Funding is a state, not a label.** A glyph by the name and the colour of
+  the figure — which is the number the classification changes the meaning of —
+  instead of a pill reading "◆ Paid by other · Dad".
+- **The unscheduled banner is gone**, replaced by an amber mark on each
+  affected row.
+- The **activity figure carries its equivalent** in the display currency.
+
+### Money
+
+- **A scenario's budget is what its activities require**, from
+  `personalMonthly`, so an activity somebody else pays for moves it and
+  renaming one does not. Typing a figure is an override now, and the only case
+  where one is stored.
+- **The projection uses the financial model.** Recurring and activity-linked
+  charges are events, not rates, so they are no longer extrapolated; and
+  personal payments the schedule says fall later this month are added, because
+  a charge the application already knows about is not a guess.
+- **Rates refresh when the application opens**, not when the provider's clock
+  says a new set exists — which left an app opened at 11:00 UTC holding
+  yesterday's numbers all morning.
+- **"Decide later" is remembered**, against the month it was given for, and the
+  offer to move leftover budget is made on the day it is live rather than all
+  month.
+
+Verified and *not* changed, because they were already right: the yearly share
+excludes paid-by-other (it was the heading that misled, and it is "What you pay
+for, by activity" now); the wallet keeps 200 USD as 200 USD across a rate
+change; the Dashboard, Wallet and Statistics all read one selector.
+
+**934 tests across 53 files, 60 browser checks.**
 
 ## 4.4.0 — 2026-08-30 — The correction pass
 
