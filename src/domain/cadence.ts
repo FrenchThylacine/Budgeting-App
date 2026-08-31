@@ -63,7 +63,10 @@ export const CADENCE_META: Record<Cadence, CadenceMeta> = {
   session: { id: "session", icon: "Ticket", labelKey: "cadence.session", tone: "var(--cadence-counted)" },
   pack: { id: "pack", icon: "Layers", labelKey: "cadence.pack", tone: "var(--cadence-counted)" },
   // Once.
-  oneOff: { id: "oneOff", icon: "Dot", labelKey: "cadence.oneOff", tone: "var(--cadence-once)" },
+  // `Dot` was a two-pixel speck that read as a bullet point rather than as a
+  // cadence — the one shape in the set that said nothing. A milestone is a
+  // single marked point on a line, which is exactly what a one-off payment is.
+  oneOff: { id: "oneOff", icon: "Milestone", labelKey: "cadence.oneOff", tone: "var(--cadence-once)" },
 };
 
 /**
@@ -125,4 +128,39 @@ export function entryCadence(entry: Pick<SpendingEntry, "recurrenceType">): Cade
  */
 export function isRecurring(cadence: Cadence): boolean {
   return cadence !== "oneOff";
+}
+
+/**
+ * The icons a reader may choose between, per cadence
+ * ==================================================
+ *
+ * Not an icon library and not a picker over four hundred glyphs: a short,
+ * curated alternative for each cadence, all of which actually mean that
+ * cadence. Somebody who reads a ticket as "cinema" rather than "session" can
+ * pick the stopwatch; nobody can pick a shape that says the wrong thing.
+ *
+ * The first entry of each list is the default, which is why `CADENCE_META`
+ * above names the same one — the two are asserted equal in the tests.
+ */
+export const CADENCE_ICON_CHOICES: Record<Cadence, readonly string[]> = {
+  monthly: ["Repeat", "CalendarSync", "RefreshCw"],
+  yearly: ["CalendarClock", "CalendarRange", "Cake"],
+  weekly: ["CalendarDays", "CalendarCheck2", "Clock"],
+  scheduled: ["CalendarCheck", "CalendarFold", "ListChecks"],
+  session: ["Ticket", "Timer", "Dumbbell"],
+  pack: ["Layers", "Package", "Boxes"],
+  oneOff: ["Milestone", "CircleDot", "Receipt"],
+};
+
+/**
+ * The icon to draw for a cadence, honouring the reader's choice.
+ *
+ * An unknown or absent choice falls back to the table's own, so a stored value
+ * from a future version — or a typo in a hand-edited snapshot — degrades to the
+ * default rather than to a blank square.
+ */
+export function cadenceIcon(cadence: Cadence, chosen?: Partial<Record<Cadence, string>>): string {
+  const preference = chosen?.[cadence];
+  if (preference && CADENCE_ICON_CHOICES[cadence].includes(preference)) return preference;
+  return CADENCE_META[cadence].icon;
 }

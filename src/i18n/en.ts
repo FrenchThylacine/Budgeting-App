@@ -1041,6 +1041,8 @@ export const en = {
   "stats.rolloverDetail": "accumulated month-end rollovers",
   "stats.spentPeriod": "Spent · {period}",
   "legend.title": "What the symbols mean",
+  "settings.cadenceIcons": "Payment schedule icons",
+  "settings.cadenceIconsHint": "The shape that stands for each payment rhythm, everywhere it appears.",
   "wallet.editMovement": "Edit movement",
   "settings.font": "Typeface",
   "font.system": "System",

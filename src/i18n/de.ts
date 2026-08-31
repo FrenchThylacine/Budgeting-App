@@ -966,6 +966,8 @@ export const de: Dictionary = {
   "stats.rolloverDetail": "aufgelaufene Monatsend-Überträge",
   "stats.spentPeriod": "Ausgegeben · {period}",
   "legend.title": "Was die Symbole bedeuten",
+  "settings.cadenceIcons": "Symbole für Zahlungsrhythmen",
+  "settings.cadenceIconsHint": "Das Symbol für jeden Zahlungsrhythmus, überall wo es erscheint.",
   "wallet.editMovement": "Bewegung bearbeiten",
   "settings.font": "Schriftart",
   "font.system": "System",

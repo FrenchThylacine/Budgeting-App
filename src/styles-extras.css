@@ -4014,3 +4014,30 @@ label:has(> input[type="radio"]) {
 .item-row[data-funding="outside"] .text-footnote {
   color: var(--text-secondary);
 }
+
+/* ── The payment-rhythm icon picker ───────────────────────────────────────────
+   One row per cadence, a few shapes each. Small, because the choice is small. */
+.cadence-icon-grid { display: grid; gap: 12px; }
+.cadence-icon-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.cadence-icon-row > .text-footnote { min-width: 7.5rem; }
+.cadence-icon-choices { display: flex; gap: 6px; }
+
+.cadence-icon-option {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.cadence-icon-option:hover { border-color: var(--border-strong); }
+
+.cadence-icon-option.is-active {
+  border-color: var(--accent);
+  color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}

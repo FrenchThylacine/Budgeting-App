@@ -19,7 +19,7 @@
 import { describe, expect, it } from "vitest";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { CADENCE_META, type Cadence } from "../src/domain/cadence";
+import { CADENCE_ICON_CHOICES, CADENCE_META, cadenceIcon, type Cadence } from "../src/domain/cadence";
 import { FUNDING_KINDS, FUNDING_META } from "../src/domain/funding";
 
 function sourceFiles(dir: string): string[] {
@@ -74,5 +74,43 @@ describe("the marks stay distinguishable without colour", () => {
     const ids = Object.keys(CADENCE_META) as Cadence[];
     const tones = new Set(ids.map((id) => CADENCE_META[id].tone));
     expect(tones.size).toBe(3);
+  });
+});
+
+describe("the payment-rhythm icons", () => {
+  it("offers a default that is the one the table names", () => {
+    /*
+     * The picker shows the first choice as the default, and `CADENCE_META`
+     * names the icon actually drawn when nobody has chosen. Two tables, one
+     * fact — so they are asserted equal rather than kept in step by hand.
+     */
+    for (const [cadence, choices] of Object.entries(CADENCE_ICON_CHOICES)) {
+      expect(choices[0], `${cadence}'s first choice`).toBe(
+        CADENCE_META[cadence as Cadence].icon,
+      );
+    }
+  });
+
+  it("no longer represents a one-off payment with a bare dot", () => {
+    // It did, and a two-pixel speck reads as a bullet point rather than as a
+    // cadence — the one shape in the set that said nothing.
+    expect(CADENCE_META.oneOff.icon).not.toBe("Dot");
+  });
+
+  it("falls back to the default rather than drawing nothing", () => {
+    expect(cadenceIcon("monthly", { monthly: "NotAnIcon" })).toBe(CADENCE_META.monthly.icon);
+    expect(cadenceIcon("monthly", {})).toBe(CADENCE_META.monthly.icon);
+    expect(cadenceIcon("monthly", undefined)).toBe(CADENCE_META.monthly.icon);
+  });
+
+  it("honours a choice that is on the cadence's own list", () => {
+    const alternative = CADENCE_ICON_CHOICES.monthly[1];
+    expect(cadenceIcon("monthly", { monthly: alternative })).toBe(alternative);
+  });
+
+  it("refuses an icon borrowed from another cadence", () => {
+    // Each list is the set of shapes that mean *that* rhythm. A ticket does not
+    // mean "yearly", so choosing it there is ignored.
+    expect(cadenceIcon("yearly", { yearly: "Ticket" })).toBe(CADENCE_META.yearly.icon);
   });
 });

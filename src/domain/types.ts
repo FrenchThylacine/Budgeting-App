@@ -209,6 +209,15 @@ export interface Settings {
    */
   fontChoice?: string;
   /**
+   * Which icon stands for each payment cadence.
+   *
+   * Only the ones the reader changed; an absent cadence uses the default from
+   * `domain/cadence.ts`. Values outside that cadence's own short list are
+   * ignored rather than drawn, so a stored value from a future version
+   * degrades to the default instead of to a blank square.
+   */
+  cadenceIcons?: Partial<Record<string, string>>;
+  /**
    * The interface language, as a BCP 47 tag ("en", "fr", "pt-BR").
    *
    * Absent means "follow the browser", which is what every budget written

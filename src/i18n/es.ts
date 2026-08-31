@@ -966,6 +966,8 @@ export const es: Dictionary = {
   "stats.rolloverDetail": "prórrogas de fin de mes acumuladas",
   "stats.spentPeriod": "Gastado · {period}",
   "legend.title": "Qué significan los símbolos",
+  "settings.cadenceIcons": "Iconos de las cadencias",
+  "settings.cadenceIconsHint": "La forma que representa cada ritmo de pago, allí donde aparezca.",
   "wallet.editMovement": "Editar movimiento",
   "settings.font": "Tipografía",
   "font.system": "Sistema",

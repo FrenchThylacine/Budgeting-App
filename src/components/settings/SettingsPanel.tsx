@@ -16,6 +16,8 @@ import type { LucideIcon } from "lucide-react";
 import { trackedCurrencies } from "../../domain/currency";
 import { FUNDING_KINDS, type FundingKind } from "../../domain/funding";
 import { DEFAULT_FONT, FONTS } from "../../domain/fonts";
+import { CADENCE_ICON_CHOICES, CADENCE_META, cadenceIcon, type Cadence } from "../../domain/cadence";
+import { CadenceIconPreview } from "../ui/CadenceMark";
 import { isHexColour } from "../../domain/statusColours";
 import { formatDateTime } from "../../domain/dates";
 import { LANGUAGES, findLanguage, searchLanguages } from "../../domain/languages";
@@ -227,6 +229,44 @@ const GeneralSettings: React.FC = () => {
               );
             })}
           </div>
+        </div>
+      </Section>
+
+      {/* One shape per payment rhythm.
+
+          A short list per cadence rather than a library: somebody who reads a
+          ticket as "cinema" instead of "session" can pick the stopwatch, and
+          nobody can pick a shape that means the wrong thing. */}
+      <Section title={t("settings.cadenceIcons")}>
+        <div className="card card-body settings-card">
+          <div className="cadence-icon-grid">
+            {(Object.keys(CADENCE_ICON_CHOICES) as Cadence[]).map((cadence) => (
+              <div key={cadence} className="cadence-icon-row">
+                <span className="text-footnote">{t(CADENCE_META[cadence].labelKey)}</span>
+                <div className="cadence-icon-choices" role="radiogroup" aria-label={t(CADENCE_META[cadence].labelKey)}>
+                  {CADENCE_ICON_CHOICES[cadence].map((name) => {
+                    const active = cadenceIcon(cadence, settings.cadenceIcons) === name;
+                    return (
+                      <button
+                        key={name}
+                        type="button"
+                        role="radio"
+                        aria-checked={active}
+                        aria-label={name}
+                        className={`cadence-icon-option${active ? " is-active" : ""}`}
+                        onClick={() =>
+                          update({ cadenceIcons: { ...(settings.cadenceIcons ?? {}), [cadence]: name } })
+                        }
+                      >
+                        <CadenceIconPreview name={name} />
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+          <p className="text-note settings-note">{t("settings.cadenceIconsHint")}</p>
         </div>
       </Section>
 
