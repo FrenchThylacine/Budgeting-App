@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 /**
  * The first-run tour: when it appears, and when it must not
  * =========================================================
@@ -270,5 +271,67 @@ describe("“Decide later” is a third answer, not a second Skip", () => {
     // The step is kept: Settings can still replay it, and resuming lands where
     // the reader stopped rather than at the beginning.
     expect(resumeStep(snapshot.settings.onboarding)).toBe(3);
+  });
+});
+
+/**
+ * A step that asks for an action must point at the control
+ * ========================================================
+ *
+ * The difference between a tour and a slideshow is that a tour shows you where
+ * the button is. A step with a task and no anchor says "now pin your currency"
+ * and leaves the reader hunting — which is the failure this section exists to
+ * fix, so it is worth a test rather than a convention.
+ *
+ * The anchors are checked against the application's own stable hooks
+ * (`data-action`, `data-settings-group`) for the same reason the harness uses
+ * them: a class name is styling and may change without anybody noticing that a
+ * spotlight has stopped landing on anything.
+ */
+describe("the spotlight", () => {
+  it("names a control for every step that waits for one", () => {
+    for (const step of TUTORIAL_STEPS) {
+      if (!step.task) continue;
+      expect(step.anchor, `step ${step.id} asks for an action without pointing at anything`).toBeTruthy();
+    }
+  });
+
+  it("points at hooks the application actually renders", async () => {
+    const sources = await Promise.all(
+      [
+        "src/components/activity/ActivityPanel.tsx",
+        "src/components/spending/SpendingPanel.tsx",
+        "src/components/wallet/WalletPanel.tsx",
+        "src/components/scenarios/ScenarioLab.tsx",
+        "src/components/settings/SettingsPanel.tsx",
+        "src/components/ui/Field.tsx",
+        "src/components/currencies/CurrencyPanel.tsx",
+      ].map((file) => readFile(new URL(`../${file}`, import.meta.url), "utf8")),
+    );
+    const markup = sources.join("\n");
+
+    for (const step of TUTORIAL_STEPS) {
+      if (!step.anchor) continue;
+      // Every selector in the preference list, not just the first: a fallback
+      // that matches nothing is a step with no spotlight at the moment it is
+      // most needed.
+      for (const selector of Array.isArray(step.anchor) ? step.anchor : [step.anchor]) {
+        const [name, value] = selector.replace(/^\[|\]$/g, "").replace(/'/g, '"').split("=");
+        // `data-settings-group` and `data-field` are rendered from variables,
+        // so the attribute being present is what can be checked; the values are
+        // covered by the group list and the field's own `name` prop.
+        const found =
+          markup.includes(`${name}=${value}`) ||
+          markup.includes(`${name}={`) ||
+          (name === "data-field" && markup.includes(`name=${value}`));
+        expect(found, `no control carries ${selector} (step ${step.id})`).toBe(true);
+      }
+    }
+  });
+
+  it("does not put a spotlight on a step that only explains", () => {
+    // An anchor on a step with nothing to do would dim the page for no reason.
+    const explaining = TUTORIAL_STEPS.filter((step) => !step.task && step.anchor);
+    expect(explaining.map((step) => step.id)).toEqual([]);
   });
 });

@@ -768,7 +768,7 @@ export const SpendingPanel: React.FC = () => {
                   <Money amount={entry.amount} currency={entry.currency} strong />
                   {mutable && (
                     <div className="row-actions">
-                      <Button variant="ghost" size="sm" icon onClick={() => beginEdit(entry)} aria-label={t("a11y.editTransaction")}>
+                      <Button variant="ghost" size="sm" icon data-action="edit-spending" onClick={() => beginEdit(entry)} aria-label={t("a11y.editTransaction")}>
                         <Pencil size={15} />
                       </Button>
                       <Button

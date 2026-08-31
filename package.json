@@ -16,7 +16,8 @@
     "dev:all": "concurrently \"npm run dev\" \"npm run server:dev\"",
     "server:dev:pg": "tsx scripts/dev-server-local-pg.mjs",
     "test:db": "vitest run tests/db-integration.test.ts tests/api-integration.test.ts",
-    "verify": "node scripts/verify-browser.mjs"
+    "verify": "node scripts/verify-browser.mjs",
+    "verify:tutorial": "node scripts/verify-tutorial.mjs"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.1.0",

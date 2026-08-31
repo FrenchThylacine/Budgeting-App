@@ -1,4 +1,4 @@
-import React, { useEffect, useId, useMemo, useRef, useState } from "react";
+import React, { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Bell, Check, ChevronLeft, ChevronRight, X } from "lucide-react";
 import { useBudgetStore } from "../../store/budgetStore";
 import {
@@ -85,6 +85,129 @@ export const Tutorial: React.FC<{
   );
 
   const done = step.task ? taskDone(step.task, snapshot) : true;
+
+  /*
+   * The control this step is about, lit up and kept in view
+   * ------------------------------------------------------
+   *
+   * A tour that says "press Add activity" while the reader hunts for the button
+   * is a tour that has described the application rather than taught it. The
+   * step names its control; this finds it, scrolls it into view, and reports
+   * where it is so the backdrop can cut a hole around it and the card can sit
+   * beside it rather than on top of it.
+   *
+   * Re-measured on scroll and resize because the page moves underneath: a
+   * spotlight pinned to stale coordinates is worse than none, since it points
+   * confidently at the wrong thing.
+   */
+  const [spot, setSpot] = useState<DOMRect | null>(null);
+  useEffect(() => {
+    if (!step.anchor) {
+      setSpot(null);
+      return;
+    }
+    const selectors = Array.isArray(step.anchor) ? step.anchor : [step.anchor];
+    const find = () => {
+      for (const selector of selectors) {
+        const found = document.querySelector(selector);
+        if (found) return found;
+      }
+      return null;
+    };
+    let frame = 0;
+    let lit: Element | null = null;
+    const measure = () => {
+      const target = find();
+      lit = target;
+      setSpot(target ? target.getBoundingClientRect() : null);
+    };
+    // After the tab switch this step asked for, not before it.
+    const settle = window.setTimeout(() => {
+      find()?.scrollIntoView({ block: "center", behavior: reducedMotion ? "auto" : "smooth" });
+      measure();
+    }, 420);
+    const track = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(measure);
+    };
+    /*
+     * The page changes shape underneath: an editor opens, a list grows, a
+     * preferred selector starts matching. Watching the DOM is what lets the
+     * spotlight move from "open the editor" to "here is the control" without
+     * the reader pressing anything in the tour.
+     */
+    const observer = new MutationObserver(() => {
+      const target = find();
+      if (target !== lit) {
+        target?.scrollIntoView({ block: "center", behavior: reducedMotion ? "auto" : "smooth" });
+        measure();
+      }
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+    window.addEventListener("scroll", track, true);
+    window.addEventListener("resize", track);
+    return () => {
+      window.clearTimeout(settle);
+      cancelAnimationFrame(frame);
+      observer.disconnect();
+      window.removeEventListener("scroll", track, true);
+      window.removeEventListener("resize", track);
+    };
+  }, [step.anchor, index, reducedMotion]);
+
+  /*
+   * Done means done: the step advances itself.
+   *
+   * The reader has just performed the action the card asked for; making them
+   * find Next afterwards is the slideshow reasserting itself. A short pause so
+   * the result is visible — a new activity appearing in the list is the
+   * confirmation — and then on.
+   *
+   * Only for task steps, and only forward: an explanation has nothing to
+   * detect, and re-reading a finished step must not fling the reader onward.
+   */
+  const advancedFrom = useRef(new Set<number>());
+  /*
+   * What "done" looked like on arrival.
+   *
+   * A step whose task was already satisfied before the reader got there —
+   * resuming a half-finished tour, or a seeded budget that already has
+   * activities — has nothing to wait for, and auto-advancing would fling the
+   * reader through several cards they never read. Those steps keep their Next
+   * button; only a task completed *while the step is open* advances by itself.
+   */
+  const doneOnArrival = useRef(false);
+  useEffect(() => {
+    doneOnArrival.current = step.task ? taskDone(step.task, snapshot) : true;
+    // Deliberately keyed on the step alone: this is a snapshot of the moment of
+    // arrival, and re-running it when the data changes would defeat the point.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [index]);
+
+  useEffect(() => {
+    if (!step.task || !done || doneOnArrival.current) return;
+    if (advancedFrom.current.has(index)) return;
+    if (index >= TUTORIAL_STEPS.length - 1) return;
+    // Long enough to see the result of what was just done — a new row appearing
+    // in the list is the confirmation — and short enough not to feel stuck.
+    const timer = window.setTimeout(() => {
+      advancedFrom.current.add(index);
+      setIndex((current) => (current === index ? current + 1 : current));
+    }, 900);
+    return () => window.clearTimeout(timer);
+    /*
+     * Deliberately *not* keyed on the snapshot, and the flag is set when the
+     * timer fires rather than when it is scheduled.
+     *
+     * Both are the same bug seen twice: saving the change the reader just made
+     * writes a revision back into the snapshot within the 900ms, which re-ran
+     * this effect, cleared the pending timer, found the step already marked as
+     * advanced and scheduled nothing in its place. The tour sat on a completed
+     * step for ever. `done` is a boolean, so it is the honest trigger here —
+     * the snapshot changing for unrelated reasons is not news.
+     */
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [done, index, step.task]);
   const passed = step.task ? Boolean(skippedTasks[step.id]) : false;
   const canAdvance = done || passed;
 
@@ -151,11 +274,96 @@ export const Tutorial: React.FC<{
     );
   };
 
+  /*
+   * Where the card goes.
+   *
+   * Beside the spotlight, on whichever side has room, and never over it — the
+   * one rule that makes a guided step usable is that the instruction and the
+   * control it names are visible at the same time.
+   *
+   * The card's own height is *measured* rather than assumed. A guess is how
+   * this breaks: the card is one paragraph on one step and three on another,
+   * and a fixed estimate puts a tall card straight over the button on a phone,
+   * which is the exact failure the rule exists to prevent. With no anchor the
+   * card keeps its default corner.
+   */
+  const [placement, setPlacement] = useState<React.CSSProperties | undefined>(undefined);
+  useLayoutEffect(() => {
+    if (!spot) {
+      setPlacement(undefined);
+      return;
+    }
+    const card = cardRef.current;
+    if (!card) return;
+    const gap = 16;
+    const margin = 12;
+    const height = card.offsetHeight;
+    const width = card.offsetWidth;
+    const below = window.innerHeight - spot.bottom - gap - margin;
+    const above = spot.top - gap - margin;
+
+    // Below if it fits, above if it fits there instead, otherwise the roomier
+    // side — where the card scrolls inside its own max-height rather than
+    // growing over the control.
+    const top =
+      height <= below
+        ? spot.bottom + gap
+        : height <= above
+          ? spot.top - gap - height
+          : below >= above
+            ? spot.bottom + gap
+            : margin;
+
+    const left = Math.min(Math.max(margin, spot.left), Math.max(margin, window.innerWidth - width - margin));
+    setPlacement({
+      top: Math.round(Math.max(margin, top)),
+      left: Math.round(left),
+      right: "auto",
+      bottom: "auto",
+      // When neither side fits, the card gets the room that is actually there.
+      maxHeight: Math.round(Math.max(140, Math.max(below, above))),
+    });
+  }, [spot, index]);
+
+  const cardPlacement = spot ? placement : undefined;
+
   return (
     <div className="tutorial-layer" role="presentation">
+      {/* The backdrop, with a hole in it.
+
+          Four panels rather than a box-shadow ring: a shadow large enough to
+          dim a page bleeds over the cut-out on some engines, and the hole has
+          to stay genuinely clear — the control inside it is the thing the
+          reader is being asked to press, and it must remain clickable. These
+          panels are `pointer-events: none` for the same reason. */}
+      {spot && (
+        <div className="tutorial-spotlight" aria-hidden="true">
+          <div className="tutorial-shade" style={{ inset: `0 0 auto 0`, height: Math.max(0, spot.top - 8) }} />
+          <div className="tutorial-shade" style={{ top: Math.max(0, spot.bottom + 8), left: 0, right: 0, bottom: 0 }} />
+          <div className="tutorial-shade" style={{ top: Math.max(0, spot.top - 8), left: 0, width: Math.max(0, spot.left - 8), height: spot.height + 16 }} />
+          <div className="tutorial-shade" style={{ top: Math.max(0, spot.top - 8), left: spot.right + 8, right: 0, height: spot.height + 16 }} />
+          <div
+            className="tutorial-ring"
+            style={{
+              top: Math.max(0, spot.top - 8),
+              left: Math.max(0, spot.left - 8),
+              width: spot.width + 16,
+              height: spot.height + 16,
+            }}
+          />
+        </div>
+      )}
       <div
         ref={cardRef}
-        className={`tutorial-card${reducedMotion ? "" : " tutorial-card-animated"}`}
+        style={cardPlacement}
+        /* Stable hooks for the verification harness, like `data-tab` on the
+           navigation. Which step is showing and whether its task is satisfied
+           are the two things a walkthrough needs to assert, and reading them
+           off the rendered card is how the harness checks the tour without
+           being told anything by the tour. */
+        data-step={step.id}
+        data-task-done={step.task ? String(done) : "no-task"}
+        className={`tutorial-card${reducedMotion ? "" : " tutorial-card-animated"}${spot ? " tutorial-card-anchored" : ""}`}
         role="dialog"
         aria-modal="false"
         aria-labelledby={titleId}
