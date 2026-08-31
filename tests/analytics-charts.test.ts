@@ -24,7 +24,6 @@ import {
   budgetPacing,
   categoryBreakdown,
   categoryMonthlySeries,
-  compactPeriodLabel,
   cumulativeForecast,
   dailySpendingCalendar,
   financialHealth,
@@ -36,6 +35,20 @@ import {
 import { createSeedBudgetSnapshot } from "../src/data/seedBudget";
 import { catId } from "./helpers/seedIds";
 import type { BudgetSnapshot, SpendingEntry } from "../src/domain/types";
+import { monthNames } from "../src/domain/i18n";
+
+/**
+ * The twelve short month names, as `Intl` writes them in English.
+ *
+ * These used to be a constant inside `domain/analytics.ts`, which put "Jan,
+ * Feb, Mar" under every bar of the trend chart in every language. The chart
+ * passes `monthNames("short")` from the translation hook now, and the tests
+ * pass the same thing for English.
+ */
+const SHORT_MONTHS = monthNames("en", "short");
+
+/** The English week marker under a bar; French writes S28, German KW28. */
+const WEEK_AXIS = (week: number) => `W${week}`;
 
 // ─── Fixtures ────────────────────────────────────────────────────────────────
 
@@ -328,7 +341,7 @@ describe("categoryMonthlySeries", () => {
     ]);
     snap.categories.push({ id: "cat-food", name: "Food", bucket: "general", color: "#00ff00" });
 
-    const { labels, series } = categoryMonthlySeries(snap, snap.settings, 4);
+    const { labels, series } = categoryMonthlySeries(snap, snap.settings, SHORT_MONTHS, 4);
     expect(labels).toHaveLength(12);
     const food = series.find((item) => item.categoryId === "cat-food")!;
     expect(food.values[2]).toBe(100); // March — recorded
@@ -342,7 +355,7 @@ describe("categoryMonthlySeries", () => {
       entry({ amount: 300, categoryId: "cat-learning" }),
       entry({ amount: 100, categoryId: "cat-other" }),
     ]);
-    const { series } = categoryMonthlySeries(snap, snap.settings, 2);
+    const { series } = categoryMonthlySeries(snap, snap.settings, SHORT_MONTHS, 2);
     expect(series).toHaveLength(2);
     expect(series[0].categoryId).toBe("cat-health");
     expect(series[1].categoryId).toBe("cat-learning");
@@ -351,7 +364,7 @@ describe("categoryMonthlySeries", () => {
 
   it("returns an empty series list when the year has no records", () => {
     const snap = snapshotWith([]);
-    expect(categoryMonthlySeries(snap, snap.settings).series).toEqual([]);
+    expect(categoryMonthlySeries(snap, snap.settings, SHORT_MONTHS).series).toEqual([]);
   });
 });
 
@@ -364,7 +377,7 @@ describe("recurringMonthlySplit", () => {
       entry({ amount: 50, month: 5, date: "2026-05-09", recurrenceType: "none" }),
       entry({ amount: 30, month: 6, date: "2026-06-09", recurrenceType: "purchase" }),
     ]);
-    const split = recurringMonthlySplit(snap, snap.settings);
+    const split = recurringMonthlySplit(snap, snap.settings, SHORT_MONTHS);
     expect(split.recurring[4]).toBe(200);
     expect(split.oneOff[4]).toBe(50);
     expect(split.recurring[5]).toBe(0); // June has records but nothing recurring
@@ -382,7 +395,7 @@ describe("recentPeriodTotals", () => {
       entry({ amount: 100, month: 7, date: "2026-07-09" }),
       entry({ amount: 60, month: 6, date: "2026-06-09", week: 24 }),
     ]);
-    const bars = recentPeriodTotals(snap, snap.settings, 4);
+    const bars = recentPeriodTotals(snap, snap.settings, SHORT_MONTHS, WEEK_AXIS, 4);
     expect(bars).toHaveLength(4);
     expect(bars[3].label).toBe("Jul");
     expect(bars[3].highlight).toBe(true);
@@ -393,7 +406,7 @@ describe("recentPeriodTotals", () => {
 
   it("leaves periods without records null rather than zero", () => {
     const snap = snapshotWith([entry({ amount: 100, month: 7 })]);
-    const bars = recentPeriodTotals(snap, snap.settings, 3);
+    const bars = recentPeriodTotals(snap, snap.settings, SHORT_MONTHS, WEEK_AXIS, 3);
     expect(bars[0].value).toBeNull();
     expect(bars[1].value).toBeNull();
     expect(bars[2].value).toBe(100);
@@ -402,24 +415,51 @@ describe("recentPeriodTotals", () => {
   it("labels weeks and years compactly", () => {
     const snap = snapshotWith([]);
     snap.settings.selectedPeriodMode = "week";
-    expect(recentPeriodTotals(snap, snap.settings, 2).map((bar) => bar.label)).toEqual(["W27", "W28"]);
+    expect(recentPeriodTotals(snap, snap.settings, SHORT_MONTHS, WEEK_AXIS, 2).map((bar) => bar.label)).toEqual(["W27", "W28"]);
 
     snap.settings.selectedPeriodMode = "year";
-    expect(recentPeriodTotals(snap, snap.settings, 2).map((bar) => bar.label)).toEqual(["2025", "2026"]);
+    expect(recentPeriodTotals(snap, snap.settings, SHORT_MONTHS, WEEK_AXIS, 2).map((bar) => bar.label)).toEqual(["2025", "2026"]);
   });
 
   it("always returns at least one period", () => {
     const snap = snapshotWith([]);
-    expect(recentPeriodTotals(snap, snap.settings, 0)).toHaveLength(1);
+    expect(recentPeriodTotals(snap, snap.settings, SHORT_MONTHS, WEEK_AXIS, 0)).toHaveLength(1);
   });
 });
 
-describe("compactPeriodLabel", () => {
-  it("shortens each mode to something that fits under a bar", () => {
+describe("the axis label under each bar", () => {
+  it("shortens each mode to something that fits, in the reader's language", () => {
+    /*
+     * `compactPeriodLabel` was exported and used by nothing but this test. It
+     * is a private helper of `recentPeriodTotals` now, so what it produces is
+     * checked where it is actually seen — under the bars.
+     */
     const snap = snapshotWith([]);
-    expect(compactPeriodLabel(snap.settings)).toBe("Jul");
-    expect(compactPeriodLabel({ ...snap.settings, selectedPeriodMode: "week" })).toBe("W28");
-    expect(compactPeriodLabel({ ...snap.settings, selectedPeriodMode: "year" })).toBe("2026");
+    const bars = recentPeriodTotals(snap, snap.settings, SHORT_MONTHS, WEEK_AXIS, 3);
+    expect(bars.map((bar) => bar.label)).toEqual(["May", "Jun", "Jul"]);
+
+    const weekly = recentPeriodTotals(
+      { ...snap, settings: { ...snap.settings, selectedPeriodMode: "week" } },
+      { ...snap.settings, selectedPeriodMode: "week" },
+      SHORT_MONTHS,
+      WEEK_AXIS,
+      1,
+    );
+    expect(weekly[0].label).toBe("W28");
+
+    const yearly = recentPeriodTotals(
+      { ...snap, settings: { ...snap.settings, selectedPeriodMode: "year" } },
+      { ...snap.settings, selectedPeriodMode: "year" },
+      SHORT_MONTHS,
+      WEEK_AXIS,
+      1,
+    );
+    expect(yearly[0].label).toBe("2026");
+
+    // And the month name really does follow the language, which is the whole
+    // reason the names are an argument now.
+    const french = recentPeriodTotals(snap, snap.settings, monthNames("fr", "short"), WEEK_AXIS, 1);
+    expect(french[0].label).not.toBe("Jul");
   });
 });
 

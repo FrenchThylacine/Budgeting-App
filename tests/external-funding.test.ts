@@ -31,7 +31,7 @@ import {
 import { calculateYear, summarizeCategories, summarizeMonth } from "../src/domain/calculations";
 import {
   externalEntries,
-  fundingLabel,
+  fundingLabelKey,
   isExternallyFunded,
   isPersonallyFunded,
   personalEntries,
@@ -40,6 +40,17 @@ import { buildPeriodReport } from "../src/domain/report";
 import { createSeedBudgetSnapshot } from "../src/data/seedBudget";
 import { findSeedCategory } from "../src/domain/seedCategories";
 import type { BudgetSnapshot, SpendingEntry } from "../src/domain/types";
+import { monthNames } from "../src/domain/i18n";
+
+/**
+ * The twelve short month names, as `Intl` writes them in English.
+ *
+ * These used to be a constant inside `domain/analytics.ts`, which put "Jan,
+ * Feb, Mar" under every bar of the trend chart in every language. The chart
+ * passes `monthNames("short")` from the translation hook now, and the tests
+ * pass the same thing for English.
+ */
+const SHORT_MONTHS = monthNames("en", "short");
 
 const NOW = new Date("2026-07-31T12:00:00Z");
 
@@ -107,12 +118,15 @@ describe("the funding predicate", () => {
     expect(externalEntries(entries)).toHaveLength(1);
   });
 
-  it("names the source for a badge", () => {
-    // Renamed deliberately: the three classifications are now "Paid by me —
-    // in budget", "Paid by other" and "Outside budget", and the stored values
-    // are unchanged so no record had to be rewritten.
-    expect(fundingLabel("shared")).toBe("Paid by other");
-    expect(fundingLabel(undefined)).toBe("Paid by me — in budget");
+  it("names the source for a badge, as a key rather than as English", () => {
+    /*
+     * It used to answer "Paid by other" — a sentence, from a domain module, in
+     * one language. The stored values are unchanged, so no record had to be
+     * rewritten; what changed is who does the wording, and the answer is the
+     * dictionary rather than this file.
+     */
+    expect(fundingLabelKey("shared")).toBe("funding.other");
+    expect(fundingLabelKey(undefined)).toBe("funding.personal");
   });
 });
 
@@ -207,7 +221,7 @@ describe("the worked example: €1,000 budget, €300 personal, €200 external"
   });
 
   it("splits recurring vs one-off on personal spend alone", () => {
-    const split = recurringMonthlySplit(snap, snap.settings);
+    const split = recurringMonthlySplit(snap, snap.settings, SHORT_MONTHS);
     expect(split.oneOff[6]).toBe(300);
   });
 

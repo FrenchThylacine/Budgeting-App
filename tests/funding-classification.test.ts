@@ -16,8 +16,8 @@ import {
   externalEntries,
   fundedByName,
   fundingKind,
-  fundingLabel,
-  fundingShortLabel,
+  fundingLabelKey,
+  fundingShortLabelKey,
   isExternallyFunded,
   isPersonallyFunded,
   otherFundedEntries,
@@ -98,11 +98,13 @@ describe("the classification itself", () => {
     expect(FUNDING_KINDS).toEqual(["personal", "other", "outside"]);
   });
 
-  it("names each kind distinctly, in full and in short", () => {
-    expect(fundingLabel("personal")).toBe("Paid by me — in budget");
-    expect(fundingLabel("shared")).toBe("Paid by other");
-    expect(fundingLabel("external")).toBe("Outside budget");
-    expect(fundingShortLabel("shared")).not.toBe(fundingShortLabel("external"));
+  it("names each kind distinctly, as keys the dictionaries answer", () => {
+    // Keys, not words. A domain module that returns "Outside budget" returns
+    // it in every language, which is the defect and not the feature.
+    expect(fundingLabelKey("personal")).toBe("funding.personal");
+    expect(fundingLabelKey("shared")).toBe("funding.other");
+    expect(fundingLabelKey("external")).toBe("funding.outside");
+    expect(fundingShortLabelKey("shared")).not.toBe(fundingShortLabelKey("external"));
   });
 
   it("gives each kind a non-colour mark, so print can tell them apart", () => {

@@ -1056,8 +1056,20 @@ try {
       return card ? card.textContent.replace(/\\s+/g, ' ').trim() : 'not found';
     `);
     assert(row !== "not found", "the activity did not appear in the list");
-    // The accrual is the figure somebody came to read, so it stays on the row.
-    assert(/177/.test(row), `the card does not state the monthly accrual: ${row}`);
+    /*
+     * The accrual is the figure somebody came to read, so it stays on the row.
+     *
+     * Derived here rather than written down. Two sessions a week at €20 is €40
+     * a week, and a month's worth of that depends on how many days the month
+     * has — so the figure is €177 in a 31-day month and €171 in a 30-day one.
+     * This check hard-coded 177 and duly went red at midnight on the first of
+     * September, reporting a translation defect that did not exist.
+     */
+    const now = new Date();
+    const daysThisMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+    const accrual = Math.round((40 * daysThisMonth) / 7);
+    const stated = new RegExp(`\\b${accrual}|${accrual - 1}\\b`);
+    assert(stated.test(row.replace(/\u202f|\u00a0|\s/g, "")), `the card does not state the monthly accrual (~${accrual}): ${row}`);
     assert(!/\bavg\.|\/year\b|\/month\b/.test(row), `the card carries an untranslated unit: ${row}`);
     /*
      * The pack size used to be printed on the row, inside a sentence nobody

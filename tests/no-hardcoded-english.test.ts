@@ -381,3 +381,91 @@ describe("the components carry no English of their own", () => {
     expect(isProse(strip("<Icon size={14} />"))).toBe(false);
   });
 });
+
+/**
+ * And none left in the domain either
+ * ==================================
+ *
+ * The scanner above reads `.tsx`, because that is where the last hundred and
+ * six were. The audit after it found a second cache, in `.ts`: the scenario
+ * preview reported a funding change as "Paid by me → Paid by other" in every
+ * language, the workbook importer wrote seven English warnings straight onto
+ * the import preview, and `funding.ts` carried a full set of English labels
+ * that nothing rendered — dead, and still English.
+ *
+ * They survived for the same reason as the first hundred and six: nothing
+ * looked there. A dictionary check cannot see a sentence that never reaches a
+ * dictionary, and a component check cannot see one written a layer down.
+ *
+ * The allowlist below is the honest part. Some English in `domain` is correct
+ * and stays, and each entry says why.
+ */
+describe("no English sentences in the domain layer", () => {
+  /**
+   * Files whose English is data rather than prose, and why.
+   *
+   * Not exemptions granted to make a test pass: each of these would be *worse*
+   * translated.
+   */
+  const ENGLISH_BY_DESIGN = new Map<string, string>([
+    ["src/domain/currencies.ts", "the English name of a currency, which is one of the two keys the picker searches"],
+    ["src/domain/languages.ts", "the English name of a language, so the list is searchable in English too"],
+    ["src/domain/fonts.ts", "font family names, which are identifiers the browser matches, not words"],
+    ["src/domain/importExport.ts", "spreadsheet sheet names and column headers, which the importer locates by text: translating them would break the round trip"],
+    ["src/domain/exchangeRates.ts", "the provider's own diagnosis, shown as a tooltip beside a translated sentence"],
+    ["src/domain/seedCategories.ts", "the name of a category an import creates, which is user data from that moment on"],
+    ["src/data/seedBudget.ts", "the example budget's own content, which is data the reader can rename"],
+    ["src/api/client.ts", "network failures, which are diagnosis and never reach a screen as prose"],
+    ["src/domain/report.ts", "font stacks in the printed stylesheet"],
+    ["src/domain/workbookImport.ts", "the developer-facing `Error.message`; what reaches the screen is the key beside it"],
+  ]);
+
+  function domainFiles(dir = "src"): string[] {
+    const found: string[] = [];
+    for (const name of readdirSync(dir)) {
+      const path = join(dir, name);
+      if (statSync(path).isDirectory()) {
+        if (name !== "i18n") found.push(...domainFiles(path));
+      } else if (path.endsWith(".ts") && !path.endsWith(".d.ts")) {
+        found.push(path);
+      }
+    }
+    return found;
+  }
+
+  it("has no English sentence anywhere a reader could see one", () => {
+    const findings: string[] = [];
+    for (const file of domainFiles()) {
+      if (ENGLISH_BY_DESIGN.has(file)) continue;
+      let inComment = false;
+      readFileSync(file, "utf8")
+        .split("\n")
+        .forEach((line, index) => {
+          const trimmed = line.trim();
+          if (inComment) {
+            if (trimmed.includes("*/")) inComment = false;
+            return;
+          }
+          if (trimmed.startsWith("/*")) {
+            if (!trimmed.includes("*/")) inComment = true;
+            return;
+          }
+          if (trimmed.startsWith("//") || trimmed.startsWith("*")) return;
+          // A sentence handed to something: pushed, returned, assigned, passed.
+          for (const match of line.matchAll(
+            /(?:[?:]|\|\||\?\?|=|,|\()\s*"([A-Z][a-z]{2,}(?: [A-Za-z’']+){2,}[.!?]?)"/g,
+          )) {
+            findings.push(`${file}:${index + 1}  ${match[1]}`);
+          }
+        });
+    }
+    expect(findings, `English prose in the domain layer:\n  ${findings.join("\n  ")}`).toEqual([]);
+  });
+
+  it("keeps the allowlist honest", () => {
+    // A file listed here that no longer exists is a reason nobody re-examined.
+    for (const file of ENGLISH_BY_DESIGN.keys()) {
+      expect(statSync(file).isFile(), `${file} is allowlisted but gone`).toBe(true);
+    }
+  });
+});

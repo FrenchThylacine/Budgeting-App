@@ -17,6 +17,7 @@ import { estimateActivity, monthlyEstimateNative, yearlyEstimateNative } from ".
 import { createSeedBudgetSnapshot } from "../src/data/seedBudget";
 import { activityPayloadFromDraft, activityToDraft, draftToActivity } from "../src/utils/formatters";
 import type { Activity, IsoWeekday } from "../src/domain/types";
+import { t } from "./lib/english";
 
 const NOW = new Date("2026-07-09T12:00:00+03:00");
 
@@ -267,9 +268,9 @@ describe("nextOccurrences", () => {
   });
 
   it("describes a schedule in words", () => {
-    expect(describeSchedule(activity({ weekdays: [1, 3] }))).toBe("Mon, Wed");
-    expect(describeSchedule(activity({ dayOfMonth: 15 }))).toBe("Day 15 monthly");
-    expect(describeSchedule(activity())).toBe("No schedule set");
+    expect(describeSchedule(activity({ weekdays: [1, 3] }), t)).toBe("Mon, Wed");
+    expect(describeSchedule(activity({ dayOfMonth: 15 }), t)).toBe("Day 15 monthly");
+    expect(describeSchedule(activity(), t)).toBe("No schedule set");
   });
 });
 

@@ -231,7 +231,8 @@ describe("importing the workbook", () => {
     const { snapshot, warnings } = importFixture();
     const weeks = snapshot.years["2026"].spendingEntries.map((e) => e.week);
     expect(Math.max(...weeks)).toBeLessThanOrEqual(53);
-    expect(warnings.some((w) => w.includes("outside the calendar year"))).toBe(true);
+    // A key, not a sentence: the importer no longer chooses a language.
+    expect(warnings.some((w) => w.key === "import.warning.weeksOutOfRange")).toBe(true);
   });
 
   it("does not import the monthly block as well as the weekly one", () => {
@@ -309,7 +310,7 @@ describe("rejecting a file that is not this workbook", () => {
     // The old code filled in the seed's activities here, presenting invented
     // data as if it had come from the file.
     expect(snapshot.years[String(snapshot.settings.selectedYear)].activities).toEqual([]);
-    expect(warnings.some((w) => w.includes("No activities"))).toBe(true);
+    expect(warnings.some((w) => w.key === "import.warning.noActivities")).toBe(true);
   });
 });
 

@@ -1,4 +1,4 @@
-import React, { Suspense, lazy, useMemo } from "react";
+import React, { Suspense, lazy, useCallback, useMemo } from "react";
 import { calculateYear } from "../../domain/calculations";
 import { isHistoricalPeriod, periodLabel } from "../../domain/periods";
 import {
@@ -150,7 +150,12 @@ const GRADE_COLOR: Record<string, string> = {
 // ─── Main Panel ───────────────────────────────────────────────────────────────
 
 export const AnalyticsPanel: React.FC = () => {
-  const { t, language, formatPercent } = useTranslation();
+  const { t, language, formatPercent, monthNames } = useTranslation();
+  /*
+   * The week marker under a bar. "W28" is English; each language writes its
+   * own, which is why this is a key rather than a prefix glued to a number.
+   */
+  const weekAxis = useCallback((week: number) => t("chart.weekAxis", { week }), [t]);
   const snapshot = useBudgetStore((state) => state.snapshot);
   const { settings } = snapshot;
   const mode = settings.selectedPeriodMode ?? "month";
@@ -184,8 +189,8 @@ export const AnalyticsPanel: React.FC = () => {
     () => cumulativeForecast(includedEntries, snapshot, settings),
     [includedEntries, snapshot, settings],
   );
-  const categoryEvolution = useMemo(() => categoryMonthlySeries(snapshot, settings, 4), [snapshot, settings]);
-  const recurringSplit = useMemo(() => recurringMonthlySplit(snapshot, settings), [snapshot, settings]);
+  const categoryEvolution = useMemo(() => categoryMonthlySeries(snapshot, settings, monthNames("short"), 4), [snapshot, settings]);
+  const recurringSplit = useMemo(() => recurringMonthlySplit(snapshot, settings, monthNames("short")), [snapshot, settings]);
   /**
    * Activity costs, from the same module the Activities tab and the reports
    * read. The statistics page does no costing of its own.
@@ -196,7 +201,7 @@ export const AnalyticsPanel: React.FC = () => {
   );
 
   const recentBars = useMemo(
-    () => recentPeriodTotals(snapshot, settings, mode === "year" ? 5 : 8),
+    () => recentPeriodTotals(snapshot, settings, monthNames("short"), weekAxis, mode === "year" ? 5 : 8),
     [snapshot, settings, mode],
   );
 
@@ -213,11 +218,11 @@ export const AnalyticsPanel: React.FC = () => {
   }, [mode, settings, snapshot]);
 
   const monthlyBars = useMemo(
-    () => monthlyTrendBars(calc.monthlyTrend, mode === "year" ? -1 : settings.selectedMonth),
+    () => monthlyTrendBars(calc.monthlyTrend, mode === "year" ? -1 : settings.selectedMonth, monthNames("short")),
     [calc.monthlyTrend, mode, settings.selectedMonth],
   );
   const weeklyBars = useMemo(
-    () => weeklyTrendBars(calc.weeklyTrend, settings.selectedWeek, 12),
+    () => weeklyTrendBars(calc.weeklyTrend, settings.selectedWeek, weekAxis, 12),
     [calc.weeklyTrend, settings.selectedWeek],
   );
 

@@ -52,19 +52,14 @@ export interface FundingKindMeta {
   kind: FundingKind;
   /** The stored `source` value written for this kind. */
   value: string;
-  /** Full label, used in editors, reports and legends. */
-  label: string;
-  /** Compact label for a badge or a narrow column. */
-  shortLabel: string;
-  /** What choosing this does to the budget, said plainly where it is chosen. */
-  hint: string;
   /** Theme token used for the figure and the chart series. */
   color: string;
   /**
    * A non-colour mark, for print.
    *
    * A black-and-white report cannot rely on a swatch, so every funding figure
-   * also carries a distinct glyph and a written label. See `domain/report.ts`.
+   * also carries a distinct glyph, printed beside a written label the report
+   * translates for itself. See `domain/report.ts`.
    */
   glyph: string;
 }
@@ -73,27 +68,18 @@ export const FUNDING_META: Record<FundingKind, FundingKindMeta> = {
   personal: {
     kind: "personal",
     value: "personal",
-    label: "Paid by me — in budget",
-    shortLabel: "Paid by me",
-    hint: "Counts against your budget.",
     color: "var(--funding-personal)",
     glyph: "●",
   },
   other: {
     kind: "other",
     value: "shared",
-    label: "Paid by other",
-    shortLabel: "Paid by other",
-    hint: "Recorded in full. Somebody else's money, so it never touches your budget.",
     color: "var(--funding-other)",
     glyph: "◆",
   },
   outside: {
     kind: "outside",
     value: "external",
-    label: "Outside budget",
-    shortLabel: "Outside budget",
-    hint: "Recorded in full. Your money, deliberately kept out of this budget.",
     color: "var(--funding-outside)",
     glyph: "▲",
   },
@@ -102,16 +88,20 @@ export const FUNDING_META: Record<FundingKind, FundingKindMeta> = {
 export interface FundingSourceOption {
   value: string;
   kind: FundingKind;
-  label: string;
-  hint: string;
 }
 
-/** What the spending and activity editors offer, in a fixed order. */
+/**
+ * What the spending and activity editors offer, in a fixed order.
+ *
+ * A kind and the value it is stored as, and nothing else. The label and the
+ * hint used to be here in English, and the editors ignored them — every one of
+ * them reaches for `t(\`funding.${kind}\`)` instead, because a `<option>` in
+ * an Arabic interface reading "Paid by other" is the whole reason the
+ * dictionaries exist. Carrying them was carrying a second, wrong answer.
+ */
 export const FUNDING_SOURCES: readonly FundingSourceOption[] = FUNDING_KINDS.map((kind) => ({
   value: FUNDING_META[kind].value,
   kind,
-  label: FUNDING_META[kind].label,
-  hint: FUNDING_META[kind].hint,
 }));
 
 /**
@@ -211,12 +201,19 @@ export function splitByFunding<T extends Pick<SpendingEntry, "source">>(
   return buckets;
 }
 
-/** Human label for a stored source value, for badges and reports. */
-export function fundingLabel(source: string | null | undefined): string {
-  return FUNDING_META[fundingKind(source)].label;
+/**
+ * The translation keys for a stored source value.
+ *
+ * Keys rather than words: a badge or a report line is read in the interface's
+ * language, and this module has no translator. The two functions that used to
+ * live here answered in English and were called by nothing but their own
+ * tests — which is how English survives an audit that only reads dictionaries.
+ */
+export function fundingLabelKey(source: string | null | undefined): string {
+  return `funding.${fundingKind(source)}`;
 }
 
 /** The compact form, for a badge or a narrow table column. */
-export function fundingShortLabel(source: string | null | undefined): string {
-  return FUNDING_META[fundingKind(source)].shortLabel;
+export function fundingShortLabelKey(source: string | null | undefined): string {
+  return `funding.${fundingKind(source)}.short`;
 }

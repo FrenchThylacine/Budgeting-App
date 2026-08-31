@@ -72,7 +72,18 @@ export const ImportControl: React.FC<ImportControlProps> = ({ variant = "full", 
       // rather than importing whatever it could find. `WorkbookShapeError`
       // extends `Error`, so the narrower check the class import used to allow
       // adds nothing now that the module is loaded on demand.
-      setError(caught instanceof Error ? caught.message : t("import.unreadable"));
+      /*
+       * A `WorkbookShapeError` carries a key and its values, so the reason the
+       * file was rejected is said in the reader's language. Anything else is
+       * an unexpected failure whose `message` is diagnosis rather than prose,
+       * and the generic sentence is the honest thing to show.
+       */
+      const { WorkbookShapeError } = await import("../../domain/workbookImport");
+      setError(
+        caught instanceof WorkbookShapeError
+          ? t(caught.key, caught.params)
+          : t("import.unreadable"),
+      );
     }
   };
 

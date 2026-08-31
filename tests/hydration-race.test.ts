@@ -1,4 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { freezeClockAt } from "./lib/clock";
+
+// These fixtures are dated August 2026; the store refuses to edit a month
+// that has ended, so the clock says mid-August too — mid-month rather than the
+// 31st, because a date at the edge of a month lands in the next one in a
+// timezone ahead of UTC. See `tests/lib/clock.ts`.
+freezeClockAt("2026-08-15T09:00:00Z");
 
 /**
  * A write made while the load was still in the air
@@ -155,7 +162,7 @@ describe("a change made while hydration is in flight", () => {
     } as never);
 
     const year = String(useBudgetStore.getState().snapshot.settings.selectedYear);
-    const idBefore = useBudgetStore
+        const idBefore = useBudgetStore
       .getState()
       .snapshot.years[year].activities.find((a) => a.name === "Added during the load")?.id;
     expect(idBefore).toBeTruthy();

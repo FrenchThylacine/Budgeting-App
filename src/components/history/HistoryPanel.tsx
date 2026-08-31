@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { calculateYear } from "../../domain/calculations";
 import { formatDualMoney, statusLabelKey } from "../../utils/formatters";
-import { monthName, formatDateTime } from "../../domain/dates";
+import { formatDateTime } from "../../domain/dates";
 import { useBudgetStore } from "../../store/budgetStore";
 import type { AuditLog, AuditType } from "../../domain/types";
 import { Badge } from "../ui/Badge";
@@ -28,7 +28,7 @@ const AUDIT_FILTERS: { value: AuditType | "all" | "historical"; labelKey: string
 ];
 
 export const HistoryPanel: React.FC = () => {
-  const { t } = useTranslation();
+  const { t, monthNames } = useTranslation();
   const snapshot = useBudgetStore((s) => s.snapshot);
   const calculation = useMemo(() => calculateYear(snapshot), [snapshot]);
   const setMonthlyNote = useBudgetStore((s) => s.setMonthlyNote);
@@ -223,7 +223,9 @@ export const HistoryPanel: React.FC = () => {
                       className="text-callout"
                       style={{ fontWeight: 600, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}
                     >
-                      {monthName(record.month)} {record.year}
+                      {/* Locale month names. `monthName()` answers in English
+                          whatever the interface language is. */}
+                      {monthNames()[record.month - 1] ?? record.month} {record.year}
                       <Badge tone={blocked ? "warning" : withRollover ? "success" : "neutral"}>
                         {t(blocked ? "history.blocked" : withRollover ? "history.rolloverApplied" : "history.closed")}
                       </Badge>
@@ -278,7 +280,7 @@ export const HistoryPanel: React.FC = () => {
                       ) : (
                         <AlertTriangle size={15} style={{ color: "var(--text-tertiary)" }} />
                       )}
-                      {monthName(approval.month)} {approval.year}
+                      {monthNames()[approval.month - 1] ?? approval.month} {approval.year}
                       <Badge tone={isApproved ? "success" : "neutral"}>{t(isApproved ? "common.approved" : "common.rejected")}</Badge>
                       <span
                         className="text-footnote"

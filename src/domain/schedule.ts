@@ -339,22 +339,23 @@ export function yearlyEstimateFromSchedule(activity: Activity, year: number): nu
 /**
  * Short human summary of a schedule, e.g. "Mon, Wed" or "Day 15 monthly".
  *
- * The translator is optional so that a test, an export or any other caller
- * without one still gets a readable English string; a component passes its own
- * and gets the reader's language.
+ * The translator is required: everything this returns is read on a screen, and
+ * an optional one meant an English sentence sitting beside every key for the
+ * benefit of callers that turned out not to exist. Tests pass the
+ * application's own English translator — `tests/lib/english.ts`.
  */
 export function describeSchedule(
   activity: Activity,
-  t?: (key: string, params?: Record<string, string | number>) => string,
+  t: (key: string, params?: Record<string, string | number>) => string,
   weekdayNames: Record<IsoWeekday, string> = WEEKDAY_SHORT_LABELS,
 ): string {
   const weekdays = normalizeWeekdays(activity.weekdays);
   if (weekdays.length > 0) return weekdays.map((day) => weekdayNames[day]).join(", ");
   const dayOfMonth = normalizeDayOfMonth(activity.dayOfMonth);
   if (dayOfMonth != null) {
-    return t ? t("activity.dayMonthly", { day: dayOfMonth }) : `Day ${dayOfMonth} monthly`;
+    return t("activity.dayMonthly", { day: dayOfMonth });
   }
-  return t ? t("activity.noSchedule") : "No schedule set";
+  return t("activity.noSchedule");
 }
 
 /**

@@ -128,9 +128,16 @@ export const ScenarioApplyDialog: React.FC<ScenarioApplyDialogProps> = ({
                     {change.labelKey ? t(change.labelKey) : change.label}
                   </span>
                   <span className="scenario-diff-values">
-                    <span className="scenario-diff-before money">{format(change.before)}</span>
+                    {/* A key when the value is a word, the value itself when it
+                        is money. Rendering `change.before` directly is how the
+                        funding line stayed in English in every language. */}
+                    <span className="scenario-diff-before money">
+                      {change.beforeKey ? t(change.beforeKey) : format(change.before)}
+                    </span>
                     <ArrowRight size={13} aria-hidden="true" />
-                    <span className="scenario-diff-after money">{format(change.after)}</span>
+                    <span className="scenario-diff-after money">
+                      {change.afterKey ? t(change.afterKey) : format(change.after)}
+                    </span>
                   </span>
                 </li>
               ))}

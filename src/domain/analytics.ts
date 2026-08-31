@@ -476,16 +476,37 @@ export interface TrendBar {
   highlight: boolean;
 }
 
-const SHORT_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+/**
+ * The twelve short month names, supplied by the caller.
+ *
+ * They used to be a constant here — "Jan, Feb, Mar" — which put English under
+ * every bar of the trend chart in every language. `useTranslation` already
+ * exposes `monthNames("short")`, which asks `Intl` and so answers "janv." in
+ * French and "ene." in Spanish, and the chart passes it in.
+ */
+export type ShortMonthNames = readonly string[];
+
+/**
+ * How this language marks a week number under a bar.
+ *
+ * "W28" is English. French writes *S28*, German *KW28* — and the chart used to
+ * write W in all three. A function rather than a prefix, because where the
+ * number goes is part of the answer.
+ */
+export type WeekAxisLabel = (week: number) => string;
 
 function summaryValue(summary: PeriodSummary): number | null {
   return summary.status === "value" || summary.status === "zero" ? summary.total ?? 0 : null;
 }
 
 /** 12 monthly bars for the selected calendar year, highlighting the selected month. */
-export function monthlyTrendBars(monthlyTrend: PeriodSummary[], selectedMonth: number): TrendBar[] {
+export function monthlyTrendBars(
+  monthlyTrend: PeriodSummary[],
+  selectedMonth: number,
+  shortMonths: ShortMonthNames,
+): TrendBar[] {
   return monthlyTrend.map((summary, i) => ({
-    label: SHORT_MONTHS[i] ?? String(i + 1),
+    label: shortMonths[i] ?? String(i + 1),
     value: summaryValue(summary),
     highlight: i + 1 === selectedMonth,
   }));
@@ -499,6 +520,7 @@ export function monthlyTrendBars(monthlyTrend: PeriodSummary[], selectedMonth: n
 export function weeklyTrendBars(
   weeklyTrend: PeriodSummary[],
   selectedWeek: number,
+  weekLabel: WeekAxisLabel,
   windowSize = 12,
 ): TrendBar[] {
   const totalWeeks = weeklyTrend.length;
@@ -511,7 +533,7 @@ export function weeklyTrendBars(
   return weeklyTrend.slice(start - 1, start - 1 + size).map((summary, i) => {
     const week = start + i;
     return {
-      label: `W${week}`,
+      label: weekLabel(week),
       value: summaryValue(summary),
       highlight: week === selectedWeek,
     };
@@ -519,14 +541,23 @@ export function weeklyTrendBars(
 }
 
 /**
- * Compact period label for chart axes, where `periodLabel` ("Week 28 · Jul
+ * Compact period label for a chart axis, where the full one ("Week 28 · Jul
  * 6–Jul 12") is far too long to sit under a bar.
+ *
+ * The month names come from the caller for the same reason as everywhere else
+ * in this file: `Intl` knows how to shorten a month in seventy languages and a
+ * constant array of twelve English strings does not. The week form stays a
+ * number with a marker, which is what a narrow axis has room for.
  */
-export function compactPeriodLabel(settings: Settings): string {
+function compactAxisLabel(
+  settings: Settings,
+  shortMonths: ShortMonthNames,
+  weekLabel: WeekAxisLabel,
+): string {
   const mode = settings.selectedPeriodMode ?? "month";
   if (mode === "year") return String(settings.selectedYear);
-  if (mode === "week") return `W${settings.selectedWeek}`;
-  return SHORT_MONTHS[settings.selectedMonth - 1] ?? `M${settings.selectedMonth}`;
+  if (mode === "week") return weekLabel(settings.selectedWeek);
+  return shortMonths[settings.selectedMonth - 1] ?? String(settings.selectedMonth);
 }
 
 // ─── Daily calendar (heatmap source) ─────────────────────────────────────────
@@ -627,6 +658,7 @@ export interface CategoryMonthlySeries {
 export function categoryMonthlySeries(
   snapshot: BudgetSnapshot,
   settings: Settings,
+  shortMonths: ShortMonthNames,
   topN = 4,
 ): { labels: string[]; series: CategoryMonthlySeries[] } {
   const record = snapshot.years[String(settings.selectedYear)];
@@ -663,7 +695,7 @@ export function categoryMonthlySeries(
       };
     });
 
-  return { labels: [...SHORT_MONTHS], series };
+  return { labels: [...shortMonths], series };
 }
 
 // ─── Recurring vs one-off over time ──────────────────────────────────────────
@@ -688,7 +720,11 @@ export interface RecurringSplitSeries {
  * Months without records stay `null` on both series so the column renders as
  * "?" rather than as an empty (zero-looking) stack.
  */
-export function recurringMonthlySplit(snapshot: BudgetSnapshot, settings: Settings): RecurringSplitSeries {
+export function recurringMonthlySplit(
+  snapshot: BudgetSnapshot,
+  settings: Settings,
+  shortMonths: ShortMonthNames,
+): RecurringSplitSeries {
   const record = snapshot.years[String(settings.selectedYear)];
   const entries = budgetRelevantEntries(record?.spendingEntries ?? [], settings);
 
@@ -707,7 +743,7 @@ export function recurringMonthlySplit(snapshot: BudgetSnapshot, settings: Settin
 
   const selectedIndex = settings.selectedMonth - 1;
   return {
-    labels: [...SHORT_MONTHS],
+    labels: [...shortMonths],
     recurring: hasRecords.map((has, index) => (has ? recurring[index] : null)),
     oneOff: hasRecords.map((has, index) => (has ? oneOff[index] : null)),
     committedMonthly:
@@ -725,6 +761,8 @@ export function recurringMonthlySplit(snapshot: BudgetSnapshot, settings: Settin
 export function recentPeriodTotals(
   snapshot: BudgetSnapshot,
   settings: Settings,
+  shortMonths: ShortMonthNames,
+  weekLabel: WeekAxisLabel,
   count = 6,
 ): TrendBar[] {
   const size = Math.max(1, Math.floor(count));
@@ -739,7 +777,7 @@ export function recentPeriodTotals(
   return walk.map((periodSettings, index) => {
     const entries = budgetRelevantEntries(entriesForSelectedPeriod(snapshot, periodSettings), settings);
     return {
-      label: compactPeriodLabel(periodSettings),
+      label: compactAxisLabel(periodSettings, shortMonths, weekLabel),
       value: entries.length > 0 ? entries.reduce((sum, e) => sum + normalizeEntry(e, snapshot), 0) : null,
       highlight: index === walk.length - 1,
     };

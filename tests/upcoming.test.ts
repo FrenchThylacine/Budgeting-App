@@ -12,6 +12,7 @@ import { createSeedBudgetSnapshot } from "../src/data/seedBudget";
 import { dayLabel, groupByDay, upcomingSchedule } from "../src/domain/upcoming";
 import { estimateActivity } from "../src/domain/calculations";
 import type { Activity, BudgetSnapshot } from "../src/domain/types";
+import { t } from "./lib/english";
 
 // A Thursday, so weekday maths is not accidentally aligned to a Monday.
 const NOW = new Date(2026, 7, 20, 9, 0, 0);
@@ -47,7 +48,7 @@ describe("upcomingSchedule", () => {
     const snapshot = snapshotWith([
       { name: "Gym", weekdays: [1, 4], pricePerSession: 20 }, // Mondays, Thursdays
     ]);
-    const { occurrences } = upcomingSchedule(snapshot, NOW, 14);
+    const { occurrences } = upcomingSchedule(snapshot, t, NOW, 14);
 
     expect(occurrences.length).toBeGreaterThan(0);
     // Every date is a Monday (1) or a Thursday (4).
@@ -63,7 +64,7 @@ describe("upcomingSchedule", () => {
       { name: "Rent", dayOfMonth: 1, pricePerMonth: 900 },
       { name: "Lesson", weekdays: [3], pricePerSession: 35 },
     ]);
-    const { occurrences } = upcomingSchedule(snapshot, NOW, 30);
+    const { occurrences } = upcomingSchedule(snapshot, t, NOW, 30);
 
     const times = occurrences.map((o) => o.date.getTime());
     // The whole point of the card: what happens first appears first, across
@@ -75,7 +76,7 @@ describe("upcomingSchedule", () => {
     const snapshot = snapshotWith([
       { name: "Subscription", recurrenceType: "monthly", pricePerMonth: 12 },
     ]);
-    const { occurrences, undated } = upcomingSchedule(snapshot, NOW, 30);
+    const { occurrences, undated } = upcomingSchedule(snapshot, t, NOW, 30);
 
     // A monthly charge with no day set has no knowable date. Guessing one would
     // put a figure on the calendar the user never entered.
@@ -85,7 +86,7 @@ describe("upcomingSchedule", () => {
 
   it("leaves one-off activities out of both lists", () => {
     const snapshot = snapshotWith([{ name: "Once", recurrenceType: "none", pricePerMonth: 50 }]);
-    const { occurrences, undated } = upcomingSchedule(snapshot, NOW, 30);
+    const { occurrences, undated } = upcomingSchedule(snapshot, t, NOW, 30);
     expect(occurrences).toEqual([]);
     expect(undated).toEqual([]);
   });
@@ -95,14 +96,14 @@ describe("upcomingSchedule", () => {
       { name: "Paused", weekdays: [1], pricePerSession: 10, active: false },
       { name: "Hidden", weekdays: [1], pricePerSession: 10, visible: false },
     ]);
-    const { occurrences, undated } = upcomingSchedule(snapshot, NOW, 30);
+    const { occurrences, undated } = upcomingSchedule(snapshot, t, NOW, 30);
     expect(occurrences).toEqual([]);
     expect(undated).toEqual([]);
   });
 
   it("stops at the horizon", () => {
     const snapshot = snapshotWith([{ name: "Gym", weekdays: [1, 4], pricePerSession: 20 }]);
-    const { occurrences } = upcomingSchedule(snapshot, NOW, 7);
+    const { occurrences } = upcomingSchedule(snapshot, t, NOW, 7);
     const limit = new Date(NOW.getTime() + 7 * 86_400_000);
     for (const occurrence of occurrences) {
       expect(occurrence.date.getTime()).toBeLessThanOrEqual(limit.getTime());
@@ -111,7 +112,7 @@ describe("upcomingSchedule", () => {
 
   it("prices a monthly charge that falls on one day of the month", () => {
     const snapshot = snapshotWith([{ name: "Rent", dayOfMonth: 1, pricePerMonth: 900 }]);
-    const { occurrences } = upcomingSchedule(snapshot, NOW, 40);
+    const { occurrences } = upcomingSchedule(snapshot, t, NOW, 40);
     // Arithmetic, not a guess: a monthly amount charged once a month costs that
     // amount on the day it falls.
     expect(occurrences[0].amountNative).toBe(900);
@@ -124,7 +125,7 @@ describe("upcomingSchedule", () => {
       // fabrication.
       { name: "Classes", weekdays: [1, 4], pricePerMonth: 200 },
     ]);
-    const { occurrences } = upcomingSchedule(snapshot, NOW, 14);
+    const { occurrences } = upcomingSchedule(snapshot, t, NOW, 14);
     expect(occurrences.length).toBeGreaterThan(0);
     expect(occurrences.every((o) => o.amountNative === null)).toBe(true);
   });
@@ -135,7 +136,7 @@ describe("upcomingSchedule", () => {
       { name: "Large", recurrenceType: "monthly", pricePerMonth: 500 },
       { name: "Medium", recurrenceType: "monthly", pricePerMonth: 50 },
     ]);
-    const { undated } = upcomingSchedule(snapshot, NOW, 30);
+    const { undated } = upcomingSchedule(snapshot, t, NOW, 30);
     expect(undated.map((u) => u.activity.name)).toEqual(["Large", "Medium", "Small"]);
   });
 });
@@ -146,7 +147,7 @@ describe("grouping and labelling", () => {
       { name: "A", weekdays: [1], pricePerSession: 1 },
       { name: "B", weekdays: [1], pricePerSession: 2 },
     ]);
-    const { occurrences } = upcomingSchedule(snapshot, NOW, 8);
+    const { occurrences } = upcomingSchedule(snapshot, t, NOW, 8);
     const days = groupByDay(occurrences);
     // Two activities on the same Monday are one heading with two rows, not two
     // headings.
@@ -155,11 +156,11 @@ describe("grouping and labelling", () => {
 
   it("uses relative labels only where they help", () => {
     const today = new Date(2026, 7, 20);
-    expect(dayLabel(today, today)).toBe("Today");
-    expect(dayLabel(new Date(2026, 7, 21), today)).toBe("Tomorrow");
+    expect(dayLabel(today, today, t)).toBe("Today");
+    expect(dayLabel(new Date(2026, 7, 21), today, t)).toBe("Tomorrow");
     // Beyond a week, a weekday name alone is ambiguous — "Monday" could be any
     // of several — so the date is spelled out.
-    expect(dayLabel(new Date(2026, 8, 15), today)).toMatch(/15/);
+    expect(dayLabel(new Date(2026, 8, 15), today, t)).toMatch(/15/);
   });
 
   it("files a late-evening occurrence under its own local day", () => {
@@ -209,11 +210,11 @@ describe("a manual renewal date", () => {
 
   it("gives a date to an activity whose rule cannot produce one", () => {
     // A yearly subscription with no day set has no derivable date at all.
-    const withoutDate = upcomingSchedule(withActivity({}), NOW);
+    const withoutDate = upcomingSchedule(withActivity({}), t, NOW);
     expect(withoutDate.occurrences).toHaveLength(0);
     expect(withoutDate.undated.map((u) => u.activity.name)).toEqual(["Navigraph"]);
 
-    const withDate = upcomingSchedule(withActivity({ nextRenewalDate: "2026-08-25" }), NOW);
+    const withDate = upcomingSchedule(withActivity({ nextRenewalDate: "2026-08-25" }), t, NOW);
     expect(withDate.occurrences).toHaveLength(1);
     expect(withDate.occurrences[0].date.getDate()).toBe(25);
     expect(withDate.occurrences[0].manual).toBe(true);
@@ -222,7 +223,7 @@ describe("a manual renewal date", () => {
 
   it("overrides the date the schedule would have produced", () => {
     const scheduled = withActivity({ costModel: "schedule", dayOfMonth: 28, recurrenceType: "monthly" });
-    expect(upcomingSchedule(scheduled, NOW).occurrences[0].date.getDate()).toBe(28);
+    expect(upcomingSchedule(scheduled, t, NOW).occurrences[0].date.getDate()).toBe(28);
 
     const overridden = withActivity({
       costModel: "schedule",
@@ -230,21 +231,21 @@ describe("a manual renewal date", () => {
       recurrenceType: "monthly",
       nextRenewalDate: "2026-08-24",
     });
-    const result = upcomingSchedule(overridden, NOW);
+    const result = upcomingSchedule(overridden, t, NOW);
     expect(result.occurrences[0].date.getDate()).toBe(24);
     expect(result.occurrences[0].manual).toBe(true);
   });
 
   it("counts a renewal dated today as still upcoming", () => {
     // Otherwise it disappears depending on the time of day the page was opened.
-    const result = upcomingSchedule(withActivity({ nextRenewalDate: "2026-08-21" }), NOW);
+    const result = upcomingSchedule(withActivity({ nextRenewalDate: "2026-08-21" }), t, NOW);
     expect(result.occurrences).toHaveLength(1);
     expect(result.occurrences[0].date.getDate()).toBe(21);
   });
 
   it("ignores a renewal date that has already passed", () => {
     // The renewal happened; the rule is right again from here.
-    const result = upcomingSchedule(withActivity({ nextRenewalDate: "2026-08-01" }), NOW);
+    const result = upcomingSchedule(withActivity({ nextRenewalDate: "2026-08-01" }), t, NOW);
     expect(result.occurrences).toHaveLength(0);
     expect(result.undated.map((u) => u.activity.name)).toEqual(["Navigraph"]);
   });
@@ -293,18 +294,18 @@ describe("the amount shown against an occurrence", () => {
   it("states the whole year on the day an annual charge lands", () => {
     // The timeline used to show "—" here: the app declining to state a figure
     // it holds. The yearly estimate *is* the charge; the renewal date is when.
-    const result = upcomingSchedule(yearlyActivity({}), NOW);
+    const result = upcomingSchedule(yearlyActivity({}), t, NOW);
     expect(result.occurrences[0].amountNative).toBe(81.64);
   });
 
   it("still says nothing when the yearly amount is genuinely unknown", () => {
     // Missing stays missing — it must not become 0.
-    const result = upcomingSchedule(yearlyActivity({ yearlyEstimate: null }), NOW);
+    const result = upcomingSchedule(yearlyActivity({ yearlyEstimate: null }), t, NOW);
     expect(result.occurrences[0].amountNative).toBeNull();
   });
 
   it("keeps a yearly estimate of 0 as a real zero", () => {
-    const result = upcomingSchedule(yearlyActivity({ yearlyEstimate: 0 }), NOW);
+    const result = upcomingSchedule(yearlyActivity({ yearlyEstimate: 0 }), t, NOW);
     expect(result.occurrences[0].amountNative).toBe(0);
   });
 });

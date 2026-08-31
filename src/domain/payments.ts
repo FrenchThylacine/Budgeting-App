@@ -429,15 +429,19 @@ export function fixedYearlyAmount(activity: Activity): number | null {
  */
 export function describePaymentCycle(
   activity: Activity,
-  t?: (key: string, params?: Record<string, string | number>) => string,
+  t: (key: string, params?: Record<string, string | number>) => string,
 ): string | null {
-  // Without a translator — a test, an export — the English is produced as
-  // before. With one, every fragment is a key, because "twice a week, paid
-  // every ten sessions" orders those two facts differently in each language.
-  const say = (key: string, params: Record<string, string | number>, fallback: string) =>
-    t ? t(key, params) : fallback;
-
-  if (activity.costModel === "fixedYearly") return say("payments.billedYearly", {}, "Billed once a year");
+  /*
+   * The translator is required.
+   *
+   * It used to be optional, with an English fallback beside every key "for a
+   * test or an export". There is no such caller: both the card and the
+   * upcoming list pass one, and the only code that took the other branch was
+   * the test asserting the English. So the fallback was seven English
+   * sentences kept alive by the test that checked them — and the audit found
+   * them exactly the way it found the others.
+   */
+  if (activity.costModel === "fixedYearly") return t("payments.billedYearly");
   if (activity.costModel !== "sessionPack") return null;
 
   const perPayment = normalizeSessionsPerPayment(activity.sessionsPerPayment);
@@ -445,31 +449,27 @@ export function describePaymentCycle(
   const period = normalizeSessionPeriod(activity.sessionPeriod);
   const cadence =
     rate != null
-      ? say(
-          period === "week" ? "payments.perWeek" : "payments.perMonth",
-          { rate: trim(rate) },
-          `${trim(rate)} / ${period}`,
-        )
+      ? t(period === "week" ? "payments.perWeek" : "payments.perMonth", { rate: trim(rate) })
       : null;
 
   if (perPayment == null) {
     if (!cadence) return null;
-    return say("payments.paySession", { cadence }, `${cadence} · pay per session`);
+    return t("payments.paySession", { cadence });
   }
 
   const every = sessionPackIntervalDays(activity);
   const interval = every != null ? describeDays(every, t, true) : null;
   const core =
     interval != null
-      ? say("payments.payEveryWithInterval", { count: perPayment, interval }, `pay every ${perPayment} sessions (≈ ${interval})`)
-      : say("payments.payEvery", { count: perPayment }, `pay every ${perPayment} sessions`);
-  return cadence ? say("payments.cycle", { cadence, core }, `${cadence} · ${core}`) : core;
+      ? t("payments.payEveryWithInterval", { count: perPayment, interval })
+      : t("payments.payEvery", { count: perPayment });
+  return cadence ? t("payments.cycle", { cadence, core }) : core;
 }
 
 /** "35 days" as "5 weeks" where that is the clearer unit. */
 export function describeDays(
   days: number,
-  t?: (key: string, params?: Record<string, string | number>) => string,
+  t: (key: string, params?: Record<string, string | number>) => string,
   /**
    * Produce "every 5 weeks" rather than "5 weeks".
    *
@@ -480,12 +480,15 @@ export function describeDays(
    */
   every = false,
 ): string {
+  /*
+   * Four keys and no English. The English branches that used to sit beside
+   * them chose their own plural — "1 week" / "2 weeks" — which is a rule that
+   * belongs to English and to nothing else; the dictionaries answer with
+   * `Intl.PluralRules`, which is why Arabic gets six forms and Japanese one.
+   */
   if (days % 7 === 0) {
-    const weeks = days / 7;
-    if (!t) return every ? `every ${weeks} week${weeks === 1 ? "" : "s"}` : `${weeks} week${weeks === 1 ? "" : "s"}`;
-    return t(every ? "common.everyWeeks" : "common.weeks", { count: weeks });
+    return t(every ? "common.everyWeeks" : "common.weeks", { count: days / 7 });
   }
-  if (!t) return every ? `every ${days} day${days === 1 ? "" : "s"}` : `${days} day${days === 1 ? "" : "s"}`;
   return t(every ? "common.everyDays" : "common.days", { count: days });
 }
 

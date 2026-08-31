@@ -47,15 +47,43 @@ export interface WorkbookImportResult {
    * block deliberately not imported. Surfaced in the preview so an import is
    * never quietly lossy.
    */
-  warnings: string[];
+  warnings: ImportWarning[];
 }
 
 /** A spreadsheet that does not look like the expected workbook. */
 export class WorkbookShapeError extends Error {
-  constructor(message: string) {
+  /**
+   * The message, as a translation key and its values.
+   *
+   * `Error` needs a `message` — it is what a stack trace and a test failure
+   * print — so one is still built in English for the developer. What reaches
+   * the screen is `key` and `params`, because a reader who opened the wrong
+   * file is owed the explanation in their own language.
+   */
+  readonly key: string;
+  readonly params: Record<string, string | number>;
+
+  constructor(message: string, key: string, params: Record<string, string | number> = {}) {
     super(message);
     this.name = "WorkbookShapeError";
+    this.key = key;
+    this.params = params;
   }
+}
+
+/**
+ * A note about the file, for the import preview.
+ *
+ * A key and its values rather than a sentence. These are read on screen by
+ * somebody deciding whether to accept an import, and they used to be assembled
+ * here in English — including two that chose "has" or "have" and "year" or
+ * "years" for themselves, which is a grammar no other language shares.
+ */
+export interface ImportWarning {
+  key: string;
+  params?: Record<string, string | number>;
+  /** Plural count, for the dictionaries that need one. */
+  count?: number;
 }
 
 type SheetRows = unknown[][];
@@ -201,8 +229,11 @@ function readSheet(workbook: XLSXTypes.WorkBook, sheetName: string, utils: typeo
   if (!sheet) {
     // The old code fell back to the first sheet, which produced confident
     // nonsense from whatever happened to be there.
+    const contains = workbook.SheetNames.join(", ");
     throw new WorkbookShapeError(
-      `This file has no "${sheetName}" sheet. It contains: ${workbook.SheetNames.join(", ") || "no sheets"}.`,
+      `This file has no "${sheetName}" sheet. It contains: ${contains || "no sheets"}.`,
+      contains ? "import.error.noSheet" : "import.error.noSheetsAtAll",
+      { sheet: sheetName, contains },
     );
   }
   // blankrows preserved: the layout has blank separator rows, and dropping them
@@ -239,7 +270,7 @@ export function parseWorkbook(
   /** Passed in so the caller owns the dynamic import of the library. */
   utils: typeof XLSXTypes.utils = requireUtils(),
 ): WorkbookImportResult {
-  const warnings: string[] = [];
+  const warnings: ImportWarning[] = [];
   const budgetRows = readSheet(workbook, "Budget", utils);
   const spendingRows = readSheet(workbook, "Spending", utils);
   const timestamp = now.toISOString();
@@ -257,7 +288,7 @@ export function parseWorkbook(
   if (activities.length === 0) {
     // The old code substituted the seed's activities here, which is worse than
     // an empty import: it presents invented data as if it came from the file.
-    warnings.push("No activities were found in the Budget sheet. Check the 'Activities' header row.");
+    warnings.push({ key: "import.warning.noActivities" });
   }
 
   const years = spending.years.length > 0 ? [...spending.years] : [meta.primaryYear];
@@ -349,7 +380,7 @@ interface WorkbookMetadata {
 function parseMetadata(
   budgetRows: SheetRows,
   spendingRows: SheetRows,
-  warnings: string[],
+  warnings: ImportWarning[],
 ): WorkbookMetadata {
   const budgetHeader = budgetRows[0] ?? [];
   const spendingHeader = spendingRows[0] ?? [];
@@ -362,7 +393,7 @@ function parseMetadata(
   // previous parser and turned an unknown balance into a stated zero.
   const personalBalance = parseAmount(valueAfterLabel(budgetHeader, ["personal balance"]));
   if (personalBalance == null) {
-    warnings.push("No personal balance found in the Budget sheet; the opening wallet entry was left out.");
+    warnings.push({ key: "import.warning.noPersonalBalance" });
   }
 
   // The budget figure is the "No Piloting" balance, which the workbook places
@@ -372,7 +403,7 @@ function parseMetadata(
     ? null
     : parseAmount(valueAfterLabel(budgetRows[balanceRowIndex] ?? [], ["no piloting"]));
   if (monthlyBudget == null) {
-    warnings.push("No monthly budget found on the Balance row; the seed default was kept.");
+    warnings.push({ key: "import.warning.noMonthlyBudget" });
   }
 
   const yearRow = findYearRow(spendingRows);
@@ -427,13 +458,14 @@ function isTerminator(name: string): boolean {
 function parseActivities(
   budgetRows: SheetRows,
   categoryId: (key: SeedCategoryKey) => string,
-  warnings: string[],
+  warnings: ImportWarning[],
   makeId: ImportIdFactory,
 ): Activity[] {
   const headerIndex = findRowIndex(budgetRows, (row) => normalizeLabel(row[0]) === "activities");
   if (headerIndex === -1) {
     throw new WorkbookShapeError(
       'The Budget sheet has no "Activities" header cell, so its activity block could not be located.',
+      "import.error.noActivitiesHeader",
     );
   }
   const header = budgetRows[headerIndex] ?? [];
@@ -456,7 +488,7 @@ function parseActivities(
     const yearly = perYearCol === -1 ? null : parseAmount(row[perYearCol]);
 
     if (perSession == null && perMonth == null && yearly == null) {
-      warnings.push(`Activity "${name}" has no price in any column and was skipped.`);
+      warnings.push({ key: "import.warning.activityWithoutPrice", params: { name } });
       continue;
     }
 
@@ -518,7 +550,7 @@ function parseWishlist(
   budgetRows: SheetRows,
   timestamp: string,
   categoryId: string,
-  warnings: string[],
+  warnings: ImportWarning[],
   makeId: ImportIdFactory,
 ): WishlistItem[] {
   const headerIndex = findRowIndex(
@@ -526,7 +558,7 @@ function parseWishlist(
     (row) => findColumnIndex(row, ["what i want", "wishlist item", "item"]) !== -1,
   );
   if (headerIndex === -1) {
-    warnings.push('No "What I want" column was found, so no wishlist items were imported.');
+    warnings.push({ key: "import.warning.noWishlistColumn" });
     return [];
   }
   const header = budgetRows[headerIndex] ?? [];
@@ -590,7 +622,7 @@ function parseSpending(
   spendingRows: SheetRows,
   timestamp: string,
   categoryId: string,
-  warnings: string[],
+  warnings: ImportWarning[],
   makeId: ImportIdFactory,
 ): SpendingParseResult {
   const entriesByYear = new Map<number, SpendingEntry[]>();
@@ -599,6 +631,7 @@ function parseSpending(
   if (yearRowIndex === -1) {
     throw new WorkbookShapeError(
       'The Spending sheet has no "Year" row listing the years, so its columns could not be located.',
+      "import.error.noYearRow",
     );
   }
   const yearRow = spendingRows[yearRowIndex] ?? [];
@@ -610,7 +643,7 @@ function parseSpending(
     yearRowIndex + 1,
   );
   if (labelRowIndex === -1) {
-    throw new WorkbookShapeError('The Spending sheet has no "Week #" header row.');
+    throw new WorkbookShapeError('The Spending sheet has no "Week #" header row.', "import.error.noWeekRow");
   }
   const labelRow = spendingRows[labelRowIndex] ?? [];
 
@@ -628,7 +661,7 @@ function parseSpending(
   });
 
   if (yearColumns.length === 0) {
-    throw new WorkbookShapeError('The "Year" row contains no recognisable year.');
+    throw new WorkbookShapeError('The "Year" row contains no recognisable year.', "import.error.noRecognisableYear");
   }
 
   // Collected rather than reported one by one: the sheet lays out 55 week rows
@@ -680,18 +713,21 @@ function parseSpending(
 
   if (outOfRangeWeeks.size > 0) {
     const weeks = [...outOfRangeWeeks].map(Number).sort((a, b) => a - b);
-    warnings.push(
-      `Week ${weeks.join(", ")} rows fall outside the calendar year and were skipped. The sheet prints 55 week rows; a year has 52 or 53.`,
-    );
+    warnings.push({
+      key: "import.warning.weeksOutOfRange",
+      params: { weeks: weeks.join(", ") },
+      count: weeks.length,
+    });
   }
 
   const withData = [...entriesByYear.keys()].sort((a, b) => a - b);
   const empty = yearColumns.filter((c) => !entriesByYear.has(c.year)).map((c) => c.year);
   if (empty.length > 0) {
-    warnings.push(
-      `${empty.join(", ")} ${empty.length === 1 ? "has" : "have"} columns in the sheet but no spending recorded. ` +
-        `${empty.length === 1 ? "It is" : "They are"} imported as empty ${empty.length === 1 ? "year" : "years"}, ready to fill in.`,
-    );
+    warnings.push({
+      key: "import.warning.emptyYears",
+      params: { years: empty.join(", ") },
+      count: empty.length,
+    });
     for (const year of empty) entriesByYear.set(year, []);
   }
 

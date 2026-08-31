@@ -1,7 +1,6 @@
-import React, { useMemo, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import { useBudgetStore } from "../../store/budgetStore";
 import { calculateYear, calculateSuggestedMonthlyBudget } from "../../domain/calculations";
-import { monthName } from "../../domain/dates";
 import {
   budgetPacing,
   budgetRelevantEntries,
@@ -141,7 +140,12 @@ const Figure: React.FC<{
 export const Dashboard: React.FC<{ onNavigate?: (tab: "spending" | "activities" | "settings") => void }> = ({
   onNavigate,
 }) => {
-  const { t, language } = useTranslation();
+  const { t, language, monthNames } = useTranslation();
+  /*
+   * The week marker under a bar. "W28" is English; each language writes its
+   * own, which is why this is a key rather than a prefix glued to a number.
+   */
+  const weekAxis = useCallback((week: number) => t("chart.weekAxis", { week }), [t]);
   const snapshot = useBudgetStore((state) => state.snapshot);
   const recordBudgetApproval = useBudgetStore((state) => state.recordBudgetApproval);
   const updateSettings = useBudgetStore((state) => state.updateSettings);
@@ -190,8 +194,8 @@ export const Dashboard: React.FC<{ onNavigate?: (tab: "spending" | "activities" 
   const trendBars = useMemo(
     () =>
       mode === "week"
-        ? weeklyTrendBars(calculation.weeklyTrend, settings.selectedWeek, 12)
-        : monthlyTrendBars(calculation.monthlyTrend, mode === "year" ? -1 : settings.selectedMonth),
+        ? weeklyTrendBars(calculation.weeklyTrend, settings.selectedWeek, weekAxis, 12)
+        : monthlyTrendBars(calculation.monthlyTrend, mode === "year" ? -1 : settings.selectedMonth, monthNames("short")),
     [mode, calculation.weeklyTrend, calculation.monthlyTrend, settings.selectedWeek, settings.selectedMonth],
   );
   /** Two months is the floor for a trend; below it there is nothing to draw. */
@@ -675,8 +679,15 @@ export const Dashboard: React.FC<{ onNavigate?: (tab: "spending" | "activities" 
                       {t(existingApproval.status === "approved" ? "dashboard.budgetApproved" : "dashboard.budgetRejected")}
                     </div>
                     <div className="text-caption" style={{ marginTop: 4 }}>
-                      {monthName(existingApproval.month)} {existingApproval.year} · suggested{" "}
-                      {money(existingApproval.suggestedAmount)}
+                      {/* `monthNames()` from the hook, not the English-only
+                          `monthName()`: this line read "August 2026" on a
+                          French screen. The sentence around it is a key too —
+                          " · suggested" was English written into the markup. */}
+                      {t("dashboard.approvalSuggested", {
+                        month: monthNames()[existingApproval.month - 1] ?? String(existingApproval.month),
+                        year: existingApproval.year,
+                        amount: money(existingApproval.suggestedAmount),
+                      })}
                     </div>
                   </div>
                   <Badge tone={existingApproval.status === "approved" ? "success" : "neutral"}>
