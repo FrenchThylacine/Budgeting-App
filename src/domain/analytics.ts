@@ -10,6 +10,7 @@ import { normalizeEntry } from "./calculations";
 import { externalEntries, otherFundedEntries, outsideBudgetEntries, personalEntries } from "./funding";
 import { movePeriod, periodLabel, selectedIsoWeekYear } from "./periods";
 import { dateInputValue, weekYear, weeksInIsoYear, startOfIsoWeek } from "./dates";
+import { activityBudgetSummary } from "./activityBudget";
 
 /**
  * Shared, period-aware analytics selectors.
@@ -234,6 +235,32 @@ export interface BudgetPacing {
   daysLeft: number;
 }
 
+
+/**
+ * Personal activity payments the schedule says fall later this month.
+ *
+ * Dated strictly after today, so a payment that has already been recorded is
+ * counted once — in what has been spent — rather than twice. Activities with
+ * no known payment date contribute nothing: the application does not invent a
+ * date for them anywhere else and a projection is a poor place to start.
+ */
+function upcomingPersonalCharges(snapshot: BudgetSnapshot, now: Date): number {
+  const settings = snapshot.settings;
+  const summary = activityBudgetSummary(snapshot, settings.selectedYear, settings.selectedMonth);
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+
+  let total = 0;
+  for (const item of summary.items) {
+    if (item.funding !== "personal" || item.status !== "due" || item.dueBase == null) continue;
+    if (!item.datesKnown || item.dueDates.length === 0) continue;
+    const later = item.dueDates.filter((date) => date.getTime() > today).length;
+    // The month's requirement is spread across the dates it names, so a pack
+    // paid twice this month contributes half per remaining date.
+    total += (item.dueBase / item.dueDates.length) * later;
+  }
+  return total;
+}
+
 /**
  * Budget pacing for the selected month. Returns null outside month mode —
  * the app's budget is defined monthly, so weekly/yearly views have no
@@ -256,7 +283,40 @@ export function budgetPacing(
   const daysLeft = Math.max(totalDays - elapsedDays, 0);
 
   const dailyAverage = elapsedDays > 0 ? spent / elapsedDays : null;
-  const projectedTotal = dailyAverage != null ? dailyAverage * totalDays : null;
+
+  /*
+   * Where the month is heading, from what is actually known about it
+   * -----------------------------------------------------------------
+   *
+   * This used to be `spent ÷ elapsed × total`, which treats a budget as a tap
+   * running at a steady rate. Two things make that wrong in opposite
+   * directions on the same screen:
+   *
+   *  - **A recurring charge is an event, not a rate.** A €200 gym block paid
+   *    on the 3rd is a fifth of the month's spending by the 4th, and
+   *    extrapolating it says the reader is on course to pay it fifteen times.
+   *    So recurring and activity-linked transactions are taken *out* of the
+   *    rate: they have already happened, they are in `spent`, and they will
+   *    not happen again this month at that cadence.
+   *  - **A charge the application already knows is coming is not a guess.**
+   *    An annual subscription renewing on the 28th is in the schedule, in the
+   *    reader's own data, with a date on it. Straight-line pacing ignores it
+   *    entirely and then reports a surprise on the 28th.
+   *
+   * So: what has been spent, plus the discretionary rate over the days that
+   * remain, plus the payments the schedule says fall in those days. Only
+   * *personal* charges are added — an activity somebody else pays for will not
+   * touch this budget when it falls due — and only ones dated after today, so
+   * a payment already recorded is counted once, in `spent`.
+   */
+  const discretionarySpent = entries
+    .filter((entry) => !entry.activityId && (!entry.recurrenceType || entry.recurrenceType === "none"))
+    .reduce((total, entry) => total + normalizeEntry(entry, snapshot), 0);
+  const discretionaryRate = elapsedDays > 0 ? discretionarySpent / elapsedDays : 0;
+
+  const upcoming = upcomingPersonalCharges(snapshot, now);
+  const projectedTotal =
+    elapsedDays > 0 ? spent + discretionaryRate * daysLeft + upcoming : null;
 
   return {
     budget,
