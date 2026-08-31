@@ -176,6 +176,69 @@ export interface WalletState {
   epoch: string | null;
 }
 
+
+/**
+ * What the wallet is actually made of, currency by currency
+ * =========================================================
+ *
+ * `walletBalance` is a single figure in the display currency, which is what a
+ * total has to be — but it is not what the money *is*. Somebody holding 200 USD
+ * and €200 has two balances, and converting both into one number and printing
+ * it is the point at which the application stops being able to answer "how many
+ * dollars do I have".
+ *
+ * So this reports the balances **in their own currencies**, untouched, and
+ * carries a converted figure alongside purely so the shares can be compared.
+ * The two are separate fields on purpose: the original amount is the fact, and
+ * the conversion is a lens. Nothing here writes back to a stored amount, and
+ * nothing rounds one — a share is derived from the conversion, never the other
+ * way round.
+ *
+ * Used by the Wallet tab, the Dashboard and the statistics, so all three agree
+ * by construction rather than by three people remembering the same rule.
+ */
+export interface WalletCurrencySlice {
+  currency: CurrencyCode;
+  /** The balance in that currency, exactly as it is held. Never converted. */
+  amount: number;
+  /** The same balance in the display currency, for comparison only. */
+  converted: number;
+  /** Its share of the converted total, 0–100, or null when the total is zero. */
+  share: number | null;
+}
+
+export function walletComposition(snapshot: BudgetSnapshot): WalletCurrencySlice[] {
+  const entries = allWalletEntries(snapshot);
+  const byCurrency = new Map<CurrencyCode, number>();
+
+  for (const entry of entries) {
+    const effect = walletEffect(entry);
+    if (effect === 0) continue;
+    // Accumulated in the entry's own currency: this is the number the reader
+    // put in, and it stays that number.
+    byCurrency.set(entry.currency, (byCurrency.get(entry.currency) ?? 0) + effect);
+  }
+
+  const slices = [...byCurrency.entries()]
+    .map(([currency, amount]) => ({
+      currency,
+      amount,
+      converted: normalizeAmount(amount, currency, snapshot.settings),
+      share: null as number | null,
+    }))
+    // A currency whose balance has netted to nothing is not part of the
+    // composition; it is a currency the reader used to hold.
+    .filter((slice) => Math.abs(slice.amount) > 0.005);
+
+  const total = slices.reduce((sum, slice) => sum + Math.abs(slice.converted), 0);
+  for (const slice of slices) {
+    slice.share = total > 0 ? (Math.abs(slice.converted) / total) * 100 : null;
+  }
+
+  // Largest first: the composition is read as "mostly euros, some dollars".
+  return slices.sort((a, b) => Math.abs(b.converted) - Math.abs(a.converted));
+}
+
 /**
  * The whole treasury, derived from the ledger and the spending record.
  *

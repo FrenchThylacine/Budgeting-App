@@ -1199,7 +1199,6 @@ export const ar: Dictionary = {
   "activity.summaryPackWithCount": "≈ {sessions} في {month} · {cycle}",
   "dashboard.addTransactionsToSeeYour": "أضف معاملات لرؤية توزيع الفئات.",
   "dashboard.thisSplitAppearsOnceThe": "يظهر هذا التوزيع بمجرّد وجود إنفاق في الفترة.",
-  "dashboard.moneyOutsideYourBudget": "مال خارج ميزانيتك",
   "history.historicalEdits": "تعديلات على فترات سابقة",
   "history.monthClose": "إغلاق الشهر",
   "history.monthCloses": "إغلاقات الأشهر",

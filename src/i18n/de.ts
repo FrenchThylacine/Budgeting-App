@@ -1167,7 +1167,6 @@ export const de: Dictionary = {
   "activity.summaryPackWithCount": "≈ {sessions} im {month} · {cycle}",
   "dashboard.addTransactionsToSeeYour": "Erfassen Sie Buchungen, um die Kategorieaufteilung zu sehen.",
   "dashboard.thisSplitAppearsOnceThe": "Diese Aufteilung erscheint, sobald die Periode Ausgaben hat.",
-  "dashboard.moneyOutsideYourBudget": "Geld außerhalb Ihres Budgets",
   "history.historicalEdits": "Historische Bearbeitungen",
   "history.monthClose": "Monatsabschluss",
   "history.monthCloses": "Monatsabschlüsse",

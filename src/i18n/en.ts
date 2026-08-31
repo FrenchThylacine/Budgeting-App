@@ -1182,7 +1182,6 @@ export const en = {
   "auth.chooseANewPassword": "Choose a new password",
   "dashboard.addTransactionsToSeeYour": "Add transactions to see your category breakdown.",
   "dashboard.thisSplitAppearsOnceThe": "This split appears once the period has spending.",
-  "dashboard.moneyOutsideYourBudget": "Money outside your budget",
   "history.historicalEdits": "Historical edits",
   "history.monthClose": "Month close",
   "history.monthCloses": "Month closes",

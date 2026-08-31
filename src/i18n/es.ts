@@ -1167,7 +1167,6 @@ export const es: Dictionary = {
   "activity.summaryPackWithCount": "≈ {sessions} en {month} · {cycle}",
   "dashboard.addTransactionsToSeeYour": "Añade transacciones para ver el reparto por categoría.",
   "dashboard.thisSplitAppearsOnceThe": "Este reparto aparece en cuanto el periodo tiene gasto.",
-  "dashboard.moneyOutsideYourBudget": "Dinero fuera de tu presupuesto",
   "history.historicalEdits": "Ediciones históricas",
   "history.monthClose": "Cierre de mes",
   "history.monthCloses": "Cierres de mes",
