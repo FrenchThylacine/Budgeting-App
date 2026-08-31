@@ -10,6 +10,13 @@
  *
  * It lives in `domain` rather than beside a component because all three
  * importers are components and none of them owns it.
+ *
+ * `currencies` and `history` are deliberately absent. Choosing which currencies to track and
+ * what the rates are is configuration, and it had a permanent seat in the
+ * navigation beside Dashboard and Spending; it is a group inside Settings now. The
+ * financial record was a fourth destination competing with the dashboard; it
+ * is a section on Statistics, which is where somebody is already looking at
+ * the numbers it explains.
  */
 export type TabKey =
   | "dashboard"
@@ -19,8 +26,6 @@ export type TabKey =
   | "wallet"
   | "analytics"
   | "scenarios"
-  | "history"
   | "report"
   | "settings"
-  | "categories"
-  | "currencies";
+  | "categories";

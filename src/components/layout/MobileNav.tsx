@@ -17,9 +17,7 @@ const moreTabs: { key: TabKey; labelKey: string; icon: React.ElementType }[] = [
   { key: "activities", labelKey: "nav.activities", icon: ListTodo },
   { key: "wishlist", labelKey: "nav.wishlist", icon: Gift },
   { key: "categories", labelKey: "nav.categories", icon: Tags },
-  { key: "currencies", labelKey: "nav.currencies", icon: Coins },
   { key: "report", labelKey: "nav.report", icon: FileText },
-  { key: "history", labelKey: "nav.history", icon: Clock },
   { key: "scenarios", labelKey: "nav.scenarios", icon: FlaskConical },
   { key: "settings", labelKey: "nav.settings", icon: Settings },
 ];

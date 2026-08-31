@@ -106,10 +106,8 @@ const navItems: { key: TabKey; labelKey: string; icon: React.ElementType }[] = [
   { key: "wallet", labelKey: "nav.wallet", icon: Wallet },
   { key: "analytics", labelKey: "nav.analytics", icon: BarChart3 },
   { key: "scenarios", labelKey: "nav.scenarios", icon: FlaskConical },
-  { key: "history", labelKey: "nav.history", icon: History },
   { key: "report", labelKey: "nav.report", icon: FileText },
   { key: "categories", labelKey: "nav.categories", icon: Tags },
-  { key: "currencies", labelKey: "nav.currencies", icon: Coins },
   { key: "settings", labelKey: "nav.settings", icon: Settings },
 ];
 

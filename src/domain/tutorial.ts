@@ -37,7 +37,6 @@ export const TUTORIAL_VERSION = 1;
 
 export type TutorialTab =
   | "dashboard"
-  | "currencies"
   | "activities"
   | "spending"
   | "scenarios"
@@ -91,7 +90,8 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
     id: "currencies",
     titleKey: "tutorial.currenciesTitle",
     bodyKey: "tutorial.currenciesBody",
-    tab: "currencies",
+    // Currencies moved into Settings; the tour follows it there.
+    tab: "settings",
     task: "pin-currency",
   },
   {

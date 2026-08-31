@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { Suspense, lazy, useMemo } from "react";
 import { calculateYear } from "../../domain/calculations";
 import { isHistoricalPeriod, periodLabel } from "../../domain/periods";
 import {
@@ -26,6 +26,10 @@ import { useTranslation } from "../../i18n/useTranslation";
 import { formatDualMoney } from "../../utils/formatters";
 import { EmptyState } from "../ui/EmptyState";
 import { Section } from "../ui/Section";
+/* Split, as it was when it was a tab. */
+const HistoryPanel = lazy(() =>
+  import("../history/HistoryPanel").then((module) => ({ default: module.HistoryPanel })),
+);
 import {
   BarChart,
   ChartPlaceholder,
@@ -824,7 +828,7 @@ export const AnalyticsPanel: React.FC = () => {
       </Section>
 
       {/* ── History ────────────────────────────────────────────────────────── */}
-      <Section title={t("nav.history")} collapsible defaultOpen={false}>
+      <Section title={t("stats.periodComparison")} collapsible defaultOpen={false}>
         <div style={{ display: "grid", gap: 16, minWidth: 0 }}>
           <ChartCard
             title={t("stats.periodComparison")}
@@ -878,6 +882,11 @@ export const AnalyticsPanel: React.FC = () => {
           </ChartCard>
         </div>
       </Section>
+
+      {/* The record, where the analysis is. It was a top-level tab. */}
+      <Suspense fallback={null}>
+        <HistoryPanel />
+      </Suspense>
     </div>
   );
 };

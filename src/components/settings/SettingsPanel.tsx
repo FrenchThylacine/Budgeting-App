@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { Suspense, lazy, useEffect, useMemo, useState } from "react";
 import {
   ArrowRight,
   Bell,
@@ -42,6 +42,11 @@ import { AccountSettings } from "./AccountSettings";
 import { Section } from "../ui/Section";
 import { SyncStatus } from "../layout/SyncStatus";
 import { resolveStoredText } from "../../domain/storedText";
+/* Split, as it was when it was a tab: the currency dataset and the rate
+   machinery are not part of the first paint. */
+const CurrencyPanel = lazy(() =>
+  import("../currencies/CurrencyPanel").then((module) => ({ default: module.CurrencyPanel })),
+);
 
 /**
  * Settings, in five groups rather than as one column of eleven.
@@ -99,6 +104,10 @@ export const SettingsPanel: React.FC = () => {
             key={id}
             type="button"
             className={`settings-group${group === id ? " is-active" : ""}`}
+            /* A stable hook for the verification harness, like `data-tab` on
+               the navigation: the class names are styling and may change, this
+               is the group's identity. */
+            data-settings-group={id}
             aria-current={group === id ? "page" : undefined}
             onClick={() => setGroup(id)}
           >
@@ -359,13 +368,6 @@ const MoneySettings: React.FC = () => {
               <div className="text-callout">{t("currencies.pinned")}</div>
               <p className="text-note settings-note">{t("currencies.pinnedHint")}</p>
             </div>
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => window.dispatchEvent(new CustomEvent("budget-os:navigate", { detail: "currencies" }))}
-            >
-              {t("nav.currencies")} <ArrowRight size={14} />
-            </Button>
           </div>
 
           <div className="settings-pair">
@@ -467,6 +469,17 @@ const MoneySettings: React.FC = () => {
           </label>
         </div>
       </Section>
+
+      {/* Currencies, where currencies were always a preference.
+
+          This was a top-level destination beside Dashboard and Spending — a
+          permanent seat in the navigation for "which currencies do I track and
+          what are the rates". Nobody visits it to *do* anything; they visit it
+          to configure something, which is what this page is. It is the same
+          panel, unchanged, one group down. */}
+      <Suspense fallback={null}>
+        <CurrencyPanel />
+      </Suspense>
     </>
   );
 };

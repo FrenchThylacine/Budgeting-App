@@ -912,7 +912,10 @@ try {
    * application must not claim to hold current rates that it does not hold.
    */
   await check("fetches rates on open, without anyone asking for them", async () => {
-    await openTab(page, "currencies");
+    // Currencies live in Settings now, so the tour of them starts there.
+    await openTab(page, "settings");
+    await page.click('[data-settings-group="money"]').catch(() => undefined);
+    await sleep(400);
     await waitForHydration(page);
     const state = await page.evaluate(`
       const { rateFreshness } = await import('/src/domain/exchangeRates.ts');
@@ -1352,7 +1355,7 @@ try {
 
 
   /** Every tab the sweeps below visit. */
-  const TABS = ["dashboard", "activities", "spending", "wishlist", "wallet", "analytics", "settings", "currencies"];
+  const TABS = ["dashboard", "activities", "spending", "wishlist", "wallet", "analytics", "settings", "report"];
 
   // ── Responsive and accessible ─────────────────────────────────────────────
   group("Small screens");

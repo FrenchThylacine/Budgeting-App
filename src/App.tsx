@@ -34,11 +34,9 @@ const loadScenarios = () => import("./components/scenarios/ScenarioLab");
 const loadHistory = () => import("./components/history/HistoryPanel");
 const loadSettings = () => import("./components/settings/SettingsPanel");
 const loadCategories = () => import("./components/categories/CategoryManager");
-const loadCurrencies = () => import("./components/currencies/CurrencyPanel");
 
 const AnalyticsPanel = lazy(() => loadAnalytics().then((m) => ({ default: m.AnalyticsPanel })));
 const ScenarioLab = lazy(() => loadScenarios().then((m) => ({ default: m.ScenarioLab })));
-const HistoryPanel = lazy(() => loadHistory().then((m) => ({ default: m.HistoryPanel })));
 /* Split like the rest: the report module and its stylesheet are fifteen
    kilobytes nothing needs until somebody asks for a report. */
 const ReportPanel = lazy(() =>
@@ -46,7 +44,6 @@ const ReportPanel = lazy(() =>
 );
 const SettingsPanel = lazy(() => loadSettings().then((m) => ({ default: m.SettingsPanel })));
 const CategoryManager = lazy(() => loadCategories().then((m) => ({ default: m.CategoryManager })));
-const CurrencyPanel = lazy(() => loadCurrencies().then((m) => ({ default: m.CurrencyPanel })));
 /**
  * The tour is deferred too.
  *
@@ -74,7 +71,7 @@ const TutorialReminder = lazy(() =>
  * never competes with a request the user is actually waiting on.
  */
 function preloadPanels(): void {
-  const loaders = [loadAnalytics, loadSettings, loadCurrencies, loadCategories, loadHistory, loadScenarios];
+  const loaders = [loadAnalytics, loadSettings, loadCategories, loadHistory, loadScenarios];
   let index = 0;
   const next = () => {
     if (index >= loaders.length) return;
@@ -120,7 +117,7 @@ import { refreshRatesOnOpen } from "./domain/exchangeRates";
  * missing one — it invites the reader to try it, and then teaches them that
  * the app's controls are decoration.
  */
-const PERIODLESS_TABS = new Set<TabKey>(["categories", "currencies", "settings"]);
+const PERIODLESS_TABS = new Set<TabKey>(["categories", "settings"]);
 
 /*
  * The tab transition no longer takes a direction.
@@ -432,11 +429,9 @@ export default function App() {
     wallet: <WalletPanel />,
     analytics: <AnalyticsPanel />,
     scenarios: <ScenarioLab />,
-    history: <HistoryPanel />,
     report: <ReportPanel />,
     settings: <SettingsPanel />,
     categories: <CategoryManager />,
-    currencies: <CurrencyPanel />,
   };
 
   const isHistorical = isViewingHistoricalPeriod(snapshot.settings);
