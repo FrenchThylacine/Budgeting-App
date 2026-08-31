@@ -117,6 +117,14 @@ export const ActivityPanel: React.FC = () => {
   const categories = snapshot.categories.filter((category) => !category.archived);
   const categoryName = (id: string) =>
     snapshot.categories.find((category) => category.id === id)?.name ?? t("common.uncategorised");
+  /**
+   * The colour that identifies an activity's category.
+   *
+   * Read from the category itself, so changing Health's colour in Settings
+   * changes every Health card. An activity may carry a colour of its own; that
+   * is a deliberate override and wins.
+   */
+  const categoryColour = (id: string) => snapshot.categories.find((category) => category.id === id)?.color;
 
   const patch = (changes: Partial<ActivityDraft>) => setForm((current) => ({ ...current, ...changes }));
 
@@ -1027,7 +1035,7 @@ export const ActivityPanel: React.FC = () => {
       ) : (
         <div className="item-list">
           {visibleActivities.map((activity) => {
-            const accent = activity.color;
+            const accent = activity.color || categoryColour(activity.categoryId);
             const estimate = estimateMap.get(activity.id);
             const due = dueByActivity.get(activity.id);
             const orderIndex = orderedAll.findIndex((item) => item.id === activity.id);
@@ -1043,6 +1051,11 @@ export const ActivityPanel: React.FC = () => {
               >
               <div
                 className={`item-row${mutable ? " editable-row" : ""}`}
+                /* Two independent facts, two channels. The funding state
+                   colours the identifying text and the figure; the category
+                   colours the outline. Somebody should be able to read *what
+                   it is* and *who pays for it* without the two competing. */
+                data-funding={activityFundingKind(activity)}
                 // The whole card opens the editor, so the small icon buttons
                 // stop being the only way in — they are a poor target on a
                 // phone and easy to miss entirely.
@@ -1082,14 +1095,22 @@ export const ActivityPanel: React.FC = () => {
                   flexWrap: "wrap",
                   gap: 12,
                   opacity: dragId === activity.id ? 0.5 : 1,
-                  // The tint is layered over the theme's own surface, so the
-                  // card keeps its contrast in both light and dark mode.
-                  background: accent
-                    ? `linear-gradient(0deg, ${tint(accent, 0.11)}, ${tint(accent, 0.11)}), var(--bg-elevated)`
-                    : "var(--bg-subtle)",
-                  border: `1px solid ${accent ? tint(accent, 0.3) : "var(--border)"}`,
-                  borderLeft: `3px solid ${accent ?? "var(--border-strong)"}`,
-                }}
+                  /*
+                   * The category, as an outline around the whole card.
+                   *
+                   * It used to be a tinted background plus a heavy left edge.
+                   * The tint had to go: with the funding state now colouring
+                   * the name and the figure, a coloured ground underneath them
+                   * is two colours competing for the same job and a readability
+                   * problem in the bargain. An outline says "this is a Health
+                   * activity" without touching anything the text sits on.
+                   *
+                   * `--category-accent` rather than a literal, so the outline
+                   * and everything else keyed to the category are one value.
+                   */
+                  "--category-accent": accent ?? "var(--border)",
+                  background: "var(--bg-elevated)",
+                } as React.CSSProperties}
               >
                 <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0, flex: "1 1 180px" }}>
                   {canReorder && (

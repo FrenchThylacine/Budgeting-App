@@ -42,6 +42,14 @@ interface CadenceMarkProps {
   variant?: "icon" | "chip";
   /** Extra detail after the label — "every 10 sessions", "renews 15 Sept". */
   detail?: string;
+  /**
+   * A visible label already accompanies this mark, so it carries none itself.
+   *
+   * The `icon` variant hides its word in an `sr-only` span, which is right on a
+   * dense row and wrong in a legend that prints the word beside it: a screen
+   * reader then hears "Monthly Monthly".
+   */
+  labelled?: boolean;
   className?: string;
 }
 
@@ -61,6 +69,7 @@ export const CadenceMark: React.FC<CadenceMarkProps> = ({
   cadence,
   variant = "icon",
   detail,
+  labelled = false,
   className = "",
 }) => {
   const { t } = useTranslation();
@@ -82,7 +91,7 @@ export const CadenceMark: React.FC<CadenceMarkProps> = ({
   return (
     <span className={`cadence-mark ${className}`.trim()} data-cadence={cadence} title={full}>
       <Icon size={14} aria-hidden="true" />
-      <span className="sr-only">{full}</span>
+      {!labelled && <span className="sr-only">{full}</span>}
     </span>
   );
 };

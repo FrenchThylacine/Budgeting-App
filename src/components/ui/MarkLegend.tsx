@@ -56,7 +56,7 @@ export const MarkLegend: React.FC<MarkLegendProps> = ({ funding = [], cadences =
       ))}
       {shown.map((cadence) => (
         <span key={cadence} className="mark-legend-item">
-          <CadenceMark cadence={cadence} />
+          <CadenceMark cadence={cadence} labelled />
           {t(CADENCE_META[cadence].labelKey)}
         </span>
       ))}

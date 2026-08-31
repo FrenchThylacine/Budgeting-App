@@ -3737,8 +3737,22 @@ label:has(> input[type="radio"]) {
   gap: 4px;
 }
 
-.mark-legend-item[data-funding="other"] .funding-glyph { color: var(--funding-other-text); }
-.mark-legend-item[data-funding="outside"] .funding-glyph { color: var(--funding-outside-text); }
+/* The legend says it by being it.
+   A key that explains a colour in grey text is a key you have to decode; these
+   entries are set in the colour they describe, so "Paid by other" in blue is
+   both the label and the example. The colours are the configurable ones, so
+   changing them in Settings changes the legend with everything else. */
+.mark-legend-item[data-funding="other"],
+.mark-legend-item[data-funding="other"] .funding-glyph {
+  color: var(--funding-other-text);
+  font-weight: 600;
+}
+
+.mark-legend-item[data-funding="outside"],
+.mark-legend-item[data-funding="outside"] .funding-glyph {
+  color: var(--funding-outside-text);
+  font-weight: 600;
+}
 
 /* The wishlist's one remaining summary figure. A line, not a card: it used to
    sit in a container with two other numbers that the filter chips above it
@@ -3947,3 +3961,56 @@ label:has(> input[type="radio"]) {
 
 .font-option-name { font-weight: 600; font-size: 0.95rem; }
 .font-option-sample { font-size: 0.78rem; color: var(--text-secondary); }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Two facts, two channels
+   ═══════════════════════════════════════════════════════════════════════════
+
+   A row carries two independent pieces of information and they must not be
+   read as one:
+
+     CATEGORY  — what it is        → the outline around the card
+     FUNDING   — who pays for it   → the colour of the identifying text and the
+                                     figure
+
+   Keeping them on different channels is what lets somebody see a green-edged
+   card with blue text and know instantly that it is a Health activity somebody
+   else pays for. Putting both in colour on the same element would leave them
+   guessing which colour meant which. */
+
+.item-row[style*="--category-accent"] {
+  /* Visible, and nothing more. A category is context, not an alarm: the outline
+     is there to be recognised out of the corner of the eye, not read. */
+  border: 1px solid color-mix(in srgb, var(--category-accent) 55%, transparent);
+}
+
+/* A little more presence where the card is the subject of the screen. */
+.activity-row.item-row[style*="--category-accent"],
+.item-list .item-row[style*="--category-accent"]:hover {
+  border-color: color-mix(in srgb, var(--category-accent) 70%, transparent);
+}
+
+/* ── Funding, on the text that identifies the row ────────────────────────────
+   The amount alone was not enough: somebody scanning a list reads the *name*,
+   and the state has to be legible from the thing they are reading. `-text`
+   variants throughout — the fill colours are for shapes and do not clear AA as
+   text — and the treatment stops at these two elements so the card never
+   becomes a block of one colour. */
+.item-row[data-funding="other"] .text-callout,
+.item-row[data-funding="other"] .row-trailing strong,
+.item-row[data-funding="other"] .activity-amount strong {
+  color: var(--funding-other-text);
+}
+
+.item-row[data-funding="outside"] .text-callout,
+.item-row[data-funding="outside"] .row-trailing strong,
+.item-row[data-funding="outside"] .activity-amount strong {
+  color: var(--funding-outside-text);
+}
+
+/* The secondary line stays quiet: a date and a note are not funding facts, and
+   colouring them too is how a row becomes a block. */
+.item-row[data-funding="other"] .text-footnote,
+.item-row[data-funding="outside"] .text-footnote {
+  color: var(--text-secondary);
+}
