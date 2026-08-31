@@ -135,6 +135,41 @@ try {
   const thirdTrack = [];
   /** The worst distance seen between an escort's artwork and its own origin. */
   let spriteOffset = null;
+  /**
+   * Every bank written to a sprite, as a span factor, kept per aeroplane.
+   *
+   * Per aeroplane and not in one list: the escorts are deliberately out of
+   * phase, so a flat array interleaves a jet rolling left with one rolling
+   * right and reports a half-span "jump" between consecutive samples that no
+   * single aircraft ever made. The first version of this check did exactly
+   * that and failed on a smooth roll.
+   *
+   * Three seats, because the middle one in DOM order is the jet that joins
+   * late — it flies a gentle arrival rather than the routine, and holding it
+   * to the routine's bank angle would be asserting the wrong thing about the
+   * right aeroplane.
+   *
+   * Collected **inside the page, on every rendered frame**, rather than by
+   * sampling over the protocol. The claim being made is that the wings do not
+   * snap between one drawn frame and the next; a sample taken every 40ms spans
+   * three or four of those, so it cannot tell a smooth roll from a jump and it
+   * reported a legitimate one as a cut.
+   */
+  let banks = [[], [], []];
+  await page.evaluate(`
+    window.__banks = [[], [], []];
+    const sample = () => {
+      const sprites = [...document.querySelectorAll('.boot-escort')];
+      sprites.forEach((sprite, seat) => {
+        const found = /scaleY\\(([-\\d.]+)\\)/.exec(sprite.style.transform ?? '');
+        if (found && window.__banks[seat]) window.__banks[seat].push(Number(found[1]));
+      });
+      if (document.querySelector('.boot-screen')) requestAnimationFrame(sample);
+    };
+    requestAnimationFrame(sample);
+    return true;
+  `);
+
   const deadline = Date.now() + 20000;
   while (Date.now() < deadline) {
     const frame = await page.evaluate(`
@@ -290,6 +325,8 @@ try {
     await sleep(frame.phase === "join" ? 0 : 40);
   }
 
+  banks = JSON.parse(await page.evaluate("JSON.stringify(window.__banks ?? [[], [], []])"));
+
   await check("flies the whole sequence: orbit, join, settle, depart", () => {
     for (const expected of ["orbit", "join", "settle", "depart", "gone"]) {
       assert(phases.includes(expected), `never reached "${expected}" (saw ${phases.join(" → ")})`);
@@ -322,6 +359,44 @@ try {
     assert(emitterGap != null, "never caught the escorts mid-routine");
     assert(emitterGap <= 26, `the smoke starts ${emitterGap}px from the tailpipe`);
     return `${emitterGap}px from the tailpipe`;
+  });
+
+  await check("the escorts bank into the turns rather than flying them flat", () => {
+    /*
+     * The brief's own bar: real banking. Seen from above, a roll shows as a
+     * loss of wingspan, so the measurement is the span factor the sprite is
+     * drawn with — 1 is wings level, and smaller is more bank.
+     *
+     * Two things are asserted, and the second matters more than the first. The
+     * aircraft must *reach* a real angle, and it must also *return* to level:
+     * a constant bank is a sticker drawn crooked, not an aeroplane rolling
+     * into a turn and out of it again.
+     */
+    // The two that fly the routine, which are the two with a full pass of
+    // samples; the third is on its arrival curve and rolls gently by design.
+    const flying = banks.filter((seat) => seat.length > 20);
+    assert(flying.length >= 2, `only ${flying.length} aircraft produced a pass of bank samples`);
+
+    const deepest = Math.min(...flying.map((seat) => Math.min(...seat)));
+    const shallowest = Math.max(...flying.map((seat) => Math.max(...seat)));
+    assert(deepest < 0.8, `the escorts never bank past ${deepest.toFixed(2)} span — they fly the turns flat`);
+    assert(shallowest > 0.95, `the escorts never return to wings level (best ${shallowest.toFixed(2)})`);
+
+    /*
+     * And the roll is a roll rather than a cut.
+     *
+     * This is the assertion that found a real defect: the wings snapped from
+     * 0.45 span to 0.95 in a single frame at the boundary between the routine
+     * and the rejoin, because the bank was recomputed from scratch each frame
+     * off two different curves. An aeroplane has a finite roll rate, and now
+     * so does this one.
+     */
+    let worstJump = 0;
+    for (const seat of flying) {
+      for (let i = 1; i < seat.length; i += 1) worstJump = Math.max(worstJump, Math.abs(seat[i] - seat[i - 1]));
+    }
+    assert(worstJump < 0.12, `the bank jumps by ${worstJump.toFixed(2)} in one frame — that is a cut, not a roll`);
+    return `${deepest.toFixed(2)}–${shallowest.toFixed(2)} span, worst step ${worstJump.toFixed(2)}`;
   });
 
   await check("the escorts fly a routine, not a ring", () => {

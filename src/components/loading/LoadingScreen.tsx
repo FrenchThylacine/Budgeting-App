@@ -381,27 +381,94 @@ function project(point: Point3): Projected {
  * Without these the sprites slide sideways at a fixed attitude, which is the
  * single thing that most makes an animated aeroplane look like a sticker.
  */
+/**
+ * An aeroplane cannot change its attitude instantly
+ * =================================================
+ *
+ * `attitudeAt` and `bezierAttitude` both compute the bank a jet *should* be at
+ * from a finite difference of the projected heading. That is the right demand,
+ * and it is not the right thing to draw: it responds within a single frame, so
+ * anywhere the demand steps — the boundary between the routine and the rejoin
+ * is the obvious one, where two different curves meet — the wings snap.
+ *
+ * Measured on the rendered frames, they snapped from 0.450 span to 0.947 in
+ * one frame: half a wingspan in sixteen milliseconds. That is not a roll, it
+ * is a cut.
+ *
+ * So the attitude that is drawn chases the attitude that is demanded, at a
+ * finite rate. That is what a roll rate *is* — an aeroplane rolls at a few
+ * hundred degrees a second, not infinitely fast — and one first-order filter
+ * buys three things at once: no snap at any phase boundary, a visible lag as
+ * the jet rolls into a turn, and a wings-level rollout that trails the path
+ * instead of arriving with it.
+ *
+ * The constant is a time to cover 63% of the remaining error. 150ms is a brisk
+ * display roll; slower reads as a heavy aeroplane and hides the choreography.
+ */
+const ROLL_TAU_MS = 150;
+
 interface Attitude {
   heading: number;
   bank: number;
   pitch: number;
 }
 
+/**
+ * The drawn attitude of one aircraft, chasing its demanded attitude.
+ *
+ * Heading is deliberately *not* filtered: the nose points along the path, and
+ * lagging it would point the aeroplane somewhere it is not going — which is
+ * the very thing the projection exists to avoid. Only the two attitudes that
+ * come from a *derivative* are smoothed, because a derivative of a piecewise
+ * curve is what has the steps in it.
+ */
+class Attitudes {
+  private bank: number[] = [1, 1, 1];
+  private pitch: number[] = [1, 1, 1];
+
+  smooth(index: number, demanded: Attitude, dtMs: number): Attitude {
+    // Exponential, so the response is the same whatever the frame interval —
+    // a dropped frame must not produce a bigger step than two good ones.
+    const k = 1 - Math.exp(-Math.max(0, dtMs) / ROLL_TAU_MS);
+    this.bank[index] += (demanded.bank - this.bank[index]) * k;
+    this.pitch[index] += (demanded.pitch - this.pitch[index]) * k;
+    return { heading: demanded.heading, bank: this.bank[index], pitch: this.pitch[index] };
+  }
+}
+
 function attitudeAt(route: PreparedRoute, tau: number): Attitude {
   // A step in *time*, not in parameter, so the sample either side is the same
   // distance away however fast the aircraft happens to be going.
   const step = 0.006;
+  /*
+   * The bank is read over a longer baseline than the heading.
+   *
+   * Both come from the same tangent, but they want different things from it.
+   * The heading wants the instantaneous direction, so it uses the shortest
+   * step that is numerically stable. The bank wants the *curvature*, and a
+   * curvature estimated over 0.006 of a pass is a finite difference of a
+   * finite difference — it spikes wherever the perspective divide changes
+   * quickly, and the jet flicked to full bank for two frames at a time.
+   * Measured over a fifth of a second of flying it is the smooth quantity it
+   * physically is, and the roll filter then has something worth chasing.
+   */
+  const curveStep = 0.03;
   const back = project(routePoint(route, tau - step));
   const here = project(routePoint(route, tau));
   const ahead = project(routePoint(route, tau + step));
+  const wideBack = project(routePoint(route, tau - curveStep));
+  const wideAhead = project(routePoint(route, tau + curveStep));
 
   const heading = (Math.atan2(ahead.y - here.y, ahead.x - here.x) * 180) / Math.PI;
-  const previous = (Math.atan2(here.y - back.y, here.x - back.x) * 180) / Math.PI;
-  // Signed change in heading over one step, shortest way round.
-  const turn = ((heading - previous + 540) % 360) - 180;
+  const previous = (Math.atan2(here.y - wideBack.y, here.x - wideBack.x) * 180) / Math.PI;
+  const next = (Math.atan2(wideAhead.y - here.y, wideAhead.x - here.x) * 180) / Math.PI;
+  // Signed change in heading across the wide baseline, shortest way round.
+  const turn = ((next - previous + 540) % 360) - 180;
   // A hard turn narrows the span to about half. Clamped, because a sprite
-  // folded to nothing reads as a glitch.
-  const bank = 1 - Math.min(0.55, Math.abs(turn) / 26);
+  // folded to nothing reads as a glitch. The divisor is larger than it was
+  // because the baseline is five times longer, so the same physical turn
+  // produces a proportionally larger number.
+  const bank = 1 - Math.min(0.55, Math.abs(turn) / 78);
 
   const depth = routePoint(route, tau + step).z - routePoint(route, tau - step).z;
   // Same idea along the fuselage: the more of the motion is toward or away
@@ -666,6 +733,15 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({ ready, onFinished,
     let last = performance.now();
     const start = last;
     /** When the orbit was broken off. Null while it is still turning. */
+    /*
+     * The attitude filter, one per run.
+     *
+     * It carries the three aircraft's current bank and pitch across frames and
+     * across phases, which is exactly why it lives out here: the point is that
+     * the rejoin starts from the attitude the routine ended at, rather than
+     * from whatever the rejoin curve demands in its first frame.
+     */
+    const attitudes = new Attitudes();
     let breakOff: number | null = null;
     /**
      * Each escort's *scene* state when it broke off.
@@ -897,6 +973,9 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({ ready, onFinished,
       // Clamped: a backgrounded tab resumes with a gap of seconds, and an
       // unclamped step would teleport the smoke off the screen in one frame.
       const dt = Math.min(0.05, (now - last) / 1000);
+      // The same interval in milliseconds, for the attitude filter, and
+      // clamped the same way and for the same reason.
+      const dtMs = dt * 1000;
       last = now;
       const elapsed = now - start;
 
@@ -913,7 +992,7 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({ ready, onFinished,
           const route = ROUTES[index];
           const at = u + index * 0.37;
           const point = routePoint(route, at);
-          const attitude = attitudeAt(route, at);
+          const attitude = attitudes.smooth(index, attitudeAt(route, at), dtMs);
           const sprite = spriteAt(point, attitude.heading, { bank: attitude.bank, pitch: attitude.pitch });
           const node = escortRefs.current[index];
           if (node) {
@@ -964,7 +1043,7 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({ ready, onFinished,
             const p2: Point3 = { x: slot.x - REJOIN_APPROACH, y: slot.y, z: 0 };
             const p3: Point3 = { x: slot.x, y: slot.y, z: 0 };
             const here = bezier3(from.point, p1, p2, p3, t);
-            const attitude = bezierAttitude(from.point, p1, p2, p3, t);
+            const attitude = attitudes.smooth(index, bezierAttitude(from.point, p1, p2, p3, t), dtMs);
             const sprite = spriteAt(here, attitude.heading, {
               bank: attitude.bank,
               pitch: attitude.pitch,
@@ -991,7 +1070,7 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({ ready, onFinished,
           const approach: Point3 = { x: slot.x - REJOIN_APPROACH, y: slot.y, z: 0 };
           const target: Point3 = { x: slot.x, y: slot.y, z: 0 };
           const here = bezier3(THIRD_ENTRY, THIRD_CONTROL, approach, target, arrival);
-          const attitude = bezierAttitude(THIRD_ENTRY, THIRD_CONTROL, approach, target, arrival);
+          const attitude = attitudes.smooth(2, bezierAttitude(THIRD_ENTRY, THIRD_CONTROL, approach, target, arrival), dtMs);
           const entering = spriteAt(here, attitude.heading, {
             bank: attitude.bank,
             pitch: attitude.pitch,
