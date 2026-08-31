@@ -1,7 +1,7 @@
 import { monthName, weeksInIsoYear, isMonthClosed, isWeekClosed } from "./dates";
 import { normalizeAmount, roundAmount } from "./currency";
 import { monthlyEstimateFromSchedule, yearlyEstimateFromSchedule } from "./schedule";
-import { fixedYearlyAmount, sessionsInMonth, sessionsInYear } from "./payments";
+import { fixedYearlyAmount, sessionsInMonth, sessionsInYear, installmentTotal, installmentPlanMonths } from "./payments";
 import { findSeedCategory } from "./seedCategories";
 import { monthlyBudgetPlan, walletState } from "./wallet";
 import {
@@ -199,6 +199,25 @@ export function monthlyEstimateNative(activity: Activity, period: EstimatePeriod
     }
     case "fixedYearly":
       return (fixedYearlyAmount(activity) ?? 0) / 12;
+    case "installments": {
+      /*
+       * The plan spread over the months it actually runs for.
+       *
+       * A monthly *accrual*, which is what this function produces everywhere —
+       * it is what the row prints as "avg/mo" and it is never a payment. What
+       * a given month genuinely requires comes from `dueInMonth`, which reads
+       * the real instalment dates; a plan of three payments demands one of them
+       * in three months and nothing in the other nine.
+       *
+       * Divided by the plan's own length rather than by twelve: six monthly
+       * payments of €500 is €500 a month for half a year, not €250 a month for
+       * a year that does not exist.
+       */
+      const total = installmentTotal(activity);
+      const months = installmentPlanMonths(activity);
+      if (total == null || months == null || months <= 0) return 0;
+      return total / months;
+    }
     case "auto":
     default:
       return autoMonthlyEstimate(activity);
@@ -229,6 +248,17 @@ export function yearlyEstimateNative(
       // average would round a real payment through a division and a
       // multiplication for no reason.
       return fixedYearlyAmount(activity) ?? 0;
+    case "installments":
+      /*
+       * The whole plan, not a year of it.
+       *
+       * "Yearly" is the wrong word for an instalment plan and the right figure
+       * is the one somebody means when they say what the activity costs: the
+       * total. A €3,000 licence paid in three instalments costs €3,000, whether
+       * the payments fall inside one year or across two — and reporting a
+       * twelve-month slice of it would invent an annual commitment that ends.
+       */
+      return installmentTotal(activity) ?? 0;
     case "perSession":
     case "fixed":
       return monthlyNative * 12;

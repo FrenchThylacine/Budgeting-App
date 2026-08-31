@@ -236,7 +236,9 @@ function dueInMonth(activity: Activity, year: number, month: number, monthlyNati
         reason:
           model === "fixedYearly"
             ? "activities.unknown.noRenewalDate"
-            : "activities.unknown.noFirstPayment",
+            : model === "installments"
+              ? "activities.unknown.noFirstInstallment"
+              : "activities.unknown.noFirstPayment",
       };
     }
     if (payments.length === 0) return { ...NOT_DUE, dates: [] };
@@ -250,7 +252,9 @@ function dueInMonth(activity: Activity, year: number, month: number, monthlyNati
         reason:
           model === "fixedYearly"
             ? "activities.unknown.yearlyAmountMissing"
-            : "activities.unknown.paymentAmountMissing",
+            : model === "installments"
+              ? "activities.unknown.installmentAmountMissing"
+              : "activities.unknown.paymentAmountMissing",
       };
     }
     return {

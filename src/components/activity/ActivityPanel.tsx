@@ -88,6 +88,7 @@ const COST_MODELS: { value: CostModel; labelKey: string; hintKey: string }[] = [
   { value: "schedule", labelKey: "activity.realSchedule", hintKey: "activity.sessionPriceMultipliedByThe2" },
   { value: "fixed", labelKey: "activity.fixedMonthly", hintKey: "activity.oneExplicitMonthlyAmountWhatever" },
   { value: "fixedYearly", labelKey: "activity.fixedYearly", hintKey: "activity.aRealAnnualPaymentOn" },
+  { value: "installments", labelKey: "activity.modelInstallments", hintKey: "activity.modelInstallmentsHint" },
 ];
 
 type SortMode = "order" | "name" | "cost";
@@ -127,6 +128,36 @@ export const ActivityPanel: React.FC = () => {
   const categoryColour = (id: string) => snapshot.categories.find((category) => category.id === id)?.color;
 
   const patch = (changes: Partial<ActivityDraft>) => setForm((current) => ({ ...current, ...changes }));
+
+  /*
+   * The plan, restated.
+   *
+   * The total is derived rather than stored, and shown in its own field so
+   * somebody who thinks in totals can type one; the sentence beneath repeats
+   * the whole plan so nobody has to multiply in their head to check they meant
+   * what they typed.
+   */
+  const installmentCountValue = Number(form.installmentCount);
+  const installmentAmountValue = Number(form.installmentAmount);
+  const installmentPlanValid =
+    Number.isFinite(installmentCountValue) &&
+    installmentCountValue >= 1 &&
+    Number.isFinite(installmentAmountValue) &&
+    installmentAmountValue > 0;
+  const installmentTotalField = installmentPlanValid
+    ? String(Math.round(installmentCountValue * installmentAmountValue * 100) / 100)
+    : "";
+  const installmentSummary = installmentPlanValid
+    ? t("activity.installmentPlan", {
+        count: installmentCountValue,
+        amount: formatMoney(installmentAmountValue, form.currency, snapshot.settings.currencyDisplayMode),
+        total: formatMoney(
+          installmentCountValue * installmentAmountValue,
+          form.currency,
+          snapshot.settings.currencyDisplayMode,
+        ),
+      })
+    : null;
 
   /**
    * Which price field the chosen cost model actually reads.
@@ -595,6 +626,99 @@ export const ActivityPanel: React.FC = () => {
                 </select>
               </Field>
             </FieldGroup>
+
+            {/* Instalments, and only for somebody who chose them.
+
+                Three numbers and a date, arranged so the arithmetic is visible
+                rather than demanded: type the count and either figure, and the
+                other is derived beneath. Only one of the two is stored — a pair
+                of numbers that must agree is a pair that will one day
+                disagree — and the plan is restated in a sentence so nobody has
+                to multiply in their head to check they meant it. */}
+            {form.costModel === "installments" && (
+              <FieldGroup title={t("activity.modelInstallments")}>
+                <Field label={t("activity.installmentCount")}>
+                  <input
+                    className="input"
+                    type="number"
+                    min="1"
+                    step="1"
+                    placeholder="3"
+                    value={form.installmentCount}
+                    onChange={(event) => patch({ installmentCount: event.target.value })}
+                  />
+                </Field>
+                <Field label={t("activity.installmentAmount")}>
+                  <input
+                    className="input"
+                    type="number"
+                    min="0"
+                    step="any"
+                    placeholder="1000"
+                    value={form.installmentAmount}
+                    onChange={(event) => patch({ installmentAmount: event.target.value })}
+                  />
+                </Field>
+                <Field label={t("activity.installmentTotal")} hint={t("activity.installmentTotalHint")}>
+                  <input
+                    className="input"
+                    type="number"
+                    min="0"
+                    step="any"
+                    placeholder="3000"
+                    value={installmentTotalField}
+                    onChange={(event) => {
+                      /*
+                       * Typing the total sets the per-payment figure, because
+                       * that is the one that is stored. Somebody who knows a
+                       * course costs €3,000 in three payments should not have
+                       * to work out that each is €1,000.
+                       */
+                      const count = Number(form.installmentCount);
+                      const total = Number(event.target.value);
+                      if (Number.isFinite(count) && count > 0 && Number.isFinite(total)) {
+                        patch({ installmentAmount: String(total / count) });
+                      }
+                    }}
+                  />
+                </Field>
+                <Field label={t("activity.installmentFrequency")}>
+                  <select
+                    className="select"
+                    value={form.installmentFrequency}
+                    onChange={(event) =>
+                      patch({ installmentFrequency: event.target.value as ActivityDraft["installmentFrequency"] })
+                    }
+                  >
+                    <option value="monthly">{t("cadence.monthly")}</option>
+                    <option value="yearly">{t("cadence.yearly")}</option>
+                    <option value="custom">{t("recurrence.custom")}</option>
+                  </select>
+                </Field>
+                {form.installmentFrequency === "custom" && (
+                  <Field label={t("activity.installmentInterval")}>
+                    <input
+                      className="input"
+                      type="number"
+                      min="1"
+                      step="1"
+                      placeholder="42"
+                      value={form.installmentIntervalDays}
+                      onChange={(event) => patch({ installmentIntervalDays: event.target.value })}
+                    />
+                  </Field>
+                )}
+                <Field label={t("activity.installmentFirst")} span hint={t("activity.installmentFirstHint")}>
+                  <input
+                    className="input"
+                    type="date"
+                    value={form.nextRenewalDate}
+                    onChange={(event) => patch({ nextRenewalDate: event.target.value })}
+                  />
+                </Field>
+                {installmentSummary && <p className="text-note settings-note">{installmentSummary}</p>}
+              </FieldGroup>
+            )}
 
             {form.costModel === "perSession" && (
               <FieldGroup title={t("activities.groupSessions")}>
@@ -1250,8 +1374,13 @@ export const ActivityPanel: React.FC = () => {
                       </span>
                     </strong>
                     <div className="text-caption" style={{ whiteSpace: "nowrap" }}>
+                      {/* An instalment plan has a total, not a yearly cost.
+                          "€3,000 /year" for a course paid over three months is
+                          an annual commitment the reader does not have; the
+                          figure they mean when they say what it costs is the
+                          total, and it is labelled as one. */}
                       {formatMoney(estimate?.yearlyNative ?? 0, activity.currency, snapshot.settings.currencyDisplayMode)}{" "}
-                      {t("common.perYear")}
+                      {activity.costModel === "installments" ? t("activity.installmentTotal") : t("common.perYear")}
                     </div>
                     {/* The equivalent in the currency every total on this tab
                         is already in.
@@ -1521,6 +1650,20 @@ function describeActivity(activity: Activity, year: number, month: number, t: Tr
       schedule: describeSchedule(activity, t),
       count: occurrencesInMonth(activity, year, month),
       month: monthLabel,
+    });
+  }
+  if (model === "installments") {
+    /*
+     * The plan, in one sentence: how many payments, of what, to what total.
+     * The row's own figure is what the *month* wants; this is what the whole
+     * thing costs, and the two are different numbers that both matter.
+     */
+    const count = activity.installmentCount ?? 0;
+    const amount = activity.installmentAmount ?? 0;
+    return t("activity.installmentPlan", {
+      count,
+      amount: formatMoney(amount, activity.currency, "symbol"),
+      total: formatMoney(count * amount, activity.currency, "symbol"),
     });
   }
   if (model === "perSession") {

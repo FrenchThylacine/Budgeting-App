@@ -393,7 +393,22 @@ export interface BudgetCategory {
  *                   is an average and is labelled as one; no monthly payment
  *                   event is ever produced.
  */
-export type CostModel = "auto" | "perSession" | "schedule" | "fixed" | "sessionPack" | "fixedYearly";
+export type CostModel =
+  | "auto"
+  | "perSession"
+  | "schedule"
+  | "fixed"
+  | "sessionPack"
+  | "fixedYearly"
+  | "installments";
+
+/**
+ * How often the payments of an installment plan fall.
+ *
+ * `custom` carries its own interval in days, which is what makes "every six
+ * weeks" expressible without a second vocabulary of recurrence rules.
+ */
+export type InstallmentFrequency = "monthly" | "yearly" | "custom";
 
 /** 1 = Monday … 7 = Sunday, matching ISO weekday numbering. */
 export type IsoWeekday = 1 | 2 | 3 | 4 | 5 | 6 | 7;
@@ -504,6 +519,24 @@ export interface Activity {
    * the rule takes over again.
    */
   nextRenewalDate?: string;
+  /**
+   * An activity paid in a fixed number of installments.
+   *
+   * The distinction that makes this a model of its own rather than a recurring
+   * cost: it **ends**. Twelve payments of €250 is not €250 a month forever, and
+   * the thirteenth month costs nothing. `installmentCount` is what says so.
+   *
+   * The total is `installmentCount × installmentAmount`. The editor lets somebody
+   * type either the total or the per-payment figure and derives the other, but
+   * only one of them is stored: two stored numbers that must agree is a pair
+   * that will one day disagree.
+   */
+  installmentCount?: number | null;
+  /** What each payment is, in the activity's own currency. */
+  installmentAmount?: number | null;
+  installmentFrequency?: InstallmentFrequency;
+  /** For `custom`: the gap between payments, in days. */
+  installmentIntervalDays?: number | null;
   /**
    * One-off exceptions to the recurring rule.
    *

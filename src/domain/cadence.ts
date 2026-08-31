@@ -37,6 +37,7 @@ export type Cadence =
   | "session"
   | "pack"
   | "scheduled"
+  | "installment"
   | "oneOff";
 
 export interface CadenceMeta {
@@ -62,6 +63,17 @@ export const CADENCE_META: Record<Cadence, CadenceMeta> = {
   // Counted: the cost follows how often you turn up, not what day it is.
   session: { id: "session", icon: "Ticket", labelKey: "cadence.session", tone: "var(--cadence-counted)" },
   pack: { id: "pack", icon: "Layers", labelKey: "cadence.pack", tone: "var(--cadence-counted)" },
+  /*
+   * Counted, like a session pack, and for the same reason: what it costs
+   * follows a count rather than a calendar. The difference is that the count
+   * runs out — which is what the label says and the icon shows.
+   */
+  installment: {
+    id: "installment",
+    icon: "Divide",
+    labelKey: "cadence.installment",
+    tone: "var(--cadence-counted)",
+  },
   // Once.
   // `Dot` was a two-pixel speck that read as a bullet point rather than as a
   // cadence — the one shape in the set that said nothing. A milestone is a
@@ -83,6 +95,8 @@ export function activityCadence(activity: Pick<Activity, "costModel" | "recurren
       return "yearly";
     case "sessionPack":
       return "pack";
+    case "installments":
+      return "installment";
     case "perSession":
       return "session";
     case "schedule":
@@ -149,6 +163,7 @@ export const CADENCE_ICON_CHOICES: Record<Cadence, readonly string[]> = {
   scheduled: ["CalendarCheck", "CalendarFold", "ListChecks"],
   session: ["Ticket", "Timer", "Dumbbell"],
   pack: ["Layers", "Package", "Boxes"],
+  installment: ["Divide", "Split", "CreditCard"],
   oneOff: ["Milestone", "CircleDot", "Receipt"],
 };
 

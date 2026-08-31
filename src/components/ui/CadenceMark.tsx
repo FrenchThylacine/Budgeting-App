@@ -11,6 +11,8 @@ import {
   CalendarSync,
   CircleDot,
   Clock,
+  CreditCard,
+  Divide,
   Dumbbell,
   Layers,
   ListChecks,
@@ -19,6 +21,7 @@ import {
   Receipt,
   RefreshCw,
   Repeat,
+  Split,
   Ticket,
   Timer,
   type LucideIcon,
@@ -43,6 +46,7 @@ const ICONS: Record<string, LucideIcon> = {
   Ticket,
   Layers,
   Milestone,
+  Divide,
   // And the alternatives a reader can choose in Settings. Named explicitly
   // rather than imported as a namespace: a bundle that carries every icon in
   // the library to make a picker work is a picker that costs 400kB.
@@ -60,6 +64,8 @@ const ICONS: Record<string, LucideIcon> = {
   Boxes,
   CircleDot,
   Receipt,
+  Split,
+  CreditCard,
 };
 
 interface CadenceMarkProps {
