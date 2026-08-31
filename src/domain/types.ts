@@ -298,6 +298,15 @@ export interface Settings {
    */
   themePreset?: string;
   /**
+   * The three colours the reader chose for the theme they built.
+   *
+   * Only the three: the other eleven tokens are derived from them, so that a
+   * theme somebody invents cannot put grey text on a grey card. See
+   * `domain/customTheme.ts`. Stored whether or not `themePreset` is "custom",
+   * so switching away to a preset and back does not lose the palette.
+   */
+  customTheme?: { background: string; surface: string; accent: string };
+  /**
    * The aircraft the **loading sequence** flies: one of the three drawn for it.
    *
    * Absent means the Concorde. See `domain/aircraft.ts`.

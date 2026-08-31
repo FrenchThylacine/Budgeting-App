@@ -1549,6 +1549,56 @@ try {
     });
   }
 
+  /*
+   * The theme the reader builds, on the real page.
+   *
+   * `tests/custom-theme.test.ts` proves the derivation is contrast-safe for ten
+   * hostile choices. It cannot prove that the derived tokens *reach* the page —
+   * that the picker writes them, that `applyTheme` paints them, and that the
+   * eleventh tile is wired to the same machinery as the ten presets. This
+   * picks a deliberately awkward colour through the real control and then runs
+   * the same sweep over the same eight tabs.
+   */
+  await check("a theme the reader builds is legible on every tab", async () => {
+    await openTab(page, "settings");
+    await page.click(".theme-grid .theme-swatch:last-child");
+    await sleep(400);
+
+    // A mid grey page with a barely different card: the case where choosing
+    // text colours by hand goes wrong, set through the application's own input.
+    const chosen = await page.evaluate(`
+      const inputs = [...document.querySelectorAll('.custom-theme-input')];
+      if (inputs.length !== 3) return 'the pickers are not there: ' + inputs.length;
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+      const values = ['#808080', '#8a8a8a', '#7d7d3a'];
+      inputs.forEach((input, index) => {
+        setter.call(input, values[index]);
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+      });
+      return values.join(' ');
+    `);
+    assert(chosen.startsWith("#"), chosen);
+    await sleep(500);
+
+    // The page really is painted with it, rather than the choice being stored
+    // and ignored.
+    const painted = await page.evaluate(
+      "getComputedStyle(document.documentElement).getPropertyValue('--bg').trim()",
+    );
+    assert(/#808080/i.test(painted), `the chosen page colour did not reach the root: "${painted}"`);
+
+    const failures = [];
+    for (const tab of TABS) {
+      await page.click(`.nav-item[data-tab="${tab}"]`);
+      await sleep(950);
+      const found = await page.evaluate(contrastSweep);
+      for (const entry of found) failures.push(`${tab}: ${entry}`);
+    }
+    equal(failures.length, 0, failures.slice(0, 6).join(" | "));
+    return `${chosen}, ${TABS.length} tabs, 0 failures`;
+  });
+
   await check("back to the default theme", async () => {
     await openTab(page, "settings");
     await page.click(".theme-grid .theme-swatch:nth-child(1)");

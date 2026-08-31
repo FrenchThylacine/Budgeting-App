@@ -3094,6 +3094,52 @@ label:has(> input[type="radio"]) {
   grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
 }
 
+/* The reader's own three colours
+   ─────────────────────────────
+   A row of native colour inputs. Native because the operating system's picker
+   is better than anything worth building here, and because it is the control
+   somebody already knows how to use. The hex is printed beside each one: a
+   swatch says which colour, and the value says which colour exactly. */
+.custom-theme {
+  display: grid;
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--separator);
+  justify-items: start;
+}
+
+.custom-theme-part {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+}
+
+.custom-theme-part > .text-callout { flex: 1; min-width: 0; }
+
+.custom-theme-input {
+  inline-size: 44px;
+  block-size: 30px;
+  padding: 2px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  cursor: pointer;
+}
+
+/* Safari and Chrome each wrap the swatch in their own box; without these the
+   chosen colour sits inside a white frame and reads as the wrong colour. */
+.custom-theme-input::-webkit-color-swatch-wrapper { padding: 0; }
+.custom-theme-input::-webkit-color-swatch { border: none; border-radius: 3px; }
+.custom-theme-input::-moz-color-swatch { border: none; border-radius: 3px; }
+
+.custom-theme-value {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.03em;
+  color: var(--text-tertiary);
+}
+
 .theme-swatch {
   display: grid;
   gap: 8px;

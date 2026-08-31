@@ -23,7 +23,13 @@ import { formatDateTime } from "../../domain/dates";
 import { LANGUAGES, findLanguage, searchLanguages } from "../../domain/languages";
 import { resolveLanguage } from "../../domain/i18n";
 import { AIRCRAFT, DEFAULT_AIRCRAFT, DEFAULT_FLEET_CRAFT, FLEET } from "../../domain/aircraft";
-import { THEME_PRESETS, themeFor } from "../../domain/theme";
+import { CUSTOM_THEME_ID, THEME_PRESETS } from "../../domain/theme";
+import {
+  DEFAULT_CUSTOM_THEME,
+  customThemeSwatch,
+  resolveThemePreset,
+  sanitiseCustomTheme,
+} from "../../domain/customTheme";
 import {
   declineNotifications,
   notificationStatus,
@@ -73,6 +79,13 @@ const GROUPS: { id: GroupId; labelKey: string; icon: LucideIcon }[] = [
   { id: "interaction", labelKey: "settings.groupInteraction", icon: Pointer },
   { id: "data", labelKey: "settings.groupData", icon: Database },
   { id: "account", labelKey: "settings.groupAccount", icon: UserRound },
+];
+
+/** The three colours the reader picks, and what each one paints. */
+const CUSTOM_THEME_PARTS: { key: "background" | "surface" | "accent"; labelKey: string }[] = [
+  { key: "background", labelKey: "settings.customThemeBackground" },
+  { key: "surface", labelKey: "settings.customThemeSurface" },
+  { key: "accent", labelKey: "settings.customThemeAccent" },
 ];
 
 const DISPLAY_MODES: { value: CurrencyDisplayMode; labelKey: string }[] = [
@@ -137,7 +150,10 @@ const GeneralSettings: React.FC = () => {
   const { t } = useTranslation();
   const settings = useBudgetStore((s) => s.snapshot.settings);
   const update = useBudgetStore((s) => s.updateSettings);
-  const theme = themeFor(settings.themePreset);
+  const theme = resolveThemePreset(settings.themePreset, settings.customTheme);
+  // Always a valid triple, whether or not the custom theme is the one showing:
+  // switching to a preset and back must not lose the palette.
+  const custom = sanitiseCustomTheme(settings.customTheme);
   const appearance: Appearance = settings.appearance ?? (settings.darkMode ? "dark" : "light");
 
   return (
@@ -170,7 +186,67 @@ const GeneralSettings: React.FC = () => {
                 <span className="text-callout">{t(preset.labelKey)}</span>
               </button>
             ))}
+
+            {/* The eleventh tile, which is not a preset.
+
+                Its colours do not exist until somebody picks them, so the
+                swatch is drawn from the current choice — and the tile sits in
+                the same grid as the ten because it is the same kind of
+                decision. */}
+            <button
+              type="button"
+              role="radio"
+              aria-checked={theme.id === CUSTOM_THEME_ID}
+              className={`theme-swatch${theme.id === CUSTOM_THEME_ID ? " is-active" : ""}`}
+              onClick={() => update({ themePreset: CUSTOM_THEME_ID, customTheme: custom })}
+            >
+              <span className="theme-swatch-colours" aria-hidden="true">
+                {customThemeSwatch(custom).map((colour, index) => (
+                  <span key={index} style={{ background: colour }} />
+                ))}
+              </span>
+              <span className="text-callout">{t("theme.custom")}</span>
+            </button>
           </div>
+
+          {/*
+            Three pickers, and eleven colours derived from them.
+
+            Not fourteen pickers. A reader who can set the text colour can set
+            it to the card colour, and a theme that can be unreadable will be —
+            so they choose the page, the cards and the accent, and every text
+            and border shade is computed from those until it clears its
+            contrast floor. Their blue stays their blue; the words on it stay
+            legible because they were worked out to be.
+          */}
+          {theme.id === CUSTOM_THEME_ID && (
+            <div className="custom-theme">
+              {CUSTOM_THEME_PARTS.map(({ key, labelKey }) => (
+                <label key={key} className="custom-theme-part">
+                  <span className="text-callout">{t(labelKey)}</span>
+                  <input
+                    type="color"
+                    className="custom-theme-input"
+                    value={custom[key]}
+                    aria-label={t(labelKey)}
+                    onChange={(event) =>
+                      update({ customTheme: { ...custom, [key]: event.target.value } })
+                    }
+                  />
+                  <span className="text-footnote custom-theme-value">{custom[key].toUpperCase()}</span>
+                </label>
+              ))}
+              <p className="text-note settings-note">{t("settings.customThemeDerived")}</p>
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={() => update({ customTheme: DEFAULT_CUSTOM_THEME })}
+              >
+                {t("settings.customThemeReset")}
+              </Button>
+            </div>
+          )}
 
           <div className="settings-row">
             <span className="text-callout">{t("settings.appearance")}</span>
@@ -199,7 +275,14 @@ const GeneralSettings: React.FC = () => {
               ))}
             </div>
           </div>
-          {theme.darkOnly && <p className="text-note settings-note">{t("settings.themeDarkOnly")}</p>}
+          {theme.darkOnly && (
+            <p className="text-note settings-note">
+              {/* The reader's own theme has one background, so it has one
+                  scheme — the same reason Deep black has one, arrived at from
+                  the other direction. */}
+              {t(theme.id === CUSTOM_THEME_ID ? "settings.customThemeScheme" : "settings.themeDarkOnly")}
+            </p>
+          )}
         </div>
       </Section>
 

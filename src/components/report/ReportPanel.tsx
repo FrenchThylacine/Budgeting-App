@@ -3,6 +3,7 @@ import { Download, ExternalLink, Printer } from "lucide-react";
 import type { CustomRange, ReportScope } from "../../domain/report";
 import { formatMoney } from "../../domain/currency";
 import { fontStack } from "../../domain/fonts";
+import { resolveThemePreset } from "../../domain/customTheme";
 import { useBudgetStore } from "../../store/budgetStore";
 import { useTranslation } from "../../i18n/useTranslation";
 import { Button } from "../ui/Button";
@@ -96,6 +97,8 @@ export const ReportPanel: React.FC = () => {
             screen: true,
             statusColours: snapshot.settings.statusColours,
             fontStack: fontStack(snapshot.settings.fontChoice),
+            // The reader's accent follows onto paper; the paper stays white.
+            themeAccent: resolveThemePreset(snapshot.settings.themePreset, snapshot.settings.customTheme).light["--accent"],
           },
         );
         if (!cancelled) setHtml(document);

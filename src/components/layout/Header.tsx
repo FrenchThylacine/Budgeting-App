@@ -5,7 +5,8 @@ import { Badge } from "../ui/Badge";
 import { Button } from "../ui/Button";
 import { SyncStatus } from "./SyncStatus";
 import { Sun, Moon, Undo2, Redo2, Wallet } from "lucide-react";
-import { resolveAppearance, themeFor } from "../../domain/theme";
+import { resolveAppearance } from "../../domain/theme";
+import { resolveThemePreset } from "../../domain/customTheme";
 import { useTranslation } from "../../i18n/useTranslation";
 
 type BudgetCalculation = ReturnType<typeof calculateYear>;
@@ -52,7 +53,7 @@ export const Header: React.FC<{
    * client still read. Writing one and not the other would put the toggle and
    * the page in disagreement the moment either is read by the other.
    */
-  const theme = themeFor(snapshot.settings.themePreset);
+  const theme = resolveThemePreset(snapshot.settings.themePreset, snapshot.settings.customTheme);
   const systemDark =
     typeof window !== "undefined" && window.matchMedia?.("(prefers-color-scheme: dark)").matches === true;
   const dark = resolveAppearance(snapshot.settings.appearance, snapshot.settings.darkMode === true, systemDark, theme);

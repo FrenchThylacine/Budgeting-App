@@ -115,6 +115,25 @@ const SETTINGS_FIELDS: Record<string, SettingsFieldCheck> = {
         typeof colour === "string" &&
         /^#[0-9a-fA-F]{6}$/.test(colour),
     ),
+  /**
+   * The three colours a reader's own theme is built from.
+   *
+   * The same rule as `statusColours` and for the same reason: these reach a
+   * stylesheet. Exactly three keys, each a six-digit hex — no extras, because
+   * an unexpected key here would be a token nobody derived and nobody checked
+   * the contrast of.
+   */
+  customTheme: (value) => {
+    if (value == null || typeof value !== "object" || Array.isArray(value)) return false;
+    const entries = Object.entries(value as Record<string, unknown>);
+    if (entries.length !== 3) return false;
+    return entries.every(
+      ([part, colour]) =>
+        ["background", "surface", "accent"].includes(part) &&
+        typeof colour === "string" &&
+        /^#[0-9a-fA-F]{6}$/.test(colour),
+    );
+  },
   // "YYYY-MM", the month the deferral was given for.
   leftoverDeferredFor: (value) => typeof value === "string" && /^\d{4}-(0[1-9]|1[0-2])$/.test(value),
   // An id from the font table, never a CSS stack: this value reaches a
