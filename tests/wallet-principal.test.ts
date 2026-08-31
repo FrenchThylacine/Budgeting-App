@@ -163,6 +163,79 @@ describe("the stored principal", () => {
     expect(stored()).toEqual({ amount: 200, currency: "USD" });
   });
 
+  it("counts spending, so the composition agrees with the balance beside it", () => {
+    /*
+     * Caught by the browser harness, which is why it exists. `walletBalance` is
+     * every ledger movement *minus budget spending* — money that left by being
+     * spent left just as surely as money moved out by hand. Summing only the
+     * ledger rows made the composition disagree with the balance, and the reset,
+     * which zeroes each currency from this, left the spent portion standing.
+     */
+    useBudgetStore.getState().addWalletEntry({
+      year: 2026,
+      month: 8,
+      date: "2026-08-31",
+      amount: 500,
+      currency: "EUR",
+      source: "Budget",
+      type: "budget",
+      note: "",
+    });
+    useBudgetStore.getState().addSpendingEntry({
+      year: 2026,
+      month: 8,
+      week: 36,
+      date: "2026-08-31",
+      categoryId: useBudgetStore.getState().snapshot.categories[0].id,
+      amount: 40,
+      currency: "EUR",
+      recurrenceType: "none",
+      note: "Lunch",
+    } as never);
+
+    const balance = walletState(useBudgetStore.getState().snapshot).walletBalance;
+    const composition = walletComposition(useBudgetStore.getState().snapshot);
+    const total = composition.reduce((sum, slice) => sum + slice.converted, 0);
+
+    expect(total).toBeCloseTo(balance, 6);
+    // And the euro side is down by the lunch.
+    expect(composition.find((slice) => slice.currency === "EUR")!.amount).toBeCloseTo(460, 6);
+  });
+
+  it("keeps the principal when the entry is edited for something else", () => {
+    /*
+     * Editing is the obvious way to corrupt a stored amount: load the entry,
+     * show it in the display currency, write back what is on screen. The
+     * editor loads and writes the amount *in its own currency*, so changing a
+     * note leaves 200 USD as 200 USD.
+     */
+    const snapshot = useBudgetStore.getState().snapshot;
+    const year = String(snapshot.settings.selectedYear);
+    const entry = snapshot.years[year].walletEntries.find((row) => row.source === "Cash gift")!;
+
+    useBudgetStore.getState().updateWalletEntry(entry.id, { note: "edited note" });
+
+    expect(stored()).toEqual({ amount: 200, currency: "USD" });
+    const after = useBudgetStore
+      .getState()
+      .snapshot.years[year].walletEntries.find((row) => row.source === "Cash gift")!;
+    expect(after.note).toBe("edited note");
+    // Date, direction and type all survive an unrelated edit.
+    expect(after.date).toBe("2026-08-31");
+    expect(after.type).toBe("personal");
+  });
+
+  it("removes an entry outright rather than hiding it", () => {
+    const snapshot = useBudgetStore.getState().snapshot;
+    const year = String(snapshot.settings.selectedYear);
+    const entry = snapshot.years[year].walletEntries.find((row) => row.source === "Cash gift")!;
+
+    useBudgetStore.getState().removeWalletEntry(entry.id);
+
+    const remaining = useBudgetStore.getState().snapshot.years[year].walletEntries;
+    expect(remaining.some((row) => row.id === entry.id)).toBe(false);
+  });
+
   it("zeroes a foreign balance in its own currency, so it stays zero when the rate moves", () => {
     /*
      * The defect this found. The reset used to write one adjustment for the

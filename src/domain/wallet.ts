@@ -208,15 +208,31 @@ export interface WalletCurrencySlice {
 }
 
 export function walletComposition(snapshot: BudgetSnapshot): WalletCurrencySlice[] {
-  const entries = allWalletEntries(snapshot);
   const byCurrency = new Map<CurrencyCode, number>();
 
-  for (const entry of entries) {
+  for (const entry of allWalletEntries(snapshot)) {
     const effect = walletEffect(entry);
     if (effect === 0) continue;
     // Accumulated in the entry's own currency: this is the number the reader
     // put in, and it stays that number.
     byCurrency.set(entry.currency, (byCurrency.get(entry.currency) ?? 0) + effect);
+  }
+
+  /*
+   * Spending is part of the balance, and was missed here at first.
+   *
+   * `walletBalance` is *every ledger movement, minus budget spending* — money
+   * that left the wallet by being spent left it just as surely as money moved
+   * out by hand. Summing only the ledger rows made the composition disagree
+   * with the balance beside it, and the wallet reset, which zeroes each
+   * currency from this, left the spent portion standing.
+   *
+   * Charged in the currency the transaction was recorded in, for the same
+   * reason everything else here is: a €40 lunch reduces the euros.
+   */
+  for (const entry of walletSpending(snapshot, ledgerEpoch(snapshot))) {
+    if (!entry.amount) continue;
+    byCurrency.set(entry.currency, (byCurrency.get(entry.currency) ?? 0) - Math.abs(entry.amount));
   }
 
   const slices = [...byCurrency.entries()]

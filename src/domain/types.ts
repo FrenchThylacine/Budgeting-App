@@ -101,6 +101,7 @@ export interface GestureSettings {
   wishlist?: { trailing?: SwipeActionId; leading?: SwipeActionId };
   activities?: { trailing?: SwipeActionId; leading?: SwipeActionId };
   spending?: { trailing?: SwipeActionId; leading?: SwipeActionId };
+  wallet?: { trailing?: SwipeActionId; leading?: SwipeActionId };
 }
 
 export type SwipeActionId = "none" | "delete" | "archive" | "buy" | "edit" | "duplicate" | "deactivate";

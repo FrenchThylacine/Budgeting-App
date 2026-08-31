@@ -1041,6 +1041,7 @@ export const en = {
   "stats.rolloverDetail": "accumulated month-end rollovers",
   "stats.spentPeriod": "Spent · {period}",
   "legend.title": "What the symbols mean",
+  "wallet.editMovement": "Edit movement",
   "settings.font": "Typeface",
   "font.system": "System",
   "font.systemHint": "Whatever your device uses",

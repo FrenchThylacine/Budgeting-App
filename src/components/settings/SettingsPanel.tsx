@@ -531,7 +531,7 @@ const InteractionSettings: React.FC = () => {
         <div className="card card-body settings-card">
           <p className="text-note settings-note">{t("settings.gesturesHint")}</p>
           <div className="gesture-grid">
-            {(["wishlist", "activities", "spending"] as const).map((surface) => {
+            {(["wishlist", "activities", "spending", "wallet"] as const).map((surface) => {
               const current = gesturesFor(settings, surface);
               return (
                 <div key={surface} className="gesture-row">

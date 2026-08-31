@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { ArrowDownLeft, ArrowUpRight, Info, Plus, RotateCcw, Trash2, Wallet as WalletIcon, AlertTriangle } from "lucide-react";
+import { ArrowDownLeft, ArrowUpRight, Info, Plus, RotateCcw, Trash2, Wallet as WalletIcon, AlertTriangle, Pencil } from "lucide-react";
 import { currencyOptionsFor, formatMoney } from "../../domain/currency";
 import { monthName, todayDateInput, isLastDayOfMonth, monthKey } from "../../domain/dates";
 import { useBudgetStore } from "../../store/budgetStore";
@@ -11,7 +11,7 @@ import {
   walletState,
   type WalletMovement,
 } from "../../domain/wallet";
-import type { CurrencyCode, CurrencyDisplayMode, WalletEntryType } from "../../domain/types";
+import type { BudgetSnapshot, CurrencyCode, CurrencyDisplayMode, SwipeActionId, WalletEntry, WalletEntryType } from "../../domain/types";
 import { useTranslation } from "../../i18n/useTranslation";
 import { Badge } from "../ui/Badge";
 import { Button } from "../ui/Button";
@@ -20,7 +20,9 @@ import { EmptyState } from "../ui/EmptyState";
 import { Field, FieldGroup } from "../ui/Field";
 import { Section } from "../ui/Section";
 import { Total } from "../ui/Money";
+import { SwipeRow } from "../ui/SwipeRow";
 import { resolveStoredText } from "../../domain/storedText";
+import { gesturesFor } from "../../domain/gestures";
 
 /**
  * The Wallet: actual money, as distinct from planned money
@@ -75,6 +77,7 @@ export const WalletPanel: React.FC = () => {
   const updateSettings = useBudgetStore((state) => state.updateSettings);
   const add = useBudgetStore((s) => s.addWalletEntry);
   const remove = useBudgetStore((s) => s.removeWalletEntry);
+  const updateWalletEntry = useBudgetStore((state) => state.updateWalletEntry);
   const resetWallet = useBudgetStore((s) => s.resetWallet);
   const allocateBudget = useBudgetStore((s) => s.allocateBudget);
   const transferBudgetToPersonal = useBudgetStore((s) => s.transferBudgetToPersonal);
@@ -112,6 +115,32 @@ export const WalletPanel: React.FC = () => {
    * budget, and there is nothing to decide.
    */
   const monthEnds = isLastDayOfMonth();
+
+  /** The entry currently open for editing, or null. */
+  const [editingEntry, setEditingEntry] = useState<WalletEntry | null>(null);
+
+  /*
+   * The same gesture preferences the other lists read, for a surface that is
+   * now offered in Settings alongside them. Turning swipe off there turns it
+   * off here.
+   */
+  const walletGestures = gesturesFor(snapshot.settings, "wallet");
+
+  const walletSwipe = (
+    action: SwipeActionId,
+    editable: boolean,
+    onEdit: () => void,
+    onDelete: () => void,
+  ) => {
+    if (!editable || action === "none") return [];
+    if (action === "delete") {
+      return [{ label: t("common.delete"), icon: <Trash2 size={18} />, destructive: true, onAction: onDelete }];
+    }
+    if (action === "edit") {
+      return [{ label: t("common.edit"), icon: <Pencil size={18} />, onAction: onEdit }];
+    }
+    return [];
+  };
   const hasLeftover = leftover > 0 && mutable;
   const askNow = hasLeftover && monthEnds && !deferred;
   const deferredMark = hasLeftover && monthEnds && deferred;
@@ -300,22 +329,43 @@ export const WalletPanel: React.FC = () => {
           <EmptyState title={t("wallet.ledgerEmpty")} description={t("wallet.ledgerEmptyBody")} />
         ) : (
           <div className="item-list">
-            {wallet.movements.map((movement) => (
-              <MovementRow
-                key={movement.id}
-                movement={movement}
-                mutable={mutable}
-                displayCurrency={snapshot.settings.baseCurrency}
-                displayMode={snapshot.settings.currencyDisplayMode}
-                money={money}
-                formatDate={formatDate}
-                t={t}
-                onDelete={() => {
-                  if (movement.spendingId) return;
-                  if (window.confirm(t("spending.confirmDelete"))) remove(movement.id);
-                }}
-              />
-            ))}
+            {wallet.movements.map((movement) => {
+              /*
+               * A movement that came from a transaction is edited where it was
+               * written — in Spending — so the ledger never offers two places
+               * to change one fact.
+               */
+              const editable = mutable && !movement.spendingId;
+              const onDelete = () => {
+                if (!editable) return;
+                if (window.confirm(t("spending.confirmDelete"))) remove(movement.id);
+              };
+              const onEdit = () => {
+                if (!editable) return;
+                const entry = walletEntryById(snapshot, movement.id);
+                if (entry) setEditingEntry(entry);
+              };
+              return (
+                <SwipeRow
+                  key={movement.id}
+                  label={resolveStoredText(movement.label, t)}
+                  trailing={walletSwipe(walletGestures.trailing, editable, onEdit, onDelete)}
+                  leading={walletSwipe(walletGestures.leading, editable, onEdit, onDelete)}
+                >
+                  <MovementRow
+                    movement={movement}
+                    mutable={editable}
+                    displayCurrency={snapshot.settings.baseCurrency}
+                    displayMode={snapshot.settings.currencyDisplayMode}
+                    money={money}
+                    formatDate={formatDate}
+                    t={t}
+                    onEdit={onEdit}
+                    onDelete={onDelete}
+                  />
+                </SwipeRow>
+              );
+            })}
           </div>
         )}
       </Section>
@@ -328,6 +378,31 @@ export const WalletPanel: React.FC = () => {
           onSubmit={(input) => {
             allocateBudget(input);
             setAllocationOpen(false);
+          }}
+        />
+      )}
+
+      {editingEntry && (
+        <MovementSheet
+          editing={editingEntry}
+          onClose={() => setEditingEntry(null)}
+          onSubmit={(input) => {
+            /*
+             * Written back exactly as typed: the amount in the currency chosen
+             * here, the sign from the direction, the date as given. Nothing is
+             * converted on the way in, so an edit cannot reprice an entry.
+             */
+            updateWalletEntry(editingEntry.id, {
+              amount: input.direction === "out" ? -Math.abs(input.amount) : Math.abs(input.amount),
+              currency: input.currency,
+              date: input.date,
+              year: Number(input.date.slice(0, 4)),
+              month: Number(input.date.slice(5, 7)),
+              source: input.source,
+              note: input.note,
+              type: input.type,
+            });
+            setEditingEntry(null);
           }}
         />
       )}
@@ -406,6 +481,22 @@ export const WalletPanel: React.FC = () => {
 };
 
 /** One movement. Spending rows are read-only here: they belong to Spending. */
+
+/**
+ * The stored entry behind a movement row.
+ *
+ * `WalletMovement` is a projection for display — it carries a converted figure
+ * and a resolved label — and editing must act on the record, not on the view of
+ * it. Searched across every year because the ledger is continuous.
+ */
+function walletEntryById(snapshot: BudgetSnapshot, entryId: string): WalletEntry | null {
+  for (const record of Object.values(snapshot.years)) {
+    const found = record.walletEntries.find((entry) => entry.id === entryId);
+    if (found) return found;
+  }
+  return null;
+}
+
 const MovementRow: React.FC<{
   movement: WalletMovement;
   mutable: boolean;
@@ -414,8 +505,9 @@ const MovementRow: React.FC<{
   money: (value: number) => string;
   formatDate: (value: string, options?: Intl.DateTimeFormatOptions) => string;
   t: (key: string, params?: Record<string, string | number | null | undefined>) => string;
+  onEdit: () => void;
   onDelete: () => void;
-}> = ({ movement, mutable, displayCurrency, displayMode, money, formatDate, t, onDelete }) => {
+}> = ({ movement, mutable, displayCurrency, displayMode, money, formatDate, t, onEdit, onDelete }) => {
   const out = movement.direction === "out";
   const isTransfer = movement.kind === "transfer";
 
@@ -453,9 +545,15 @@ const MovementRow: React.FC<{
             <div className="text-footnote">≈ {money(movement.amountBase)}</div>
           )}
         </div>
-        {mutable && !movement.spendingId && (
+        {mutable && (
+          /* The same two controls, in the same order, as a transaction row:
+             the treasury is a ledger and should not have an interaction
+             language of its own. */
           <div className="row-actions">
-            <Button size="sm" variant="ghost" icon onClick={onDelete} aria-label={t("common.delete")}>
+            <Button size="sm" variant="ghost" icon onClick={onEdit} aria-label={t("common.edit")} title={t("common.edit")}>
+              <Pencil size={15} />
+            </Button>
+            <Button size="sm" variant="ghost" icon onClick={onDelete} aria-label={t("common.delete")} title={t("common.delete")}>
               <Trash2 size={15} />
             </Button>
           </div>
@@ -575,6 +673,15 @@ const AllocationSheet: React.FC<{
 
 /** Any other money movement: the user's own money in, or cash out. */
 const MovementSheet: React.FC<{
+  /**
+   * The entry being edited, or nothing when one is being created.
+   *
+   * Editing loads the values *as stored* — the amount in its own currency, the
+   * direction from its sign, the date, the type. The display currency is not
+   * consulted anywhere in here, which is the point: opening an entry to change
+   * its note must not be a way to quietly reprice it.
+   */
+  editing?: WalletEntry | null;
   onClose: () => void;
   onSubmit: (input: {
     amount: number;
@@ -585,23 +692,25 @@ const MovementSheet: React.FC<{
     note: string;
     type: WalletEntryType;
   }) => void;
-}> = ({ onClose, onSubmit }) => {
+}> = ({ editing, onClose, onSubmit }) => {
   const { t } = useTranslation();
   const settings = useBudgetStore((s) => s.snapshot.settings);
-  const [amount, setAmount] = useState("");
-  const [direction, setDirection] = useState<"in" | "out">("in");
-  const [currency, setCurrency] = useState<CurrencyCode>(settings.baseCurrency);
-  const [date, setDate] = useState(todayDateInput());
-  const [source, setSource] = useState("");
-  const [note, setNote] = useState("");
-  const [type, setType] = useState<WalletEntryType>("personal");
+  const [amount, setAmount] = useState(editing ? String(Math.abs(editing.amount)) : "");
+  const [direction, setDirection] = useState<"in" | "out">(
+    editing ? (editing.amount < 0 ? "out" : "in") : "in",
+  );
+  const [currency, setCurrency] = useState<CurrencyCode>(editing?.currency ?? settings.baseCurrency);
+  const [date, setDate] = useState(editing?.date ?? todayDateInput());
+  const [source, setSource] = useState(editing?.source ?? "");
+  const [note, setNote] = useState(editing?.note ?? "");
+  const [type, setType] = useState<WalletEntryType>(editing?.type ?? "personal");
 
   const parsed = Number(amount);
   const valid = Number.isFinite(parsed) && parsed !== 0 && source.trim() !== "" && date !== "";
 
   return (
     <EditorSheet
-      title={t("wallet.addMovement")}
+      title={editing ? t("wallet.editMovement") : t("wallet.addMovement")}
       onClose={onClose}
       footer={
         <>
@@ -609,7 +718,7 @@ const MovementSheet: React.FC<{
             {t("common.cancel")}
           </Button>
           <Button type="submit" variant="primary" form="wallet-movement-form" disabled={!valid}>
-            {t("common.add")}
+            {editing ? t("common.saveChanges") : t("common.add")}
           </Button>
         </>
       }

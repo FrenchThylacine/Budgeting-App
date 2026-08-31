@@ -974,6 +974,7 @@ export const fr: Dictionary = {
   "stats.rolloverDetail": "reports de fin de mois cumulés",
   "stats.spentPeriod": "Dépensé · {period}",
   "legend.title": "Ce que signifient les symboles",
+  "wallet.editMovement": "Modifier le mouvement",
   "settings.font": "Police",
   "font.system": "Système",
   "font.systemHint": "Celle de votre appareil",

@@ -966,6 +966,7 @@ export const de: Dictionary = {
   "stats.rolloverDetail": "aufgelaufene Monatsend-Überträge",
   "stats.spentPeriod": "Ausgegeben · {period}",
   "legend.title": "Was die Symbole bedeuten",
+  "wallet.editMovement": "Bewegung bearbeiten",
   "settings.font": "Schriftart",
   "font.system": "System",
   "font.systemHint": "Die deines Geräts",

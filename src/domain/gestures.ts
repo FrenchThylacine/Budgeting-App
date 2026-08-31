@@ -26,7 +26,7 @@ export interface GesturePreferences {
   leading: SwipeActionId;
 }
 
-export type GestureSurface = "wishlist" | "activities" | "spending";
+export type GestureSurface = "wishlist" | "activities" | "spending" | "wallet";
 
 export const DEFAULT_GESTURES: Record<GestureSurface, GesturePreferences> = {
   // Delete is trailing everywhere, which is the platform convention. A short
@@ -39,6 +39,10 @@ export const DEFAULT_GESTURES: Record<GestureSurface, GesturePreferences> = {
   // remains available as a configured alternative.
   activities: { trailing: "deactivate", leading: "none" },
   spending: { trailing: "delete", leading: "none" },
+  // The treasury behaves like the transaction list, because that is what it is:
+  // a ledger of things that happened. Same directions, same actions, so a
+  // gesture learned on one surface works on the other.
+  wallet: { trailing: "delete", leading: "edit" },
 };
 
 /** Which actions each list can actually perform. Offering more would be a lie. */
@@ -49,6 +53,7 @@ export const AVAILABLE_ACTIONS: Record<GestureSurface, SwipeActionId[]> = {
   // and hiding it is a presentation one. See ACTION_LABEL_KEYS below.
   activities: ["none", "deactivate", "archive", "edit", "duplicate", "delete"],
   spending: ["none", "edit", "delete"],
+  wallet: ["none", "edit", "delete"],
 };
 
 /**

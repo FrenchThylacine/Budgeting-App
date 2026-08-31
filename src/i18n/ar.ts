@@ -998,6 +998,7 @@ export const ar: Dictionary = {
   "stats.rolloverDetail": "مبالغ مُرحّلة متراكمة في نهاية الشهر",
   "stats.spentPeriod": "أُنفق · {period}",
   "legend.title": "ماذا تعني الرموز",
+  "wallet.editMovement": "تعديل الحركة",
   "settings.font": "الخط",
   "font.system": "النظام",
   "font.systemHint": "خط جهازك",
