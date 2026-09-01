@@ -149,8 +149,3 @@ export function fadeToContrast(colour: Rgb, ground: Rgb, ratio: number): Rgb {
   }
   return last;
 }
-
-/** True when `foreground` on `ground` clears WCAG AA for body text. */
-export function clearsAA(foreground: Rgb, ground: Rgb): boolean {
-  return contrast(foreground, ground) >= 4.5;
-}

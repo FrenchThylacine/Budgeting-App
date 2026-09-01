@@ -2,14 +2,101 @@
 
 This is the active engineering tracker. A checkbox is ticked only after implementation **and** the relevant verification have both succeeded. "The code exists" is never sufficient.
 
-**Last updated:** 2026-08-31 (V5) — ten destinations instead of eleven, a report you can read before you print it, colour and typeface as the reader's choice, and three bugs that were quietly costing an account every write it made.
+**Last updated:** 2026-09-01 (V5 — part 2) — a tour that points at the button, translations in the layer no dictionary check can see, a theme the reader builds that cannot come out unreadable, statistics that say which currencies the money was in, and an aeroplane that no longer rolls half a wingspan in one frame.
 
 
 **Version:** 5.0.0. See `CHANGELOG.md` for what each version was.
 
-**Verification state.** **934 tests across 53 files, all passing** — 852 unit and 82 against a real PostgreSQL 17.5 database. TypeScript clean for **both** targets. **`scripts/verify-browser.mjs` drives a real Chrome on a brand-new account each run: 60 checks, all passing**, including six phone widths, two themes, and measurements of the loading animation rather than assertions about it. Both bundles build clean. Nothing from 2026-08-17 onward is verified in production.
+**Verification state.** **1010 tests across 58 files, all passing** (83 skipped) — TypeScript clean for **both** targets, both bundles build clean. **`scripts/verify-browser.mjs` drives a real Chrome on a brand-new account each run: 64 checks, all passing**, including six phone widths, two presets *and a theme built through the picker at run time*, and measurements of the loading animation rather than assertions about it. **`scripts/verify-tutorial.mjs` walks the tour itself: 12 checks**, at a desktop and a phone width. Nothing from 2026-08-17 onward is verified in production.
+
+## What this pass did — 2026-09-01 (V5, part 2)
+
+Seven sections of the brief, in the order it asked for them. Each is recorded
+with what was *measured*, not with what was written.
+
+- [x] **§10 The tour points at the control.** A dimmed backdrop with a real
+      hole in it — four panels rather than one shadow, so the button inside
+      stays clickable — the card placed beside the highlight and never over it,
+      with its height *measured* rather than guessed, and the step advancing
+      itself when the task is genuinely done. *Two defects found by walking it:
+      the currencies step pointed at Settings while the control that pins one
+      lives a group deeper, and saving the reader's change re-ran the advance
+      effect, cancelled its timer and parked the tour on a completed step for
+      ever.*
+- [x] **§11 Translations, in the layer nothing checked.** Every guard here read
+      the dictionaries, and a sentence that never reaches a dictionary passes
+      all of them. Found on screen and fixed: the scenario preview's funding
+      change, seven importer warnings and six importer rejections, the upcoming
+      list calling `describeSchedule` with **no translator at all**, the trend
+      chart's "Jan, Feb, Mar" and "W28", and History's month names. The cause
+      was one shape repeated — an optional translator with English beside every
+      key "for a test or an export", where no export existed and the only
+      caller taking that branch was the test asserting the English.
+      `tests/no-hardcoded-english.test.ts` now scans the domain layer too, with
+      an allowlist that says per file why its English is data.
+- [x] **§12 Thirteen typefaces.** Seven named faces beside the six families.
+      The test holds the architecture rather than the list: no rule in either
+      stylesheet names a family except through `--font-sans`.
+- [x] **§13 Ten themes, and one the reader builds.** Three colours chosen,
+      eleven derived by walking toward the ink until each clears its floor.
+      Verified over ten deliberately hostile palettes in unit tests *and*
+      through the real picker in the browser, where it found three genuine
+      defects — a scheme chosen by a luminance cut-off while the ink was chosen
+      by measurement, an accent unreadable on its own tinted chip, and a
+      cadence chip at 1.86:1.
+- [x] **§14 Statistics say which currencies the money was in.** Amounts as
+      recorded, converted only for the bar length, with the transaction count
+      beside them because one $2,000 flight and forty €12 lunches otherwise
+      make dollars look like the currency this budget lives in.
+- [x] **§15 The airshow banks.** The one quality bar the brief names that
+      nothing measured. Measured per rendered frame, the wings snapped 0.450 →
+      0.947 span in sixteen milliseconds at a phase boundary. Fixed with a
+      finite roll rate and a curvature estimated over a baseline long enough to
+      be smooth: worst step per frame 0.497 → 0.047.
+- [x] **§16 Integration audit.** Ten tabs at a desktop and a phone width: no
+      sideways scroll, nothing clipped, nothing overflowing outside a
+      deliberate scroller. Plus a check that crosses into the printed report,
+      which inherits nothing: the reader's typeface and accent reach it, and a
+      yellow accent is darkened to 4.8:1 on paper rather than passed through.
+
+Three things were found by the clock rather than by a change, and are recorded
+because they will happen again: thirty-five store tests went red at midnight on
+the first of September because their August fixtures had become the past and
+the store correctly refuses to edit a closed month (the tests pin the clock now,
+mid-month — a date at the end of a month lands in the next one in a timezone
+ahead of UTC), and the browser harness hard-coded a monthly accrual that is
+€177 in a 31-day month and €171 in a 30-day one.
 
 ## How this session verified things
+
+**V5 part 2, 2026-09-01.** One lesson, and it is the same one three times:
+*a guard only finds what it looks at.*
+
+- Every translation check in this repository read the **dictionaries**. A
+  sentence that never reaches a dictionary passes all of them, and there were
+  thirteen of them one layer down — including an upcoming list calling
+  `describeSchedule` with no translator at all, which had been printing "Day 15
+  monthly" on a French screen for as long as the function had existed. The fix
+  was not a sweep; it was making the translator a **required argument**, which
+  turned a thing you have to remember into a thing that does not compile.
+- The airshow's banking was the one quality bar the brief names by name that
+  nothing measured. Measured, it was broken. The measurement had to be taken
+  *inside the page on every animation frame* to be worth anything — the first
+  version sampled over the protocol every 40ms, spanned four drawn frames, and
+  reported a smooth roll as a cut.
+- The custom theme's contrast is guaranteed by construction and proved over ten
+  hostile palettes in unit tests. The browser found three defects anyway, all
+  of the same kind: a token the derivation did not own — the light/dark status
+  pairs, the accent's own tinted chip, the cadence chip — meeting a background
+  that is neither light nor dark. A proof about the tokens you derive says
+  nothing about the ones you do not.
+
+And one about time. Thirty-five store tests went red at midnight with no change
+to any of them: their August fixtures had become the past, and the store
+correctly refuses to edit a closed month. Pinning the clock fixed it — pinned
+*mid-month*, because a machine three hours ahead of UTC reads
+`2026-08-31T21:00:00Z` as the first of September, which is how the first
+attempt at the fix failed on the same two tests for the same reason.
 
 **V4.4, 2026-08-30.** The whole pass is one lesson, learned expensively:
 *every check compared numbers the script produced against other numbers the
@@ -597,12 +684,46 @@ something had slipped through the previous one:
 ## Discovered issues — open, current
 
 - [ ] **The icon library's 244 icon *names* are English.** They are a search index rather than prose — the picker matches typed English keywords against them — and translating them is 244 nouns × 4 languages for something nobody reads as a sentence. *(Narrowed 2026-08-30: the sixteen category headings above them, and the "no icon matches" message, are translated. What is left is the index itself.)*
-- [ ] **The Excel export's sheet headers are English** ("Total activity cost", "Charged to this budget"). They are column names in a data-interchange file that the app also re-imports, where a stable header is worth more than a translated one — but a reader who opens the workbook meets English. Recorded rather than silently accepted.
-- [ ] **The Excel import's warnings are English.** They name English cell labels from the workbook they are describing ("the Budget sheet has no \"Activities\" header cell"), and the dialog is reached only when the user chooses a file. Recorded rather than silently accepted.
+- [ ] **The Excel export's sheet headers are English** ("Total activity cost", "Charged to this budget"). They are column names in a data-interchange file that the app also re-imports **by matching header text**, so translating them would break the round trip for every existing workbook. Re-examined 2026-09-01 and deliberately kept; the reason is now recorded in the domain scanner's allowlist rather than only here.
+- [x] ~~**The Excel import's warnings are English.**~~ *(Closed 2026-09-01.)* All seven warnings and all six rejection messages are translation keys with their values now, in five languages. The `Error.message` behind a rejection stays English — it is what a stack trace prints — and what reaches the screen is the key beside it.
 - [ ] **`sessionsPerMonth` and `sessionsPerPeriod` both describe a frequency.** Merging them would migrate every existing `perSession` activity, which is not worth doing for tidiness alone.
 - [ ] **The wallet does not model transfers between currencies.** A movement has one currency and converts for display; moving €100 into a dollar wallet is two entries, not one.
 - [ ] **Notifications are permission-only.** Nothing yet *schedules* a reminder: a real push pipeline needs VAPID keys and a server endpoint, and inventing one would be the "fake permission request" the brief forbids in another form.
 - [ ] `xlsx@0.18.5` carries two high-severity advisories with no registry fix.
+
+## Verified in a browser — 2026-09-01 (V5, part 2)
+
+`node scripts/verify-browser.mjs` against a freshly started dev server and a
+real PostgreSQL 17 database, on a brand-new account each run. **64/64.**
+
+New in this pass, and each one earned its place by failing first:
+
+- **the escorts bank into the turns rather than flying them flat** — collected
+  inside the page on every animation frame, because a sample taken every 40ms
+  spans three or four drawn frames and cannot tell a smooth roll from a cut. It
+  reported a legitimate roll as a jump until it was moved in-page, and it
+  reported a real cut before the roll rate was added.
+- **a theme the reader builds is legible on every tab** — a mid grey page with
+  a barely different card and an olive accent, set through the application's
+  own colour inputs, then the same WCAG sweep over the same eight tabs. Found
+  forty unreadable nodes, then six, then one.
+- **statistics report which currencies the money was in** — reads the recorded
+  150 000 LBP off the rendered chart, not the €1.40 it converts to.
+- **the reader's typeface and accent follow onto paper** — the report inherits
+  nothing, so both are asserted rather than assumed, including that a yellow
+  accent is darkened to 4.8:1 on white instead of passed through.
+
+`node scripts/verify-tutorial.mjs` walks the tour itself on a fresh account at
+1440×900 and again at 390×844. **12/12.** It performs the steps — presses the
+highlighted control, pins a currency that is not already pinned — and then
+waits to see whether the tour notices. It also asserts the negative: a step
+with nothing done must stay put.
+
+A cross-tab layout sweep at both widths over all ten destinations found no
+sideways scroll, nothing clipped and nothing overflowing outside a deliberate
+scroller. The settings group strip does extend past a phone viewport; it is a
+horizontal scroller and that is the design, which is why the sweep asks about
+the ancestor rather than only about the rectangle.
 
 ## Verified in a browser — 2026-08-30 (V4)
 

@@ -1477,6 +1477,48 @@ try {
   });
 
 
+  /*
+   * The report is a document of its own, so nothing it inherits is inherited.
+   *
+   * Two things this pass claimed reach it, and neither was checked: the
+   * reader's typeface, and — new here — the reader's accent. The paper stays
+   * white and the ink stays dark whatever theme is on screen, because printing
+   * a dark background wastes toner to produce something harder to read; what
+   * follows the theme is the colour that carries the headings.
+   *
+   * The accent is pushed until it clears 4.5:1 on white on the way in, so a
+   * pale yellow that reads as a button on a dark page is not invisible on
+   * paper. That is asserted here rather than assumed.
+   */
+  await check("the reader's typeface and accent follow onto paper", async () => {
+    const measured = await page.evaluate(`
+      const { buildPeriodReport, reportHtml } = await import('/src/domain/report.ts');
+      const { createTranslator } = await import('/src/domain/i18n.ts');
+      const t = createTranslator('en');
+      const snapshot = window.__budgetStoreInstance.getState().snapshot;
+      const report = buildPeriodReport(snapshot, 'month', new Date(), t);
+      const html = reportHtml(report, (value) => value.toFixed(2), t, {
+        fontStack: 'Verdana, Geneva, sans-serif',
+        // A yellow nobody could read as a heading on white.
+        themeAccent: '#FFE600',
+      });
+      const face = /font-family:\\s*([^;]+);/.exec(html)?.[1] ?? '';
+      const navy = /--navy:\\s*([^;]+);/.exec(html)?.[1]?.trim() ?? '';
+      return JSON.stringify({ face, navy });
+    `);
+    const { face, navy } = JSON.parse(measured);
+    assert(/Verdana/.test(face), `the chosen typeface did not reach the report: ${face}`);
+    assert(/^#[0-9a-f]{6}$/i.test(navy), `the accent did not reach the report: ${navy}`);
+
+    // And it was made legible rather than passed through.
+    const channel = (v) => { const c = v / 255; return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); };
+    const rgb = [1, 3, 5].map((i) => parseInt(navy.slice(i, i + 2), 16));
+    const l = 0.2126 * channel(rgb[0]) + 0.7152 * channel(rgb[1]) + 0.0722 * channel(rgb[2]);
+    const ratio = 1.05 / (l + 0.05);
+    assert(ratio >= 4.5, `the accent prints at ${ratio.toFixed(2)}:1 on white — a heading nobody can read`);
+    return `${face.split(",")[0]} · ${navy} at ${ratio.toFixed(1)}:1`;
+  });
+
   /** Every tab the sweeps below visit. */
   const TABS = ["dashboard", "activities", "spending", "wishlist", "wallet", "analytics", "settings", "report"];
 

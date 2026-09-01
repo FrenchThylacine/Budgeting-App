@@ -9,6 +9,7 @@ with one small fix gets a patch rather than a new minor.
 
 | Version | What it was |
 | --- | --- |
+| **5.1.0** | A tour that points at the button, a theme you build that cannot come out unreadable, and English found in the layer no dictionary check looks at |
 | **5.0.0** | Ten destinations instead of eleven, a report you can read before you print it, and three bugs that were costing an account its data |
 | **4.4.0** | The correction pass: the aeroplane was not where the arithmetic put it, a choreographed routine, and a legend instead of a paragraph |
 | **4.3.0** | The audit pass: a rejoin that is a curve, one visual vocabulary, and twenty-three sentences nobody had translated |
@@ -19,6 +20,97 @@ with one small fix gets a patch rather than a new minor.
 | **2.0.0**–**2.1.0** | Accounts, Excel import, dedicated editors, scenarios, swipe, the first identity |
 | **1.0.0**–**1.1.0** | The first working budget: activities, spending, wishlist, reports |
 | **0.1.0**–**0.2.0** | Before it was an application |
+
+## 5.1.0 — 2026-09-01 — Guards that look where the defects actually are
+
+The whole release is one lesson repeated: *a guard only finds what it looks
+at.* Three of this pass's checks were written because the brief named a
+quality bar that nothing measured, and all three found something broken the
+first time they ran.
+
+### A tour that points at the button
+
+It described the application and left you to find things. Each step now names
+its control, lights it up, and waits for you to use it.
+
+- A dimmed backdrop with a real hole in it — four panels rather than one
+  shadow, so the control inside stays visible *and clickable*.
+- The card beside the highlight, never over it, on whichever side has room,
+  with its height measured rather than assumed. A guess is what puts a
+  three-paragraph card over a button on a phone.
+- The spotlight follows: it scrolls the control into view, re-measures on
+  scroll and resize, and moves from "open the editor" to "here is the choice"
+  as the page changes.
+- Finishing the task advances the step by itself, read from application state.
+  A step whose task was already done on arrival keeps its button instead of
+  flinging you onward.
+
+Walking the tour in a real browser found two defects: the currencies step
+pointed at Settings while the control that pins one lives a group deeper, and
+saving your change cancelled the advance timer and parked the tour on a
+completed step for ever.
+
+### English in the layer nothing checked
+
+Every translation guard here read the dictionaries. A sentence that never
+reaches a dictionary passes all of them, and thirteen were on screen: the
+scenario preview's funding change, seven importer warnings and six importer
+rejections, the trend chart's "Jan, Feb, Mar" and "W28", History's month
+names — and an upcoming list calling `describeSchedule` with **no translator
+at all**, printing "Day 15 monthly" on a French screen.
+
+The cause was one shape repeated: an optional translator with an English
+sentence beside every key, "for a test or an export". No export called any of
+them, and the only code taking the English branch was the test asserting the
+English. The translator is required now, so it is a thing that does not
+compile rather than a thing to remember.
+
+### Thirteen typefaces
+
+Arial, Verdana, Trebuchet MS, Tahoma, Garamond, Palatino and Courier New join
+the six families. Named, because somebody who wants Verdana wants Verdana, and
+grouped by kind rather than sorted, because an alphabetical list interleaves
+Arial with Courier.
+
+### Ten themes, and one you build
+
+Four more presets, and a custom theme: you choose three colours — the page,
+the cards, the accent — and the other eleven tokens are derived by walking
+toward the ink until each clears its contrast floor. Your blue stays your
+blue; the words on it are legible because they were worked out to be. It
+persists, and the printed report takes your accent onto paper while the paper
+stays white.
+
+Proved over ten hostile palettes in unit tests, and then through the real
+picker in a browser, which found three more defects — the scheme was chosen by
+a luminance cut-off while the ink was chosen by measurement, and the two
+disagree exactly in the middle of the range.
+
+### Statistics say which currencies the money was in
+
+Every other figure converts, which answers "how much" and not "in what". Two
+new blocks keep the recorded amounts — what was spent and what the wallet
+holds, currency by currency — with the transaction count beside them, because
+one $2,000 flight and forty €12 lunches otherwise make dollars look like the
+currency this budget lives in.
+
+### An aeroplane that cannot roll half a wingspan in one frame
+
+Measured per rendered frame, the escorts' wings snapped from 0.450 span to
+0.947 in sixteen milliseconds where the routine meets the rejoin. Fixed with a
+finite roll rate — the drawn attitude chases the demanded one, carried across
+frames and across phases — and a curvature estimated over a baseline long
+enough to be smooth. Worst step per frame: 0.497 → 0.047.
+
+### Tests that do not go red at midnight
+
+Thirty-five store tests failed on the first of September with no change to any
+of them: their August fixtures had become the past, and the store correctly
+refuses to edit a closed month. They pin the clock now — mid-month, because a
+machine ahead of UTC reads the 31st at 21:00Z as the first of the next month,
+which is how the first attempt at the fix failed the same way.
+
+1010 tests, 64 browser checks, and 12 more that walk the tour itself.
 
 ## 5.0.0 — 2026-08-31 — Fewer places, less text, and the data actually saving
 
