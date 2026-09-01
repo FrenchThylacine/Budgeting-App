@@ -62,7 +62,9 @@ export const ScenarioLab: React.FC = () => {
             >
               <Check size={14} /> {t("scenarios.saveCurrent")}
             </Button>
-            <Button variant="primary" size="sm" disabled={!mutable} onClick={() => setEditing("new")}>
+            {/* A stable hook, like `data-tab`: the tour lights this control up
+                and the harness presses it. */}
+            <Button variant="primary" size="sm" data-action="new-scenario" disabled={!mutable} onClick={() => setEditing("new")}>
               <Plus size={14} /> {t("scenarios.new")}
             </Button>
           </div>

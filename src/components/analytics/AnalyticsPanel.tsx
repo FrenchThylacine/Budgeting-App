@@ -1,4 +1,4 @@
-import React, { Suspense, lazy, useMemo } from "react";
+import React, { Suspense, lazy, useCallback, useMemo } from "react";
 import { calculateYear } from "../../domain/calculations";
 import { isHistoricalPeriod, periodLabel } from "../../domain/periods";
 import {
@@ -9,6 +9,7 @@ import {
   categoryMonthlySeries,
   cumulativeForecast,
   dailySpendingCalendar,
+  currencyDistribution,
   entriesForSelectedPeriod,
   financialHealth,
   monthlyTrendBars,
@@ -22,6 +23,8 @@ import {
 import { useBudgetStore } from "../../store/budgetStore";
 import { activityBudgetSummary, fundingShares } from "../../domain/activityBudget";
 import { FUNDING_KINDS, FUNDING_META } from "../../domain/funding";
+import { walletComposition, type WalletCurrencySlice } from "../../domain/wallet";
+import { formatMoney } from "../../domain/currency";
 import { useTranslation } from "../../i18n/useTranslation";
 import { formatDualMoney } from "../../utils/formatters";
 import { EmptyState } from "../ui/EmptyState";
@@ -150,7 +153,12 @@ const GRADE_COLOR: Record<string, string> = {
 // ─── Main Panel ───────────────────────────────────────────────────────────────
 
 export const AnalyticsPanel: React.FC = () => {
-  const { t, language, formatPercent } = useTranslation();
+  const { t, language, formatPercent, monthNames } = useTranslation();
+  /*
+   * The week marker under a bar. "W28" is English; each language writes its
+   * own, which is why this is a key rather than a prefix glued to a number.
+   */
+  const weekAxis = useCallback((week: number) => t("chart.weekAxis", { week }), [t]);
   const snapshot = useBudgetStore((state) => state.snapshot);
   const { settings } = snapshot;
   const mode = settings.selectedPeriodMode ?? "month";
@@ -160,6 +168,17 @@ export const AnalyticsPanel: React.FC = () => {
   const calc = useMemo(() => calculateYear(snapshot), [snapshot]);
 
   const periodEntries = useMemo(() => entriesForSelectedPeriod(snapshot, settings), [snapshot, settings]);
+
+  /*
+   * Which currencies the money was actually in.
+   *
+   * Every other figure on this page is converted into the display currency,
+   * which is the right answer to "how much" and the wrong answer to "in what".
+   * These two keep the original amounts: what was spent, currency by currency,
+   * and what the wallet is holding right now.
+   */
+  const currencySlices = useMemo(() => currencyDistribution(periodEntries, snapshot), [periodEntries, snapshot]);
+  const walletSlices = useMemo(() => walletComposition(snapshot), [snapshot]);
   const includedEntries = useMemo(
     () => budgetRelevantEntries(periodEntries, settings),
     [periodEntries, settings],
@@ -184,8 +203,8 @@ export const AnalyticsPanel: React.FC = () => {
     () => cumulativeForecast(includedEntries, snapshot, settings),
     [includedEntries, snapshot, settings],
   );
-  const categoryEvolution = useMemo(() => categoryMonthlySeries(snapshot, settings, 4), [snapshot, settings]);
-  const recurringSplit = useMemo(() => recurringMonthlySplit(snapshot, settings), [snapshot, settings]);
+  const categoryEvolution = useMemo(() => categoryMonthlySeries(snapshot, settings, monthNames("short"), 4), [snapshot, settings]);
+  const recurringSplit = useMemo(() => recurringMonthlySplit(snapshot, settings, monthNames("short")), [snapshot, settings]);
   /**
    * Activity costs, from the same module the Activities tab and the reports
    * read. The statistics page does no costing of its own.
@@ -196,7 +215,7 @@ export const AnalyticsPanel: React.FC = () => {
   );
 
   const recentBars = useMemo(
-    () => recentPeriodTotals(snapshot, settings, mode === "year" ? 5 : 8),
+    () => recentPeriodTotals(snapshot, settings, monthNames("short"), weekAxis, mode === "year" ? 5 : 8),
     [snapshot, settings, mode],
   );
 
@@ -213,11 +232,11 @@ export const AnalyticsPanel: React.FC = () => {
   }, [mode, settings, snapshot]);
 
   const monthlyBars = useMemo(
-    () => monthlyTrendBars(calc.monthlyTrend, mode === "year" ? -1 : settings.selectedMonth),
+    () => monthlyTrendBars(calc.monthlyTrend, mode === "year" ? -1 : settings.selectedMonth, monthNames("short")),
     [calc.monthlyTrend, mode, settings.selectedMonth],
   );
   const weeklyBars = useMemo(
-    () => weeklyTrendBars(calc.weeklyTrend, settings.selectedWeek, 12),
+    () => weeklyTrendBars(calc.weeklyTrend, settings.selectedWeek, weekAxis, 12),
     [calc.weeklyTrend, settings.selectedWeek],
   );
 
@@ -826,6 +845,70 @@ export const AnalyticsPanel: React.FC = () => {
           )}
         </div>
       </Section>
+
+      {/* ── Currencies ─────────────────────────────────────────────────────── */}
+
+      {/*
+        The one place on this page that does not convert.
+        
+        A budget that pays a Lebanese rent in dollars and buys lunch in euros
+        has two facts to report, and only one of them is a total: how much, and
+        in what. Everything above answers the first. These answer the second,
+        with the amounts exactly as they were recorded — the converted figure
+        is here only so two currencies can share a bar.
+      */}
+      {(currencySlices.length > 0 || walletSlices.length > 0) && (
+        <Section title={t("stats.currencies")} collapsible defaultOpen={currencySlices.length > 1}>
+          <div style={{ display: "grid", gap: 16, minWidth: 0 }}>
+            {currencySlices.length > 0 && (
+              <ChartCard title={t("stats.spentByCurrency")} subtitle={t("stats.spentByCurrencyHint")}>
+                <HorizontalBarChart
+                  title={t("stats.ariaSpentByCurrency")}
+                  rows={currencySlices.map((slice) => ({
+                    id: slice.currency,
+                    label: slice.currency,
+                    value: slice.converted,
+                    /* The amount in its own currency goes in the visible
+                       caption, not in a tooltip: it is the fact this chart
+                       exists to show, and a fact behind a hover is a fact
+                       nobody on a phone will ever read. */
+                    caption: `${formatMoney(slice.amount, slice.currency as never, settings.currencyDisplayMode)} · ${
+                      slice.share != null
+                        ? t("stats.currencyShare", {
+                            share: formatPercent(slice.share / 100, 1),
+                            count: slice.count,
+                          })
+                        : t("stats.currencyCountOnly", { count: slice.count })
+                    }`,
+                  }))}
+                  formatValue={money}
+                />
+              </ChartCard>
+            )}
+
+            {walletSlices.length > 0 && (
+              <ChartCard title={t("stats.walletByCurrency")} subtitle={t("stats.walletByCurrencyHint")}>
+                <HorizontalBarChart
+                  title={t("stats.ariaWalletByCurrency")}
+                  rows={walletSlices.map((slice: WalletCurrencySlice) => ({
+                    id: slice.currency,
+                    label: slice.currency,
+                    /* Absolute, because a bar cannot be negative — the sign is
+                       in the caption, where a reader can see that this pocket
+                       is overdrawn rather than merely small. */
+                    value: Math.abs(slice.converted),
+                    caption: `${formatMoney(slice.amount, slice.currency as never, settings.currencyDisplayMode)}${
+                      slice.share != null ? ` · ${formatPercent(Math.abs(slice.share) / 100, 1)}` : ""
+                    }`,
+                    tone: slice.amount < 0 ? "danger" : undefined,
+                  }))}
+                  formatValue={money}
+                />
+              </ChartCard>
+            )}
+          </div>
+        </Section>
+      )}
 
       {/* ── History ────────────────────────────────────────────────────────── */}
       <Section title={t("stats.periodComparison")} collapsible defaultOpen={false}>

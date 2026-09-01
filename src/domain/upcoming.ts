@@ -93,10 +93,19 @@ function hasPaymentBaseline(activity: Activity): boolean {
 
 export function upcomingSchedule(
   snapshot: BudgetSnapshot,
+  /**
+   * Required, because everything this produces is read on a screen.
+   *
+   * Second rather than last: `from` and `horizonDays` both have defaults, and
+   * a required argument cannot sit behind an optional one. It used to be
+   * optional, with English beside every key for "a test or an export" — no
+   * export calls it, the screen always passes one, and the only caller taking
+   * that branch was the test asserting the English. Tests pass the
+   * application's own English translator: `tests/lib/english.ts`.
+   */
+  t: (key: string, params?: Record<string, string | number>) => string,
   from = new Date(),
   horizonDays = 14,
-  /** Optional, so a test or an export gets the English wording as before. */
-  t?: (key: string, params?: Record<string, string | number>) => string,
 ): UpcomingSchedule {
   const record = snapshot.years[String(snapshot.settings.selectedYear)];
   const activities = (record?.activities ?? []).filter((a) => a.active && a.visible);
@@ -230,7 +239,7 @@ export function localDayKey(date: Date): string {
 export function dayLabel(
   date: Date,
   now = new Date(),
-  t?: (key: string, params?: Record<string, string | number>) => string,
+  t: (key: string, params?: Record<string, string | number>) => string,
   formatDate?: (value: Date, options?: Intl.DateTimeFormatOptions) => string,
 ): string {
   const format = formatDate ?? ((value: Date, options?: Intl.DateTimeFormatOptions) => value.toLocaleDateString(undefined, options));
@@ -239,8 +248,8 @@ export function dayLabel(
       new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime()) /
       86_400_000,
   );
-  if (days === 0) return t ? t("upcoming.today") : "Today";
-  if (days === 1) return t ? t("upcoming.tomorrow") : "Tomorrow";
+  if (days === 0) return t("upcoming.today");
+  if (days === 1) return t("upcoming.tomorrow");
   if (days > 1 && days < 7) return format(date, { weekday: "long" });
   return format(date, { weekday: "short", day: "numeric", month: "short" });
 }

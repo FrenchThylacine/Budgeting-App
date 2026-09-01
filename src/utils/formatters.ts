@@ -47,6 +47,11 @@ export interface ActivityDraft {
   dayOfMonth: string;
   startDate: string;
   nextRenewalDate: string;
+  /** Instalment plan, as typed. Empty strings when the model is not in use. */
+  installmentCount: string;
+  installmentAmount: string;
+  installmentFrequency: "monthly" | "yearly" | "custom";
+  installmentIntervalDays: string;
 }
 
 export interface WishlistDraft {
@@ -144,6 +149,11 @@ export function activityToDraft(activity: Activity | null, snapshot: BudgetSnaps
     dayOfMonth: valueToInput(activity?.dayOfMonth),
     startDate: activity?.startDate ?? "",
     nextRenewalDate: activity?.nextRenewalDate ?? "",
+    installmentCount: activity?.installmentCount != null ? String(activity.installmentCount) : "",
+    installmentAmount: activity?.installmentAmount != null ? String(activity.installmentAmount) : "",
+    installmentFrequency: activity?.installmentFrequency ?? "monthly",
+    installmentIntervalDays:
+      activity?.installmentIntervalDays != null ? String(activity.installmentIntervalDays) : "",
   };
 }
 
@@ -192,6 +202,15 @@ export function activityPayloadFromDraft(draft: ActivityDraft): Omit<Activity, "
     dayOfMonth: clampDayOfMonth(parseAmount(draft.dayOfMonth)),
     startDate: draft.startDate.trim() || undefined,
     nextRenewalDate: draft.nextRenewalDate.trim() || undefined,
+    /*
+     * Only the per-payment figure is stored, never the total: the editor lets
+     * somebody type either and derives the other, and two stored numbers that
+     * must agree is a pair that will one day disagree.
+     */
+    installmentCount: parseAmount(draft.installmentCount),
+    installmentAmount: parseAmount(draft.installmentAmount),
+    installmentFrequency: draft.installmentFrequency,
+    installmentIntervalDays: parseAmount(draft.installmentIntervalDays),
   };
 }
 

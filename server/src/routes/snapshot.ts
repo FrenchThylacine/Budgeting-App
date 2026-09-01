@@ -7,6 +7,7 @@ import { ALL_CURRENCY_CODES } from "../../../src/domain/currencies.js";
 import { LANGUAGES } from "../../../src/domain/languages.js";
 import { AIRCRAFT_IDS, FLEET_IDS } from "../../../src/domain/aircraft.js";
 import { FONT_IDS } from "../../../src/domain/fonts.js";
+import { CADENCE_ICON_CHOICES } from "../../../src/domain/cadence.js";
 import { APPEARANCES, THEME_IDS } from "../../../src/domain/theme.js";
 
 /**
@@ -114,11 +115,43 @@ const SETTINGS_FIELDS: Record<string, SettingsFieldCheck> = {
         typeof colour === "string" &&
         /^#[0-9a-fA-F]{6}$/.test(colour),
     ),
+  /**
+   * The three colours a reader's own theme is built from.
+   *
+   * The same rule as `statusColours` and for the same reason: these reach a
+   * stylesheet. Exactly three keys, each a six-digit hex — no extras, because
+   * an unexpected key here would be a token nobody derived and nobody checked
+   * the contrast of.
+   */
+  customTheme: (value) => {
+    if (value == null || typeof value !== "object" || Array.isArray(value)) return false;
+    const entries = Object.entries(value as Record<string, unknown>);
+    if (entries.length !== 3) return false;
+    return entries.every(
+      ([part, colour]) =>
+        ["background", "surface", "accent"].includes(part) &&
+        typeof colour === "string" &&
+        /^#[0-9a-fA-F]{6}$/.test(colour),
+    );
+  },
   // "YYYY-MM", the month the deferral was given for.
   leftoverDeferredFor: (value) => typeof value === "string" && /^\d{4}-(0[1-9]|1[0-2])$/.test(value),
   // An id from the font table, never a CSS stack: this value reaches a
   // stylesheet, and the table is the only thing allowed to say what a font is.
   fontChoice: isOneOf(FONT_IDS),
+  // A map of cadence to icon name. Both sides are checked against the tables
+  // rather than accepted as strings: these values choose a component, and an
+  // unknown one would render nothing at all.
+  cadenceIcons: (value) =>
+    value != null &&
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    Object.entries(value as Record<string, unknown>).every(
+      ([cadence, icon]) =>
+        cadence in CADENCE_ICON_CHOICES &&
+        typeof icon === "string" &&
+        (CADENCE_ICON_CHOICES as Record<string, readonly string[]>)[cadence].includes(icon),
+    ),
   language: (value) => typeof value === "string" && LANGUAGE_CODES.has(value),
   appearance: isOneOf(APPEARANCES),
   themePreset: isOneOf(THEME_IDS),

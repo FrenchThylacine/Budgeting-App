@@ -1,7 +1,6 @@
-import React, { useMemo, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import { useBudgetStore } from "../../store/budgetStore";
 import { calculateYear, calculateSuggestedMonthlyBudget } from "../../domain/calculations";
-import { monthName } from "../../domain/dates";
 import {
   budgetPacing,
   budgetRelevantEntries,
@@ -41,10 +40,11 @@ import {
 } from "lucide-react";
 import { EditorSheet } from "../ui/EditorSheet";
 import { FundingMark } from "../ui/FundingMark";
-import { Total } from "../ui/Money";
+import { Money, Total } from "../ui/Money";
 import { useTranslation } from "../../i18n/useTranslation";
 import type { Translator } from "../../domain/i18n";
 import { storedText } from "../../domain/storedText";
+import { walletComposition } from "../../domain/wallet";
 import {
   dashboardWidgets,
   moveWidget,
@@ -140,7 +140,12 @@ const Figure: React.FC<{
 export const Dashboard: React.FC<{ onNavigate?: (tab: "spending" | "activities" | "settings") => void }> = ({
   onNavigate,
 }) => {
-  const { t, language } = useTranslation();
+  const { t, language, monthNames } = useTranslation();
+  /*
+   * The week marker under a bar. "W28" is English; each language writes its
+   * own, which is why this is a key rather than a prefix glued to a number.
+   */
+  const weekAxis = useCallback((week: number) => t("chart.weekAxis", { week }), [t]);
   const snapshot = useBudgetStore((state) => state.snapshot);
   const recordBudgetApproval = useBudgetStore((state) => state.recordBudgetApproval);
   const updateSettings = useBudgetStore((state) => state.updateSettings);
@@ -175,6 +180,11 @@ export const Dashboard: React.FC<{ onNavigate?: (tab: "spending" | "activities" 
 
   const isCurrent = isViewingCurrentMonth(settings);
   const money = (value: number | null | undefined) => formatDualMoney(value, settings);
+  /*
+   * What the wallet actually holds, currency by currency. The same selector
+   * the Wallet tab and the statistics use, so the three cannot drift.
+   */
+  const walletHoldings = useMemo(() => walletComposition(snapshot), [snapshot]);
   const healthColor = health.grade ? GRADE_COLOR[health.grade] ?? "var(--accent)" : "var(--text-tertiary)";
 
   /** Who paid for this period's transactions. See domain/funding.ts. */
@@ -184,8 +194,8 @@ export const Dashboard: React.FC<{ onNavigate?: (tab: "spending" | "activities" 
   const trendBars = useMemo(
     () =>
       mode === "week"
-        ? weeklyTrendBars(calculation.weeklyTrend, settings.selectedWeek, 12)
-        : monthlyTrendBars(calculation.monthlyTrend, mode === "year" ? -1 : settings.selectedMonth),
+        ? weeklyTrendBars(calculation.weeklyTrend, settings.selectedWeek, weekAxis, 12)
+        : monthlyTrendBars(calculation.monthlyTrend, mode === "year" ? -1 : settings.selectedMonth, monthNames("short")),
     [mode, calculation.weeklyTrend, calculation.monthlyTrend, settings.selectedWeek, settings.selectedMonth],
   );
   /** Two months is the floor for a trend; below it there is nothing to draw. */
@@ -669,8 +679,15 @@ export const Dashboard: React.FC<{ onNavigate?: (tab: "spending" | "activities" 
                       {t(existingApproval.status === "approved" ? "dashboard.budgetApproved" : "dashboard.budgetRejected")}
                     </div>
                     <div className="text-caption" style={{ marginTop: 4 }}>
-                      {monthName(existingApproval.month)} {existingApproval.year} · suggested{" "}
-                      {money(existingApproval.suggestedAmount)}
+                      {/* `monthNames()` from the hook, not the English-only
+                          `monthName()`: this line read "August 2026" on a
+                          French screen. The sentence around it is a key too —
+                          " · suggested" was English written into the markup. */}
+                      {t("dashboard.approvalSuggested", {
+                        month: monthNames()[existingApproval.month - 1] ?? String(existingApproval.month),
+                        year: existingApproval.year,
+                        amount: money(existingApproval.suggestedAmount),
+                      })}
                     </div>
                   </div>
                   <Badge tone={existingApproval.status === "approved" ? "success" : "neutral"}>
@@ -700,35 +717,45 @@ export const Dashboard: React.FC<{ onNavigate?: (tab: "spending" | "activities" 
           <Card>
             <CardBody>
               <div style={{ display: "grid", gap: 14 }}>
+                {/* Wallet balance, and nothing else.
+
+                    This card used to carry the balance, the remaining budget,
+                    the personal balance and a year-to-date figure — a treasury
+                    summary on a dashboard, four inches from the Wallet tab that
+                    exists to hold exactly that. What somebody wants from a
+                    dashboard is *how much money is there*. The breakdown lives
+                    one press away, where it is the subject rather than an
+                    aside.
+
+                    The figure comes from the same `calculation.wallet` the
+                    Wallet tab reads, so the two cannot disagree. */}
                 <div>
                   <div className="text-footnote" style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
                     <CreditCard size={14} /> {t("wallet.balance")}
                   </div>
-                  {/* The real cash figure, from the ledger — not the planning
-                      budget, and not a per-year slice of it. The Wallet tab
-                      breaks it into budget and personal money. */}
-                  {/* `Total`, not `money()` — this is an aggregate, so it is
-                      the figure the optional second currency belongs under.
-                      `formatDualMoney` prints the display currency and stops,
-                      which meant the one balance somebody with two currencies
-                      most wants to read twice was the one that only appeared
-                      once. */}
                   <div className="text-headline money">
-                    <Total amount={calculation.wallet.walletTotal} />
+                    {walletHoldings.length === 1 && walletHoldings[0].currency !== settings.baseCurrency ? (
+                      /* One currency, and not the one everything is displayed
+                         in: the balance *is* that amount, so it is printed as
+                         itself with the display equivalent underneath rather
+                         than converted away. A wallet holding 200 USD holds
+                         200 USD, whatever it is worth today. */
+                      <Money amount={walletHoldings[0].amount} currency={walletHoldings[0].currency} strong />
+                    ) : (
+                      <Total amount={calculation.wallet.walletTotal} />
+                    )}
                   </div>
                 </div>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: 12 }}>
-                  <Figure
-                    label={t("wallet.budgetRemaining")}
-                    value={money(calculation.wallet.budgetRemaining)}
-                    detail={t("report.budgetMoneyAvailable")}
-                    tone={calculation.wallet.budgetRemaining >= 0 ? "positive" : "negative"}
-                  />
-                  <Figure
-                    label={t("wallet.personalBalance")}
-                    value={money(calculation.wallet.personalBalance)}
-                    detail={t("dashboard.moneyOutsideYourBudget")}
-                  />
+              </div>
+            </CardBody>
+          </Card>
+
+          {/* Not wallet money, and so not on the wallet card. A wishlist total
+              is a plan and a year-to-date figure is spending; putting either
+              beside a cash balance invites them to be read as part of it. */}
+          <Card>
+            <CardBody>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: 12 }}>
                   <Figure
                     label={t("nav.wishlist")}
                     value={money(calculation.wishlist.activeTotal)}
@@ -752,7 +779,6 @@ export const Dashboard: React.FC<{ onNavigate?: (tab: "spending" | "activities" 
                         : undefined
                     }
                   />
-                </div>
               </div>
             </CardBody>
           </Card>

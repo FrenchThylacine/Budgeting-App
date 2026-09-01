@@ -2686,6 +2686,48 @@ label:has(> input[type="radio"]) {
 
 .tutorial-card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
+/* The step's control, lit up
+   ─────────────────────────
+   Four shades and a ring rather than one enormous box-shadow: the cut-out has
+   to be genuinely clear, because the control inside it is the thing the reader
+   is being asked to press. Everything here is `pointer-events: none`, so the
+   dimming is only dimming — the button underneath stays live. */
+.tutorial-spotlight {
+  position: fixed;
+  inset: 0;
+  z-index: 89;
+  pointer-events: none;
+}
+
+.tutorial-shade {
+  position: fixed;
+  background: rgba(3, 20, 48, 0.52);
+  transition: opacity 180ms ease;
+}
+
+.tutorial-ring {
+  position: fixed;
+  border-radius: var(--radius-md);
+  border: 2px solid var(--accent);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 28%, transparent);
+  animation: tutorialPulse 1.8s ease-in-out infinite;
+}
+
+@keyframes tutorialPulse {
+  0%, 100% { box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 28%, transparent); }
+  50% { box-shadow: 0 0 0 9px color-mix(in srgb, var(--accent) 12%, transparent); }
+}
+
+/* Anchored beside the highlight rather than parked at the bottom. The
+   coordinates come from `getBoundingClientRect`, so the card is positioned in
+   the same frame of reference: fixed to the viewport. */
+.tutorial-card-anchored {
+  position: fixed;
+  width: min(360px, calc(100vw - 24px));
+  max-height: min(70vh, 520px);
+  overflow-y: auto;
+}
+
 /* Reduced motion is honoured by *not adding* the animated class at all, rather
    than by animating to zero. See `Tutorial.tsx`. */
 .tutorial-card-animated { animation: tutorialRise 260ms cubic-bezier(0.2, 0.7, 0.3, 1) both; }
@@ -2740,11 +2782,22 @@ label:has(> input[type="radio"]) {
 @media (max-width: 768px) {
   .tutorial-layer { padding: var(--space-3) var(--space-3) calc(var(--space-3) + 68px); }
   .tutorial-card { width: 100%; padding: var(--space-4); }
+  /* Anchored on a phone too: the same rule applies, and it applies harder —
+     a full-width sheet over a small screen is exactly what hides the button
+     the step is asking for. The card narrows and sits beside the highlight. */
+  .tutorial-card-anchored {
+    left: 12px !important;
+    right: 12px !important;
+    width: auto;
+    max-height: 46vh;
+    padding: var(--space-4);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .tutorial-card-animated { animation: none; }
   .tutorial-track-fill { transition: none; }
+  .tutorial-ring { animation: none; }
 }
 
 /* ─── Right-to-left ───────────────────────────────────────────────────────── */
@@ -3039,6 +3092,52 @@ label:has(> input[type="radio"]) {
   display: grid;
   gap: var(--space-2);
   grid-template-columns: repeat(auto-fill, minmax(132px, 1fr));
+}
+
+/* The reader's own three colours
+   ─────────────────────────────
+   A row of native colour inputs. Native because the operating system's picker
+   is better than anything worth building here, and because it is the control
+   somebody already knows how to use. The hex is printed beside each one: a
+   swatch says which colour, and the value says which colour exactly. */
+.custom-theme {
+  display: grid;
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--separator);
+  justify-items: start;
+}
+
+.custom-theme-part {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  width: 100%;
+}
+
+.custom-theme-part > .text-callout { flex: 1; min-width: 0; }
+
+.custom-theme-input {
+  inline-size: 44px;
+  block-size: 30px;
+  padding: 2px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  cursor: pointer;
+}
+
+/* Safari and Chrome each wrap the swatch in their own box; without these the
+   chosen colour sits inside a white frame and reads as the wrong colour. */
+.custom-theme-input::-webkit-color-swatch-wrapper { padding: 0; }
+.custom-theme-input::-webkit-color-swatch { border: none; border-radius: 3px; }
+.custom-theme-input::-moz-color-swatch { border: none; border-radius: 3px; }
+
+.custom-theme-value {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.03em;
+  color: var(--text-tertiary);
 }
 
 .theme-swatch {
@@ -3737,8 +3836,22 @@ label:has(> input[type="radio"]) {
   gap: 4px;
 }
 
-.mark-legend-item[data-funding="other"] .funding-glyph { color: var(--funding-other-text); }
-.mark-legend-item[data-funding="outside"] .funding-glyph { color: var(--funding-outside-text); }
+/* The legend says it by being it.
+   A key that explains a colour in grey text is a key you have to decode; these
+   entries are set in the colour they describe, so "Paid by other" in blue is
+   both the label and the example. The colours are the configurable ones, so
+   changing them in Settings changes the legend with everything else. */
+.mark-legend-item[data-funding="other"],
+.mark-legend-item[data-funding="other"] .funding-glyph {
+  color: var(--funding-other-text);
+  font-weight: 600;
+}
+
+.mark-legend-item[data-funding="outside"],
+.mark-legend-item[data-funding="outside"] .funding-glyph {
+  color: var(--funding-outside-text);
+  font-weight: 600;
+}
 
 /* The wishlist's one remaining summary figure. A line, not a card: it used to
    sit in a container with two other numbers that the filter chips above it
@@ -3947,3 +4060,83 @@ label:has(> input[type="radio"]) {
 
 .font-option-name { font-weight: 600; font-size: 0.95rem; }
 .font-option-sample { font-size: 0.78rem; color: var(--text-secondary); }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Two facts, two channels
+   ═══════════════════════════════════════════════════════════════════════════
+
+   A row carries two independent pieces of information and they must not be
+   read as one:
+
+     CATEGORY  — what it is        → the outline around the card
+     FUNDING   — who pays for it   → the colour of the identifying text and the
+                                     figure
+
+   Keeping them on different channels is what lets somebody see a green-edged
+   card with blue text and know instantly that it is a Health activity somebody
+   else pays for. Putting both in colour on the same element would leave them
+   guessing which colour meant which. */
+
+.item-row[style*="--category-accent"] {
+  /* Visible, and nothing more. A category is context, not an alarm: the outline
+     is there to be recognised out of the corner of the eye, not read. */
+  border: 1px solid color-mix(in srgb, var(--category-accent) 55%, transparent);
+}
+
+/* A little more presence where the card is the subject of the screen. */
+.activity-row.item-row[style*="--category-accent"],
+.item-list .item-row[style*="--category-accent"]:hover {
+  border-color: color-mix(in srgb, var(--category-accent) 70%, transparent);
+}
+
+/* ── Funding, on the text that identifies the row ────────────────────────────
+   The amount alone was not enough: somebody scanning a list reads the *name*,
+   and the state has to be legible from the thing they are reading. `-text`
+   variants throughout — the fill colours are for shapes and do not clear AA as
+   text — and the treatment stops at these two elements so the card never
+   becomes a block of one colour. */
+.item-row[data-funding="other"] .text-callout,
+.item-row[data-funding="other"] .row-trailing strong,
+.item-row[data-funding="other"] .activity-amount strong {
+  color: var(--funding-other-text);
+}
+
+.item-row[data-funding="outside"] .text-callout,
+.item-row[data-funding="outside"] .row-trailing strong,
+.item-row[data-funding="outside"] .activity-amount strong {
+  color: var(--funding-outside-text);
+}
+
+/* The secondary line stays quiet: a date and a note are not funding facts, and
+   colouring them too is how a row becomes a block. */
+.item-row[data-funding="other"] .text-footnote,
+.item-row[data-funding="outside"] .text-footnote {
+  color: var(--text-secondary);
+}
+
+/* ── The payment-rhythm icon picker ───────────────────────────────────────────
+   One row per cadence, a few shapes each. Small, because the choice is small. */
+.cadence-icon-grid { display: grid; gap: 12px; }
+.cadence-icon-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.cadence-icon-row > .text-footnote { min-width: 7.5rem; }
+.cadence-icon-choices { display: flex; gap: 6px; }
+
+.cadence-icon-option {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.cadence-icon-option:hover { border-color: var(--border-strong); }
+
+.cadence-icon-option.is-active {
+  border-color: var(--accent);
+  color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}

@@ -215,14 +215,23 @@ describe("the preview", () => {
     expect(changes[0]).toMatchObject({ kind: "activity-enabled", label: "Gym", before: true, after: false });
   });
 
-  it("reports a funding override in words, not as a number", () => {
+  it("reports a funding override in words the interface can translate", () => {
+    /*
+     * Keys rather than English. It used to answer "Paid by other" — a sentence
+     * chosen by a domain module, rendered verbatim by the apply dialog, and so
+     * printed in English on an Arabic screen. The kind is still carried, for
+     * anything that wants to reason about it rather than show it.
+     */
     const changes = scenarioDiff(
       snapshot,
       preset({ activityStates: { [lessons.id]: { enabled: true, funding: "other" } } }),
     );
     expect(changes).toHaveLength(1);
     expect(changes[0].kind).toBe("activity-funding");
-    expect(String(changes[0].after)).toMatch(/paid by other/i);
+    expect(changes[0].before).toBe("personal");
+    expect(changes[0].after).toBe("other");
+    expect(changes[0].beforeKey).toBe("funding.personal.short");
+    expect(changes[0].afterKey).toBe("funding.other.short");
   });
 
   it("says nothing when the scenario restates what is already true", () => {

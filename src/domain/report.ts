@@ -1,6 +1,7 @@
 import type { BudgetSnapshot, Settings } from "./types";
 import { activityBudgetSummary, type FundingTotals } from "./activityBudget";
 import { FUNDING_KINDS, FUNDING_META, type FundingKind } from "./funding";
+import { parseHex, reachContrast, toHex } from "./colour";
 import { sanitiseStatusColours, type StatusColours } from "./statusColours";
 import { createTranslator, formatDate, formatNumber, formatPercent, monthNames, type Translator } from "./i18n";
 import { calculateYear, normalizeEntry } from "./calculations";
@@ -566,6 +567,20 @@ export interface ReportHtmlOptions {
    * inconsistency this pass exists to remove.
    */
   fontStack?: string | null;
+  /**
+   * The reader's accent, as a hex colour.
+   *
+   * The paper stays white and the ink stays dark, whatever theme is on screen:
+   * a report is printed, and printing a dark background wastes toner to produce
+   * something harder to read. What *does* follow the theme is the accent —
+   * section rules, the heading colour, the chart fills — so a report from a
+   * green budget looks like that budget rather than like a different product.
+   *
+   * Darkened on the way in until it clears 4.5:1 on white, because that accent
+   * carries text. A pale yellow that reads well as a button on a dark page is
+   * invisible as a heading on paper.
+   */
+  themeAccent?: string | null;
 }
 
 export function reportHtml(
@@ -575,6 +590,17 @@ export function reportHtml(
   options: ReportHtmlOptions = {},
 ): string {
   const chosen = sanitiseStatusColours(options.statusColours);
+  /*
+   * The reader's accent, made safe for paper.
+   *
+   * Pushed until it clears 4.5:1 on white — it colours section headings and
+   * the print button's label — and falling back to the report's own navy when
+   * no theme accent was given or the value is not a colour.
+   */
+  const accentRgb = options.themeAccent ? parseHex(options.themeAccent) : null;
+  const printAccent = accentRgb
+    ? toHex(reachContrast(accentRgb, { r: 255, g: 255, b: 255 }, 4.5))
+    : "#12326B";
   const ink: Record<FundingKind, string> = { ...FUNDING_COLOUR, ...chosen };
   const maxMonthly = Math.max(...report.monthly.map((m) => m.value ?? 0), 1);
   const maxCategory = Math.max(...report.categories.map((c) => c.total), 1);
@@ -775,7 +801,7 @@ export function reportHtml(
     --ink-faint: #7B8698;
     --rule: #E2E7EE;
     --rule-soft: #F2F5F8;
-    --navy: #12326B;
+    --navy: ${printAccent};
     --accent: #C8102E;
     --blue: #1E3FA8;
   }

@@ -1,15 +1,33 @@
 import React from "react";
 import {
+  Boxes,
+  Cake,
   CalendarCheck,
+  CalendarCheck2,
   CalendarClock,
   CalendarDays,
-  Dot,
+  CalendarFold,
+  CalendarRange,
+  CalendarSync,
+  CircleDot,
+  Clock,
+  CreditCard,
+  Divide,
+  Dumbbell,
   Layers,
+  ListChecks,
+  Milestone,
+  Package,
+  Receipt,
+  RefreshCw,
   Repeat,
+  Split,
   Ticket,
+  Timer,
   type LucideIcon,
 } from "lucide-react";
-import { CADENCE_META, type Cadence } from "../../domain/cadence";
+import { CADENCE_META, cadenceIcon, type Cadence } from "../../domain/cadence";
+import { useBudgetStore } from "../../store/budgetStore";
 import { useTranslation } from "../../i18n/useTranslation";
 
 /**
@@ -20,13 +38,34 @@ import { useTranslation } from "../../i18n/useTranslation";
  * turns a name into a shape.
  */
 const ICONS: Record<string, LucideIcon> = {
+  // The defaults.
   Repeat,
   CalendarClock,
   CalendarDays,
   CalendarCheck,
   Ticket,
   Layers,
-  Dot,
+  Milestone,
+  Divide,
+  // And the alternatives a reader can choose in Settings. Named explicitly
+  // rather than imported as a namespace: a bundle that carries every icon in
+  // the library to make a picker work is a picker that costs 400kB.
+  CalendarSync,
+  RefreshCw,
+  CalendarRange,
+  Cake,
+  CalendarCheck2,
+  Clock,
+  CalendarFold,
+  ListChecks,
+  Timer,
+  Dumbbell,
+  Package,
+  Boxes,
+  CircleDot,
+  Receipt,
+  Split,
+  CreditCard,
 };
 
 interface CadenceMarkProps {
@@ -42,6 +81,14 @@ interface CadenceMarkProps {
   variant?: "icon" | "chip";
   /** Extra detail after the label — "every 10 sessions", "renews 15 Sept". */
   detail?: string;
+  /**
+   * A visible label already accompanies this mark, so it carries none itself.
+   *
+   * The `icon` variant hides its word in an `sr-only` span, which is right on a
+   * dense row and wrong in a legend that prints the word beside it: a screen
+   * reader then hears "Monthly Monthly".
+   */
+  labelled?: boolean;
   className?: string;
 }
 
@@ -61,11 +108,13 @@ export const CadenceMark: React.FC<CadenceMarkProps> = ({
   cadence,
   variant = "icon",
   detail,
+  labelled = false,
   className = "",
 }) => {
   const { t } = useTranslation();
+  const chosen = useBudgetStore((state) => state.snapshot.settings.cadenceIcons);
   const meta = CADENCE_META[cadence];
-  const Icon = ICONS[meta.icon] ?? Dot;
+  const Icon = ICONS[cadenceIcon(cadence, chosen)] ?? Milestone;
   const label = t(meta.labelKey);
   const full = detail ? `${label} · ${detail}` : label;
 
@@ -82,7 +131,18 @@ export const CadenceMark: React.FC<CadenceMarkProps> = ({
   return (
     <span className={`cadence-mark ${className}`.trim()} data-cadence={cadence} title={full}>
       <Icon size={14} aria-hidden="true" />
-      <span className="sr-only">{full}</span>
+      {!labelled && <span className="sr-only">{full}</span>}
     </span>
   );
+};
+
+/**
+ * One icon, drawn by name.
+ *
+ * Exported so the Settings picker can show the alternatives without a second
+ * copy of the name-to-component table — which is the table that would drift.
+ */
+export const CadenceIconPreview: React.FC<{ name: string; size?: number }> = ({ name, size = 16 }) => {
+  const Icon = ICONS[name] ?? Milestone;
+  return <Icon size={size} aria-hidden="true" />;
 };

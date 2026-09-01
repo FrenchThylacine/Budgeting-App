@@ -35,7 +35,7 @@ export const UpcomingSchedule: React.FC<UpcomingScheduleProps> = ({ snapshot, mo
   const mutable = useBudgetStore((s) => s.isCurrentPeriodMutable)();
   const [editing, setEditing] = useState<{ activity: Activity; date: Date } | null>(null);
 
-  const { occurrences, undated, horizonDays } = upcomingSchedule(snapshot, now, 14, t);
+  const { occurrences, undated, horizonDays } = upcomingSchedule(snapshot, t, now, 14);
   const allDays = groupByDay(occurrences);
 
   // A twice-weekly activity alone fills a fortnight. Showing every day turns
@@ -98,8 +98,13 @@ export const UpcomingSchedule: React.FC<UpcomingScheduleProps> = ({ snapshot, mo
                           ? item.cycleNote
                           : (
                             <>
-                              {describeSchedule(item.activity)}
-                              {item.manual && " · renewal date you set"}
+                              {/* The translator was missing here, so this line
+                                  printed "Day 15 monthly" on a French screen —
+                                  and the marker beside it was English written
+                                  straight into the markup. Both found by making
+                                  the translator a required argument. */}
+                              {describeSchedule(item.activity, t)}
+                              {item.manual && ` · ${t("upcoming.renewalDateYouSet")}`}
                             </>
                           )}
                       </span>

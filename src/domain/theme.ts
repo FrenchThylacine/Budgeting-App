@@ -49,6 +49,10 @@ export interface ThemePreset {
    * the absence of light. There is no light version of that idea, and inventing
    * one would produce a seventh theme wearing the sixth one's name. The
    * appearance control says so rather than silently ignoring the choice.
+   *
+   * The theme the reader builds is the same situation arrived at differently:
+   * they chose one background, so there is one scheme, and which one it is
+   * follows from the colour they picked rather than from a switch.
    */
   darkOnly?: boolean;
   /** Three colours for the picker: ground, surface, accent. */
@@ -298,10 +302,171 @@ export const THEME_PRESETS: ThemePreset[] = [
       "--accent-contrast": "#150A28",
     },
   },
+  {
+    id: "forest",
+    labelKey: "theme.forest",
+    swatch: ["#F1F6F1", "#FFFFFF", "#1B6E3C"],
+    light: {
+      "--bg": "#F1F6F1",
+      "--bg-elevated": "#FFFFFF",
+      "--bg-subtle": "#F8FBF8",
+      "--bg-inset": "#E5EAE5",
+      "--text-primary": "#030D07",
+      "--text-secondary": "#5D6560",
+      "--text-tertiary": "#636A65",
+      "--border": "#D3D9D4",
+      "--border-strong": "#BBC2BC",
+      "--separator": "#DFE5DF",
+      "--accent": "#1B6E3C",
+      "--accent-soft": "#D3E3D8",
+      "--accent-hover": "#165A31",
+      "--accent-contrast": "#FFFFFF",
+    },
+    dark: {
+      "--bg": "#080F0A",
+      "--bg-elevated": "#122015",
+      "--bg-subtle": "#0D1810",
+      "--bg-inset": "#141B16",
+      "--text-primary": "#ECFAF1",
+      "--text-secondary": "#848E88",
+      "--text-tertiary": "#7E8982",
+      "--border": "#1F2721",
+      "--border-strong": "#303832",
+      "--separator": "#19211B",
+      "--accent": "#5FD98A",
+      "--accent-soft": "#142B1C",
+      "--accent-hover": "#7CE09F",
+      "--accent-contrast": "#000000",
+    },
+  },
+  {
+    id: "ember",
+    labelKey: "theme.ember",
+    swatch: ["#FBF3EE", "#FFFFFF", "#B5451B"],
+    light: {
+      "--bg": "#FBF3EE",
+      "--bg-elevated": "#FFFFFF",
+      "--bg-subtle": "#FDF9F7",
+      "--bg-inset": "#EEE7E2",
+      "--text-primary": "#160803",
+      "--text-secondary": "#6C615C",
+      "--text-tertiary": "#6E645F",
+      "--border": "#DED6D1",
+      "--border-strong": "#C7BEB9",
+      "--separator": "#EAE1DC",
+      "--accent": "#B5451B",
+      "--accent-soft": "#F1DBD0",
+      "--accent-hover": "#943916",
+      "--accent-contrast": "#FFFFFF",
+    },
+    dark: {
+      "--bg": "#140B07",
+      "--bg-elevated": "#241511",
+      "--bg-subtle": "#1C100C",
+      "--bg-inset": "#201713",
+      "--text-primary": "#FFF2ED",
+      "--text-secondary": "#908581",
+      "--text-tertiary": "#8A807B",
+      "--border": "#2C221E",
+      "--border-strong": "#433935",
+      "--separator": "#261C18",
+      "--accent": "#FF9466",
+      "--accent-soft": "#351E14",
+      "--accent-hover": "#FFA782",
+      "--accent-contrast": "#000000",
+    },
+  },
+  {
+    id: "steel",
+    labelKey: "theme.steel",
+    swatch: ["#EEF1F4", "#FFFFFF", "#3F5B72"],
+    light: {
+      "--bg": "#EEF1F4",
+      "--bg-elevated": "#FFFFFF",
+      "--bg-subtle": "#F7F8FA",
+      "--bg-inset": "#E2E5E8",
+      "--text-primary": "#080B0E",
+      "--text-secondary": "#5F6265",
+      "--text-tertiary": "#626568",
+      "--border": "#D1D4D7",
+      "--border-strong": "#BABDC0",
+      "--separator": "#DDE0E3",
+      "--accent": "#3F5B72",
+      "--accent-soft": "#D6DCE2",
+      "--accent-hover": "#344B5D",
+      "--accent-contrast": "#FFFFFF",
+    },
+    dark: {
+      "--bg": "#0A0E12",
+      "--bg-elevated": "#161C23",
+      "--bg-subtle": "#10151B",
+      "--bg-inset": "#161A1E",
+      "--text-primary": "#F2F6FA",
+      "--text-secondary": "#84888C",
+      "--text-tertiary": "#82868A",
+      "--border": "#212529",
+      "--border-strong": "#33373B",
+      "--separator": "#1B1F23",
+      "--accent": "#8FB6D6",
+      "--accent-soft": "#1D262D",
+      "--accent-hover": "#A3C3DD",
+      "--accent-contrast": "#000000",
+    },
+  },
+  {
+    id: "graphite",
+    labelKey: "theme.graphite",
+    swatch: ["#F5F5F5", "#FFFFFF", "#2B2B2B"],
+    light: {
+      "--bg": "#F5F5F5",
+      "--bg-elevated": "#FFFFFF",
+      "--bg-subtle": "#FAFAFA",
+      "--bg-inset": "#E9E9E9",
+      "--text-primary": "#050505",
+      "--text-secondary": "#636363",
+      "--text-tertiary": "#686868",
+      "--border": "#D7D7D7",
+      "--border-strong": "#BFBFBF",
+      "--separator": "#E3E3E3",
+      "--accent": "#2B2B2B",
+      "--accent-soft": "#D9D9D9",
+      "--accent-hover": "#232323",
+      "--accent-contrast": "#FFFFFF",
+    },
+    dark: {
+      "--bg": "#0B0B0B",
+      "--bg-elevated": "#181818",
+      "--bg-subtle": "#121212",
+      "--bg-inset": "#171717",
+      "--text-primary": "#FAFAFA",
+      "--text-secondary": "#868686",
+      "--text-tertiary": "#848484",
+      "--border": "#232323",
+      "--border-strong": "#353535",
+      "--separator": "#1D1D1D",
+      "--accent": "#D6D6D6",
+      "--accent-soft": "#272727",
+      "--accent-hover": "#DDDDDD",
+      "--accent-contrast": "#000000",
+    },
+  },
 ];
 
 export const DEFAULT_THEME = "airfrance";
-export const THEME_IDS: readonly string[] = THEME_PRESETS.map((preset) => preset.id);
+
+/**
+ * The id of the theme the reader builds.
+ *
+ * Not a preset in `THEME_PRESETS`, because its colours do not exist until
+ * somebody chooses them — `domain/customTheme.ts` derives the whole palette
+ * from three of them. It is listed here so the API can accept the id and the
+ * picker can offer the tile beside the ten that ship.
+ */
+export const CUSTOM_THEME_ID = "custom";
+export const THEME_IDS: readonly string[] = [
+  ...THEME_PRESETS.map((preset) => preset.id),
+  CUSTOM_THEME_ID,
+];
 
 export function themeFor(id: string | null | undefined): ThemePreset {
   return THEME_PRESETS.find((preset) => preset.id === id) ?? THEME_PRESETS[0];

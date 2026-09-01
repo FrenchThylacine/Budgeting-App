@@ -20,6 +20,20 @@ import {
 import { calculateYear } from "../src/domain/calculations";
 import { createSeedBudgetSnapshot } from "../src/data/seedBudget";
 import type { BudgetSnapshot, SpendingEntry } from "../src/domain/types";
+import { monthNames } from "../src/domain/i18n";
+
+/**
+ * The twelve short month names, as `Intl` writes them in English.
+ *
+ * These used to be a constant inside `domain/analytics.ts`, which put "Jan,
+ * Feb, Mar" under every bar of the trend chart in every language. The chart
+ * passes `monthNames("short")` from the translation hook now, and the tests
+ * pass the same thing for English.
+ */
+const SHORT_MONTHS = monthNames("en", "short");
+
+/** The English week marker under a bar; French writes S28, German KW28. */
+const WEEK_AXIS = (week: number) => `W${week}`;
 
 function entry(overrides: Partial<SpendingEntry>): SpendingEntry {
   return {
@@ -229,7 +243,7 @@ describe("trend bar windows", () => {
     const snap = snapshotWith([entry({ amount: 10, week: 33, month: 8, date: "2026-08-12" })]);
     snap.settings.selectedWeek = 33;
     const calc = calculateYear(snap);
-    const bars = weeklyTrendBars(calc.weeklyTrend, 33, 12);
+    const bars = weeklyTrendBars(calc.weeklyTrend, 33, WEEK_AXIS, 12);
     expect(bars).toHaveLength(12);
     const highlighted = bars.filter((b) => b.highlight);
     expect(highlighted).toHaveLength(1);
@@ -239,7 +253,7 @@ describe("trend bar windows", () => {
   it("weekly window clamps at the start of the year", () => {
     const snap = snapshotWith([]);
     const calc = calculateYear(snap);
-    const bars = weeklyTrendBars(calc.weeklyTrend, 2, 12);
+    const bars = weeklyTrendBars(calc.weeklyTrend, 2, WEEK_AXIS, 12);
     expect(bars[0].label).toBe("W1");
     expect(bars.some((b) => b.label === "W2" && b.highlight)).toBe(true);
   });
@@ -247,7 +261,7 @@ describe("trend bar windows", () => {
   it("monthly bars keep pending/closed empty months as null (missing ≠ 0)", () => {
     const snap = snapshotWith([entry({ amount: 100, month: 7 })]);
     const calc = calculateYear(snap, new Date("2026-08-15T12:00:00Z"));
-    const bars = monthlyTrendBars(calc.monthlyTrend, 7);
+    const bars = monthlyTrendBars(calc.monthlyTrend, 7, SHORT_MONTHS);
     expect(bars[6].value).toBe(100); // July recorded
     expect(bars[0].value).toBeNull(); // January closed with no data → missing
     expect(bars[6].highlight).toBe(true);

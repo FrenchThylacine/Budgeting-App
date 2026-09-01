@@ -135,6 +135,41 @@ try {
   const thirdTrack = [];
   /** The worst distance seen between an escort's artwork and its own origin. */
   let spriteOffset = null;
+  /**
+   * Every bank written to a sprite, as a span factor, kept per aeroplane.
+   *
+   * Per aeroplane and not in one list: the escorts are deliberately out of
+   * phase, so a flat array interleaves a jet rolling left with one rolling
+   * right and reports a half-span "jump" between consecutive samples that no
+   * single aircraft ever made. The first version of this check did exactly
+   * that and failed on a smooth roll.
+   *
+   * Three seats, because the middle one in DOM order is the jet that joins
+   * late — it flies a gentle arrival rather than the routine, and holding it
+   * to the routine's bank angle would be asserting the wrong thing about the
+   * right aeroplane.
+   *
+   * Collected **inside the page, on every rendered frame**, rather than by
+   * sampling over the protocol. The claim being made is that the wings do not
+   * snap between one drawn frame and the next; a sample taken every 40ms spans
+   * three or four of those, so it cannot tell a smooth roll from a jump and it
+   * reported a legitimate one as a cut.
+   */
+  let banks = [[], [], []];
+  await page.evaluate(`
+    window.__banks = [[], [], []];
+    const sample = () => {
+      const sprites = [...document.querySelectorAll('.boot-escort')];
+      sprites.forEach((sprite, seat) => {
+        const found = /scaleY\\(([-\\d.]+)\\)/.exec(sprite.style.transform ?? '');
+        if (found && window.__banks[seat]) window.__banks[seat].push(Number(found[1]));
+      });
+      if (document.querySelector('.boot-screen')) requestAnimationFrame(sample);
+    };
+    requestAnimationFrame(sample);
+    return true;
+  `);
+
   const deadline = Date.now() + 20000;
   while (Date.now() < deadline) {
     const frame = await page.evaluate(`
@@ -290,6 +325,8 @@ try {
     await sleep(frame.phase === "join" ? 0 : 40);
   }
 
+  banks = JSON.parse(await page.evaluate("JSON.stringify(window.__banks ?? [[], [], []])"));
+
   await check("flies the whole sequence: orbit, join, settle, depart", () => {
     for (const expected of ["orbit", "join", "settle", "depart", "gone"]) {
       assert(phases.includes(expected), `never reached "${expected}" (saw ${phases.join(" → ")})`);
@@ -322,6 +359,44 @@ try {
     assert(emitterGap != null, "never caught the escorts mid-routine");
     assert(emitterGap <= 26, `the smoke starts ${emitterGap}px from the tailpipe`);
     return `${emitterGap}px from the tailpipe`;
+  });
+
+  await check("the escorts bank into the turns rather than flying them flat", () => {
+    /*
+     * The brief's own bar: real banking. Seen from above, a roll shows as a
+     * loss of wingspan, so the measurement is the span factor the sprite is
+     * drawn with — 1 is wings level, and smaller is more bank.
+     *
+     * Two things are asserted, and the second matters more than the first. The
+     * aircraft must *reach* a real angle, and it must also *return* to level:
+     * a constant bank is a sticker drawn crooked, not an aeroplane rolling
+     * into a turn and out of it again.
+     */
+    // The two that fly the routine, which are the two with a full pass of
+    // samples; the third is on its arrival curve and rolls gently by design.
+    const flying = banks.filter((seat) => seat.length > 20);
+    assert(flying.length >= 2, `only ${flying.length} aircraft produced a pass of bank samples`);
+
+    const deepest = Math.min(...flying.map((seat) => Math.min(...seat)));
+    const shallowest = Math.max(...flying.map((seat) => Math.max(...seat)));
+    assert(deepest < 0.8, `the escorts never bank past ${deepest.toFixed(2)} span — they fly the turns flat`);
+    assert(shallowest > 0.95, `the escorts never return to wings level (best ${shallowest.toFixed(2)})`);
+
+    /*
+     * And the roll is a roll rather than a cut.
+     *
+     * This is the assertion that found a real defect: the wings snapped from
+     * 0.45 span to 0.95 in a single frame at the boundary between the routine
+     * and the rejoin, because the bank was recomputed from scratch each frame
+     * off two different curves. An aeroplane has a finite roll rate, and now
+     * so does this one.
+     */
+    let worstJump = 0;
+    for (const seat of flying) {
+      for (let i = 1; i < seat.length; i += 1) worstJump = Math.max(worstJump, Math.abs(seat[i] - seat[i - 1]));
+    }
+    assert(worstJump < 0.12, `the bank jumps by ${worstJump.toFixed(2)} in one frame — that is a cut, not a roll`);
+    return `${deepest.toFixed(2)}–${shallowest.toFixed(2)} span, worst step ${worstJump.toFixed(2)}`;
   });
 
   await check("the escorts fly a routine, not a ring", () => {
@@ -1056,8 +1131,20 @@ try {
       return card ? card.textContent.replace(/\\s+/g, ' ').trim() : 'not found';
     `);
     assert(row !== "not found", "the activity did not appear in the list");
-    // The accrual is the figure somebody came to read, so it stays on the row.
-    assert(/177/.test(row), `the card does not state the monthly accrual: ${row}`);
+    /*
+     * The accrual is the figure somebody came to read, so it stays on the row.
+     *
+     * Derived here rather than written down. Two sessions a week at €20 is €40
+     * a week, and a month's worth of that depends on how many days the month
+     * has — so the figure is €177 in a 31-day month and €171 in a 30-day one.
+     * This check hard-coded 177 and duly went red at midnight on the first of
+     * September, reporting a translation defect that did not exist.
+     */
+    const now = new Date();
+    const daysThisMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+    const accrual = Math.round((40 * daysThisMonth) / 7);
+    const stated = new RegExp(`\\b${accrual}|${accrual - 1}\\b`);
+    assert(stated.test(row.replace(/\u202f|\u00a0|\s/g, "")), `the card does not state the monthly accrual (~${accrual}): ${row}`);
     assert(!/\bavg\.|\/year\b|\/month\b/.test(row), `the card carries an untranslated unit: ${row}`);
     /*
      * The pack size used to be printed on the row, inside a sentence nobody
@@ -1211,6 +1298,62 @@ try {
     return figures.join(" · ");
   });
 
+  /*
+   * The dashboard's wallet, which is one figure and not four.
+   *
+   * The Wallet tab has three balances because that is its subject. The
+   * dashboard used to repeat all of them plus a year-to-date total, four
+   * inches from the tab that exists to hold them — a treasury summary where
+   * somebody wanted "how much money is there". This asserts the reduction
+   * survived, in the rendered page rather than in a comment.
+   */
+  await check("the dashboard's wallet card carries the balance and nothing else", async () => {
+    await openTab(page, "dashboard");
+    const state = await page.evaluate(`
+      // The savings widget is a disclosure, and closed by default: a card the
+      // reader opens is still a card, but it has to be opened to be read.
+      const toggle = [...document.querySelectorAll('.disclosure button, button[aria-expanded]')]
+        .find((node) => /épargne|savings|portefeuille|wallet/i.test(node.textContent ?? ''));
+      if (!toggle) return JSON.stringify({ error: 'no savings disclosure on the dashboard' });
+      if (toggle.getAttribute('aria-expanded') === 'false') toggle.click();
+      return new Promise((resolve) => setTimeout(() => {
+        const panel = toggle.parentElement;
+        const label = [...panel.querySelectorAll('.text-footnote')]
+          .find((node) => /solde|balance/i.test(node.textContent ?? ''));
+        if (!label) return resolve(JSON.stringify({ error: 'the card has no balance label' }));
+        /*
+         * Scoped to the card the balance is *in*, not to the disclosure.
+         *
+         * The disclosure holds a second card below it — the wishlist total and
+         * the year-to-date spend — which are deliberately not on the wallet
+         * card, because a plan and a spending figure beside a cash balance
+         * invite being read as part of it. The first version of this check
+         * measured the panel and reported three figures, which was the check
+         * finding the separation rather than the absence of it.
+         */
+        const card = label.closest('.card') ?? panel;
+        const figures = [...card.querySelectorAll('.text-headline, .money')]
+          .map((node) => node.textContent.replace(/\\s+/g, ' ').trim())
+          .filter(Boolean);
+        resolve(JSON.stringify({ label: label.textContent.trim(), figures: [...new Set(figures)] }));
+      }, 500));
+    `);
+    const found = JSON.parse(state);
+    assert(!found.error, found.error);
+    /*
+     * One figure. The single-currency case prints a second line — the display
+     * equivalent under the held amount — and that is one balance said twice,
+     * not two balances; anything past that is the treasury summary coming back.
+     */
+    assert(
+      found.figures.length >= 1 && found.figures.length <= 2,
+      `the dashboard wallet shows ${found.figures.length} figures: ${found.figures.join(" | ")}`,
+    );
+    // Back where the next check expects to be.
+    await openTab(page, "wallet");
+    return `${found.label}: ${found.figures.join(" / ")}`;
+  });
+
   await check("resetting the wallet zeroes the money and leaves the records", async () => {
     const before = await page.evaluate(
       "return Array.from(document.querySelectorAll('.item-row')).length;",
@@ -1287,6 +1430,42 @@ try {
     return `${line.primary} ${line.secondary}`;
   });
 
+  /*
+   * The distribution, with two real currencies in the period.
+   *
+   * The budget above recorded €40 and 150 000 LBP, so this is the case the
+   * section exists for: two currencies whose totals cannot be compared without
+   * converting, and whose *amounts* must survive being compared. The assertion
+   * is that the recorded figures are on screen beside the converted bar —
+   * 150 000, not the €1.40-ish it is worth.
+   */
+  await check("statistics report which currencies the money was in", async () => {
+    await openTab(page, "analytics");
+    const section = await page.evaluate(`
+      const heading = [...document.querySelectorAll('.section-title, h2, h3')]
+        .find((node) => /devise|currenc|moneda|währung|عمل/i.test(node.textContent ?? ''));
+      if (!heading) return 'no currency section';
+      // Open it if it is a collapsed section.
+      const toggle = heading.closest('button') ?? heading.parentElement?.querySelector('button');
+      if (toggle && toggle.getAttribute('aria-expanded') === 'false') toggle.click();
+      return 'found';
+    `);
+    assert(section === "found", section);
+    await sleep(600);
+
+    const rows = await page.evaluate(`
+      // The chart is an SVG; its labels and captions are <text> nodes.
+      const labels = [...document.querySelectorAll('svg text')]
+        .map((n) => n.textContent.replace(/\\s+/g, ' ').trim());
+      return JSON.stringify(labels.filter((text) => /LBP|L\\.L\\.|EUR|€/.test(text)));
+    `);
+    const found = JSON.parse(rows).join(" | ");
+    assert(/LBP|L\.L\./.test(found), `the Lebanese pound is not in the distribution: ${found}`);
+    // The recorded amount, not what it converts to.
+    assert(/150[\s\u202f\u00a0.,]?000/.test(found), `the original amount is not shown: ${found}`);
+    return found.slice(0, 70);
+  });
+
   await check("the second currency is off until it is chosen", async () => {
     const totals = await page.evaluate(
       "document.querySelectorAll('.funding-split-value .money-secondary').length",
@@ -1353,6 +1532,48 @@ try {
     return "French, self-contained";
   });
 
+
+  /*
+   * The report is a document of its own, so nothing it inherits is inherited.
+   *
+   * Two things this pass claimed reach it, and neither was checked: the
+   * reader's typeface, and — new here — the reader's accent. The paper stays
+   * white and the ink stays dark whatever theme is on screen, because printing
+   * a dark background wastes toner to produce something harder to read; what
+   * follows the theme is the colour that carries the headings.
+   *
+   * The accent is pushed until it clears 4.5:1 on white on the way in, so a
+   * pale yellow that reads as a button on a dark page is not invisible on
+   * paper. That is asserted here rather than assumed.
+   */
+  await check("the reader's typeface and accent follow onto paper", async () => {
+    const measured = await page.evaluate(`
+      const { buildPeriodReport, reportHtml } = await import('/src/domain/report.ts');
+      const { createTranslator } = await import('/src/domain/i18n.ts');
+      const t = createTranslator('en');
+      const snapshot = window.__budgetStoreInstance.getState().snapshot;
+      const report = buildPeriodReport(snapshot, 'month', new Date(), t);
+      const html = reportHtml(report, (value) => value.toFixed(2), t, {
+        fontStack: 'Verdana, Geneva, sans-serif',
+        // A yellow nobody could read as a heading on white.
+        themeAccent: '#FFE600',
+      });
+      const face = /font-family:\\s*([^;]+);/.exec(html)?.[1] ?? '';
+      const navy = /--navy:\\s*([^;]+);/.exec(html)?.[1]?.trim() ?? '';
+      return JSON.stringify({ face, navy });
+    `);
+    const { face, navy } = JSON.parse(measured);
+    assert(/Verdana/.test(face), `the chosen typeface did not reach the report: ${face}`);
+    assert(/^#[0-9a-f]{6}$/i.test(navy), `the accent did not reach the report: ${navy}`);
+
+    // And it was made legible rather than passed through.
+    const channel = (v) => { const c = v / 255; return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); };
+    const rgb = [1, 3, 5].map((i) => parseInt(navy.slice(i, i + 2), 16));
+    const l = 0.2126 * channel(rgb[0]) + 0.7152 * channel(rgb[1]) + 0.0722 * channel(rgb[2]);
+    const ratio = 1.05 / (l + 0.05);
+    assert(ratio >= 4.5, `the accent prints at ${ratio.toFixed(2)}:1 on white — a heading nobody can read`);
+    return `${face.split(",")[0]} · ${navy} at ${ratio.toFixed(1)}:1`;
+  });
 
   /** Every tab the sweeps below visit. */
   const TABS = ["dashboard", "activities", "spending", "wishlist", "wallet", "analytics", "settings", "report"];
@@ -1536,6 +1757,56 @@ try {
       return `${TABS.length} tabs, 0 failures`;
     });
   }
+
+  /*
+   * The theme the reader builds, on the real page.
+   *
+   * `tests/custom-theme.test.ts` proves the derivation is contrast-safe for ten
+   * hostile choices. It cannot prove that the derived tokens *reach* the page —
+   * that the picker writes them, that `applyTheme` paints them, and that the
+   * eleventh tile is wired to the same machinery as the ten presets. This
+   * picks a deliberately awkward colour through the real control and then runs
+   * the same sweep over the same eight tabs.
+   */
+  await check("a theme the reader builds is legible on every tab", async () => {
+    await openTab(page, "settings");
+    await page.click(".theme-grid .theme-swatch:last-child");
+    await sleep(400);
+
+    // A mid grey page with a barely different card: the case where choosing
+    // text colours by hand goes wrong, set through the application's own input.
+    const chosen = await page.evaluate(`
+      const inputs = [...document.querySelectorAll('.custom-theme-input')];
+      if (inputs.length !== 3) return 'the pickers are not there: ' + inputs.length;
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+      const values = ['#808080', '#8a8a8a', '#7d7d3a'];
+      inputs.forEach((input, index) => {
+        setter.call(input, values[index]);
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+      });
+      return values.join(' ');
+    `);
+    assert(chosen.startsWith("#"), chosen);
+    await sleep(500);
+
+    // The page really is painted with it, rather than the choice being stored
+    // and ignored.
+    const painted = await page.evaluate(
+      "getComputedStyle(document.documentElement).getPropertyValue('--bg').trim()",
+    );
+    assert(/#808080/i.test(painted), `the chosen page colour did not reach the root: "${painted}"`);
+
+    const failures = [];
+    for (const tab of TABS) {
+      await page.click(`.nav-item[data-tab="${tab}"]`);
+      await sleep(950);
+      const found = await page.evaluate(contrastSweep);
+      for (const entry of found) failures.push(`${tab}: ${entry}`);
+    }
+    equal(failures.length, 0, failures.slice(0, 6).join(" | "));
+    return `${chosen}, ${TABS.length} tabs, 0 failures`;
+  });
 
   await check("back to the default theme", async () => {
     await openTab(page, "settings");

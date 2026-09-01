@@ -81,6 +81,24 @@ export interface TutorialStep {
    * request behind an explanation and a user gesture.
    */
   action?: "request-notifications";
+  /**
+   * The control this step is about, as a CSS selector.
+   *
+   * The tour lights it up and puts the card beside it — never over it — so the
+   * instruction and the thing to press are visible at the same time. A step
+   * without one is explaining rather than asking.
+   *
+   * Selectors are the application's own stable hooks (`data-tab`,
+   * `data-action`) rather than class names, for the same reason the browser
+   * harness uses them: a class is styling and may change, these are identities.
+   *
+   * Several selectors mean *in order of preference*, which is how a step whose
+   * control lives inside an editor works: light up the button that opens the
+   * editor while it is closed, and the control itself once it is open. Plain
+   * `querySelector` with a comma list cannot do this — it answers in document
+   * order, not in the order asked.
+   */
+  anchor?: string | string[];
 }
 
 export const TUTORIAL_STEPS: TutorialStep[] = [
@@ -93,6 +111,9 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
     // Currencies moved into Settings; the tour follows it there.
     tab: "settings",
     task: "pin-currency",
+    // Currencies are a group inside Settings, so the first thing to press is
+    // the group; once it is open, the control that pins one.
+    anchor: ['[data-action="pin-currency"]', '[data-settings-group="money"]'],
   },
   {
     id: "activities",
@@ -100,6 +121,7 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
     bodyKey: "tutorial.activitiesBody",
     tab: "activities",
     task: "create-activity",
+    anchor: '[data-action="add-activity"]',
   },
   { id: "schedule", titleKey: "tutorial.scheduleTitle", bodyKey: "tutorial.scheduleBody", tab: "activities" },
   {
@@ -108,6 +130,7 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
     bodyKey: "tutorial.spendingBody",
     tab: "spending",
     task: "record-spending",
+    anchor: '[data-action="add-spending"]',
   },
   {
     id: "funding",
@@ -115,6 +138,8 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
     bodyKey: "tutorial.fundingBody",
     tab: "spending",
     task: "try-other-funding",
+    // Closed editor: the button that opens one. Open editor: the choice itself.
+    anchor: ['[data-field="funding"]', '[data-action="edit-spending"]', '[data-action="add-spending"]'],
   },
   {
     id: "wallet",
@@ -122,6 +147,7 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
     bodyKey: "tutorial.walletBody",
     tab: "wallet",
     task: "allocate-budget",
+    anchor: '[data-action="allocate-budget"]',
   },
   {
     id: "scenarios",
@@ -129,6 +155,7 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
     bodyKey: "tutorial.scenariosBody",
     tab: "scenarios",
     task: "create-scenario",
+    anchor: '[data-action="new-scenario"]',
   },
   { id: "stats", titleKey: "tutorial.statsTitle", bodyKey: "tutorial.statsBody", tab: "analytics" },
   { id: "reports", titleKey: "tutorial.reportsTitle", bodyKey: "tutorial.reportsBody" },

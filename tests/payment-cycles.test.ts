@@ -29,6 +29,7 @@ import { monthlyEstimateNative, yearlyEstimateNative } from "../src/domain/calcu
 import { upcomingSchedule } from "../src/domain/upcoming";
 import { createSeedBudgetSnapshot } from "../src/data/seedBudget";
 import type { Activity, BudgetSnapshot } from "../src/domain/types";
+import { t } from "./lib/english";
 
 function activity(overrides: Partial<Activity> = {}): Activity {
   return {
@@ -83,7 +84,7 @@ describe("session frequency is not payment frequency", () => {
 
   it("puts five weeks between payments, not half a week", () => {
     expect(sessionPackIntervalDays(gym)).toBe(35);
-    expect(describeDays(35)).toBe("5 weeks");
+    expect(describeDays(35, t)).toBe("5 weeks");
   });
 
   it("counts the month's real sessions rather than a notional four weeks", () => {
@@ -110,7 +111,7 @@ describe("session frequency is not payment frequency", () => {
   });
 
   it("says out loud that the sessions and the payments are counted separately", () => {
-    expect(describePaymentCycle(gym)).toBe("2 / week · pay every 10 sessions (≈ every 5 weeks)");
+    expect(describePaymentCycle(gym, t)).toBe("2 / week · pay every 10 sessions (≈ every 5 weeks)");
   });
 
   it("produces one payment every five weeks from the baseline, not one per session", () => {
@@ -236,7 +237,7 @@ describe("the dashboard timeline", () => {
   it("shows nothing for an annual charge that is not due in the window", () => {
     const snapshot = snapshotWith([nebula]);
     snapshot.settings.selectedYear = 2026;
-    const { occurrences, undated } = upcomingSchedule(snapshot, from, 14);
+    const { occurrences, undated } = upcomingSchedule(snapshot, t, from, 14);
     expect(occurrences).toEqual([]);
     // Not "undated" either: it has a date, and it is simply not due yet.
     expect(undated).toEqual([]);
@@ -245,7 +246,7 @@ describe("the dashboard timeline", () => {
   it("shows one €60 charge — and only one — when the window reaches it", () => {
     const snapshot = snapshotWith([nebula]);
     snapshot.settings.selectedYear = 2026;
-    const { occurrences } = upcomingSchedule(snapshot, from, 40);
+    const { occurrences } = upcomingSchedule(snapshot, t, from, 40);
     expect(occurrences).toHaveLength(1);
     expect(occurrences[0].amountNative).toBe(60);
     expect(occurrences[0].kind).toBe("payment");
@@ -255,7 +256,7 @@ describe("the dashboard timeline", () => {
   it("shows one €200 gym payment in a fortnight, not four €20 sessions", () => {
     const snapshot = snapshotWith([gym]);
     snapshot.settings.selectedYear = 2026;
-    const { occurrences } = upcomingSchedule(snapshot, from, 14);
+    const { occurrences } = upcomingSchedule(snapshot, t, from, 14);
     expect(occurrences).toHaveLength(1);
     expect(occurrences[0].amountNative).toBe(200);
     expect(occurrences[0].sessions).toBe(10);
@@ -265,7 +266,7 @@ describe("the dashboard timeline", () => {
   it("lists a payment-cycle activity as undated only when it has no baseline", () => {
     const snapshot = snapshotWith([{ ...nebula, nextRenewalDate: undefined, startDate: undefined }]);
     snapshot.settings.selectedYear = 2026;
-    const { occurrences, undated } = upcomingSchedule(snapshot, from, 40);
+    const { occurrences, undated } = upcomingSchedule(snapshot, t, from, 40);
     expect(occurrences).toEqual([]);
     expect(undated).toHaveLength(1);
     // The figure offered is the monthly average, which the card labels as one.

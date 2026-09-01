@@ -101,6 +101,7 @@ export interface GestureSettings {
   wishlist?: { trailing?: SwipeActionId; leading?: SwipeActionId };
   activities?: { trailing?: SwipeActionId; leading?: SwipeActionId };
   spending?: { trailing?: SwipeActionId; leading?: SwipeActionId };
+  wallet?: { trailing?: SwipeActionId; leading?: SwipeActionId };
 }
 
 export type SwipeActionId = "none" | "delete" | "archive" | "buy" | "edit" | "duplicate" | "deactivate";
@@ -208,6 +209,15 @@ export interface Settings {
    */
   fontChoice?: string;
   /**
+   * Which icon stands for each payment cadence.
+   *
+   * Only the ones the reader changed; an absent cadence uses the default from
+   * `domain/cadence.ts`. Values outside that cadence's own short list are
+   * ignored rather than drawn, so a stored value from a future version
+   * degrades to the default instead of to a blank square.
+   */
+  cadenceIcons?: Partial<Record<string, string>>;
+  /**
    * The interface language, as a BCP 47 tag ("en", "fr", "pt-BR").
    *
    * Absent means "follow the browser", which is what every budget written
@@ -287,6 +297,15 @@ export interface Settings {
    * can be tested rather than assumed.
    */
   themePreset?: string;
+  /**
+   * The three colours the reader chose for the theme they built.
+   *
+   * Only the three: the other eleven tokens are derived from them, so that a
+   * theme somebody invents cannot put grey text on a grey card. See
+   * `domain/customTheme.ts`. Stored whether or not `themePreset` is "custom",
+   * so switching away to a preset and back does not lose the palette.
+   */
+  customTheme?: { background: string; surface: string; accent: string };
   /**
    * The aircraft the **loading sequence** flies: one of the three drawn for it.
    *
@@ -383,7 +402,22 @@ export interface BudgetCategory {
  *                   is an average and is labelled as one; no monthly payment
  *                   event is ever produced.
  */
-export type CostModel = "auto" | "perSession" | "schedule" | "fixed" | "sessionPack" | "fixedYearly";
+export type CostModel =
+  | "auto"
+  | "perSession"
+  | "schedule"
+  | "fixed"
+  | "sessionPack"
+  | "fixedYearly"
+  | "installments";
+
+/**
+ * How often the payments of an installment plan fall.
+ *
+ * `custom` carries its own interval in days, which is what makes "every six
+ * weeks" expressible without a second vocabulary of recurrence rules.
+ */
+export type InstallmentFrequency = "monthly" | "yearly" | "custom";
 
 /** 1 = Monday … 7 = Sunday, matching ISO weekday numbering. */
 export type IsoWeekday = 1 | 2 | 3 | 4 | 5 | 6 | 7;
@@ -494,6 +528,24 @@ export interface Activity {
    * the rule takes over again.
    */
   nextRenewalDate?: string;
+  /**
+   * An activity paid in a fixed number of installments.
+   *
+   * The distinction that makes this a model of its own rather than a recurring
+   * cost: it **ends**. Twelve payments of €250 is not €250 a month forever, and
+   * the thirteenth month costs nothing. `installmentCount` is what says so.
+   *
+   * The total is `installmentCount × installmentAmount`. The editor lets somebody
+   * type either the total or the per-payment figure and derives the other, but
+   * only one of them is stored: two stored numbers that must agree is a pair
+   * that will one day disagree.
+   */
+  installmentCount?: number | null;
+  /** What each payment is, in the activity's own currency. */
+  installmentAmount?: number | null;
+  installmentFrequency?: InstallmentFrequency;
+  /** For `custom`: the gap between payments, in days. */
+  installmentIntervalDays?: number | null;
   /**
    * One-off exceptions to the recurring rule.
    *

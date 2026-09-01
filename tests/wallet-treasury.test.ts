@@ -28,6 +28,13 @@ import { useBudgetStore } from "../src/store/budgetStore";
 import { createEmptyBudgetSnapshot } from "../src/data/seedBudget";
 import { findSeedCategory } from "../src/domain/seedCategories";
 import type { Activity, BudgetSnapshot, SpendingEntry, WalletEntry } from "../src/domain/types";
+import { freezeClockAt } from "./lib/clock";
+
+// These fixtures are dated August 2026; the store refuses to edit a month
+// that has ended, so the clock says mid-August too — mid-month rather than the
+// 31st, because a date at the edge of a month lands in the next one in a
+// timezone ahead of UTC. See `tests/lib/clock.ts`.
+freezeClockAt("2026-08-15T09:00:00Z");
 
 const NOW = new Date(2026, 7, 16);
 

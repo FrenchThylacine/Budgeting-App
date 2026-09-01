@@ -43,7 +43,9 @@ A next-renewal date states what no rule can derive — the day an annual subscri
 
 **Languages.** Seventy-six languages are offered; five (English, French, Spanish, German, Arabic) are fully translated, and a test asserts that "fully" is true — every key the interface asks for exists in every one of them, including the printed reports. The rest are offered for their locale formatting and labelled as such rather than pretending a translation exists. Right-to-left is real: `dir="rtl"` on the root and the handful of physically-sided rules mirrored.
 
-**Themes.** Six colour themes — Air France, Concorde, Paper, Deep black, Alpine, Plum — each with a light and a dark variant, plus Light / Dark / System. The themes are *data* rather than stylesheets, which is what lets `tests/theme-contrast.test.ts` measure every text colour against every surface in every theme and fail the build if one drops below WCAG AA.
+**Themes.** Ten colour themes — Air France, Concorde, Paper, Deep black, Alpine, Plum, Forest, Ember, Steel, Graphite — each with a light and a dark variant, plus Light / Dark / System. The themes are *data* rather than stylesheets, which is what lets `tests/theme-contrast.test.ts` measure every text colour against every surface in every theme and fail the build if one drops below WCAG AA.
+
+**And one you build.** A preset's contrast can be measured before it ships; a theme somebody invents in Settings cannot, because it does not exist until they build it. So it is *constructed* safe instead: you choose three colours — the page, the cards, the accent — and the other eleven tokens are derived by walking toward the ink until each clears its floor. Text at 7:1, the ramp made by fading rather than darkening so it stays a hierarchy, borders visible without being boxes, and the accent held to the *text* ratio because it colours headings. Your blue stays your blue. The status colours keep their hue and have their shade recomputed against your page, because a green that means "under budget" must still mean that — and the shipped light and dark pairs are neither of the things a page you picked might be.
 
 **Currencies.** Display currency, an optional **second currency** shown under any amount recorded in another one, plus live exchange rates, refreshed once when the application opens and only when the day's rates are due. A refresh that fails is reported as failed rather than being passed off as current, and there is a manual override and an offline fallback. Conversion is presentation-only: stored amounts are never rewritten. You choose which currencies the app offers, so a budget in two currencies is not asked to pick from ten — but the display currency, and any currency real records are denominated in, can never be untracked.
 
@@ -191,6 +193,7 @@ After a deploy, `GET /api/health` answers `{"status":"ok","database":"connected"
 | `node scripts/build-icons.mjs` | Regenerate the icon set and the aircraft artwork from `assets/brand/` (needs ImageMagick; the outputs are committed) |
 | `node scripts/extract-craft.mjs` | Re-cut the twenty-two transition silhouettes from the Flightradar24 sheet (`--contact` also writes a labelled contact sheet) |
 | `npm run verify` | Drive the running app through a real Chrome and check the workflows end to end (start it against a freshly started dev server) |
+| `npm run verify:tutorial` | Walk the first-run tour in a real Chrome — press the highlighted control, do the task, watch the step advance — at a desktop and a phone width |
 
 ---
 
@@ -205,15 +208,36 @@ Domain and store tests cover period/ISO-week semantics, currency conversion, ana
 
 The integration suites run the real schema, migrations, repository SQL, and the Express API against a live PostgreSQL server, including transaction rollback, the 409 conflict path, and a simulated two-device exchange. They are worth running before trusting any persistence change: a mocked driver accepts SQL that real PostgreSQL rejects, which is how several live defects previously went unnoticed.
 
+**Two of the suites are pinned to a date, and that is deliberate.** The store
+refuses to edit a period that has already ended, which is correct behaviour and
+which makes any test writing into "the current month" depend on the wall clock.
+Thirty-five of them went red overnight when August became the past. They pin the
+clock to their own fixtures' month now — see `tests/lib/clock.ts`, which also
+explains why the pin is *mid*-month.
+
+**And two of them run a browser.** `npm run verify` drives a real Chrome over
+the DevTools Protocol on a brand-new account each run: 65 checks, six phone
+widths, two theme presets and one built through the picker at run time, and
+measurements of the loading animation — the bank angle of the escorts is
+collected inside the page on every animation frame, because a sample taken
+every 40ms spans four drawn frames and cannot tell a smooth roll from a cut.
+`npm run verify:tutorial` walks the first-run tour itself and asserts both
+directions: that a completed task advances the step, and that an untouched one
+does not.
+
 ---
 
 ## Interface
 
 **Ten destinations, and two of them stopped competing.** Currencies is configuration and lives in Settings; the financial record is consulted while looking at the numbers and is a section on Statistics; the report is a tab where it used to be three buttons that each opened a finished document in a new window.
 
+**The tour points at the button.** Each step of the first run names the control it is about, dims the page around it, and waits for you to actually use it — the advance is read from application state, not from a Next button. The card sits beside the highlight and never over it, with its height measured rather than assumed, because a guess is what puts a three-paragraph card over a button on a phone. `npm run verify:tutorial` walks it in a real browser at both widths and asserts the negative too: a step with nothing done stays put.
+
+**Statistics say which currencies the money was in.** Every other figure converts into your display currency, which answers "how much" and not "in what". Two blocks keep the recorded amounts — what was spent and what the wallet holds, currency by currency — with the transaction count beside them, because one $2,000 flight and forty €12 lunches otherwise make dollars look like the currency the budget lives in.
+
 **The report preview is the report.** The same generated document the print and the download use, in a frame — not a second renderer of the same model, because two renderers drift and a preview that lies is worse than none. Its own stylesheet reflows below 720px and keeps A4 for `@media print`, so a phone gets a readable document rather than an A4 page scaled to nothing.
 
-**Colour and typeface are the reader's.** The three funding colours and six locally-available typefaces, applied through single tokens that the application and the printed report both read. A chosen colour is a *fill*: the text shade is derived from it by mixing toward the theme's foreground, so a pale one becomes readable rather than invisible.
+**Colour and typeface are the reader's.** The three funding colours and thirteen locally-available typefaces — six families and seven named faces, Arial through Courier New — applied through single tokens that the application and the printed report both read. Nothing is downloaded, so nothing arrives late and reflows the page. A chosen colour is a *fill*: the text shade is derived from it by mixing toward the theme's foreground, so a pale one becomes readable rather than invisible. The printed report takes your typeface and your accent, and the accent is darkened until it clears 4.5:1 on white — paper is white whatever the screen is.
 
 **One vocabulary for who paid, with a key to it.** `FundingMark` and `CadenceMark` are the only two components that draw these marks, and a test asserts it; `MarkLegend` explains the ones a given screen actually uses, taken from the data in view rather than from the vocabulary, and renders nothing when everything on that screen is ordinary: three hand-written copies of the same three glyphs is how a vocabulary quietly stops being one. The three funding states have one identity everywhere they appear — a badge on a row, a series in a chart, a chip on a card, a column in the report: the **accent** for money out of this budget, **blue** for somebody else's, **amber** for money you keep outside it. Each also carries a glyph (● ◆ ▲) and a word, because colour is the fastest channel and never the only one: the states survive a greyscale printer and a colour-blind reader, and the report's three inks are separated by lightness as well as hue so that two blues do not print as one grey.
 

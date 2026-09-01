@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { calculateRolloverDelta, createNextYearRecord } from "../domain/calculations";
-import { ALLOCATION_TYPE, TRANSFER_TYPE, monthlyBudgetPlan, walletState } from "../domain/wallet";
+import { ALLOCATION_TYPE, TRANSFER_TYPE, monthlyBudgetPlan, walletState, walletComposition } from "../domain/wallet";
 import { monthFromDateInput, monthName, todayDateInput, weekFromDateInput } from "../domain/dates";
 import { isUsableAmount } from "../domain/wishlist";
 import type { WishlistLinkResult, WishlistPurchaseOverrides } from "../domain/wishlist";
@@ -219,6 +219,52 @@ interface BudgetStore {
 /** Ticket for the newest in-flight hydration; see `hydrate`. */
 let hydrateGeneration = 0;
 
+/**
+ * Writes made while a load was still in the air
+ * =============================================
+ *
+ * Hydration replaces the whole snapshot, and it can take a network round trip.
+ * A person who opens the application and immediately changes something is
+ * making a legitimate, *newer* write against a snapshot that is about to be
+ * thrown away — and the sequence that follows loses it:
+ *
+ *   1. hydration starts;  2. the user edits;  3. hydration lands and overwrites.
+ *
+ * Neither obvious answer is right. Letting the remote win discards the user's
+ * change. Letting the local snapshot win is worse: during a first load the
+ * local snapshot is the *empty* one, so keeping it would replace the account's
+ * entire budget with a blank sheet containing one edit.
+ *
+ * What survives is neither snapshot but the **mutation**. Every store change is
+ * already a pure recipe over a snapshot, so a change made during a load is
+ * queued and re-applied to whatever hydration brings back. A delete removes the
+ * row from the *server's* copy; an add adds to it. Nothing is merged field by
+ * field, so nothing is resurrected.
+ *
+ * ─── Why the ids are recorded ────────────────────────────────────────────────
+ *
+ * A recipe that creates something calls `id()`, which is random. Replaying it
+ * would produce a *different* id from the one the interface is already holding
+ * — an editor open on the new activity would be pointing at a row that no
+ * longer exists. So the ids a recipe generates are taped on the way through and
+ * played back on re-application, which makes the replay exact rather than
+ * merely equivalent.
+ */
+interface PendingMutation {
+  recipe: (snapshot: BudgetSnapshot) => BudgetSnapshot | unknown;
+  type: AuditType;
+  summary: string;
+  metadata?: Record<string, unknown> | unknown;
+  /** The ids this recipe generated the first time it ran, in order. */
+  ids: string[];
+}
+
+let pendingMutations: PendingMutation[] = [];
+/** Collects ids while a mutation runs for the first time. */
+let idTape: string[] | null = null;
+/** Hands the same ids back while a mutation is replayed. */
+let idPlayback: { values: string[]; index: number } | null = null;
+
 export const useBudgetStore = create<BudgetStore>((set, get) => ({
   snapshot: createEmptyBudgetSnapshot(),
   hydrated: false,
@@ -250,7 +296,8 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
   isCurrentPeriodMutable: () =>
     !isViewingHistoricalPeriod(get().snapshot.settings) || get().historicalEditUnlocked,
 
-  /**
+  
+/**
    * Load order matters for multi-device correctness: the server is asked
    * first and wins when reachable, so a device never boots from a stale local
    * cache and then overwrites newer remote data. IndexedDB is used only when
@@ -281,16 +328,24 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
       if (!current()) return;
       if (remote) {
         const normalized = normalizeSnapshot(remote);
+        // Anything the user changed while this was in flight is re-applied to
+        // the account's real budget rather than lost with the empty one.
+        const { snapshot: merged, replayed } = applyPendingMutations(normalized);
         set({
-          snapshot: normalized,
+          snapshot: merged,
           hydrated: true,
           baseRevision: normalized.revision ?? 0,
-          syncState: "saved",
+          syncState: replayed > 0 ? "saving" : "saved",
           lastSyncedAt: new Date().toISOString(),
-          pendingLocalChanges: false,
+          pendingLocalChanges: replayed > 0,
           syncError: null,
+          undoStack: [],
+          redoStack: [],
         });
-        await saveIdbSnapshot(normalized).catch(() => undefined);
+        await saveIdbSnapshot(merged).catch(() => undefined);
+        // Those changes were never sent: the snapshot they were made against is
+        // gone, so this is the first time the server hears about them.
+        if (replayed > 0) persistSnapshot(merged, set, get);
         return;
       }
 
@@ -300,8 +355,8 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
       if (!current()) return;
       // A new account, not a demo. Its first budget is empty; the local cache
       // is used only if this device genuinely has unsynced work.
-      const seeded = normalizeSnapshot(local ?? createEmptyBudgetSnapshot());
-      set({ snapshot: seeded, hydrated: true, baseRevision: null, syncState: "saving" });
+      const seeded = applyPendingMutations(normalizeSnapshot(local ?? createEmptyBudgetSnapshot())).snapshot;
+      set({ snapshot: seeded, hydrated: true, baseRevision: null, syncState: "saving", undoStack: [], redoStack: [] });
       persistSnapshot(seeded, set, get);
       return;
     } catch (error) {
@@ -319,12 +374,13 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
       }
       const local = await loadIdbSnapshot().catch(() => null);
       if (!current()) return;
+      const offline = applyPendingMutations(normalizeSnapshot(local ?? createEmptyBudgetSnapshot()));
       set({
-        snapshot: normalizeSnapshot(local ?? createEmptyBudgetSnapshot()),
+        snapshot: offline.snapshot,
         hydrated: true,
         baseRevision: null,
         syncState: "offline",
-        pendingLocalChanges: local != null,
+        pendingLocalChanges: local != null || offline.replayed > 0,
         syncError:
           storedText("sync.offlineCopy"),
       });
@@ -880,6 +936,8 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
     if (Math.abs(balance) < 0.005) return null;
 
     const adjustment = -balance;
+    // Held currency by currency, so each can be zeroed in its own.
+    const composition = walletComposition(snapshot);
     // Budget money still claimed by the ledger. Zeroing the cash while leaving
     // this standing would assert that €600 of budget money is available in a
     // wallet the user has just declared empty — a contradiction they can see,
@@ -906,18 +964,35 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
             createdAt: new Date().toISOString(),
           });
         }
-        record.walletEntries.push({
-          id: id("wallet-reset"),
-          year,
-          month: draft.settings.selectedMonth,
-          amount: adjustment,
-          currency: draft.settings.baseCurrency,
-          date: todayDateInput(),
-          source: storedText("wallet.resetSource"),
-          type: "adjustment",
-          note: storedText("wallet.resetLedgerNote"),
-          createdAt: new Date().toISOString(),
-        });
+        /*
+         * One adjustment per currency held, each in that currency.
+         *
+         * This used to write a single entry for the whole balance in the
+         * display currency — a *converted* figure. A wallet holding 200 USD
+         * against a euro display was zeroed with −€172.43, and the moment the
+         * rate moved the ledger stopped netting to zero: the balance drifted
+         * back to a few euros out of nothing, because the two sides of the
+         * reset were denominated differently and only one of them was affected
+         * by the rate.
+         *
+         * Zeroing dollars with dollars keeps the reset true at every future
+         * rate, which is the same rule the rest of the wallet follows: an
+         * amount is an amount and a currency, and a conversion is a lens.
+         */
+        for (const slice of composition) {
+          record.walletEntries.push({
+            id: id("wallet-reset"),
+            year,
+            month: draft.settings.selectedMonth,
+            amount: -slice.amount,
+            currency: slice.currency,
+            date: todayDateInput(),
+            source: storedText("wallet.resetSource"),
+            type: "adjustment",
+            note: storedText("wallet.resetLedgerNote"),
+            createdAt: new Date().toISOString(),
+          });
+        }
       },
       "wallet",
       storedText("audit.walletReset"),
@@ -1371,6 +1446,45 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
   },
 }));
 
+/**
+ * Re-apply the changes made while the load was in the air.
+ *
+ * Returns the snapshot to store: the hydrated one when nothing was queued, and
+ * the hydrated one with every queued recipe applied in order otherwise. Each
+ * recipe replays with the ids it generated the first time, so an editor that is
+ * open on something created a moment ago is still pointing at it.
+ *
+ * The undo stack is cleared rather than carried over. Its entries describe a
+ * snapshot that no longer exists — the empty one this device held before the
+ * account's budget arrived — and offering to "undo" back to it would be
+ * offering to delete everything.
+ */
+function applyPendingMutations(hydratedSnapshot: BudgetSnapshot): {
+  snapshot: BudgetSnapshot;
+  replayed: number;
+} {
+  if (pendingMutations.length === 0) return { snapshot: hydratedSnapshot, replayed: 0 };
+
+  const queued = pendingMutations;
+  pendingMutations = [];
+  let snapshot = hydratedSnapshot;
+  for (const mutation of queued) {
+    const next = clone(snapshot);
+    const previous = idPlayback;
+    idPlayback = { values: mutation.ids, index: 0 };
+    let replacement: BudgetSnapshot | unknown;
+    try {
+      replacement = mutation.recipe(next);
+    } finally {
+      idPlayback = previous;
+    }
+    snapshot = isBudgetSnapshot(replacement) ? replacement : next;
+    snapshot.revision = (hydratedSnapshot.revision ?? 0) + 1;
+    touch(snapshot, mutation.type, mutation.summary, mutation.metadata, null);
+  }
+  return { snapshot, replayed: queued.length };
+}
+
 function commit(
   set: (partial: Partial<BudgetStore>) => void,
   get: () => BudgetStore,
@@ -1381,7 +1495,34 @@ function commit(
 ): void {
   const before = clone(get().snapshot);
   const next = clone(before);
-  const replacement = recipe(next);
+
+  /*
+   * Until the first load has landed, this change is also queued.
+   *
+   * It is applied locally straight away — the interface must stay responsive —
+   * and re-applied to whatever hydration brings back, because the snapshot it
+   * is being applied to here is about to be replaced. The ids it generates are
+   * taped so the replay produces the same ones.
+   *
+   * The condition is `!hydrated`, not "a load is in flight". Driving this in a
+   * real browser showed why: the application gates hydration on the session
+   * check, so there is a window after mount in which nothing is loading *yet*
+   * and a write is still doomed. Anything before the first snapshot arrives is
+   * written against a snapshot that is going to be replaced, whether or not the
+   * request has been made.
+   */
+  const queue = !get().hydrated;
+  const tape: string[] = [];
+  const previousTape = idTape;
+  if (queue) idTape = tape;
+  let replacement: BudgetSnapshot | unknown;
+  try {
+    replacement = recipe(next);
+  } finally {
+    if (queue) idTape = previousTape;
+  }
+  if (queue) pendingMutations.push({ recipe, type, summary, metadata, ids: tape });
+
   const finalSnapshot = isBudgetSnapshot(replacement) ? replacement : next;
   finalSnapshot.revision = (before.revision ?? 0) + 1;
 
@@ -1576,8 +1717,17 @@ function purchaseTimestamp(date: string | undefined): string | undefined {
 }
 
 function id(prefix: string): string {
-  if ("crypto" in globalThis && "randomUUID" in crypto) return `${prefix}-${crypto.randomUUID()}`;
-  return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  // Replaying a queued mutation: hand back the id it generated the first time,
+  // so the re-application is exact rather than merely equivalent.
+  if (idPlayback && idPlayback.index < idPlayback.values.length) {
+    return idPlayback.values[idPlayback.index++];
+  }
+  const value =
+    "crypto" in globalThis && "randomUUID" in crypto
+      ? `${prefix}-${crypto.randomUUID()}`
+      : `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  if (idTape) idTape.push(value);
+  return value;
 }
 
 function clone<T>(value: T): T {

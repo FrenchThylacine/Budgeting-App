@@ -680,6 +680,13 @@ export const SpendingPanel: React.FC = () => {
               >
               <div
                 className={`item-row${mutable ? " editable-row" : ""}`}
+                /* Who funds it, on the row rather than only on the figure: the
+                   category is the primary identifying text, and the state has
+                   to be readable from what identifies the row. */
+                data-funding={entryFundingKind(entry)}
+                /* And the category's own colour, as an outline. Two independent
+                   facts, two channels: what it is, and who pays for it. */
+                style={{ "--category-accent": category?.color ?? "transparent" } as React.CSSProperties}
                 role={mutable ? "button" : undefined}
                 tabIndex={mutable ? 0 : undefined}
                 aria-label={mutable ? t("spending.editTransaction") : undefined}
@@ -761,7 +768,7 @@ export const SpendingPanel: React.FC = () => {
                   <Money amount={entry.amount} currency={entry.currency} strong />
                   {mutable && (
                     <div className="row-actions">
-                      <Button variant="ghost" size="sm" icon onClick={() => beginEdit(entry)} aria-label={t("a11y.editTransaction")}>
+                      <Button variant="ghost" size="sm" icon data-action="edit-spending" onClick={() => beginEdit(entry)} aria-label={t("a11y.editTransaction")}>
                         <Pencil size={15} />
                       </Button>
                       <Button

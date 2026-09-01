@@ -173,7 +173,9 @@ export const CurrencyPanel: React.FC = () => {
         title={t("currencies.title")}
         action={
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <Button variant="secondary" size="sm" onClick={() => setPickerOpen(true)}>
+            {/* A stable hook, like `data-tab` on the navigation: the tour
+                lights this control up, and the harness presses it. */}
+            <Button variant="secondary" size="sm" data-action="pin-currency" onClick={() => setPickerOpen(true)}>
               <Plus size={14} /> {t("currencies.addCurrency")}
             </Button>
             {/* The mode switch. `aria-pressed` rather than a checkbox: it is a

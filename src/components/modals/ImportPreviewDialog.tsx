@@ -3,12 +3,13 @@ import { AlertTriangle, Download, FileSpreadsheet, X } from "lucide-react";
 import type { BudgetSnapshot } from "../../domain/types";
 import type { WorkbookImportSummary } from "../../domain/workbookImport";
 import { useTranslation } from "../../i18n/useTranslation";
+import type { ImportWarning } from "../../domain/workbookImport";
 
 export interface ImportPreview {
   fileName: string;
   snapshot: BudgetSnapshot;
   summary: WorkbookImportSummary;
-  warnings: string[];
+  warnings: ImportWarning[];
 }
 
 interface ImportPreviewDialogProps {
@@ -197,8 +198,13 @@ export const ImportPreviewDialog: React.FC<ImportPreviewDialogProps> = ({
             <>
               <h3 className="text-callout" style={{ margin: "16px 0 6px" }}>{t("import.notesFromTheFile")}</h3>
               <ul className="modal-consequences">
+                {/* Translated here rather than assembled in the importer: a
+                    note about a spreadsheet is read by the person deciding
+                    whether to accept it, in their own language. */}
                 {preview.warnings.map((warning) => (
-                  <li key={warning}>{warning}</li>
+                  <li key={`${warning.key}-${JSON.stringify(warning.params ?? {})}`}>
+                    {t(warning.key, { ...warning.params, count: warning.count })}
+                  </li>
                 ))}
               </ul>
             </>

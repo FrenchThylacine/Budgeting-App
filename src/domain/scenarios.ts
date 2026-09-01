@@ -40,6 +40,18 @@ export interface ScenarioChange {
   /** Current value, or null when nothing is set today. */
   before: number | boolean | string | null;
   after: number | boolean | string;
+  /**
+   * The same two values as translation keys, when they are words rather than
+   * money.
+   *
+   * A funding change reads "Paid by me → Paid by other", and those are the
+   * only two *sentences* this module produces. They used to be emitted as
+   * English strings and rendered verbatim, so the scenario preview stayed in
+   * English in every language — the same failure `labelKey` above exists to
+   * prevent, one field over.
+   */
+  beforeKey?: string;
+  afterKey?: string;
   /** Present for cap changes, so the UI can colour by category. */
   categoryId?: string;
   categoryColor?: string;
@@ -271,8 +283,10 @@ export function scenarioDiff(snapshot: BudgetSnapshot, preset: ScenarioPreset): 
       changes.push({
         kind: "activity-funding",
         label: activity.name,
-        before: FUNDING_META[own].shortLabel,
-        after: FUNDING_META[stored.funding].shortLabel,
+        before: own,
+        after: stored.funding,
+        beforeKey: `funding.${own}.short`,
+        afterKey: `funding.${stored.funding}.short`,
         activityId: activity.id,
       });
     }

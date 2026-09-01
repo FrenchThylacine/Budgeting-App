@@ -96,7 +96,8 @@ import { AuthScreen } from "./components/auth/AuthScreen";
 import { TabTransition } from "./components/ui/TabTransition";
 import { Tricolour } from "./components/ui/Tricolour";
 import { LoadingScreen, recallBootAircraft, rememberBootAircraft } from "./components/loading/LoadingScreen";
-import { applyTheme, clearTheme, resolveAppearance, themeFor } from "./domain/theme";
+import { CUSTOM_THEME_ID, applyTheme, clearTheme, resolveAppearance } from "./domain/theme";
+import { customStatusTextTokens, resolveThemePreset, sanitiseCustomTheme } from "./domain/customTheme";
 import { sanitiseStatusColours, statusColourVariables } from "./domain/statusColours";
 import { fontStack } from "./domain/fonts";
 import { shouldAutoStartTutorial } from "./domain/tutorial";
@@ -271,6 +272,7 @@ export default function App() {
    * switches to dark at sunset should take the application with it.
    */
   const themePreset = snapshot.settings.themePreset;
+  const customTheme = snapshot.settings.customTheme;
   const appearance = snapshot.settings.appearance;
   const darkModeSetting = snapshot.settings.darkMode === true;
   const [systemDark, setSystemDark] = useState(
@@ -286,7 +288,7 @@ export default function App() {
 
   useEffect(() => {
     const root = document.documentElement;
-    const theme = themeFor(themePreset);
+    const theme = resolveThemePreset(themePreset, customTheme);
     const dark = resolveAppearance(appearance, darkModeSetting, systemDark, theme);
     // `=== true`, not the raw value: classList.toggle ignores an `undefined`
     // second argument and flips the class instead of clearing it. A snapshot
@@ -300,7 +302,7 @@ export default function App() {
       root.style.removeProperty("color-scheme");
       clearTheme(root);
     };
-  }, [themePreset, appearance, darkModeSetting, systemDark]);
+  }, [themePreset, customTheme, appearance, darkModeSetting, systemDark]);
 
   /*
    * The reader's own status colours, over whatever the theme said.
@@ -315,12 +317,28 @@ export default function App() {
   const statusColours = snapshot.settings.statusColours;
   useEffect(() => {
     const root = document.documentElement;
-    const variables = statusColourVariables(sanitiseStatusColours(statusColours));
+    /*
+     * Two layers, in this order: the shades a reader's own theme needs, then
+     * the colours they chose outright.
+     *
+     * The stylesheet ships a light set and a dark set of status colours, and a
+     * page somebody picked themselves is not obliged to be either — a mid grey
+     * fails both, which the browser check found as forty unreadable text nodes.
+     * So a custom theme re-shades them, keeping each hue and computing its
+     * lightness against the grounds it will actually be printed on. An explicit
+     * choice still wins over that, because it is a choice.
+     */
+    const variables = {
+      ...(themePreset === CUSTOM_THEME_ID
+        ? customStatusTextTokens(sanitiseCustomTheme(customTheme))
+        : {}),
+      ...statusColourVariables(sanitiseStatusColours(statusColours)),
+    };
     for (const [name, value] of Object.entries(variables)) root.style.setProperty(name, value);
     return () => {
       for (const name of Object.keys(variables)) root.style.removeProperty(name);
     };
-  }, [statusColours, themePreset, appearance, darkModeSetting, systemDark]);
+  }, [statusColours, themePreset, customTheme, appearance, darkModeSetting, systemDark]);
 
   /*
    * The typeface, which is one token because every rule that names a family

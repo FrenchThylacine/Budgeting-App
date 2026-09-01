@@ -187,6 +187,19 @@ export function paymentBaseline(activity: Activity): Date | null {
  * 29 February is clamped to the 28th in a common year rather than rolling into
  * March, which is what every subscription service does with it.
  */
+/**
+ * The same day of the month, `months` later.
+ *
+ * Clamped to the month's length, so a plan starting on the 31st pays on the
+ * 30th in April rather than slipping into May and dragging every later payment
+ * with it.
+ */
+function addMonthsKeepingDay(date: Date, months: number): Date {
+  const target = new Date(date.getFullYear(), date.getMonth() + months, 1);
+  const day = Math.min(date.getDate(), daysInMonth(target.getFullYear(), target.getMonth() + 1));
+  return new Date(target.getFullYear(), target.getMonth(), day);
+}
+
 function addYears(date: Date, years: number): Date {
   const year = date.getFullYear() + years;
   const month = date.getMonth();
@@ -253,6 +266,93 @@ export function sessionPackPaymentDates(activity: Activity, from: Date, count: n
   return dates;
 }
 
+
+/**
+ * The dates an installment plan actually falls on.
+ *
+ * Bounded by `installmentCount`, which is the whole difference between this and
+ * a recurring cost: a plan of twelve payments has a *last* one, and the month
+ * after it costs nothing. A schedule that kept producing dates would report a
+ * commitment the reader has finished paying.
+ *
+ * Dates are generated from the first payment forward and then filtered to the
+ * window, rather than advanced to it, because "which installment number is
+ * this" is only answerable by counting from the start.
+ */
+export function installmentPaymentDates(activity: Activity): Date[] {
+  const baseline = paymentBaseline(activity);
+  const count = normalizeInstallmentCount(activity.installmentCount);
+  if (!baseline || count == null) return [];
+
+  const frequency = activity.installmentFrequency ?? "monthly";
+  const dates: Date[] = [];
+  for (let index = 0; index < count; index += 1) {
+    if (frequency === "monthly") {
+      dates.push(addMonthsKeepingDay(baseline, index));
+    } else if (frequency === "yearly") {
+      dates.push(addMonthsKeepingDay(baseline, index * 12));
+    } else {
+      const interval = normalizeInstallmentInterval(activity.installmentIntervalDays);
+      if (interval == null) return [];
+      dates.push(addDays(baseline, index * interval));
+    }
+  }
+  return dates;
+}
+
+/** A whole, positive number of installments, or null when it is not stated. */
+export function normalizeInstallmentCount(value: number | null | undefined): number | null {
+  if (value == null || !Number.isFinite(value)) return null;
+  const whole = Math.floor(value);
+  // One installment is a one-off payment expressed the long way round, and is
+  // legal: somebody may plan two and pay the second early.
+  return whole >= 1 && whole <= 600 ? whole : null;
+}
+
+/** A sane custom interval in days. */
+export function normalizeInstallmentInterval(value: number | null | undefined): number | null {
+  if (value == null || !Number.isFinite(value)) return null;
+  const whole = Math.floor(value);
+  return whole >= 1 && whole <= 3650 ? whole : null;
+}
+
+/** What one installment costs, in the activity's own currency. */
+export function installmentAmount(activity: Activity): number | null {
+  const amount = activity.installmentAmount;
+  if (amount == null || !Number.isFinite(amount) || amount < 0) return null;
+  return amount;
+}
+
+/**
+ * What the whole plan costs: every installment, once.
+ *
+ * This is the figure the activity is *worth* — €3,000 of flying — as distinct
+ * from what any one month requires, which is one installment or none.
+ */
+/**
+ * How many months the plan runs for, from its first payment to its last.
+ *
+ * Used for the monthly accrual, which is a display figure: what a month
+ * genuinely requires comes from the dates. At least one, so a single-payment
+ * plan does not divide by zero.
+ */
+export function installmentPlanMonths(activity: Activity): number | null {
+  const dates = installmentPaymentDates(activity);
+  if (dates.length === 0) return null;
+  const first = dates[0];
+  const last = dates[dates.length - 1];
+  const months =
+    (last.getFullYear() - first.getFullYear()) * 12 + (last.getMonth() - first.getMonth()) + 1;
+  return Math.max(1, months);
+}
+
+export function installmentTotal(activity: Activity): number | null {
+  const count = normalizeInstallmentCount(activity.installmentCount);
+  const amount = installmentAmount(activity);
+  if (count == null || amount == null) return null;
+  return count * amount;
+}
+
 /**
  * Real payments for an activity in `[from, to]`, or null when this module does
  * not model the activity's payments.
@@ -262,7 +362,7 @@ export function sessionPackPaymentDates(activity: Activity, from: Date, count: n
  */
 export function paymentsBetween(activity: Activity, from: Date, to: Date): PaymentOccurrence[] | null {
   const model = activity.costModel;
-  if (model !== "fixedYearly" && model !== "sessionPack") return null;
+  if (model !== "fixedYearly" && model !== "sessionPack" && model !== "installments") return null;
   if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) return [];
 
   const end = startOfDay(to).getTime();
@@ -278,6 +378,13 @@ export function paymentsBetween(activity: Activity, from: Date, to: Date): Payme
         amountNative: fixedYearlyAmount(activity),
         fromRenewalDate,
       }));
+  }
+
+  if (model === "installments") {
+    const amount = installmentAmount(activity);
+    return installmentPaymentDates(activity)
+      .filter((date) => date.getTime() >= startOfDay(from).getTime() && date.getTime() <= end)
+      .map((date) => ({ date, amountNative: amount, fromRenewalDate }));
   }
 
   const interval = sessionPackIntervalDays(activity);
@@ -322,15 +429,19 @@ export function fixedYearlyAmount(activity: Activity): number | null {
  */
 export function describePaymentCycle(
   activity: Activity,
-  t?: (key: string, params?: Record<string, string | number>) => string,
+  t: (key: string, params?: Record<string, string | number>) => string,
 ): string | null {
-  // Without a translator — a test, an export — the English is produced as
-  // before. With one, every fragment is a key, because "twice a week, paid
-  // every ten sessions" orders those two facts differently in each language.
-  const say = (key: string, params: Record<string, string | number>, fallback: string) =>
-    t ? t(key, params) : fallback;
-
-  if (activity.costModel === "fixedYearly") return say("payments.billedYearly", {}, "Billed once a year");
+  /*
+   * The translator is required.
+   *
+   * It used to be optional, with an English fallback beside every key "for a
+   * test or an export". There is no such caller: both the card and the
+   * upcoming list pass one, and the only code that took the other branch was
+   * the test asserting the English. So the fallback was seven English
+   * sentences kept alive by the test that checked them — and the audit found
+   * them exactly the way it found the others.
+   */
+  if (activity.costModel === "fixedYearly") return t("payments.billedYearly");
   if (activity.costModel !== "sessionPack") return null;
 
   const perPayment = normalizeSessionsPerPayment(activity.sessionsPerPayment);
@@ -338,31 +449,27 @@ export function describePaymentCycle(
   const period = normalizeSessionPeriod(activity.sessionPeriod);
   const cadence =
     rate != null
-      ? say(
-          period === "week" ? "payments.perWeek" : "payments.perMonth",
-          { rate: trim(rate) },
-          `${trim(rate)} / ${period}`,
-        )
+      ? t(period === "week" ? "payments.perWeek" : "payments.perMonth", { rate: trim(rate) })
       : null;
 
   if (perPayment == null) {
     if (!cadence) return null;
-    return say("payments.paySession", { cadence }, `${cadence} · pay per session`);
+    return t("payments.paySession", { cadence });
   }
 
   const every = sessionPackIntervalDays(activity);
   const interval = every != null ? describeDays(every, t, true) : null;
   const core =
     interval != null
-      ? say("payments.payEveryWithInterval", { count: perPayment, interval }, `pay every ${perPayment} sessions (≈ ${interval})`)
-      : say("payments.payEvery", { count: perPayment }, `pay every ${perPayment} sessions`);
-  return cadence ? say("payments.cycle", { cadence, core }, `${cadence} · ${core}`) : core;
+      ? t("payments.payEveryWithInterval", { count: perPayment, interval })
+      : t("payments.payEvery", { count: perPayment });
+  return cadence ? t("payments.cycle", { cadence, core }) : core;
 }
 
 /** "35 days" as "5 weeks" where that is the clearer unit. */
 export function describeDays(
   days: number,
-  t?: (key: string, params?: Record<string, string | number>) => string,
+  t: (key: string, params?: Record<string, string | number>) => string,
   /**
    * Produce "every 5 weeks" rather than "5 weeks".
    *
@@ -373,12 +480,15 @@ export function describeDays(
    */
   every = false,
 ): string {
+  /*
+   * Four keys and no English. The English branches that used to sit beside
+   * them chose their own plural — "1 week" / "2 weeks" — which is a rule that
+   * belongs to English and to nothing else; the dictionaries answer with
+   * `Intl.PluralRules`, which is why Arabic gets six forms and Japanese one.
+   */
   if (days % 7 === 0) {
-    const weeks = days / 7;
-    if (!t) return every ? `every ${weeks} week${weeks === 1 ? "" : "s"}` : `${weeks} week${weeks === 1 ? "" : "s"}`;
-    return t(every ? "common.everyWeeks" : "common.weeks", { count: weeks });
+    return t(every ? "common.everyWeeks" : "common.weeks", { count: days / 7 });
   }
-  if (!t) return every ? `every ${days} day${days === 1 ? "" : "s"}` : `${days} day${days === 1 ? "" : "s"}`;
   return t(every ? "common.everyDays" : "common.days", { count: days });
 }
 
