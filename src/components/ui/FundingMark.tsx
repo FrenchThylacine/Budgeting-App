@@ -24,67 +24,41 @@ import { useTranslation } from "../../i18n/useTranslation";
  *                 activity is funded*; outside-budget is amber, because it is
  *                 the reader's own money held apart, which is a different kind
  *                 of fact;
- *   **a word**  — in the badge and the chip, and in the tooltip and the
- *                 accessible name everywhere else.
+ *   **a word**  — beside the figure, and in the tooltip.
  */
 
 interface FundingMarkProps {
   kind: FundingKind;
-  /**
-   * `badge` — glyph and short label, for a row that is already dense.
-   *
-   * `chip` — glyph, a figure of the caller's choosing, then the label. For a
-   * summary, where the amount is the point and the kind qualifies it.
-   *
-   * `glyph` — the mark alone, for a legend or a table cell that has its own
-   * heading. The word stays in the accessible name.
-   */
-  variant?: "badge" | "chip" | "glyph";
-  /** Extra detail after the label — who pays, when that is recorded. */
-  detail?: string;
-  /** The figure, for the `chip` variant. */
+  /** The figure the kind qualifies. */
   children?: React.ReactNode;
   className?: string;
 }
 
-export const FundingMark: React.FC<FundingMarkProps> = ({
-  kind,
-  variant = "badge",
-  detail,
-  children,
-  className = "",
-}) => {
+/**
+ * One shape, because there is one place left that needs it.
+ *
+ * There were three — a badge, a bare glyph and this chip. The badge had no
+ * callers at all, and the glyph's two were the activity and transaction cards,
+ * where V5.1 removed it: the funding state is carried there by the colour of
+ * the name and the figure, and a fourth mark on a card that already has an
+ * outline, an entity mark and a schedule shape is one thing too many competing
+ * to be noticed.
+ *
+ * The chip survives because a *summary* is the one place the colour cannot
+ * carry it: a figure standing on its own beside two other figures has nothing
+ * to be a different colour from.
+ */
+export const FundingMark: React.FC<FundingMarkProps> = ({ kind, children, className = "" }) => {
   const { t } = useTranslation();
   const label = t(`funding.${kind}.short`);
-  const hint = t(`funding.${kind}.hint`);
-  const glyph = FUNDING_META[kind].glyph;
-
-  if (variant === "chip") {
-    return (
-      <span className={`funding-chip ${className}`.trim()} data-funding={kind} title={hint}>
-        <span className="funding-glyph" aria-hidden="true">
-          {glyph}
-        </span>
-        {children}
-        <span className="funding-chip-label">{label}</span>
-      </span>
-    );
-  }
-
-  if (variant === "glyph") {
-    return (
-      <span className={`funding-glyph ${className}`.trim()} data-funding={kind} title={hint}>
-        <span aria-hidden="true">{glyph}</span>
-        <span className="sr-only">{label}</span>
-      </span>
-    );
-  }
 
   return (
-    <span className={`funding-badge ${className}`.trim()} data-funding={kind} title={hint}>
-      <span aria-hidden="true">{glyph}</span>
-      {label}
-      {detail ? ` · ${detail}` : ""}
+    <span className={`funding-chip ${className}`.trim()} data-funding={kind} title={t(`funding.${kind}.hint`)}>
+      <span className="funding-glyph" aria-hidden="true">
+        {FUNDING_META[kind].glyph}
+      </span>
+      {children}
+      <span className="funding-chip-label">{label}</span>
     </span>
   );
 };

@@ -215,15 +215,31 @@ Thirty-five of them went red overnight when August became the past. They pin the
 clock to their own fixtures' month now — see `tests/lib/clock.ts`, which also
 explains why the pin is *mid*-month.
 
-**And two of them run a browser.** `npm run verify` drives a real Chrome over
-the DevTools Protocol on a brand-new account each run: 65 checks, six phone
+**And four of them run a browser.** `npm run verify` drives a real Chrome over
+the DevTools Protocol on a brand-new account each run: 66 checks, six phone
 widths, two theme presets and one built through the picker at run time, and
 measurements of the loading animation — the bank angle of the escorts is
 collected inside the page on every animation frame, because a sample taken
 every 40ms spans four drawn frames and cannot tell a smooth roll from a cut.
+It also writes 200 USD against a euro display, tours five display currencies,
+moves the rate and reloads, and asserts that what PostgreSQL hands back is
+still two hundred dollars.
+
 `npm run verify:tutorial` walks the first-run tour itself and asserts both
 directions: that a completed task advances the step, and that an untouched one
 does not.
+
+`npm run verify:airshow` **replaces the page's clock** before the application's
+first line runs — `requestAnimationFrame` becomes a queue the script drains one
+frame at a time, `performance.now` reads a counter it advances — so the loading
+sequence can be stepped deterministically and photographed. That is the only
+way the numbers and the picture can describe the same instant, and it is what
+found the smoke rendering as three hard-edged bars while every measurement of
+it passed. `npm run verify:cards` does the same job for the activity and
+transaction lists: it writes one card per funding state, then photographs both
+lists and measures the outline, the text colours and every labelled icon on
+them — in both appearances, because an outline chosen against white is a
+different amount of contrast against near-black.
 
 ---
 

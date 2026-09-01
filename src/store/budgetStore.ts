@@ -1,6 +1,14 @@
 import { create } from "zustand";
 import { calculateRolloverDelta, createNextYearRecord } from "../domain/calculations";
-import { ALLOCATION_TYPE, TRANSFER_TYPE, monthlyBudgetPlan, walletState, walletComposition } from "../domain/wallet";
+import {
+  ALLOCATION_TYPE,
+  TRANSFER_TYPE,
+  budgetComposition,
+  monthlyBudgetPlan,
+  walletComposition,
+  walletState,
+} from "../domain/wallet";
+import type { CanonicalMoney } from "../domain/wallet";
 import { monthFromDateInput, monthName, todayDateInput, weekFromDateInput } from "../domain/dates";
 import { isUsableAmount } from "../domain/wishlist";
 import type { WishlistLinkResult, WishlistPurchaseOverrides } from "../domain/wishlist";
@@ -174,7 +182,9 @@ interface BudgetStore {
    * balance is deliberately unaffected. Offered at the two moments leftover
    * budget comes up, and never performed without being asked for.
    */
-  transferBudgetToPersonal: (amount: number, note?: string) => void;
+  transferBudgetToPersonal: (money: CanonicalMoney, note?: string) => void;
+  /** Move the whole leftover budget claim across, one entry per currency. */
+  sweepBudgetToPersonal: (note?: string) => void;
   updateWalletEntry: (id: string, patch: Partial<WalletEntry>) => void;
   removeWalletEntry: (id: string) => void;
   closeMonth: (year: number, month: number, applyRollover: boolean) => void;
@@ -844,11 +854,17 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
       set,
       get,
       (snapshot) => {
-        currentYear(snapshot).walletEntries.push({
-          ...entry,
-          id: entry.id ?? id("wallet"),
-          createdAt: new Date().toISOString(),
-        });
+        currentYear(snapshot).walletEntries.push(
+          // The caller states both halves of the money, which is the whole
+          // contract; `movement` is what makes that impossible to half-do.
+          movement(entry.year, entry.month, { amount: entry.amount, currency: entry.currency }, {
+            id: entry.id ?? id("wallet"),
+            type: entry.type,
+            source: entry.source,
+            note: entry.note ?? "",
+            date: entry.date,
+          }),
+        );
       },
       "wallet",
       storedText("audit.walletAdded"),
@@ -865,13 +881,10 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
       set,
       get,
       (snapshot) => {
-        ensureYearRecord(snapshot, year).walletEntries.push({
+        ensureYearRecord(snapshot, year).walletEntries.push(
+          movement(year, month, { amount, currency }, {
           id: id("wallet-allocation"),
-          year,
-          month,
           date,
-          amount,
-          currency,
           /*
            * A translation key, not a sentence.
            *
@@ -885,8 +898,8 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
           source: source?.trim() || storedText("wallet.allocationSource", { month: monthName(month), year }),
           type: ALLOCATION_TYPE,
           note: note?.trim() ?? "",
-          createdAt: new Date().toISOString(),
-        });
+          }),
+        );
       },
       "wallet",
       storedText("audit.budgetAllocated", { month: monthName(month), year }),
@@ -894,9 +907,17 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
     );
   },
 
-  transferBudgetToPersonal: (amount, note) => {
+  /**
+   * Move a stated amount of budget money onto the personal side.
+   *
+   * The currency is part of the argument and always has been part of the
+   * *fact*; it used to be filled in here from `settings.baseCurrency`, which
+   * is the display currency and therefore says nothing about the money. A
+   * caller with a figure in dollars and a euro display silently wrote euros.
+   */
+  transferBudgetToPersonal: (money, note) => {
     if (!get().isCurrentPeriodMutable()) return;
-    if (!Number.isFinite(amount) || amount <= 0) return;
+    if (!Number.isFinite(money.amount) || money.amount <= 0) return;
     const snapshot = get().snapshot;
     const year = snapshot.settings.selectedYear;
     const month = snapshot.settings.selectedMonth;
@@ -904,22 +925,65 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
       set,
       get,
       (draft) => {
-        ensureYearRecord(draft, year).walletEntries.push({
-          id: id("wallet-transfer"),
-          year,
-          month,
-          date: todayDateInput(),
-          amount,
-          currency: draft.settings.baseCurrency,
-          source: storedText("wallet.transferSource"),
-          type: TRANSFER_TYPE,
-          note: note?.trim() || storedText("wallet.transferLedgerNote"),
-          createdAt: new Date().toISOString(),
-        });
+        ensureYearRecord(draft, year).walletEntries.push(
+          movement(year, month, money, {
+            id: id("wallet-transfer"),
+            type: TRANSFER_TYPE,
+            source: storedText("wallet.transferSource"),
+            note: note?.trim() || storedText("wallet.transferLedgerNote"),
+          }),
+        );
       },
       "wallet",
       storedText("audit.walletTransferred"),
-      { year, month, amount },
+      { year, month, amount: money.amount, currency: money.currency },
+    );
+  },
+
+  /**
+   * Move **all** the leftover budget onto the personal side — one entry per
+   * currency it is held in.
+   *
+   * This is the operation the wallet actually offers, and it is separate from
+   * the one above for a reason that is not tidiness. Sweeping a balance is a
+   * *cancellation*: it exists to leave the budget claim at zero. An entry that
+   * cancels other entries has to be denominated the way they are, or the two
+   * sides stop netting the moment the rate moves — and "the moment the rate
+   * moves" is not a hypothetical, it is every time the rate provider is
+   * polled.
+   *
+   * Sweeping €172.41 against an allocation of 200 USD left a wallet the reader
+   * had just cleared holding €18.06 of budget money at a rate of 1.05 and
+   * €49.81 at 0.90, out of nothing.
+   */
+  sweepBudgetToPersonal: (note) => {
+    if (!get().isCurrentPeriodMutable()) return;
+    const snapshot = get().snapshot;
+    const year = snapshot.settings.selectedYear;
+    const month = snapshot.settings.selectedMonth;
+    // Only the currencies the claim is actually positive in: a currency the
+    // budget is overdrawn in is not leftover money to move anywhere.
+    const claim = budgetComposition(snapshot).filter((slice) => slice.amount > 0.005);
+    if (claim.length === 0) return;
+    commit(
+      set,
+      get,
+      (draft) => {
+        const record = ensureYearRecord(draft, year);
+        for (const slice of claim) {
+          record.walletEntries.push(
+            movement(year, month, { amount: slice.amount, currency: slice.currency }, {
+              id: id("wallet-transfer"),
+              type: TRANSFER_TYPE,
+              source: storedText("wallet.transferSource"),
+              note: note?.trim() || storedText("wallet.transferLedgerNote"),
+            }),
+          );
+        }
+      },
+      "wallet",
+      storedText("audit.walletTransferred"),
+      { year, month, slices: claim.map((slice) => ({ amount: slice.amount, currency: slice.currency })) },
     );
   },
 
@@ -938,31 +1002,39 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
     const adjustment = -balance;
     // Held currency by currency, so each can be zeroed in its own.
     const composition = walletComposition(snapshot);
-    // Budget money still claimed by the ledger. Zeroing the cash while leaving
-    // this standing would assert that €600 of budget money is available in a
-    // wallet the user has just declared empty — a contradiction they can see,
-    // and one that drives the personal balance negative by exactly that
-    // amount. The claim is released first, so all three figures land on zero.
-    const claimed = walletState(snapshot).budgetRemaining;
+    /*
+     * Budget money still claimed by the ledger, **currency by currency**.
+     *
+     * Zeroing the cash while leaving this standing would assert that €600 of
+     * budget money is available in a wallet the user has just declared empty —
+     * a contradiction they can see, and one that drives the personal balance
+     * negative by exactly that amount. So the claim is released too.
+     *
+     * It used to be released as one entry for `budgetRemaining`, which is that
+     * claim *converted into the display currency* — and the comment below,
+     * about zeroing dollars with dollars, was already on the file when it was.
+     * The cash half obeyed the rule and the claim half did not, so a wallet
+     * holding an allocation of 200 USD against a euro display was cleared with
+     * a release of €172.41 and then grew €18.06 of budget money the next time
+     * the rate provider answered. Measured, at three rates, in
+     * `tests/wallet-rate-invariance.test.ts`.
+     */
+    const claimed = budgetComposition(snapshot);
 
     commit(
       set,
       get,
       (draft) => {
         const record = ensureYearRecord(draft, year);
-        if (Math.abs(claimed) >= 0.005) {
-          record.walletEntries.push({
-            id: id("wallet-reset-claim"),
-            year,
-            month: draft.settings.selectedMonth,
-            date: todayDateInput(),
-            amount: claimed,
-            currency: draft.settings.baseCurrency,
-            source: storedText("wallet.resetSource"),
-            type: TRANSFER_TYPE,
-            note: storedText("wallet.resetClaimNote"),
-            createdAt: new Date().toISOString(),
-          });
+        for (const slice of claimed) {
+          record.walletEntries.push(
+            movement(year, draft.settings.selectedMonth, { amount: slice.amount, currency: slice.currency }, {
+              id: id("wallet-reset-claim"),
+              type: TRANSFER_TYPE,
+              source: storedText("wallet.resetSource"),
+              note: storedText("wallet.resetClaimNote"),
+            }),
+          );
         }
         /*
          * One adjustment per currency held, each in that currency.
@@ -980,18 +1052,14 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
          * amount is an amount and a currency, and a conversion is a lens.
          */
         for (const slice of composition) {
-          record.walletEntries.push({
-            id: id("wallet-reset"),
-            year,
-            month: draft.settings.selectedMonth,
-            amount: -slice.amount,
-            currency: slice.currency,
-            date: todayDateInput(),
-            source: storedText("wallet.resetSource"),
-            type: "adjustment",
-            note: storedText("wallet.resetLedgerNote"),
-            createdAt: new Date().toISOString(),
-          });
+          record.walletEntries.push(
+            movement(year, draft.settings.selectedMonth, { amount: -slice.amount, currency: slice.currency }, {
+              id: id("wallet-reset"),
+              type: "adjustment",
+              source: storedText("wallet.resetSource"),
+              note: storedText("wallet.resetLedgerNote"),
+            }),
+          );
         }
       },
       "wallet",
@@ -1059,17 +1127,33 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
           };
         } else if (applyRollover) {
           const walletEntryId = id("wallet-rollover");
-          record.walletEntries.push({
-            id: walletEntryId,
-            year,
-            month,
-            amount: delta,
-            currency: snapshot.settings.baseCurrency,
-            source: storedText("wallet.monthEndRollover"),
-            type: "rollover",
-            note: delta < 0 ? storedText("audit.rolloverNegative") : storedText("audit.rolloverPositive"),
-            createdAt: timestamp,
-          });
+          /*
+           * The one place a display-currency figure legitimately becomes a
+           * stored principal, and it is worth being explicit about why.
+           *
+           * Everything else in this file writes money the reader typed, in the
+           * currency they typed it in. The rollover is different in kind: it
+           * is the *decision* "carry September's unspent budget forward", and
+           * the figure the reader was shown and confirmed is
+           * `monthlyBudget − spent`, both already converted into the display
+           * currency. Storing that figure in that currency records what was
+           * agreed. Converting it back into some other currency first would be
+           * the round trip §2.2 forbids, and would make the stored number
+           * differ from the one on the screen when it was confirmed.
+           *
+           * It is safe *because* a rollover cancels nothing. The entries that
+           * do — the wallet reset and the leftover sweep — take their
+           * currencies from `budgetComposition`, so they stay netted at every
+           * future rate. See `tests/wallet-rate-invariance.test.ts`.
+           */
+          record.walletEntries.push(
+            movement(year, month, { amount: delta, currency: snapshot.settings.baseCurrency }, {
+              id: walletEntryId,
+              type: "rollover",
+              source: storedText("wallet.monthEndRollover"),
+              note: delta < 0 ? storedText("audit.rolloverNegative") : storedText("audit.rolloverPositive"),
+            }),
+          );
           closeRecord = {
             id: id("close"),
             year,
@@ -1579,6 +1663,51 @@ function touch(
     metadata: baseMetadata,
   });
   snapshot.auditLog = snapshot.auditLog.slice(0, 300);
+}
+
+/**
+ * The one place a ledger movement is built
+ * ========================================
+ *
+ * Every wallet entry in this store used to be an object literal written out at
+ * the call site, and five of them filled the currency in as
+ * `settings.baseCurrency` — the **display** currency, which is a rendering
+ * preference and says nothing whatever about what money is. Two of those five
+ * were live defects (see `sweepBudgetToPersonal` and `resetWallet`), and both
+ * were invisible because they are only wrong *later*: at the instant the entry
+ * is written the display rate makes it look right, and it stops netting the
+ * next time the rate provider answers.
+ *
+ * So a movement is built here, from a `CanonicalMoney` — an amount **and** the
+ * currency it is in, together, in one argument that cannot be half-supplied.
+ * A caller with a converted figure and no currency to name now has nothing to
+ * pass, which is exactly the state it should be in.
+ *
+ * It is not a type system proof and it is not pretending to be one. It is the
+ * narrowest seam every write goes through, so there is one place to read, one
+ * place to review, and one place a rule can be enforced —
+ * `tests/wallet-rate-invariance.test.ts` enforces it from the other side, by
+ * moving the rates and asserting that nothing stored and nothing derived-and-
+ * settled moves at all.
+ */
+function movement(
+  year: number,
+  month: number,
+  money: CanonicalMoney,
+  rest: { id: string; type: WalletEntry["type"]; source: string; note: string; date?: string },
+): WalletEntry {
+  return {
+    id: rest.id,
+    year,
+    month,
+    date: rest.date ?? todayDateInput(),
+    amount: money.amount,
+    currency: money.currency,
+    source: rest.source,
+    type: rest.type,
+    note: rest.note,
+    createdAt: new Date().toISOString(),
+  };
 }
 
 function currentYear(snapshot: BudgetSnapshot): YearRecord {

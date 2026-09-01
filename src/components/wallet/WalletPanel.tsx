@@ -80,7 +80,7 @@ export const WalletPanel: React.FC = () => {
   const updateWalletEntry = useBudgetStore((state) => state.updateWalletEntry);
   const resetWallet = useBudgetStore((s) => s.resetWallet);
   const allocateBudget = useBudgetStore((s) => s.allocateBudget);
-  const transferBudgetToPersonal = useBudgetStore((s) => s.transferBudgetToPersonal);
+  const sweepBudgetToPersonal = useBudgetStore((s) => s.sweepBudgetToPersonal);
   const mutable = useBudgetStore((s) => s.isCurrentPeriodMutable)();
 
   const wallet = useMemo(() => walletState(snapshot), [snapshot]);
@@ -433,7 +433,18 @@ export const WalletPanel: React.FC = () => {
           money={money}
           onClose={() => setLeftoverOpen(false)}
           onTransfer={() => {
-            transferBudgetToPersonal(leftover);
+            /*
+             * The *sweep*, not a transfer of the converted figure.
+             *
+             * `leftover` is the claim converted into the display currency, and
+             * it is the right number to *say* — the sheet is asking about it
+             * in the reader's own money. It is the wrong number to *write*: a
+             * cancellation has to be denominated the way the entries it
+             * cancels are, or the two sides stop netting the next time the
+             * rate provider answers. The sweep writes one entry per currency
+             * the claim is actually held in.
+             */
+            sweepBudgetToPersonal();
             setNotice(t("wallet.transferDone", { amount: money(leftover) }));
             setLeftoverOpen(false);
             setAllocationOpen(true);

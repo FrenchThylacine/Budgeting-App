@@ -57,6 +57,26 @@ import type {
 export type WalletDirection = "in" | "out";
 
 /**
+ * Money as the user entered it: an amount **and the currency it is in**.
+ *
+ * This is the only shape anything is allowed to write to the ledger, and the
+ * reason it is a type rather than two arguments is that two arguments can be
+ * forgotten one at a time. Every defect this application has had in this area
+ * has been the same shape — a `number` that came out of a conversion being
+ * passed to something that stores a `number` — and a `number` cannot say which
+ * currency it is in.
+ *
+ * The counterpart is deliberately *not* a type. A converted figure is a
+ * rendering, it never travels, and giving it a name would suggest it is a
+ * thing you might keep. See `WalletCurrencySlice`, where the amount is the
+ * fact and the conversion sits beside it as a lens.
+ */
+export interface CanonicalMoney {
+  readonly amount: number;
+  readonly currency: CurrencyCode;
+}
+
+/**
  * What a ledger entry is.
  *
  * `budget` is a **budget allocation**: money actually received for the month's
@@ -207,15 +227,26 @@ export interface WalletCurrencySlice {
   share: number | null;
 }
 
-export function walletComposition(snapshot: BudgetSnapshot): WalletCurrencySlice[] {
+/**
+ * A balance broken down by the currency it is actually held in.
+ *
+ * `effect` says which balance: `walletEffect` for the cash held, `budgetEffect`
+ * for the part of it the budget still claims. Spending reduces both, in the
+ * currency it was recorded in, because a €40 lunch reduces the euros whichever
+ * of the two figures is being asked about.
+ */
+function compose(
+  snapshot: BudgetSnapshot,
+  effect: (entry: Pick<WalletEntry, "type" | "amount">) => number,
+): WalletCurrencySlice[] {
   const byCurrency = new Map<CurrencyCode, number>();
 
   for (const entry of allWalletEntries(snapshot)) {
-    const effect = walletEffect(entry);
-    if (effect === 0) continue;
+    const moved = effect(entry);
+    if (moved === 0) continue;
     // Accumulated in the entry's own currency: this is the number the reader
     // put in, and it stays that number.
-    byCurrency.set(entry.currency, (byCurrency.get(entry.currency) ?? 0) + effect);
+    byCurrency.set(entry.currency, (byCurrency.get(entry.currency) ?? 0) + moved);
   }
 
   /*
@@ -253,6 +284,37 @@ export function walletComposition(snapshot: BudgetSnapshot): WalletCurrencySlice
 
   // Largest first: the composition is read as "mostly euros, some dollars".
   return slices.sort((a, b) => Math.abs(b.converted) - Math.abs(a.converted));
+}
+
+export function walletComposition(snapshot: BudgetSnapshot): WalletCurrencySlice[] {
+  return compose(snapshot, walletEffect);
+}
+
+/**
+ * The **budget claim**, currency by currency.
+ *
+ * The same fact `walletState().budgetRemaining` reports as one converted
+ * figure, kept instead in the currencies the money is actually in — and it
+ * exists for one reason, which is worth writing down because the defect it
+ * fixes was live and invisible.
+ *
+ * An entry written to *cancel* other entries has to be denominated the same
+ * way they are. The wallet reset already knew this for the cash half: it
+ * zeroes each currency in its own, so a reset dollar balance stays zero at
+ * every future rate. The half that releases the **budget claim** did not — it
+ * wrote a single transfer for `budgetRemaining`, a figure converted into the
+ * display currency. So a wallet holding an allocation of 200 USD against a
+ * euro display was reset with a claim release of €172.41, and the moment the
+ * rate moved the two sides stopped netting: **measured, a wallet the reader
+ * had just emptied grew €18.06 of budget money out of nothing at 1.05, €49.81
+ * at 0.90 and −€18.57 at 1.30.**
+ *
+ * That is the brief's §2 exactly — a display conversion deciding what the
+ * ledger *is* rather than what it looks like — and it survived because every
+ * test of the reset asserted the balances at the rate the reset happened at.
+ */
+export function budgetComposition(snapshot: BudgetSnapshot): WalletCurrencySlice[] {
+  return compose(snapshot, budgetEffect);
 }
 
 /**

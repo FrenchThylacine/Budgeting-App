@@ -1,6 +1,6 @@
 import React from "react";
 import { CADENCE_META, type Cadence } from "../../domain/cadence";
-import { FUNDING_META, type FundingKind } from "../../domain/funding";
+import type { FundingKind } from "../../domain/funding";
 import { CadenceMark } from "./CadenceMark";
 import { useTranslation } from "../../i18n/useTranslation";
 
@@ -47,10 +47,16 @@ export const MarkLegend: React.FC<MarkLegendProps> = ({ funding = [], cadences =
     <p className={`mark-legend ${className}`.trim()}>
       <span className="sr-only">{t("legend.title")}</span>
       {kinds.map((kind) => (
+        /*
+         * The word, in the colour it is describing, and no glyph.
+         *
+         * The cards it keys stopped carrying a funding glyph in V5.1 — the
+         * name and the figure are set in the funding colour instead — so a
+         * legend entry showing a diamond would be explaining a mark that is no
+         * longer anywhere on the screen. "Paid by other", in blue, is both the
+         * label and the example.
+         */
         <span key={kind} className="mark-legend-item" data-funding={kind}>
-          <span className="funding-glyph" aria-hidden="true">
-            {FUNDING_META[kind].glyph}
-          </span>
           {t(`funding.${kind}.short`)}
         </span>
       ))}

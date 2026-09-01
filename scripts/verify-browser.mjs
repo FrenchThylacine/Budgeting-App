@@ -187,8 +187,10 @@ try {
       const track = [];
       const escorts = [...document.querySelectorAll('.boot-escort')].slice(0, 2);
       const canvases = [...document.querySelectorAll('.boot-smoke')];
-      if (phase === 'orbit' && escorts.length === 2 && canvases.length === 2) {
-        const dpr = canvases[0].width / 1180;
+      if (phase === 'display' && escorts.length === 2 && canvases.length === 2) {
+        const boxW = canvases[0].clientWidth;
+        const boxH = canvases[0].clientHeight;
+        const dpr = canvases[0].width / boxW;
         const columns = canvases.map((c) => c.getContext('2d').getImageData(0, 0, c.width, c.height));
         // One read per canvas per sample, shared by both escorts.
         const HUES = [(r, g, b) => b > r + 30, (r, g, b) => r > b + 30];
@@ -222,10 +224,10 @@ try {
            * slow enough to miss what it measures.
            */
           const WINDOW = 70;
-          const px0 = Math.max(0, Math.round((tx + 590 - WINDOW) * dpr));
-          const px1 = Math.min(columns[0].width - 1, Math.round((tx + 590 + WINDOW) * dpr));
-          const py0 = Math.max(0, Math.round((ty + 310 - WINDOW) * dpr));
-          const py1 = Math.min(columns[0].height - 1, Math.round((ty + 310 + WINDOW) * dpr));
+          const px0 = Math.max(0, Math.round((tx + boxW / 2 - WINDOW) * dpr));
+          const px1 = Math.min(columns[0].width - 1, Math.round((tx + boxW / 2 + WINDOW) * dpr));
+          const py0 = Math.max(0, Math.round((ty + boxH / 2 - WINDOW) * dpr));
+          const py1 = Math.min(columns[0].height - 1, Math.round((ty + boxH / 2 + WINDOW) * dpr));
           let best = Infinity;
           for (const image of columns) {
             const data = image.data;
@@ -234,7 +236,7 @@ try {
                 const p = (y * image.width + x) * 4;
                 if (data[p + 3] < 60) continue;
                 if (!HUES[seat](data[p], data[p + 1], data[p + 2])) continue;
-                const d = Math.hypot(x / dpr - 590 - tx, y / dpr - 310 - ty);
+                const d = Math.hypot(x / dpr - boxW / 2 - tx, y / dpr - boxH / 2 - ty);
                 if (d < best) best = d;
               }
             }
@@ -259,7 +261,7 @@ try {
        * rectangle — so this is exact whatever the heading.
        */
       let offset = null;
-      if (phase === 'orbit') {
+      if (phase === 'display') {
         const escort = document.querySelector('.boot-escort');
         const art = escort?.firstElementChild;
         if (escort && art) {
@@ -279,10 +281,12 @@ try {
       if (phase === 'settle' || phase === 'depart') {
         const canvases = [...document.querySelectorAll('.boot-smoke')];
         if (canvases.length === 2) {
-          const dpr = canvases[0].width / 1180;
+          const boxW = canvases[0].clientWidth;
+          const boxH = canvases[0].clientHeight;
+          const dpr = canvases[0].width / boxW;
           // A vertical cut just behind the formation's slots, where the three
           // ribbons are still parallel and have not yet spread into each other.
-          const x = Math.round((1180 / 2 - 170) * dpr);
+          const x = Math.round((boxW / 2 - 210) * dpr);
           const columns = canvases.map((c) => c.getContext('2d').getImageData(x, 0, 1, c.height).data);
           const rows = [];
           for (let y = 0; y < canvases[0].height; y += Math.round(2 * dpr)) {
@@ -294,7 +298,7 @@ try {
             }
             if (!best) continue;
             const hue = best[2] > best[0] + 18 ? 'blue' : best[0] > best[2] + 18 ? 'red' : 'white';
-            rows.push({ y: Math.round(y / dpr - 310), hue });
+            rows.push({ y: Math.round(y / dpr - boxH / 2), hue });
           }
           const runs = [];
           for (const row of rows) {
@@ -314,7 +318,11 @@ try {
     if (frame.offset != null) spriteOffset = spriteOffset == null ? frame.offset : Math.max(spriteOffset, frame.offset);
     // The three ribbons nearest the slots, once all three are laid down.
     if (frame.bands) {
-      const near = frame.bands.filter((band) => band.from >= -80 && band.to <= 80);
+      // The formation is stepped ±84 scene pixels vertically, and perspective
+      // moves the near one further out again, so the window has to be wider
+      // than the slots are — it is asking "the three ribbons behind the
+      // formation", not "three ribbons within eighty pixels of the middle".
+      const near = frame.bands.filter((band) => band.from >= -170 && band.to <= 170);
       if (near.length === 3) bands = near;
     }
     if (frame.phase === "gone") break;
@@ -327,8 +335,8 @@ try {
 
   banks = JSON.parse(await page.evaluate("JSON.stringify(window.__banks ?? [[], [], []])"));
 
-  await check("flies the whole sequence: orbit, join, settle, depart", () => {
-    for (const expected of ["orbit", "join", "settle", "depart", "gone"]) {
+  await check("flies the whole sequence: display, join, settle, depart", () => {
+    for (const expected of ["display", "join", "settle", "depart", "gone"]) {
       assert(phases.includes(expected), `never reached "${expected}" (saw ${phases.join(" → ")})`);
     }
     return phases.join(" → ");
@@ -400,10 +408,10 @@ try {
   });
 
   await check("the escorts fly a routine, not a ring", () => {
-    // A circle has one radius. This one breathes, rolls and climbs, so the
-    // distance from the lead has to vary by a real margin over a circuit.
-    // The orbit is elastic: a warm load breaks it off at the 700ms floor, so
-    // the sample count is small and the *variation* is the assertion.
+    // A circle has one radius. This one breathes, rolls and changes station,
+    // so the distance from the lead has to vary by a real margin over a lap.
+    // The display is elastic: a warm load breaks it off at the floor, so the
+    // sample count is small and the *variation* is the assertion.
     assert(radii.length >= 8, `only ${radii.length} samples of the track`);
     const min = Math.min(...radii);
     const max = Math.max(...radii);
@@ -1352,6 +1360,85 @@ try {
     // Back where the next check expects to be.
     await openTab(page, "wallet");
     return `${found.label}: ${found.figures.join(" / ")}`;
+  });
+
+  /*
+   * The principal, through the real database and back
+   * =================================================
+   *
+   * `tests/wallet-principal.test.ts` and `tests/wallet-rate-invariance.test.ts`
+   * assert this over the store, which is the object that gets persisted. What
+   * they cannot assert is the round trip: the brief asks, in as many words, for
+   * a reload and a hydration, and a hydration means the *server's* copy coming
+   * back over the wire and replacing the local one.
+   *
+   * So this writes 200 USD against a euro display, tours the display currency
+   * through five more, moves the rate, reloads the page — which fetches the
+   * snapshot from PostgreSQL — and then reads the stored entry. Two hundred
+   * dollars, or the check fails.
+   */
+  await check("200 USD survives five display currencies, a rate change and a reload", async () => {
+    const write = await page.evaluate(`
+      const store = window.__budgetStoreInstance.getState();
+      store.updateSettings({ baseCurrency: 'EUR' });
+      store.addWalletEntry({
+        id: 'principal-check',
+        year: store.snapshot.settings.selectedYear,
+        month: store.snapshot.settings.selectedMonth,
+        date: store.snapshot.settings.selectedYear + '-08-05',
+        amount: 200,
+        currency: 'USD',
+        source: 'Salary',
+        type: 'personal',
+        note: '',
+      });
+      return true;
+    `);
+    assert(write === true, "could not write the principal");
+
+    // Every display currency the brief names, and a rate move in the middle.
+    for (const currency of ["EUR", "CHF", "GBP", "LBP", "USD", "EUR"]) {
+      await page.evaluate(
+        `window.__budgetStoreInstance.getState().updateSettings({ baseCurrency: ${JSON.stringify(currency)} }); return true;`,
+      );
+      await sleep(60);
+    }
+    await page.evaluate(`
+      const store = window.__budgetStoreInstance.getState();
+      const rates = { ...store.snapshot.settings.exchangeRates };
+      store.updateSettings({ exchangeRates: { ...rates, eurUsd: 1.2214, perEur: { ...rates.perEur, USD: 1.2214 } } });
+      return true;
+    `);
+    // Let the write reach the server before the page is thrown away.
+    await page.waitFor("window.__budgetStoreInstance.getState().syncState !== 'saving'", {
+      timeoutMs: 15000,
+      label: "the save to land",
+    });
+    await sleep(400);
+
+    await page.goto(BASE);
+    await waitForApp(page);
+    assert(await waitForHydration(page), "the store never hydrated after the reload");
+
+    const stored = await page.evaluate(`
+      const snapshot = window.__budgetStoreInstance.getState().snapshot;
+      const entry = Object.values(snapshot.years)
+        .flatMap((record) => record.walletEntries ?? [])
+        .find((row) => row.id === 'principal-check');
+      return JSON.stringify(entry ? { amount: entry.amount, currency: entry.currency } : null);
+    `);
+    const found = JSON.parse(stored);
+    assert(found, "the entry did not come back from the server at all");
+    equal(found.amount, 200, "the stored amount after a round trip through PostgreSQL");
+    equal(found.currency, "USD", "the stored currency after a round trip through PostgreSQL");
+    // And clear it, so the checks after this one see the wallet they expect.
+    await page.evaluate(`
+      window.__budgetStoreInstance.getState().removeWalletEntry('principal-check');
+      return true;
+    `);
+    await sleep(300);
+    await openTab(page, "wallet");
+    return `${found.amount} ${found.currency}, after EUR→CHF→GBP→LBP→USD→EUR, a rate move and a reload`;
   });
 
   await check("resetting the wallet zeroes the money and leaves the records", async () => {
