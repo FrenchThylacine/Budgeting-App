@@ -29,7 +29,6 @@ import { EmptyState } from "../ui/EmptyState";
 import { Section } from "../ui/Section";
 import { EditorSheet } from "../ui/EditorSheet";
 import { SwipeRow } from "../ui/SwipeRow";
-import { FundingMark } from "../ui/FundingMark";
 import { MarkLegend } from "../ui/MarkLegend";
 import { gesturesFor } from "../../domain/gestures";
 import type { SwipeActionId } from "../../domain/types";
@@ -727,12 +726,12 @@ export const SpendingPanel: React.FC = () => {
                     {/* Which of the two exclusions it is, not merely that it
                         is one. "Paid by other" and "Outside budget" behave the
                         same against the budget and mean different things. */}
-                    {/* The glyph beside the category, and the colour on the
-                        figure — the same two channels the activity list uses,
-                        rather than a pill spelling out "Paid by other" on
-                        every affected row. */}
+                    {/* The colour on the category and on the figure says which
+                        of the two it is; this is the same fact for a reader who
+                        cannot see a colour. The glyph that used to sit here as
+                        well was the third statement of it on one row. */}
                     {isExternallyFunded(entry) && (
-                      <FundingMark kind={entryFundingKind(entry)} variant="glyph" />
+                      <span className="sr-only">{t(`funding.${entryFundingKind(entry)}.short`)}</span>
                     )}
                     {entry.activityId && activityById.get(entry.activityId) && (
                       <span className="badge badge-info" title={t("spending.activity")}>

@@ -70,7 +70,6 @@ import { Button } from "../ui/Button";
 import { EmptyState } from "../ui/EmptyState";
 import { Field, FieldGroup } from "../ui/Field";
 import { Section } from "../ui/Section";
-import { FundingMark } from "../ui/FundingMark";
 import { MarkLegend } from "../ui/MarkLegend";
 import { InfoDot } from "../ui/InfoDot";
 import { activityBudgetSummary, fundingShares, type ActivityMonthCost } from "../../domain/activityBudget";
@@ -1273,7 +1272,23 @@ export const ActivityPanel: React.FC = () => {
                           changes the meaning of. The words are in the
                           accessible name and in the mark's own tooltip. */}
                       {activityFundingKind(activity) !== "personal" && (
-                        <FundingMark kind={activityFundingKind(activity)} variant="glyph" />
+                        /*
+                         * The word, for a reader who cannot see the colour —
+                         * and nothing drawn.
+                         *
+                         * There used to be a glyph here as well. It is
+                         * redundant now that the name and the figure are both
+                         * set in the funding colour, and a card carrying an
+                         * outline, a mark, a schedule shape and a status glyph
+                         * is four things competing to be noticed first.
+                         *
+                         * What the glyph also carried was the *only* non-visual
+                         * statement of the fact: colour is not a channel a
+                         * screen reader has. So the icon goes and the sentence
+                         * stays, which is the trade the brief is asking for
+                         * rather than a straight deletion.
+                         */
+                        <span className="sr-only">{t(`funding.${activityFundingKind(activity)}.short`)}</span>
                       )}
                     </div>
                     {/* One meta line, not three.

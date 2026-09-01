@@ -475,10 +475,10 @@ export const Dashboard: React.FC<{ onNavigate?: (tab: "spending" | "activities" 
                   {(funding.otherFundedCount > 0 || funding.outsideBudgetCount > 0) && (
                     <div className="funding-chips">
                       {funding.otherFundedCount > 0 && (
-                        <FundingMark kind="other" variant="chip">{money(funding.otherFunded)}</FundingMark>
+                        <FundingMark kind="other">{money(funding.otherFunded)}</FundingMark>
                       )}
                       {funding.outsideBudgetCount > 0 && (
-                        <FundingMark kind="outside" variant="chip">{money(funding.outsideBudget)}</FundingMark>
+                        <FundingMark kind="outside">{money(funding.outsideBudget)}</FundingMark>
                       )}
                     </div>
                   )}

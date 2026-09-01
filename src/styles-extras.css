@@ -2208,38 +2208,12 @@ label:has(> input[type="radio"]) {
    Funding, activity budgeting, currencies, languages and the tour
    ═══════════════════════════════════════════════════════════════════════════ */
 
-/* ─── The funding badge ───────────────────────────────────────────────────── */
-
-/* Three classifications, each with a colour *and* a glyph *and* a word.
-   Colour alone is invisible to a colour-blind reader and gone entirely on a
-   monochrome printer, so it is always the third thing carrying the meaning,
-   never the first. The glyphs match the ones the report prints. */
-.funding-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 1px 8px;
-  border-radius: 99px;
-  border: 1px solid var(--border-strong);
-  font-size: 0.6875rem;
-  font-weight: var(--weight-medium);
-  letter-spacing: 0.01em;
-  white-space: nowrap;
-  color: var(--text-secondary);
-  background: var(--bg-subtle);
-}
-
-.funding-badge[data-funding="other"] {
-  border-color: var(--funding-other);
-  color: var(--funding-other-text);
-  background: var(--funding-other-soft);
-}
-
-.funding-badge[data-funding="outside"] {
-  border-color: var(--funding-outside);
-  color: var(--funding-outside-text);
-  background: var(--funding-outside-soft);
-}
+/* ─── The funding mark ────────────────────────────────────────────────────────
+   The pill that used to sit on every externally funded row is gone: the rows
+   carry the classification in the colour of the name and the figure, and V5.1
+   took the glyph off them as well. What is left is the chip, which is a
+   *summary* — a figure standing on its own, with nothing beside it to be a
+   different colour from. */
 
 .funding-glyph {
   font-size: 0.75em;
@@ -4081,15 +4055,30 @@ label:has(> input[type="radio"]) {
    guessing which colour meant which. */
 
 .item-row[style*="--category-accent"] {
-  /* Visible, and nothing more. A category is context, not an alarm: the outline
-     is there to be recognised out of the corner of the eye, not read. */
-  border: 1px solid color-mix(in srgb, var(--category-accent) 55%, transparent);
+  /*
+   * Two pixels, and the width was decided by looking rather than by choosing.
+   *
+   * At one pixel and 55% of the category colour the outline was, on a white
+   * card, essentially not there: photographed at a desktop width, the cards
+   * read as plain white rectangles and the only thing carrying the category
+   * was the mark beside the name. An outline nobody sees communicates nothing,
+   * and §3's whole point is that the card should say *what this is* before it
+   * is read.
+   *
+   * Two pixels at 78% is visible across the room and still quieter than the
+   * text on it. Three was tried and is a highlight rather than a label: on a
+   * list of eight cards it turns the page into a colour chart.
+   */
+  border: 2px solid color-mix(in srgb, var(--category-accent) 78%, transparent);
+  /* The 1px border it replaces was already in the box; the extra pixel comes
+     out of the padding so the row's height and its content do not move. */
+  padding: calc(var(--space-3) - 1px) calc(var(--space-4) - 1px);
 }
 
 /* A little more presence where the card is the subject of the screen. */
 .activity-row.item-row[style*="--category-accent"],
 .item-list .item-row[style*="--category-accent"]:hover {
-  border-color: color-mix(in srgb, var(--category-accent) 70%, transparent);
+  border-color: var(--category-accent);
 }
 
 /* ── Funding, on the text that identifies the row ────────────────────────────
