@@ -36,3 +36,7 @@ src/**/*.js.map
 src/**/*.d.ts
 src/**/*.d.ts.map
 !src/vite-env.d.ts
+
+# What the verification harnesses photograph. Evidence, not source: the scripts
+# that produce it are committed, the PNGs are not.
+artefacts/

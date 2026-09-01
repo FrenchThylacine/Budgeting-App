@@ -2,12 +2,94 @@
 
 This is the active engineering tracker. A checkbox is ticked only after implementation **and** the relevant verification have both succeeded. "The code exists" is never sufficient.
 
-**Last updated:** 2026-09-01 (V5 — part 2) — a tour that points at the button, translations in the layer no dictionary check can see, a theme the reader builds that cannot come out unreadable, statistics that say which currencies the money was in, and an aeroplane that no longer rolls half a wingspan in one frame.
+**Last updated:** 2026-09-01 (V5.1 — correction pass) — escorts that fly *with* the lead instead of orbiting it, a wallet reset that stays reset when the exchange rate moves, a category outline you can actually see, and one less mark on every card.
 
 
 **Version:** 5.0.0. See `CHANGELOG.md` for what each version was.
 
-**Verification state.** **1010 tests across 58 files, all passing** (83 skipped) — TypeScript clean for **both** targets, both bundles build clean. **`scripts/verify-browser.mjs` drives a real Chrome on a brand-new account each run: 65 checks, all passing**, including six phone widths, two presets *and a theme built through the picker at run time*, and measurements of the loading animation rather than assertions about it. **`scripts/verify-tutorial.mjs` walks the tour itself: 12 checks**, at a desktop and a phone width. Nothing from 2026-08-17 onward is verified in production.
+**Verification state.** **1044 tests across 60 files, all passing** (83 skipped) — TypeScript clean for **both** targets, both bundles build clean. **`scripts/verify-browser.mjs` drives a real Chrome on a brand-new account each run: 66 checks, all passing**, including six phone widths, two presets *and a theme built through the picker at run time*, and measurements of the loading animation rather than assertions about it. **`scripts/verify-airshow.mjs` steps the loading animation frame by frame on a replaced clock and photographs it at thirteen points**, so the numbers and the picture describe the same instant. **`scripts/verify-cards.mjs` photographs and measures the activity and transaction cards.** **`scripts/verify-tutorial.mjs` walks the tour itself: 12 checks**, at a desktop and a phone width. Nothing from 2026-08-17 onward is verified in production.
+
+## What this pass did — 2026-09-01 (V5.1, correction pass)
+
+Six sections of the brief, in the order it asked for them, and then all six
+again in the same order. Each is recorded with what was *measured* and what was
+*looked at*, because this pass turned on the difference twice.
+
+- [x] **§1 The escorts fly with the lead, not around it.** The old routes were
+      a closed loop **in the lead's frame**, so an escort that reached the far
+      side had to turn round and fly *left* to get home. Every version of this
+      animation since V4 had that shape, and it is why it kept reading as
+      machinery on a spindle however good the curve was. The flying now lives
+      in `src/domain/airshow.ts` as a pure function of two numbers, and the
+      escorts fly a **barrel roll around the leader's flight path**: a helix,
+      half a turn apart, so *one high, one low* and *one near, one far* are
+      theorems rather than hopes. **Measured over every break-off phase:
+      forward velocity never below 146 px/s against a 375 cruise, nose never
+      more than 66° off the line of flight, no two aircraft closer than 90
+      scene pixels, none closer than 93 to the lead.** Three separate
+      collision defects were found by sampling and fixed — see below.
+- [x] **§2 A wallet reset that stays reset.** A live defect, of exactly the
+      class the brief describes and invisible to every existing test: the
+      reset released the **budget claim** as one figure converted into the
+      display currency while zeroing the *cash* correctly, currency by
+      currency. **Measured: a wallet the reader had just emptied held €18.06 of
+      budget money at a rate of 1.05, €49.81 at 0.90 and −€18.57 at 1.30.**
+      Both cancellation paths now take their currencies from
+      `budgetComposition`, every ledger write goes through one `movement()`
+      seam that cannot be handed an amount without a currency, and
+      `tests/wallet-rate-invariance.test.ts` walks forty rate changes, ten
+      currency combinations, a failed rate provider and a hydration.
+- [x] **§3 An outline you can see.** It was 1px at 55% of the category colour;
+      photographed on a white card at a desktop width it was, in practice, not
+      there. 2px at 78%, chosen by looking at 1, 2 and 3 rather than by picking
+      a number — three reads as a highlight and turns a list of eight cards
+      into a colour chart. The extra pixel comes out of the padding, so nothing
+      on the card moves.
+- [x] **§4 One less mark on every card.** The ◆ and ▲ glyphs are gone from the
+      activity and transaction rows; the name and the figure already carry the
+      funding state in colour. What the glyph *also* carried was the only
+      non-visual statement of the fact — colour is not a channel a screen
+      reader has — so the icon went and the sentence stayed, as an `sr-only`
+      label. The schedule marks are untouched. `FundingMark` lost two of its
+      three variants: one had no callers at all.
+- [x] **§5 The three channels, on one card.** Photographed: a green outline
+      with a dark name for a personal Health activity; a blue outline with a
+      blue name and a blue figure for one somebody else pays; a teal outline
+      with an orange name and an orange figure for one kept outside the budget
+      — each with its schedule mark, and no pills, no status icons and no
+      sentences.
+- [x] **§6 Everything, again, in order.** 1,044 unit tests, TypeScript on both
+      projects, both bundles, 66 browser checks, 12 tutorial checks, and the
+      animation photographed at thirteen points of its own timeline.
+
+### The three collision defects the sampling found
+
+Worth recording individually, because each was invisible to the check before it
+and the third is the interesting one.
+
+1. **The escorts collapsed through the lead.** Falling back from station ahead
+   of the leader to a slot behind it, a straight line in Cartesian coordinates
+   from a point on a ring to a point near its centre goes *through the middle*.
+   Sampled: **7.9 scene pixels from the lead aircraft.** The roll-out is flown
+   in the ring's own coordinates now — the radius eases from the display's to
+   the formation's and never below either — so the clearance is a property of
+   the geometry rather than of the sample.
+2. **The pair coincided on screen while 224 pixels apart in depth.** The camera
+   lies in the plane of the ring, so the projection flattens it onto a line:
+   when one escort is level with the lead so is the other, and near the lead's
+   own station the perspective divide has nothing left to spread them with.
+   **Nine tenths of a pixel apart, with every three-dimensional check passing.**
+   Opening the ring angle does not fix it and the reason is worth keeping — for
+   *any* fixed angular offset there is a phase where the two altitudes coincide
+   anyway. The station is the one axis the ring does not live in, so that is
+   where the lane went.
+3. **The remaining close approaches are a manoeuvre, not a defect.** 0.2% of
+   sampled pairs come within 52 projected pixels, and every one of them is the
+   *opposition pass*: the two crossing the leader's station from opposite sides,
+   one drawn behind its two-hundred-pixel silhouette and one in front, at scales
+   of 0.85 and 1.25. The test says so in those terms rather than banning it —
+   refusing it would mean refusing the shot the whole depth treatment exists to
+   produce.
 
 ## What this pass did — 2026-09-01 (V5, part 2)
 
@@ -68,6 +150,34 @@ ahead of UTC), and the browser harness hard-coded a monthly accrual that is
 €177 in a 31-day month and €171 in a 30-day one.
 
 ## How this session verified things
+
+**V5.1, 2026-09-01.** Two lessons, and the second is the one this repository
+keeps having to relearn from a different direction.
+
+- **A pure function can be sampled; a component cannot.** Every version of the
+  loading animation before this one had the geometry inline in a React
+  component, and every one of them was described correctly in a comment and
+  wrong on the screen. Moving the choreography into `src/domain/airshow.ts` —
+  positions, velocities, accelerations and attitudes of all four aircraft as a
+  function of two numbers, with no DOM anywhere near it — is what let
+  `tests/airshow-choreography.test.ts` walk the entire sequence at **every
+  break-off phase**, every eight milliseconds, and assert the brief's
+  requirements as numbers. It found four genuine defects in one afternoon,
+  three of them collisions, and all four were in code that had already been
+  read and believed.
+- **A three-dimensional check is not a picture.** The second collision the
+  sampling found was two aircraft **224 scene pixels apart in depth and nine
+  tenths of a pixel apart on the screen**. The 3D check passed; the reader would
+  have seen one aeroplane. So the suite projects as well as measuring, and the
+  browser harness photographs as well as projecting — and the photographs are
+  what found the smoke rendering as three hard-edged bars, which is a thing the
+  brief names in as many words and which no number in the file could see.
+- And one about *tests* rather than about pictures. Making the ledger's write
+  path take an amount and a currency together, instead of a bare number,
+  immediately broke two passing tests — because they had been passing `150` and
+  the store had been silently stamping the display currency onto it. The type
+  change did not find a bug in the tests. It found the bug the tests were
+  written on top of.
 
 **V5 part 2, 2026-09-01.** One lesson, and it is the same one three times:
 *a guard only finds what it looks at.*
@@ -295,11 +405,12 @@ something had slipped through the previous one:
       before a load lands is overwritten. The generation counter fixes
       out-of-order *hydrations*; it does not merge a concurrent local edit.
       Reproducible by driving the browser harness immediately after a reload.
-- [ ] **The animation was not revisited in this pass.** V4.4 rebuilt it —
-      authored waypoints, centripetal Catmull-Rom, arc-length traversal, a
-      cubic rejoin, smoke turbulence, and the fix for the sprite being drawn
-      forty pixels from its own position. The V5 brief asks for further
-      refinement of the choreography, which has not been done.
+- [x] ~~**The animation was not revisited in this pass.**~~ *(Closed 2026-09-01,
+      V5.1.)* Rebuilt around a moving reference frame: the choreography is a
+      pure module, the escorts fly a helix around the leader's flight path
+      rather than a closed loop in its frame, and the whole thing is sampled at
+      every break-off phase and photographed at thirteen points of its own
+      timeline.
 - [ ] **Icon customisation (V5 §25) is not implemented.** Activity icons come
       from the shared picker; the one-off cadence still uses a dot.
 - [ ] **The tutorial is partly interactive.** Task steps already refuse to
@@ -683,6 +794,35 @@ something had slipped through the previous one:
 
 ## Discovered issues — open, current
 
+- [ ] **The month-end rollover stores a figure derived from the display
+      currency, and that is deliberate.** Everything else in the ledger stores
+      money the reader typed, in the currency they typed it in. The rollover is
+      different in kind: the figure the reader is shown and confirms is
+      `monthlyBudget − spent`, both already converted, so the display currency
+      *is* its denomination and converting it into anything else before storing
+      it would be the round trip the brief forbids. It is safe because a
+      rollover cancels nothing — the two entries that *do*, the wallet reset
+      and the leftover sweep, take their currencies from `budgetComposition`
+      and stay netted at every future rate. Recorded here rather than only in a
+      comment because it is the one exception in the file, and
+      `tests/wallet-rate-invariance.test.ts` fails if a second one appears.
+      *Open in the sense that it is a known asymmetry, not in the sense that
+      there is a fix waiting.*
+- [ ] **Two aircraft can overlap on screen during the opposition pass.** 0.2%
+      of sampled frames put a pair within 52 projected pixels — always the two
+      escorts crossing the leader's own station from opposite sides, one drawn
+      behind its silhouette and one in front, at scales of 0.85 and 1.25, and
+      never closer than 194 scene pixels in three dimensions. §1.6 permits this
+      where "the depth difference is clearly legible", and it is the shot the
+      whole depth treatment exists to produce, so it is allowed by name in the
+      test rather than banned. Left here so that a future reader who sees two
+      silhouettes touch knows it was a decision.
+- [ ] **The funding chips on the dashboard and the activity summary keep their
+      glyphs.** §4 asked for the icons to come off the *cards*, and they have.
+      A summary figure standing beside two other figures has nothing to be a
+      different colour from, so the glyph is doing real work there rather than
+      repeating the colour. If the brief meant those too, they are three call
+      sites and one component.
 - [ ] **The icon library's 244 icon *names* are English.** They are a search index rather than prose — the picker matches typed English keywords against them — and translating them is 244 nouns × 4 languages for something nobody reads as a sentence. *(Narrowed 2026-08-30: the sixteen category headings above them, and the "no icon matches" message, are translated. What is left is the index itself.)*
 - [ ] **The Excel export's sheet headers are English** ("Total activity cost", "Charged to this budget"). They are column names in a data-interchange file that the app also re-imports **by matching header text**, so translating them would break the round trip for every existing workbook. Re-examined 2026-09-01 and deliberately kept; the reason is now recorded in the domain scanner's allowlist rather than only here.
 - [x] ~~**The Excel import's warnings are English.**~~ *(Closed 2026-09-01.)* All seven warnings and all six rejection messages are translation keys with their values now, in five languages. The `Error.message` behind a rejection stays English — it is what a stack trace prints — and what reaches the screen is the key beside it.
@@ -690,6 +830,69 @@ something had slipped through the previous one:
 - [ ] **The wallet does not model transfers between currencies.** A movement has one currency and converts for display; moving €100 into a dollar wallet is two entries, not one.
 - [ ] **Notifications are permission-only.** Nothing yet *schedules* a reminder: a real push pipeline needs VAPID keys and a server endpoint, and inventing one would be the "fake permission request" the brief forbids in another form.
 - [ ] `xlsx@0.18.5` carries two high-severity advisories with no registry fix.
+
+## Verified in a browser — 2026-09-01 (V5.1)
+
+`node scripts/verify-browser.mjs` against a freshly started dev server and a
+real PostgreSQL 17 database, on a brand-new account each run. **66/66.**
+
+New in this pass:
+
+- **200 USD survives five display currencies, a rate change and a reload.** The
+  unit suites assert this over the store, which is the object that gets
+  persisted; what they cannot assert is the round trip. This writes the entry
+  against a euro display, tours EUR → CHF → GBP → LBP → USD → EUR, moves the
+  rate, waits for the save to land, reloads the page — which fetches the
+  snapshot back out of PostgreSQL — and reads the stored entry. **200 USD.**
+
+`node scripts/verify-airshow.mjs` replaces the page's clock before the
+application's first line runs: `requestAnimationFrame` becomes a queue the
+script drains one frame at a time and `performance.now` reads a counter it
+advances. The sequence then runs deterministically at 16⅔ms a step, and at each
+of thirteen points the last frame drawn and the numbers read off it are the
+*same instant*, because they are. **387 frames, thirteen photographs.** What
+they showed:
+
+| Point | What the picture shows |
+| --- | --- |
+| 5–40% | Blue and red on opposite sides of the leader, one always above and one below, one always larger and drawn in front and the other smaller and behind; noses between 3° and 45° of the line of flight, never left |
+| 20% | The occlusion shot: the red ribbon passing *behind* the Concorde's fuselage and out the other side while the blue jet crosses in front of its nose |
+| 50–70% | The roll-out — the manoeuvre shrinking, both escorts easing aft past the leader, the third arriving from behind-left at −709px and closing to its slot |
+| 80% | Three ribbons behind the lead, blue over white over red, tapering and dissipating rather than ending |
+| 90–95% | The formation accelerating right, ahead of the reveal wipe, the ribbons stretching because the aircraft outran them |
+| 100% | The application |
+
+And the cost, measured on a *separate* run with the real clock, because a frame
+stepped by a script takes as long as the script waits and says nothing about
+performance: **386 frames, median 16.7ms, worst 16.7ms, none over 20ms** — a
+locked sixty for the whole sequence, on a canvas a third larger than the one it
+replaced.
+
+Two defects came out of the photographs and out of nothing else: the smoke's
+hot core was a **hard-edged bright bar** with a squared-off end — the brief's
+"three perfectly straight digital bars", drawn by a flat alpha over everything
+younger than half a second — and every ribbon finished in a **blunt rectangle**
+a third of the way across the screen, because the oldest puff faded to half
+opacity at its widest rather than to nothing. Both are alpha curves now, and
+the gradient carries five stops rather than two so a curve is followed rather
+than approximated by a straight line between its ends.
+
+`npm run verify:cards` creates an account, writes one activity and one
+transaction per funding state across four categories, and then photographs and
+measures both lists — the outline width and colour, the computed colour of the
+name and of the figure, and every labelled icon on the card — **in both
+appearances**, because `color-mix` with `transparent` composites over whatever
+is behind it and an outline chosen against white is a different amount of
+contrast against near-black. It is what §3's "choose the final thickness based
+on the actual rendered result" needs, and it is what showed that 1px at 55% was
+invisible.
+
+Measured on the cards, light and dark: outline 2px at the configured category
+colour (`#16A34A` Health, `#2563EB` Learning, `#0D9488` Utilities, unchanged
+between appearances); the name and the figure at `#1A5FBF` / `#4FD1E8` for paid
+by other and `#9A4A08` / `#FFA726` for outside budget; the schedule mark
+present on every card; **no funding glyph on any of them**, and the word still
+in the accessible name.
 
 ## Verified in a browser — 2026-09-01 (V5, part 2)
 

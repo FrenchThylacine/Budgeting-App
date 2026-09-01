@@ -17,7 +17,9 @@
     "server:dev:pg": "tsx scripts/dev-server-local-pg.mjs",
     "test:db": "vitest run tests/db-integration.test.ts tests/api-integration.test.ts",
     "verify": "node scripts/verify-browser.mjs",
-    "verify:tutorial": "node scripts/verify-tutorial.mjs"
+    "verify:tutorial": "node scripts/verify-tutorial.mjs",
+    "verify:airshow": "node scripts/verify-airshow.mjs",
+    "verify:cards": "node scripts/verify-cards.mjs"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.1.0",
