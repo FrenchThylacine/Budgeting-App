@@ -1362,6 +1362,85 @@ try {
     return `${found.label}: ${found.figures.join(" / ")}`;
   });
 
+  /*
+   * The principal, through the real database and back
+   * =================================================
+   *
+   * `tests/wallet-principal.test.ts` and `tests/wallet-rate-invariance.test.ts`
+   * assert this over the store, which is the object that gets persisted. What
+   * they cannot assert is the round trip: the brief asks, in as many words, for
+   * a reload and a hydration, and a hydration means the *server's* copy coming
+   * back over the wire and replacing the local one.
+   *
+   * So this writes 200 USD against a euro display, tours the display currency
+   * through five more, moves the rate, reloads the page — which fetches the
+   * snapshot from PostgreSQL — and then reads the stored entry. Two hundred
+   * dollars, or the check fails.
+   */
+  await check("200 USD survives five display currencies, a rate change and a reload", async () => {
+    const write = await page.evaluate(`
+      const store = window.__budgetStoreInstance.getState();
+      store.updateSettings({ baseCurrency: 'EUR' });
+      store.addWalletEntry({
+        id: 'principal-check',
+        year: store.snapshot.settings.selectedYear,
+        month: store.snapshot.settings.selectedMonth,
+        date: store.snapshot.settings.selectedYear + '-08-05',
+        amount: 200,
+        currency: 'USD',
+        source: 'Salary',
+        type: 'personal',
+        note: '',
+      });
+      return true;
+    `);
+    assert(write === true, "could not write the principal");
+
+    // Every display currency the brief names, and a rate move in the middle.
+    for (const currency of ["EUR", "CHF", "GBP", "LBP", "USD", "EUR"]) {
+      await page.evaluate(
+        `window.__budgetStoreInstance.getState().updateSettings({ baseCurrency: ${JSON.stringify(currency)} }); return true;`,
+      );
+      await sleep(60);
+    }
+    await page.evaluate(`
+      const store = window.__budgetStoreInstance.getState();
+      const rates = { ...store.snapshot.settings.exchangeRates };
+      store.updateSettings({ exchangeRates: { ...rates, eurUsd: 1.2214, perEur: { ...rates.perEur, USD: 1.2214 } } });
+      return true;
+    `);
+    // Let the write reach the server before the page is thrown away.
+    await page.waitFor("window.__budgetStoreInstance.getState().syncState !== 'saving'", {
+      timeoutMs: 15000,
+      label: "the save to land",
+    });
+    await sleep(400);
+
+    await page.goto(BASE);
+    await waitForApp(page);
+    assert(await waitForHydration(page), "the store never hydrated after the reload");
+
+    const stored = await page.evaluate(`
+      const snapshot = window.__budgetStoreInstance.getState().snapshot;
+      const entry = Object.values(snapshot.years)
+        .flatMap((record) => record.walletEntries ?? [])
+        .find((row) => row.id === 'principal-check');
+      return JSON.stringify(entry ? { amount: entry.amount, currency: entry.currency } : null);
+    `);
+    const found = JSON.parse(stored);
+    assert(found, "the entry did not come back from the server at all");
+    equal(found.amount, 200, "the stored amount after a round trip through PostgreSQL");
+    equal(found.currency, "USD", "the stored currency after a round trip through PostgreSQL");
+    // And clear it, so the checks after this one see the wallet they expect.
+    await page.evaluate(`
+      window.__budgetStoreInstance.getState().removeWalletEntry('principal-check');
+      return true;
+    `);
+    await sleep(300);
+    await openTab(page, "wallet");
+    return `${found.amount} ${found.currency}, after EUR→CHF→GBP→LBP→USD→EUR, a rate move and a reload`;
+  });
+
   await check("resetting the wallet zeroes the money and leaves the records", async () => {
     const before = await page.evaluate(
       "return Array.from(document.querySelectorAll('.item-row')).length;",

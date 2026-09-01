@@ -364,7 +364,7 @@ describe("moving leftover budget to the personal balance", () => {
     expect(before.personalBalance).toBeCloseTo(200, 6);
     expect(before.walletBalance).toBeCloseTo(350, 6);
 
-    useBudgetStore.getState().transferBudgetToPersonal(150);
+    useBudgetStore.getState().transferBudgetToPersonal({ amount: 150, currency: "USD" });
 
     const after = walletState(useBudgetStore.getState().snapshot);
     expect(after.budgetRemaining).toBeCloseTo(0, 6);
@@ -392,8 +392,8 @@ describe("moving leftover budget to the personal balance", () => {
     useBudgetStore.setState({ snapshot, hydrated: true, undoStack: [], redoStack: [] });
     const before = useBudgetStore.getState().snapshot.years["2026"].walletEntries.length;
 
-    useBudgetStore.getState().transferBudgetToPersonal(0);
-    useBudgetStore.getState().transferBudgetToPersonal(-50);
+    useBudgetStore.getState().transferBudgetToPersonal({ amount: 0, currency: "USD" });
+    useBudgetStore.getState().transferBudgetToPersonal({ amount: -50, currency: "USD" });
 
     expect(useBudgetStore.getState().snapshot.years["2026"].walletEntries).toHaveLength(before);
   });
@@ -629,7 +629,7 @@ describe("the full acceptance scenario", () => {
 
     // 17–20. Transfer it.
     const walletBefore = state().walletBalance;
-    store().transferBudgetToPersonal(150);
+    store().transferBudgetToPersonal({ amount: 150, currency: "USD" });
     expect(state().budgetRemaining).toBeCloseTo(0, 6);
     expect(state().personalBalance).toBeCloseTo(350, 6);
     expect(state().walletBalance).toBeCloseTo(walletBefore, 6);
