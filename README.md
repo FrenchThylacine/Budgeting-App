@@ -216,7 +216,7 @@ clock to their own fixtures' month now — see `tests/lib/clock.ts`, which also
 explains why the pin is *mid*-month.
 
 **And two of them run a browser.** `npm run verify` drives a real Chrome over
-the DevTools Protocol on a brand-new account each run: 64 checks, six phone
+the DevTools Protocol on a brand-new account each run: 65 checks, six phone
 widths, two theme presets and one built through the picker at run time, and
 measurements of the loading animation — the bank angle of the escorts is
 collected inside the page on every animation frame, because a sample taken

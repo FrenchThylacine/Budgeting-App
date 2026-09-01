@@ -1298,6 +1298,62 @@ try {
     return figures.join(" · ");
   });
 
+  /*
+   * The dashboard's wallet, which is one figure and not four.
+   *
+   * The Wallet tab has three balances because that is its subject. The
+   * dashboard used to repeat all of them plus a year-to-date total, four
+   * inches from the tab that exists to hold them — a treasury summary where
+   * somebody wanted "how much money is there". This asserts the reduction
+   * survived, in the rendered page rather than in a comment.
+   */
+  await check("the dashboard's wallet card carries the balance and nothing else", async () => {
+    await openTab(page, "dashboard");
+    const state = await page.evaluate(`
+      // The savings widget is a disclosure, and closed by default: a card the
+      // reader opens is still a card, but it has to be opened to be read.
+      const toggle = [...document.querySelectorAll('.disclosure button, button[aria-expanded]')]
+        .find((node) => /épargne|savings|portefeuille|wallet/i.test(node.textContent ?? ''));
+      if (!toggle) return JSON.stringify({ error: 'no savings disclosure on the dashboard' });
+      if (toggle.getAttribute('aria-expanded') === 'false') toggle.click();
+      return new Promise((resolve) => setTimeout(() => {
+        const panel = toggle.parentElement;
+        const label = [...panel.querySelectorAll('.text-footnote')]
+          .find((node) => /solde|balance/i.test(node.textContent ?? ''));
+        if (!label) return resolve(JSON.stringify({ error: 'the card has no balance label' }));
+        /*
+         * Scoped to the card the balance is *in*, not to the disclosure.
+         *
+         * The disclosure holds a second card below it — the wishlist total and
+         * the year-to-date spend — which are deliberately not on the wallet
+         * card, because a plan and a spending figure beside a cash balance
+         * invite being read as part of it. The first version of this check
+         * measured the panel and reported three figures, which was the check
+         * finding the separation rather than the absence of it.
+         */
+        const card = label.closest('.card') ?? panel;
+        const figures = [...card.querySelectorAll('.text-headline, .money')]
+          .map((node) => node.textContent.replace(/\\s+/g, ' ').trim())
+          .filter(Boolean);
+        resolve(JSON.stringify({ label: label.textContent.trim(), figures: [...new Set(figures)] }));
+      }, 500));
+    `);
+    const found = JSON.parse(state);
+    assert(!found.error, found.error);
+    /*
+     * One figure. The single-currency case prints a second line — the display
+     * equivalent under the held amount — and that is one balance said twice,
+     * not two balances; anything past that is the treasury summary coming back.
+     */
+    assert(
+      found.figures.length >= 1 && found.figures.length <= 2,
+      `the dashboard wallet shows ${found.figures.length} figures: ${found.figures.join(" | ")}`,
+    );
+    // Back where the next check expects to be.
+    await openTab(page, "wallet");
+    return `${found.label}: ${found.figures.join(" / ")}`;
+  });
+
   await check("resetting the wallet zeroes the money and leaves the records", async () => {
     const before = await page.evaluate(
       "return Array.from(document.querySelectorAll('.item-row')).length;",

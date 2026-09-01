@@ -7,7 +7,7 @@ This is the active engineering tracker. A checkbox is ticked only after implemen
 
 **Version:** 5.0.0. See `CHANGELOG.md` for what each version was.
 
-**Verification state.** **1010 tests across 58 files, all passing** (83 skipped) — TypeScript clean for **both** targets, both bundles build clean. **`scripts/verify-browser.mjs` drives a real Chrome on a brand-new account each run: 64 checks, all passing**, including six phone widths, two presets *and a theme built through the picker at run time*, and measurements of the loading animation rather than assertions about it. **`scripts/verify-tutorial.mjs` walks the tour itself: 12 checks**, at a desktop and a phone width. Nothing from 2026-08-17 onward is verified in production.
+**Verification state.** **1010 tests across 58 files, all passing** (83 skipped) — TypeScript clean for **both** targets, both bundles build clean. **`scripts/verify-browser.mjs` drives a real Chrome on a brand-new account each run: 65 checks, all passing**, including six phone widths, two presets *and a theme built through the picker at run time*, and measurements of the loading animation rather than assertions about it. **`scripts/verify-tutorial.mjs` walks the tour itself: 12 checks**, at a desktop and a phone width. Nothing from 2026-08-17 onward is verified in production.
 
 ## What this pass did — 2026-09-01 (V5, part 2)
 
@@ -694,7 +694,7 @@ something had slipped through the previous one:
 ## Verified in a browser — 2026-09-01 (V5, part 2)
 
 `node scripts/verify-browser.mjs` against a freshly started dev server and a
-real PostgreSQL 17 database, on a brand-new account each run. **64/64.**
+real PostgreSQL 17 database, on a brand-new account each run. **65/65.**
 
 New in this pass, and each one earned its place by failing first:
 
@@ -712,6 +712,12 @@ New in this pass, and each one earned its place by failing first:
 - **the reader's typeface and accent follow onto paper** — the report inherits
   nothing, so both are asserted rather than assumed, including that a yellow
   accent is darkened to 4.8:1 on white instead of passed through.
+- **the dashboard's wallet card carries the balance and nothing else** — added
+  during the final re-read of §2, because the reduction was described in a
+  comment and measured nowhere. It reports one figure. Its first version
+  reported three and was wrong: it measured the whole disclosure, and the two
+  extra figures are the wishlist total and the year-to-date spend, which sit in
+  a *separate* card precisely so they are not read as part of the balance.
 
 `node scripts/verify-tutorial.mjs` walks the tour itself on a fresh account at
 1440×900 and again at 390×844. **12/12.** It performs the steps — presses the

@@ -110,7 +110,7 @@ refuses to edit a closed month. They pin the clock now — mid-month, because a
 machine ahead of UTC reads the 31st at 21:00Z as the first of the next month,
 which is how the first attempt at the fix failed the same way.
 
-1010 tests, 64 browser checks, and 12 more that walk the tour itself.
+1010 tests, 65 browser checks, and 12 more that walk the tour itself.
 
 ## 5.0.0 — 2026-08-31 — Fewer places, less text, and the data actually saving
 
