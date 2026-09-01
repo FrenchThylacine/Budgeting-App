@@ -1376,28 +1376,34 @@
   place-items: center;
 }
 
-/* The body the whole formation is a part of. The departure translates this,
-   which is why the escorts' own transforms stay relative to the lead. */
+/* The body the whole formation is a part of.
+   It is *not* animated. The departure used to translate this — the picture,
+   smoke and canvases and all — which reads as the composition being pushed off
+   the table rather than as aeroplanes leaving. The aircraft fly out on their
+   own transforms now, and this only carries the small-screen scale. */
 .boot-scene {
   position: relative;
   width: 0;
   height: 0;
-  transform: translate3d(0, 0, 0);
   scale: var(--boot-scale);
-  will-change: transform;
 }
 
+/* The lead. Its transform is written every frame — it holds the centre while
+   the camera travels with it, and then flies out to the right ahead of the
+   formation — so the translate that centres the artwork is part of the string
+   the script writes rather than a rule the script has to remember. */
 .boot-lead {
   position: absolute;
   left: 0;
   top: 0;
   transform: translate(-50%, -50%);
   z-index: 2;
+  will-change: transform;
   filter: drop-shadow(0 10px 26px rgba(0, 0, 0, 0.5));
 }
 
 .boot-lead-art {
-  /* A shallow, slow bank. The lead is holding station, not manoeuvring. */
+  /* A shallow, slow bank. The lead is holding its line, not manoeuvring. */
   animation: bootLeadHold 5.2s ease-in-out infinite;
 }
 
@@ -1447,13 +1453,10 @@
 
 /* The third jet is in the DOM from the first frame — decoding an image in the
    middle of the join is a dropped frame nobody misses — and is simply
-   invisible until the other two have rolled out of the turn. */
-.boot-escort-late {
-  opacity: 0;
-  transition: opacity 420ms var(--ease-out) 260ms;
-}
-
-.boot-escort-late.is-joined { opacity: 1; }
+   invisible until it flies in. Its opacity is then written by the script on
+   every frame, tied to the distance it has actually flown; a CSS transition
+   here would fight that, and it knows nothing about where the aeroplane is. */
+.boot-escort-late { opacity: 0; }
 
 /* ── The smoke ────────────────────────────────────────────────────────────────
    Two canvases, one on each side of the lead aircraft, so a ribbon laid down
@@ -1500,15 +1503,15 @@
   color: rgba(255, 255, 255, 0.78);
 }
 
-/* The orbit is 190px wide before the aircraft are drawn on it; a 320px phone
-   cannot hold that, so the whole stage is scaled rather than each part of it
-   being given its own breakpoint. */
+/* The display spans about 400px before the aircraft are drawn on it; a 320px
+   phone cannot hold that, so the whole stage is scaled rather than each part
+   of it being given its own breakpoint. */
 @media (max-width: 720px) { .boot-screen { --boot-scale: 0.72; } }
 @media (max-width: 400px) { .boot-screen { --boot-scale: 0.56; } }
 
 @media (prefers-reduced-motion: reduce) {
   .boot-lead-art { animation: none; }
-  .boot-escort-late { transition: none; opacity: 1; }
+  .boot-escort-late { opacity: 1; }
 }
 
 /* ─── Gesture preferences ─────────────────────────────────────────────────── */
