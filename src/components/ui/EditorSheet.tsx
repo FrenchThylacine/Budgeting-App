@@ -154,10 +154,23 @@ export const EditorSheet: React.FC<EditorSheetProps> = ({
  * away. Showing twenty fields at once does not make an editor powerful, it
  * makes the four that matter harder to find.
  */
-export const AdvancedFields: React.FC<{ label?: string; children: React.ReactNode }> = ({ label, children }) => {
+/**
+ * `defaultOpen` is read once, at mount, exactly like the native
+ * `<details>` element's own `open` attribute — it is not kept in sync with
+ * later prop changes. A caller that recomputed it from live form state on
+ * every keystroke would force the section back open the instant a reader
+ * typed into the very field that made it true, which reads as the
+ * disclosure refusing to stay closed. See `advancedSectionsFor` in
+ * `ActivityPanel.tsx` for the caller that gets this right.
+ */
+export const AdvancedFields: React.FC<{ label?: string; defaultOpen?: boolean; children: React.ReactNode }> = ({
+  label,
+  defaultOpen = false,
+  children,
+}) => {
   const { t } = useTranslation();
   return (
-    <details className="sheet-advanced">
+    <details className="sheet-advanced" open={defaultOpen}>
       <summary>{label ?? t("editor.advanced")}</summary>
       <div className="sheet-advanced-body">{children}</div>
     </details>

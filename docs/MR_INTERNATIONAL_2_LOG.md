@@ -1448,3 +1448,99 @@ pre-existing terminology drift in `es.ts`'s `rollover.delta`, which said
   pre-existing `unavailable` branch before a user can ever reach the
   close buttons, so it was not exercised as a *post-close* screen — by
   construction, not by omission.
+
+---
+
+## Phase 5.15 — Recurring activity progressive disclosure
+
+**Date:** 2026-09-05
+**Environment:** same account, desktop, chrome-devtools MCP; a real
+activity created and re-edited ("Ski pass," monthly, a seasonal tag set)
+rather than only read from source.
+
+### Investigation
+
+Read `ActivityPanel.tsx`'s editor in full — over 25 fields across the
+form — expecting to build the progressive-disclosure structure the brief
+asks for. It already exists: three sections ("Autres prix" / other
+prices, "Couleur et icône" / appearance, "Saison, notes et visibilité" /
+season, notes and visibility) are wrapped in an existing `<AdvancedFields>`
+component (`ui/EditorSheet.tsx`, a native `<details>`), collapsed by
+default, covering four of the brief's five named "potential advanced
+options" — alternate prices, presentation, seasons, notes, visibility —
+almost verbatim. `CHANGELOG.md` confirms this was deliberate, in a prior
+pass, with the same reasoning the brief now asks for: *"Season, notes and
+visibility sit behind Advanced. Recurrence, schedule and prices stay
+visible — the schedule fields already appear only when the chosen cost
+model needs them, so hiding them would have hidden exactly what the user
+had just asked for."* The remaining item, "unusual renewal behaviour" —
+installments, session packs, a real-schedule calendar — is already
+choice-gated the same correct way: those fields appear only once the
+reader has picked that cost model themselves, which is the opt-in, not a
+thing to hide behind a second disclosure on top of the first choice.
+
+So the basic path this phase's brief asks for — name, amount, currency,
+category, recurrence, next date, payer/funding — was already exactly
+what a fresh "Add activity" shows, confirmed by opening it: nine visible
+fields, three collapsed disclosures, nothing else.
+
+What the investigation did find, empirically rather than by reading:
+opening an *existing* activity for editing left every advanced disclosure
+closed **regardless of whether it already held a value** — created "Ski
+pass" with a seasonal tag of "hiver," reopened it, and "Saison, notes et
+visibilité" was collapsed with no indication a season tag existed inside
+it. Nothing was lost — `activityToDraft` reads every field correctly —
+but a reader would have to know to open a section that gives no sign it
+contains anything, on every single future edit. That is "do not break
+existing activities" applied to discoverability rather than data
+integrity, and it is a gap the three-disclosure structure did not exist
+to close by itself.
+
+### Implementation
+
+`ui/EditorSheet.tsx`: `AdvancedFields` takes an optional `defaultOpen`
+prop, applied as `<details open={defaultOpen}>`.
+
+`ActivityPanel.tsx`: a new `advancedSectionsFor(draft)` (module-level,
+pure) inspects a freshly loaded draft — not live `form` state — and
+returns which of the three sections already hold a non-default value:
+a price other than the one the cost model reads, a colour/icon, or a
+season/notes/inactive/hidden flag. `begin()` (called once, when the
+editor opens) computes this and stores it in a new `advancedOpen` state,
+passed to the three `<AdvancedFields>` call sites.
+
+Computing it from the *freshly loaded draft* rather than `form` is the
+one thing that had to be got right: `form` changes on every keystroke,
+and deriving "should this be open" from it would force a section back
+open the instant a reader typed into the very field that made the
+computed value `true` — indistinguishable from a disclosure that refuses
+to stay closed. Both new pieces of code carry a comment stating this
+explicitly, since it is the kind of mistake that passes a quick look and
+fails the first time someone tries to collapse a section they just used.
+
+### Tests
+
+- `npx tsc -b` clean; `npx vitest run` 1044 passed / 0 failed.
+- `node scripts/verify-browser.mjs` — 66/66, unaffected.
+- Manual, in a real browser: created "Ski pass" (monthly, no colour, no
+  other prices, seasonal tag "hiver"), saved it, reopened it for editing.
+  "Saison, notes et visibilité" was open on load with "hiver" visible in
+  the field; "Autres prix" and "Couleur et icône" — genuinely empty on
+  this activity — stayed collapsed. A fresh "Ajouter une activité" still
+  opens with all three collapsed, as before this phase.
+
+### Regression
+
+Additive only: one new optional prop with a default that preserves the
+existing collapsed-by-default behaviour for every caller that does not
+pass it (there are none elsewhere — `AdvancedFields` is only used in this
+one editor), one new piece of state set exactly once per `begin()` call
+alongside the existing `setForm`, and one new pure function nothing else
+calls. No field, validation, or save path changed.
+
+### Remaining concerns
+
+- None found beyond the discoverability gap this phase closed. The basic
+  path, the three disclosures' contents, and the choice-gated
+  cost-model-specific fields were all already correct and were verified
+  rather than rebuilt.
