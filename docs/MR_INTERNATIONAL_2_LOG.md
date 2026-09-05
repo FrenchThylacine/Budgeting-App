@@ -259,3 +259,98 @@ editing).
   months; the contradictory "Aucune donnée · 1 transaction" pairing on a
   month with only a wallet-ledger entry) remain open, assigned to later
   visual-language/UX phases (5.4, 5.14).
+
+---
+
+## Phase 5.3 — Responsive / mobile user experience
+
+**Date:** 2026-09-05
+**Environment:** same account and data, chrome-devtools MCP, viewport
+resized live (no device emulation quirks) at 390×844, 768×1024, and back to
+1440×900 desktop, plus the project's own harness at 320/360/375/390/412/430.
+
+### Tests
+
+Walked Dashboard, Activities (list + "Nouvelle activité" full editor),
+Spending, Wallet (balances, wallet-entry-history table, "entrée/sortie"
+dialog), Reports (including its embedded iframe's own internal scroll),
+Statistics → Historique financier, Categories, all four Settings tabs, the
+mobile "Plus" sheet, and a full tutorial replay — at 390px. Spot-checked
+768px (tablet portrait) on the Dashboard specifically to confirm the
+mobile↔sidebar breakpoint (748/2759 in `src/styles-extras.css`, is `max-width:
+780px`) was landing where intended rather than by accident.
+
+### Results
+
+🔴 **Bugs found while testing responsiveness (not layout bugs themselves,
+found by reading real content on real screens):**
+
+1. Wallet ledger rows and two audit-log sentence types stored raw English
+   month names (`Budget de September 2026`), and the Statistics
+   "Historique financier" list rendered its own month labels in English
+   outright. Two entirely missing translation keys (`audit.noteWritten`,
+   `audit.noteCleared`) meant writing or clearing a monthly note logged the
+   literal key name. See the commit for the full fix — this turned out to
+   be the same "sentence translated, values inside it were not" defect
+   class `docs/KNOWN_ISSUES.md` already documents once; this is where it
+   had not yet been caught.
+2. Four hardcoded English "Cancel" buttons (History's note editor, Account
+   settings, the historical-period-edit confirmation, Wishlist's editor)
+   next to dozens of correctly-translated ones using the same
+   `common.cancel` key. Fixed to match.
+
+🟢 **Responsive layout itself: no confirmed defects.** Specifically checked
+and clean:
+
+- No horizontal overflow or sub-24px touch target anywhere from 320–430px
+  (harness) or manually at 390px across every screen listed above.
+- The "Budget par mois" table (6 columns) scrolls inside its own bounded
+  horizontal scrollbar rather than pushing the page wide — the correct
+  pattern, already in place.
+- The tutorial overlay's highlight box tracked its real target correctly
+  through a tab switch at 390px, with the card never covering the control
+  (confirmed both visually and by the existing `verify-tutorial.mjs`
+  harness, 12/12).
+- The Report's iframe correctly reflows its tables to the narrow width
+  with no clipping; it does use its own internal scroll (nested inside the
+  outer page's scroll) rather than expanding to fit content, which is a
+  reasonable bounded-preview pattern, not a defect.
+- Dialogs/editors (activity creation, category list, wallet entry) render
+  as full-width sheets with sticky footers on mobile — no cramped controls.
+- 768px correctly still renders the mobile (bottom-nav, single-column)
+  layout rather than an awkward in-between state, which is intentional
+  (the sidebar breakpoint is 780px).
+
+One thing that looked like a bug and was not, recorded so it is not
+re-investigated: the Report's "BUDGET RESTANT" figure appeared as
+"€100.00" (period, not comma) in a screenshot; direct DOM inspection of the
+live iframe confirmed it actually reads "€ 100,00" — a rendering/reading
+artifact at that zoom level, not a formatting defect.
+
+### Implementation
+
+See the "fix: a wallet deposit remembered September in English forever"
+commit — domain/i18n.ts, budgetStore.ts, HistoryPanel.tsx, three other
+components' Cancel buttons, and all 5 locale files.
+
+### Tests (fix verification)
+
+`npx tsc -b` clean; `npx vitest run` 1044 passed/83 skipped/0 failed;
+`verify-browser.mjs` 66/66; manually confirmed in the running app that a
+freshly-created wallet allocation, the Historique financier month list, and
+the note-field aria-label all now read in French.
+
+### Regression
+
+Full suites above cover it; no other consumer of the changed keys or of
+`period.label` was found via grep before editing.
+
+### Remaining concerns
+
+- Did not test RTL (Arabic) layout at mobile widths — worth a pass whenever
+  accessibility (5.17) or visual language (5.4) work touches direction-
+  sensitive CSS, since this phase only exercised LTR (French).
+- Did not exhaustively test every dialog in the app at mobile width (e.g.
+  Wishlist's editor, Excel import preview) — covered the highest-traffic
+  ones; will pick up any stragglers opportunistically in later phases that
+  touch those features directly.
