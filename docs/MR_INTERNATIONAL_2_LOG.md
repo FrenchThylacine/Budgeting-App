@@ -1544,3 +1544,94 @@ calls. No field, validation, or save path changed.
   path, the three disclosures' contents, and the choice-gated
   cost-model-specific fields were all already correct and were verified
   rather than rebuilt.
+
+---
+
+## Phase 5.16 — Outside Budget mental model
+
+**Date:** 2026-09-05
+**Environment:** source read across all six named surfaces; `nav.wallet`
+correctly cross-checked as a deliberate non-surface rather than an
+oversight (see below).
+
+### Investigation
+
+Read `domain/funding.ts` first — its own header already states the exact
+distinction the brief asks a user to make, as three genuinely different
+facts rather than "spent" and "not spent": personal (consumes the
+budget), other (someone else's money, never touches the budget), outside
+(the reader's own money, deliberately kept off this budget). It states
+explicitly why 2 and 3 must never be collapsed into one "excluded"
+figure, and every selector in the codebase already routes through it.
+
+Checked the brief's six named surfaces against that model, one at a time:
+
+- **Creation** (`ActivityPanel.tsx`, `SpendingPanel.tsx`): the funding
+  selector already shows a hint the moment a non-default kind is chosen
+  — `funding.outside.hint`: "Recorded in full. Your money, deliberately
+  kept out of this budget." — distinct in wording from `funding.other
+  .hint`. This is the brief's "explain contextually at the moment it
+  matters" already built, word for word.
+- **Spending**: a four-tile split (personal / other / outside / gross),
+  shown only when there is something to split, each tile carrying a
+  glyph, a colour, a label and a transaction count — with a comment
+  stating the same reason `funding.ts` gives for never summing 2 and 3.
+  Per-row entries carry the same glyph via `data-funding`.
+- **Dashboard**: the same three-channel `FundingMark` chip — glyph,
+  `data-funding` colour, word — used for the period's funding tags, and
+  it already carries `title={t(\`funding.${kind}.hint\`)}`: the exact
+  same creation-time sentence, available on hover when only *viewing*
+  data rather than entering it.
+- **Reports**: `domain/report.ts`'s own comment states the brief's
+  requirement as an existing design rule — "each funding kind carries a
+  glyph (● ◆ ▲) and its written label" — specifically because a
+  black-and-white printed page cannot rely on colour; every funding
+  figure in the generated report, and every segment of its split bar,
+  carries its own glyph and percentage.
+- **Statistics** (`AnalyticsPanel.tsx`): the same `FUNDING_META` glyphs
+  and colours drive its funding breakdown chart and legend.
+- **Wallet**: no funding-kind rendering exists here, and it should not —
+  by `funding.ts`'s own definition, outside-budget spending is "also
+  never consumes the personal budget," so the wallet ledger — a record of
+  real money movements *in* this budget's treasury — correctly has
+  nothing to show. Confirmed this is by design rather than a gap: an
+  outside-budget transaction has no wallet effect anywhere in
+  `domain/wallet.ts`, so there is nothing to surface without inventing a
+  figure the model says does not belong there.
+
+`FUNDING_MARK.tsx`'s own header additionally documents that this is
+already a *consolidation* from three separate hand-written renderings
+(a badge, a bare glyph, a chip) into one component specifically to stop
+"the badge learns a tooltip the chip never gets" — the identical failure
+mode this phase exists to prevent, already fixed in an earlier pass.
+
+### Results
+
+🟢 Not reproduced as a content or comprehension gap. Every one of the six
+named surfaces already distinguishes the three funding kinds by the
+brief's own preferred means — glyph, colour, and a written label, never
+colour alone — and two of the three (creation, and viewing on the
+Dashboard) already carry the exact contextual sentence the brief asks
+for. Wallet's silence on outside-budget spending is the model working
+correctly, not a missing surface.
+
+### Implementation
+
+None. Verified rather than patched, on the same evidence pattern as
+Phases 5.8 and 5.10.
+
+### Regression
+
+N/A — no code changed.
+
+### Remaining concerns
+
+- `FundingMark`'s hover explanation uses a native `title` attribute,
+  which is not reachable by keyboard focus or touch and is not
+  consistently exposed by screen readers — unlike `InfoDot` (used in
+  Phase 5.13), which handles hover, focus and press alike. This is an
+  accessibility question about the *mechanism*, not the *content* — the
+  right sentence is already there, in the right place, on hover — and
+  Phase 5.17 explicitly names "keyboard navigation, focus... icon
+  labels" as its own accessibility checklist, so fixing the mechanism is
+  left there rather than folded in piecemeal here.
