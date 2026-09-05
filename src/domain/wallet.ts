@@ -48,7 +48,6 @@ import { storedText } from "./storedText";
 import type {
   BudgetSnapshot,
   CurrencyCode,
-  MonthCloseRecord,
   SpendingEntry,
   WalletEntry,
   WalletEntryType,
@@ -430,19 +429,6 @@ export interface BudgetPeriod {
   transferred: number;
   /** Still available at the end of the month: it does not expire. */
   remaining: number;
-  /**
-   * The month's close record, if it has one.
-   *
-   * `remaining` above already accounts for everything a close *does* to
-   * budget arithmetic — which for a rollover is nothing: `budgetEffect()`
-   * gives a `"rollover"` entry no budget effect at all, by the Phase 5.2
-   * policy that Remaining Budget is a separate, continuous ledger a
-   * month-close never touches. Carrying the close record here is purely so
-   * the row can *say* it was closed, and where the écart went, without
-   * that presentational fact changing a single number above it — see
-   * Phase 5.14.
-   */
-  close: MonthCloseRecord | null;
 }
 
 /**
@@ -488,8 +474,6 @@ export function budgetPeriods(snapshot: BudgetSnapshot): BudgetPeriod[] {
       const carriedIn = running;
       const remaining = carriedIn + value.allocated - value.spent - value.transferred;
       running = remaining;
-      const close =
-        snapshot.years[String(value.year)]?.closedMonths.find((record) => record.month === value.month) ?? null;
       return {
         year: value.year,
         month: value.month,
@@ -499,7 +483,6 @@ export function budgetPeriods(snapshot: BudgetSnapshot): BudgetPeriod[] {
         spent: value.spent,
         transferred: value.transferred,
         remaining,
-        close,
       };
     })
     .reverse();

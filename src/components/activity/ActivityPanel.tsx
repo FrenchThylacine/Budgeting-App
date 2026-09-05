@@ -92,59 +92,6 @@ const COST_MODELS: { value: CostModel; labelKey: string; hintKey: string }[] = [
 
 type SortMode = "order" | "name" | "cost";
 
-/**
- * Phase 5.15 — which price the chosen model reads, outside the component.
- *
- * A standalone twin of the in-component `relevantPrice`, needed because
- * `begin()` has to ask this question of a *freshly loaded* draft before it
- * is ever assigned to `form` state — see `advancedSectionsFor` below.
- */
-function relevantPriceField(
-  draft: Pick<ActivityDraft, "costModel" | "recurrenceType">,
-  field: "pricePerMonth" | "pricePerSession" | "pricePerPurchase" | "yearlyEstimate",
-): boolean {
-  const model = draft.costModel ?? "auto";
-  if (model === "fixed") return field === "pricePerMonth";
-  if (model === "perSession" || model === "sessionPack" || model === "schedule") return field === "pricePerSession";
-  if (model === "fixedYearly") return field === "yearlyEstimate";
-  if (draft.recurrenceType === "yearly") return field === "yearlyEstimate";
-  if (draft.recurrenceType === "session") return field === "pricePerSession";
-  if (draft.recurrenceType === "purchase") return field === "pricePerPurchase";
-  return field === "pricePerMonth";
-}
-
-/**
- * Which of the editor's three collapsed "Advanced" sections should start
- * open, for an activity as it already exists.
- *
- * Computed once, when the editor opens (`begin()`), from the freshly
- * loaded draft — never from live `form` state. Deriving it from `form` on
- * every keystroke would force a section back open on every render whose
- * computed value is `true`, which is indistinguishable from the disclosure
- * refusing to stay closed once a reader has just filled in the very field
- * that opened it.
- *
- * This is the brief's "do not break existing activities" applied to
- * discoverability rather than data loss: nothing here was ever hidden from
- * the record, but a season, a colour, or a note set before this phase
- * existed would otherwise sit behind a closed triangle with no hint that
- * anything is there, on every single time the activity is reopened.
- */
-function advancedSectionsFor(draft: ActivityDraft): { prices: boolean; appearance: boolean; details: boolean } {
-  const priceFields: Array<"pricePerMonth" | "pricePerSession" | "pricePerPurchase" | "yearlyEstimate"> = [
-    "pricePerMonth",
-    "pricePerSession",
-    "pricePerPurchase",
-    "yearlyEstimate",
-  ];
-  return {
-    prices:
-      priceFields.some((field) => !relevantPriceField(draft, field) && draft[field]) || Boolean(draft.estimatedCost),
-    appearance: Boolean(draft.color || draft.icon || draft.iconUrl),
-    details: Boolean(draft.seasonalTag || draft.notes || !draft.active || !draft.visible),
-  };
-}
-
 export const ActivityPanel: React.FC = () => {
   const { t, formatDate, monthNames } = useTranslation();
   const snapshot = useBudgetStore((s) => s.snapshot);
@@ -158,7 +105,6 @@ export const ActivityPanel: React.FC = () => {
   const [editing, setEditing] = useState<Activity | null>(null);
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<ActivityDraft>(() => activityToDraft(null, snapshot));
-  const [advancedOpen, setAdvancedOpen] = useState(() => advancedSectionsFor(form));
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("");
   const [sortBy, setSortBy] = useState<SortMode>("order");
@@ -234,10 +180,8 @@ export const ActivityPanel: React.FC = () => {
   };
 
   const begin = (activity: Activity | null) => {
-    const draft = activityToDraft(activity, snapshot);
     setEditing(activity);
-    setForm(draft);
-    setAdvancedOpen(advancedSectionsFor(draft));
+    setForm(activityToDraft(activity, snapshot));
     setOpen(true);
   };
 
@@ -991,7 +935,7 @@ export const ActivityPanel: React.FC = () => {
 
             {/* The prices this model does not read, and the fallback the
                 automatic model uses when none of them is filled in. */}
-            <AdvancedFields label={t("activity.otherPrices")} defaultOpen={advancedOpen.prices}>
+            <AdvancedFields label={t("activity.otherPrices")}>
               <FieldGroup title={t("activity.otherPrices")}>
                 {!relevantPrice("pricePerMonth") && (
               <Field label={t("activity.monthlyCost")} name="pricePerMonth" emphasised={form.costModel === "fixed"}>
@@ -1132,7 +1076,7 @@ export const ActivityPanel: React.FC = () => {
                 icon library, above the question of what the thing costs. They
                 are worth having and they are never the reason somebody opened
                 this sheet. */}
-            <AdvancedFields label={t("activity.appearance")} defaultOpen={advancedOpen.appearance}>
+            <AdvancedFields label={t("activity.appearance")}>
               <FieldGroup title={t("activity.appearance")}>
                 <Field label={t("activity.colour")} span group>
                   <ColorPicker value={form.color || undefined} onChange={(color) => patch({ color: color ?? "" })} />
@@ -1158,7 +1102,7 @@ export const ActivityPanel: React.FC = () => {
               />
             </AdvancedFields>
 
-            <AdvancedFields label={t("activity.seasonNotesAndVisibility")} defaultOpen={advancedOpen.details}>
+            <AdvancedFields label={t("activity.seasonNotesAndVisibility")}>
             <FieldGroup title={t("activities.groupDetails")}>
               <Field label={t("activity.seasonalTag")} hint={t("activity.eGSummerWinterNormal")}>
                 <input

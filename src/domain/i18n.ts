@@ -201,21 +201,6 @@ function interpolate(template: string, params: TranslateParams | undefined, loca
   return template.replace(/\{(\w+)\}/g, (match, name: string) => {
     const value = params[name];
     if (value == null) return match;
-    /*
-     * A month number is a name, not a quantity.
-     *
-     * `storedText` sites that write a ledger row before a language exists
-     * (see domain/storedText.ts) can only pass the month as a number — a
-     * name baked in at write time would freeze that row in whatever
-     * language was active the day it was written. `{month}` is therefore
-     * the one placeholder resolved to a *word* here rather than formatted
-     * as a number; every other caller that already has a localized label
-     * (a full "September 2026" string, say) passes a string and is
-     * untouched by this branch.
-     */
-    if (name === "month" && typeof value === "number") {
-      return monthNames(locale)[value - 1] ?? String(value);
-    }
     if (typeof value !== "number") return String(value);
     /*
      * A year is a label, not a quantity.

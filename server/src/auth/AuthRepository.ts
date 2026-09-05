@@ -6,8 +6,6 @@ export interface UserRecord {
   id: string;
   email: string;
   emailNormalized: string;
-  username: string | null;
-  usernameNormalized: string | null;
   passwordHash: string;
   snapshotId: string;
   createdAt: string;
@@ -18,7 +16,6 @@ export interface SessionRecord {
   userId: string;
   snapshotId: string;
   email: string;
-  username: string | null;
 }
 
 /**
@@ -49,34 +46,6 @@ export function isPlausibleEmail(email: string): boolean {
   return at > 0 && at === trimmed.lastIndexOf("@") && at < trimmed.length - 1;
 }
 
-/**
- * Normalize a username for lookup and uniqueness, the same way
- * `normalizeEmail` does for addresses — so "Alice" and "alice" cannot become
- * two different handles.
- */
-export function normalizeUsername(username: string): string {
-  return username.trim().toLowerCase();
-}
-
-/**
- * Whether a string is a valid username.
- *
- * Deliberately narrow, unlike `isPlausibleEmail` — a username is chosen here,
- * not verified by an external system, so the definitive test cannot be
- * "does it work"; the character set has to rule out confusion up front.
- * Letters, digits, underscore and hyphen only (`@` is excluded on purpose:
- * it is what `findUserByIdentifier` uses to tell a username from an email
- * without a database round trip), 3–24 characters, and it must start with a
- * letter so a username can never be mistaken for a phone number or an
- * account id.
- */
-const USERNAME_PATTERN = /^[a-z][a-z0-9_-]{2,23}$/;
-
-export function isValidUsername(username: string): boolean {
-  if (typeof username !== "string") return false;
-  return USERNAME_PATTERN.test(normalizeUsername(username));
-}
-
 export class AuthRepository {
   constructor(private sql = getDatabase()) {}
 
@@ -86,37 +55,16 @@ export class AuthRepository {
 
   async findUserByEmail(email: string): Promise<UserRecord | null> {
     const rows = await this.query(
-      `SELECT id, email, email_normalized, username, username_normalized, password_hash, snapshot_id, created_at
+      `SELECT id, email, email_normalized, password_hash, snapshot_id, created_at
          FROM users WHERE email_normalized = $1`,
       [normalizeEmail(email)],
     );
     return rows[0] ? toUser(rows[0]) : null;
   }
 
-  /**
-   * Resolve whatever was typed into the sign-in form — an email address or a
-   * username — to an account.
-   *
-   * The two live in different columns, but nothing about the request says
-   * which one a caller meant, and asking would be one more decision the
-   * brief's own §16 rules out ("keep email login" — a single field, not a
-   * toggle). `@` is the discriminator: it is required in every plausible
-   * email and forbidden in every valid username (`USERNAME_PATTERN`), so it
-   * decides which column to query without ever guessing or querying both.
-   */
-  async findUserByIdentifier(identifier: string): Promise<UserRecord | null> {
-    if (identifier.includes("@")) return this.findUserByEmail(identifier);
-    const rows = await this.query(
-      `SELECT id, email, email_normalized, username, username_normalized, password_hash, snapshot_id, created_at
-         FROM users WHERE username_normalized = $1`,
-      [normalizeUsername(identifier)],
-    );
-    return rows[0] ? toUser(rows[0]) : null;
-  }
-
   async findUserById(id: string): Promise<UserRecord | null> {
     const rows = await this.query(
-      `SELECT id, email, email_normalized, username, username_normalized, password_hash, snapshot_id, created_at
+      `SELECT id, email, email_normalized, password_hash, snapshot_id, created_at
          FROM users WHERE id = $1`,
       [id],
     );
@@ -171,8 +119,6 @@ export class AuthRepository {
       id,
       email: email.trim(),
       emailNormalized: normalizeEmail(email),
-      username: null,
-      usernameNormalized: null,
       passwordHash,
       snapshotId,
       createdAt: now,
@@ -185,30 +131,6 @@ export class AuthRepository {
       now,
       userId,
     ]);
-  }
-
-  /**
-   * Set or change the account's username.
-   *
-   * Returns `false` when the normalized form is already somebody else's
-   * handle — detected from the unique constraint, the same
-   * check-by-consequence `createUser` and `updateEmail` already use, so a
-   * race between two accounts claiming the same name at once cannot let both
-   * win.
-   */
-  async setUsername(userId: string, username: string, now: string): Promise<boolean> {
-    try {
-      await this.query(`UPDATE users SET username = $1, username_normalized = $2, updated_at = $3 WHERE id = $4`, [
-        username.trim(),
-        normalizeUsername(username),
-        now,
-        userId,
-      ]);
-    } catch (error) {
-      if (isUniqueViolation(error)) return false;
-      throw error;
-    }
-    return true;
   }
 
   /**
@@ -244,7 +166,7 @@ export class AuthRepository {
    */
   async findSessionByTokenHash(tokenHash: string): Promise<SessionRecord | null> {
     const rows = await this.query(
-      `SELECT s.id, s.user_id, u.snapshot_id, u.email, u.username
+      `SELECT s.id, s.user_id, u.snapshot_id, u.email
          FROM sessions s
          JOIN users u ON u.id = s.user_id
         WHERE s.token_hash = $1 AND s.expires_at > NOW()`,
@@ -252,13 +174,7 @@ export class AuthRepository {
     );
     const row = rows[0];
     if (!row) return null;
-    return {
-      id: row.id,
-      userId: row.user_id,
-      snapshotId: row.snapshot_id,
-      email: row.email,
-      username: row.username ?? null,
-    };
+    return { id: row.id, userId: row.user_id, snapshotId: row.snapshot_id, email: row.email };
   }
 
   async touchSession(sessionId: string): Promise<void> {
@@ -338,78 +254,6 @@ export class AuthRepository {
     await this.query(`DELETE FROM password_reset_tokens WHERE expires_at < NOW()`);
     await this.query(`DELETE FROM auth_attempts WHERE created_at < NOW() - INTERVAL '1 day'`);
   }
-
-  // ─── Account deletion ─────────────────────────────────────────────────────
-
-  /** Build an unexecuted Neon query for batched transaction execution. */
-  private buildQuery(text: string, params: unknown[]): unknown {
-    const parts = text.split(/\$\d+/);
-    const strings = Object.assign([...parts], { raw: [...parts] }) as unknown as TemplateStringsArray;
-    return (this.sql as any)(strings, ...params);
-  }
-
-  /**
-   * Erase an account and every row of the budget it owns, atomically.
-   *
-   * Deliberately explicit and ordered, rather than one `DELETE FROM
-   * snapshots` left to cascade: `activities`, `spending_entries` and
-   * `wishlist_items` all reference `categories(id)` with `ON DELETE
-   * RESTRICT` — a category must not vanish out from under spending that
-   * still names it during *ordinary* use, where the app checks first. But
-   * `categories` and `years` both cascade independently from `snapshots`
-   * on their own `snapshot_id` foreign keys, and Postgres does not
-   * guarantee it will finish deleting the `year_id`-cascaded activities
-   * before it attempts the `snapshot_id`-cascaded categories in the same
-   * statement. Tested directly against a real database: a bare `DELETE
-   * FROM snapshots` on an account with even one activity fails outright
-   * with `violates foreign key constraint "activities_category_id_fkey"`
-   * — the whole deletion aborts, the account survives, and a self-service
-   * "delete my account" would throw a raw database error for every
-   * account that has ever recorded anything. Deleting the RESTRICT-guarded
-   * children first, explicitly, sidesteps the ordering question rather
-   * than hoping a particular Postgres version resolves it favourably.
-   *
-   * One transaction: a partially erased account — data gone, login still
-   * working, or the reverse — is a worse failure than the deletion simply
-   * not happening.
-   */
-  async deleteAccount(userId: string, snapshotId: string): Promise<void> {
-    const byYear = (table: string) =>
-      this.buildQuery(`DELETE FROM ${table} WHERE year_id IN (SELECT id FROM years WHERE snapshot_id = $1)`, [
-        snapshotId,
-      ]);
-    const bySnapshot = (table: string) => this.buildQuery(`DELETE FROM ${table} WHERE snapshot_id = $1`, [snapshotId]);
-
-    const writes = [
-      // RESTRICT-guarded children of `categories`, first and explicitly.
-      byYear("spending_entries"),
-      byYear("wishlist_items"),
-      byYear("activities"),
-      // The rest of a year's own data.
-      byYear("wallet_entries"),
-      byYear("closed_months"),
-      bySnapshot("years"),
-      bySnapshot("categories"),
-      // Not FK-linked to `snapshots` at all (see migration 006's own
-      // comment on `budget_approvals`), so nothing would remove it
-      // otherwise.
-      bySnapshot("budget_approvals"),
-      bySnapshot("audit_log"),
-      bySnapshot("seasonal_presets"),
-      bySnapshot("scenario_presets"),
-      this.buildQuery(`DELETE FROM snapshots WHERE id = $1`, [snapshotId]),
-      // Cascades sessions and password_reset_tokens (migration 007).
-      this.buildQuery(`DELETE FROM users WHERE id = $1`, [userId]),
-    ];
-
-    const sqlAny = this.sql as any;
-    if (typeof sqlAny.transaction === "function") {
-      await sqlAny.transaction(writes);
-      return;
-    }
-    // A driver without transaction support: still ordered, just not atomic.
-    for (const write of writes) await write;
-  }
 }
 
 function toUser(row: Record<string, any>): UserRecord {
@@ -417,8 +261,6 @@ function toUser(row: Record<string, any>): UserRecord {
     id: row.id,
     email: row.email,
     emailNormalized: row.email_normalized,
-    username: row.username ?? null,
-    usernameNormalized: row.username_normalized ?? null,
     passwordHash: row.password_hash,
     snapshotId: row.snapshot_id,
     createdAt: row.created_at,

@@ -563,7 +563,6 @@ export default function App() {
           <RolloverDialog
             onClose={() => setRolloverOpen(false)}
             calculation={calculation}
-            onNavigate={setActiveTab}
           />
         )}
 

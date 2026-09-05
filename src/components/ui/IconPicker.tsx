@@ -89,7 +89,6 @@ import {
   Wrench,
   X,
   Ambulance, Anchor, Armchair, Baby, Bath, BatteryCharging, Bird, Bitcoin, Bookmark, Bot, BrainCircuit, Briefcase, Building2, Cake, Calculator, Caravan, Carrot, Cat, ChartColumn, ChartPie, ChefHat, Cherry, ClipboardList, Cloud, CloudSun, Code, Coins, Croissant, CupSoda, Database, Dices, Disc3, Dog, DollarSign, Donut, DoorOpen, Egg, Euro, FileText, Fish, Flag, Flower, Forklift, Gauge, GitBranch, Glasses, Hammer, Handshake, HardDrive, IceCream, Joystick, Keyboard, Library, ListMusic, Martini, Mic, Microwave, Milk, MonitorPlay, Mouse, Navigation, Package, Percent, PlaneLanding, PlaneTakeoff, Podcast, Popcorn, Presentation, Printer, Projector, Puzzle, Radar, Radio, Receipt, Recycle, Refrigerator, Repeat, Rocket, Route, Sailboat, Satellite, School, Server, Shirt, Snowflake, Soup, Speaker, Sprout, Store, Sun, Swords, Tag, Target, Terminal, TowerControl, TrafficCone, TramFront, Trees, Truck, Twitch, Umbrella, University, Video, Warehouse, WashingMachine, Watch, Wind, Youtube,
-  BadgeDollarSign, Shield,
   Activity, Amphora, Antenna, Aperture, Binoculars, BookA, BookMarked, Boxes, Brush, Cable, Castle,
   Cctv, Church, Cog, Crosshair, Drama, Earth, Fan, Feather, Headset, Images, Layers, Locate,
   MemoryStick, MessageSquareQuote, Milestone, MonitorSpeaker, MountainSnow, Music4, Newspaper,
@@ -311,10 +310,8 @@ export const ICON_CATEGORIES: IconCategory[] = [
     label: "Finance",
     icons: [
       { name: "CreditCard", label: "Card", icon: CreditCard, keywords: "payment subscription debit visa" },
-      { name: "Banknote", label: "Cash", icon: Banknote, keywords: "money notes withdrawal" },
-      { name: "BadgeDollarSign", label: "Salary", icon: BadgeDollarSign, keywords: "income wages payroll paycheck earnings" },
+      { name: "Banknote", label: "Cash", icon: Banknote, keywords: "money notes salary income" },
       { name: "Landmark", label: "Bank", icon: Landmark, keywords: "banking account institution tax" },
-      { name: "Shield", label: "Insurance", icon: Shield, keywords: "policy cover premium protection" },
       { name: "PiggyBank", label: "Savings", icon: PiggyBank, keywords: "save fund reserve deposit" },
       { name: "Wallet", label: "Wallet", icon: Wallet, keywords: "pocket money spending balance" },
       { name: "HandCoins", label: "Fees", icon: HandCoins, keywords: "charges cost payment lending" },
@@ -694,7 +691,7 @@ export const IconPicker: React.FC<IconPickerProps> = ({ value, onChange, accent,
         onClick={() => setOpen((current) => !current)}
         aria-haspopup="listbox"
         aria-expanded={open}
-        aria-label={`${fieldLabel}: ${value ? iconLabel(value) : t("icons.noIcon")}`}
+        aria-label={`${fieldLabel}: ${iconLabel(value)}`}
         style={{ width: "100%", justifyContent: "flex-start", gap: 10, minWidth: 0, overflow: "hidden" }}
       >
         <span
@@ -713,7 +710,7 @@ export const IconPicker: React.FC<IconPickerProps> = ({ value, onChange, accent,
           <ActivityIcon name={value} size={15} color="currentColor" />
         </span>
         <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-          {selected ? selected.label : value ? value : t("icons.chooseIcon")}
+          {selected ? selected.label : value ? value : "Choose icon"}
         </span>
       </button>
 
@@ -771,7 +768,7 @@ export const IconPicker: React.FC<IconPickerProps> = ({ value, onChange, accent,
             onClick={() => select(undefined)}
             style={{ width: "100%", justifyContent: "flex-start", marginBottom: 6 }}
           >
-            <Circle size={14} /> {t("icons.noIcon")}
+            <Circle size={14} /> No icon
           </button>
 
           {flat.length === 0 ? (

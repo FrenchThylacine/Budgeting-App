@@ -140,13 +140,6 @@
   transform: translateY(-50%);
 }
 
-.auth-remember {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  cursor: pointer;
-}
-
 .auth-submit {
   width: 100%;
   margin-top: var(--space-2);
@@ -1372,67 +1365,6 @@
   height: 42%;
   background: linear-gradient(180deg, transparent, rgba(107, 165, 255, 0.10) 60%, rgba(228, 0, 43, 0.10));
   pointer-events: none;
-}
-
-/* ─── Warp acceleration (Phase 5.9) ────────────────────────────────────────
-   §1.23 already has the aircraft's side of "high speed" — they outrun their
-   own smoke. This is the environment's side of the same idea: streaks that
-   read as the world rushing past a cockpit at speed, the way a windscreen
-   blurs at pace.
-
-   `--warp-strength` is written every frame in LoadingScreen.tsx, from the
-   same departure progress that drives the clip-path reveal — not switched
-   on by the `depart` phase class alone. That is the difference between "a
-   speed effect that appears because the phase changed" and "a speed effect
-   that *is* the acceleration", which is what Phase 5.8 asks every part of
-   this sequence to be: one continuous thing, not a handoff between two.
-
-   No z-index is set here on purpose: every aircraft and the smoke canvases
-   carry an explicit z-index (1–3), which is its own stacking layer above
-   the default one these elements sit in — so the streaks paint under the
-   formation *by construction*, whatever order the DOM happens to list them
-   in, rather than by a number chosen to be smaller than three others. */
-.boot-warp {
-  position: absolute;
-  inset: 0;
-  overflow: hidden;
-  pointer-events: none;
-  --warp-strength: 0;
-}
-
-.boot-warp-streak {
-  position: absolute;
-  left: 0;
-  height: var(--warp-thickness, 2px);
-  width: var(--warp-length, 18vw);
-  top: var(--warp-top, 50%);
-  /* Feathered at both ends — a hard-edged bar reads as a UI element, not a
-     streak of light. */
-  background: linear-gradient(
-    90deg,
-    transparent 0%,
-    rgba(255, 255, 255, var(--warp-ink, 0.5)) 42%,
-    rgba(255, 255, 255, var(--warp-ink, 0.5)) 58%,
-    transparent 100%
-  );
-  opacity: calc(var(--warp-strength) * var(--warp-peak, 0.7));
-  transform: translate3d(-24vw, 0, 0);
-  animation: bootWarpRun var(--warp-duration, 640ms) linear infinite;
-  animation-delay: var(--warp-delay, 0ms);
-  /* The animation always runs — starting and stopping it in sync with the
-     phase is exactly the two-animations-and-a-seam shape Phase 5.8 rules
-     out. Silence is `--warp-strength: 0` making it invisible, not the
-     animation being absent. */
-  will-change: transform;
-}
-
-@keyframes bootWarpRun {
-  from { transform: translate3d(-24vw, 0, 0); }
-  to   { transform: translate3d(124vw, 0, 0); }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .boot-warp { display: none; }
 }
 
 .boot-stage {
@@ -2801,14 +2733,6 @@ label:has(> input[type="radio"]) {
 
 .tutorial-title { margin: 0; }
 .tutorial-body { margin: 0; color: var(--text-secondary); }
-
-.tutorial-character-row { display: flex; align-items: flex-start; gap: var(--space-3); }
-.tutorial-character { flex: 0 0 auto; }
-.tutorial-character-row .tutorial-title { padding-top: 6px; }
-
-@media (max-width: 480px) {
-  .tutorial-character { width: 44px; height: 44px; }
-}
 
 .tutorial-action {
   display: flex;

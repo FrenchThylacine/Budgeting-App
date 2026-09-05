@@ -59,19 +59,7 @@ function isSecureRequest(req: Request): boolean {
   return req.protocol === "https";
 }
 
-/**
- * `persistent` defaults to `true` so every existing call site — signup,
- * password reset, change-password, change-email — keeps issuing the cookie
- * it always has without being touched. Only `/signin` ever passes `false`,
- * for someone who left Remember Me unchecked.
- */
-export function setSessionCookie(
-  req: Request,
-  res: Response,
-  token: string,
-  options: { persistent?: boolean } = {},
-): void {
-  const persistent = options.persistent ?? true;
+export function setSessionCookie(req: Request, res: Response, token: string): void {
   res.cookie(SESSION_COOKIE, token, {
     httpOnly: true, // unreadable from JavaScript, so an XSS cannot exfiltrate it
     secure: isSecureRequest(req),
@@ -81,15 +69,7 @@ export function setSessionCookie(
     // which is the CSRF case that matters.
     sameSite: "lax",
     path: "/",
-    /*
-     * No `maxAge` at all when the session was not asked to be remembered —
-     * not a short one. A cookie with any `Max-Age`/`Expires` is a *persistent*
-     * cookie by definition and survives the browser closing; the only way to
-     * get "gone when the browser closes" is to omit the attribute entirely.
-     * The one-day backstop for that case lives server-side, on the session
-     * row itself (`UNREMEMBERED_SESSION_TTL_DAYS`), not on the cookie.
-     */
-    ...(persistent ? { maxAge: SESSION_TTL_DAYS * DAY_MS } : {}),
+    maxAge: SESSION_TTL_DAYS * DAY_MS,
   });
 }
 

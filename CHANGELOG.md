@@ -9,7 +9,6 @@ with one small fix gets a patch rather than a new minor.
 
 | Version | What it was |
 | --- | --- |
-| **5.2.0** | A wallet bug that was a mislabelled key, not a wrong number; a checkbox that changes what "unchecked" means; an account that can delete itself, correctly, on the second attempt at the query |
 | **5.1.0** | A tour that points at the button, a theme you build that cannot come out unreadable, and English found in the layer no dictionary check looks at |
 | **5.0.0** | Ten destinations instead of eleven, a report you can read before you print it, and three bugs that were costing an account its data |
 | **4.4.0** | The correction pass: the aeroplane was not where the arithmetic put it, a choreographed routine, and a legend instead of a paragraph |
@@ -21,64 +20,6 @@ with one small fix gets a patch rather than a new minor.
 | **2.0.0**–**2.1.0** | Accounts, Excel import, dedicated editors, scenarios, swipe, the first identity |
 | **1.0.0**–**1.1.0** | The first working budget: activities, spending, wishlist, reports |
 | **0.1.0**–**0.2.0** | Before it was an application |
-
-## 5.2.0 — 2026-09-05 — A wallet bug that was never in the wallet
-
-Eighteen phases, run in order, each investigated before it was fixed. Eight
-of them closed as *not reproduced* — an airshow "restart," smoke that read
-as thin lines, a 409 that would not recur — each with the harness or the
-deterministic test that closed the question, rather than a fix for a bug
-that was never there. The rest were real.
-
-### The wallet was never wrong
-
-Main Wallet, Remaining Budget and Personal Balance were arithmetically
-correct on the first day of this pass and every day after. What was wrong
-was a translation key: the Dashboard's planning cap and the Wallet's
-treasury balance shared one label, so two honest answers to two different
-questions read as one figure disagreeing with itself. Split the key, gave
-the Dashboard's tile a one-sentence explanation and a link to the number it
-was being confused with, and put the month-close écart's destination — a
-confirmed, deliberate product decision, not a bug — into the close dialog
-itself, in both directions: before you ask, and again in the receipt after.
-
-### A checkbox that changes what "unchecked" means
-
-Every sign-in got a thirty-day cookie whether or not anyone asked for one.
-Remember Me unchecked is now a cookie gone when the browser closes, backed
-by a one-day session as a backstop; checked keeps the thirty days. A second
-identifier field was never built — one field now accepts an email or a
-username, told apart by an `@` a valid username can never contain.
-
-### An account that can delete itself, correctly, on the second attempt at the query
-
-The first version of the deletion query failed against a real database with
-a foreign-key violation on any account that had ever recorded an activity —
-Postgres does not guarantee it finishes one cascade path before starting an
-independent one from the same delete. Fixed by deleting the RESTRICT-guarded
-tables explicitly, in dependency order, before their parents, in one
-transaction. Two safeguards guard the button itself: the current password,
-and the account's own email typed back.
-
-### A thylacine, twelve streaks of speed, and a table that remembers it was closed
-
-A pilot-hatted mascot walks the tour's thirteen steps now, in ten poses drawn
-before any of them touched production code. The loading screen's departure
-gained the environment's own sense of speed — a dozen streaks driven by the
-same curve that drives the reveal, never switched on by a phase change,
-which is exactly the seam the airshow investigation went looking for
-elsewhere and did not find. And a closed month leaves a mark in its own
-history table: a badge, and one line saying where its écart went, changing
-no arithmetic that was already correct.
-
-### A financial-consistency test, driven through the real store
-
-A realistic multi-month scenario — an allocation, personal money, all three
-funding kinds, a recurring activity, two categories, a second currency, a
-month close — asserted after every step: Main Wallet equals Remaining
-Budget plus Personal Balance, concrete figures and not only the identity,
-and an activity added to the plan moves none of the three. Planning and
-Treasury do not leak into each other; now there is a permanent test saying so.
 
 ## 5.1.0 — 2026-09-01 — Guards that look where the defects actually are
 

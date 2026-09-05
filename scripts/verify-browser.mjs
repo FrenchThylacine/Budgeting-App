@@ -492,9 +492,7 @@ try {
    * stable code; the client says it.
    */
   await check("a failed sign-in is reported in the reader's language", async () => {
-    // Not `input[type=email]`: sign-in accepts a username too (§20), so that
-    // field is `type=text` there and only sign-up's is still `type=email`.
-    await page.setValue("input[autocomplete=username]", `nobody-${stamp}@example.test`);
+    await page.setValue("input[type=email]", `nobody-${stamp}@example.test`);
     await page.setValue("input[type=password]", "definitely-not-the-password");
     await page.click(".auth-submit");
     await page.waitFor("!!document.querySelector('.auth-banner-error')", { timeoutMs: 9000, label: "the error banner" });

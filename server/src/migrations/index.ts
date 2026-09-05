@@ -336,25 +336,6 @@ export async function runMigrations(
         await sql`ALTER TABLE wallet_entries ADD COLUMN IF NOT EXISTS date TEXT;`;
       },
     },
-    {
-      /*
-       * A second way to sign in, alongside email.
-       *
-       * Nullable and un-backfilled: every existing account was created before
-       * usernames existed, and inventing one would be indistinguishable from a
-       * value the owner had actually chosen. `username_normalized` gets the
-       * same treatment `email_normalized` already has — a case-folded column
-       * carrying the UNIQUE constraint and every lookup, so "Alice" and
-       * "alice" cannot become two different handles — and a UNIQUE column
-       * permits any number of NULLs, so accounts without one do not collide
-       * with each other.
-       */
-      name: "016-username-authentication",
-      run: async (sql: NeonQueryFunction<any, any>) => {
-        await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS username TEXT;`;
-        await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS username_normalized TEXT UNIQUE;`;
-      },
-    },
   ];
 
 

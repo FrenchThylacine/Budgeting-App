@@ -51,23 +51,14 @@ interface FundingMarkProps {
 export const FundingMark: React.FC<FundingMarkProps> = ({ kind, children, className = "" }) => {
   const { t } = useTranslation();
   const label = t(`funding.${kind}.short`);
-  const hint = t(`funding.${kind}.hint`);
 
   return (
-    <span className={`funding-chip ${className}`.trim()} data-funding={kind} title={hint}>
+    <span className={`funding-chip ${className}`.trim()} data-funding={kind} title={t(`funding.${kind}.hint`)}>
       <span className="funding-glyph" aria-hidden="true">
         {FUNDING_META[kind].glyph}
       </span>
       {children}
       <span className="funding-chip-label">{label}</span>
-      {/*
-       * Phase 5.17.C: `title` only reaches a sighted mouse user who happens
-       * to hover — not keyboard focus, not touch, and not every screen
-       * reader. The same sentence, read every time regardless of input
-       * method, rather than a second mechanism nothing here has room to
-       * build (see Phase 5.16's note on this exact chip).
-       */}
-      <span className="sr-only"> — {hint}</span>
     </span>
   );
 };

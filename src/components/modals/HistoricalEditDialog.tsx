@@ -140,7 +140,7 @@ export const HistoricalEditDialog: React.FC<HistoricalEditDialogProps> = ({
 
         <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 20, flexWrap: "wrap" }}>
           <Button variant="ghost" onClick={onCancel}>
-            {t("common.cancel")}
+            Cancel
           </Button>
           <Button variant="danger" onClick={onConfirm} disabled={!acknowledged}>
             {t("historical.unlockEditing")}

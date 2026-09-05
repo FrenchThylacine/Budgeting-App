@@ -8,7 +8,6 @@ import { AppError } from "../middleware/errorHandler.js";
 export interface AuthContext {
   userId: string;
   email: string;
-  username: string | null;
   /** The budget this account owns; every repository call is scoped to it. */
   snapshotId: string;
   sessionId: string;
@@ -42,7 +41,6 @@ export async function attachAuth(req: Request, _res: Response, next: NextFunctio
       req.auth = {
         userId: session.userId,
         email: session.email,
-        username: session.username,
         snapshotId: session.snapshotId,
         sessionId: session.id,
       };

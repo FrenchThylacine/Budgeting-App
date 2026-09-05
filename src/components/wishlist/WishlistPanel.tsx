@@ -690,7 +690,7 @@ export const WishlistPanel: React.FC = () => {
           footer={
             <>
               <Button type="button" variant="ghost" onClick={resetForms}>
-                {t("common.cancel")}
+                Cancel
               </Button>
               <Button type="button" variant="secondary" onClick={() => markBoughtOnly(purchasingItem)}>
                 {t("wishlist.justMarkBought")}
