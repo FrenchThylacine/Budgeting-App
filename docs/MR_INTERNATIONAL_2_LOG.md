@@ -560,6 +560,83 @@ changed beyond the two intentional additions (the character row, the
   accent colour reflected in the guide. Confirmed as consistent with the
   tricolour band's own precedent rather than an oversight.
 
+---
+
+## Phase 5.7 — Tutorial targeting / overlay positioning
+
+**Date:** 2026-09-05
+**Environment:** same account, desktop, live viewport resizes via
+chrome-devtools MCP (not device emulation — an actual CDP viewport change,
+which fires the same `resize` event a real window drag does).
+
+### Investigation
+
+Re-read `Tutorial.tsx`'s placement effect before assuming the brief's
+premise. The mechanism is already exactly what the brief asks for —
+`getBoundingClientRect()` on the real target, re-measured on scroll,
+resize, and a `MutationObserver` for layout changes triggered by the tour
+itself — and `verify-tutorial.mjs` already asserts "does not put the card
+over the control" and passed 12/12 going into this phase. So the question
+was whether a real gap still existed, not which pixel offset to hardcode.
+
+### Reproduction
+
+Opened the "funding" step (an anchor step that stays lit whether or not
+its task is done) at 1440×900, then resized the live viewport down to
+1000×700 — a same-window resize, not a device switch. Confirmed via
+`getBoundingClientRect()` on both elements that the tutorial card's box
+(628,109)–(988,565) fully contained the spotlighted edit button's box
+(869,579)–(905,611): the card was rendered directly on top of the control
+it was supposed to leave clickable, exactly the class of bug this phase
+names.
+
+### Root cause
+
+`Tutorial.tsx`'s placement `useLayoutEffect` computed the card's `top`
+using `card.offsetHeight` — but the DOM at the moment this effect runs
+still carries the *previous* render's `placement.maxHeight` (this effect
+is what's about to replace it). `offsetHeight` is capped by whatever
+`max-height` happens to still be applied, so after a resize shrinks the
+window, the card measured itself against yesterday's ceiling: short
+enough that the "does it fit above the spot" check passed, then grew to
+its true (taller) height once the new, larger `maxHeight` this effect
+itself computed was actually applied a moment later — landing the grown
+card on top of the spot the shorter measurement said would clear it.
+
+### Fix
+
+One line: measure `card.scrollHeight` instead of `card.offsetHeight`.
+`scrollHeight` reports the content's natural extent independent of
+whatever `max-height`/`overflow` is currently constraining the box, so it
+gives the same, correct answer whether this is the first placement or the
+hundredth — no dependency on which stale style happens to still be
+applied. No pixel offsets, no viewport-specific branches, no change to
+the anchor/spotlight/scroll-tracking machinery, all of which were already
+correct.
+
+### Tests
+
+`npx tsc -b` clean; `npx vitest run` 1044 passed/0 failed. Reproduced the
+exact failing scenario (1440×900 → resize to 1000×700 mid-"funding"-step)
+before the fix (confirmed overlap via `getBoundingClientRect`) and after
+(confirmed `overlap: false`, card and target separated by the intended
+~16px gap) — then re-ran `verify-tutorial.mjs` (12/12) and
+`verify-browser.mjs` (66/66).
+
+### Regression
+
+The fix touches only the height value fed into an existing formula; the
+formula itself, the anchor-selector logic, the scroll/resize/mutation
+listeners, and the mobile card-width CSS are all unchanged. Both harnesses
+and the manual walk from Phase 5.6 (13 steps, two viewport widths) still
+pass with no change in behavior anywhere the bug wasn't present.
+
+### Remaining concerns
+
+- None found. This was the one adversarial scenario (resize mid-anchored-
+  step) that the existing test suite didn't already cover; scroll,
+  tab-switch, and mobile-width cases were already asserted and remain so.
+
 ### Implementation
 
 Added two icons to the existing Finance category (no new category, no new

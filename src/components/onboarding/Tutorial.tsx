@@ -327,7 +327,22 @@ export const Tutorial: React.FC<{
     if (!card) return;
     const gap = 16;
     const margin = 12;
-    const height = card.offsetHeight;
+    /*
+     * `scrollHeight`, not `offsetHeight`.
+     *
+     * The DOM still carries the *previous* placement's `maxHeight` — this
+     * effect is what is about to replace it, and the style prop reflects
+     * last render, not this one. `offsetHeight` is capped by whatever that
+     * old value happened to be, so a card growing into a step with more to
+     * say measured itself against yesterday's ceiling: short enough to
+     * measure "fits below", too tall once the new (larger) `maxHeight`
+     * actually let it grow, and the card landed straight over the control
+     * it was placed to avoid. `scrollHeight` is the content's own extent —
+     * it does not know or care what `max-height` is currently applied — so
+     * it reports the same number whether this is the first placement or the
+     * hundredth.
+     */
+    const height = card.scrollHeight;
     const width = card.offsetWidth;
     const below = window.innerHeight - spot.bottom - gap - margin;
     const above = spot.top - gap - margin;
