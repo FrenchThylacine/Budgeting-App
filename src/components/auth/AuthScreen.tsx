@@ -47,6 +47,7 @@ export const AuthScreen: React.FC = () => {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [inviteCode, setInviteCode] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [rememberMe, setRememberMe] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
 
@@ -90,7 +91,7 @@ export const AuthScreen: React.FC = () => {
     clearError();
 
     if (mode === "signin") {
-      await signIn(email, password);
+      await signIn(email, password, rememberMe);
       return;
     }
 
@@ -172,16 +173,23 @@ export const AuthScreen: React.FC = () => {
 
         {mode !== "reset" && (
           <label className="auth-field">
-            <span className="text-caption">{t("auth.email")}</span>
+            <span className="text-caption">{t(mode === "signin" ? "auth.emailOrUsername" : "auth.email")}</span>
             <input
               className="input"
-              type="email"
-              autoComplete="email"
+              /*
+               * Sign-in accepts either an email or a username (§20), and an
+               * `email` input rejects anything without an `@` before the
+               * value ever reaches the form — a username would refuse to
+               * submit. Sign-up and password reset still require a real
+               * address, so only sign-in relaxes this.
+               */
+              type={mode === "signin" ? "text" : "email"}
+              autoComplete={mode === "signin" ? "username" : "email"}
               autoFocus
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder={t("auth.youExampleCom")}
+              placeholder={t(mode === "signin" ? "auth.emailOrUsernamePlaceholder" : "auth.youExampleCom")}
             />
           </label>
         )}
@@ -246,8 +254,19 @@ export const AuthScreen: React.FC = () => {
           </label>
         )}
 
+        {mode === "signin" && (
+          <label className="auth-remember">
+            <input
+              type="checkbox"
+              checked={rememberMe}
+              onChange={(e) => setRememberMe(e.target.checked)}
+            />
+            <span className="text-caption">{t("auth.rememberMe")}</span>
+          </label>
+        )}
+
         <button className="btn btn-primary btn-lg auth-submit" type="submit" disabled={busy}>
-          {busy ? "Working…" : copy.action}
+          {busy ? t("common.working") : copy.action}
         </button>
 
         <div className="auth-links">

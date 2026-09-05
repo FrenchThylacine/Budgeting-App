@@ -9,6 +9,7 @@
 export interface AuthUser {
   id: string;
   email: string;
+  username: string | null;
 }
 
 /**
@@ -79,8 +80,9 @@ export async function signUp(
   return body.user;
 }
 
-export async function signIn(email: string, password: string): Promise<AuthUser> {
-  const body = await post<{ user: AuthUser }>("/signin", { email, password });
+/** `email` accepts either an email address or a username — the server tells them apart. */
+export async function signIn(email: string, password: string, rememberMe = false): Promise<AuthUser> {
+  const body = await post<{ user: AuthUser }>("/signin", { email, password, rememberMe });
   return body.user;
 }
 
@@ -104,6 +106,15 @@ export async function changePassword(currentPassword: string, newPassword: strin
 export async function changeEmail(currentPassword: string, email: string): Promise<AuthUser> {
   const body = await post<{ user: AuthUser }>("/change-email", { currentPassword, email });
   return body.user;
+}
+
+export async function setUsername(username: string): Promise<AuthUser> {
+  const body = await post<{ user: AuthUser }>("/set-username", { username });
+  return body.user;
+}
+
+export async function deleteAccount(currentPassword: string, confirmEmail: string): Promise<void> {
+  await post<{ success: boolean }>("/delete-account", { currentPassword, confirmEmail });
 }
 
 /**

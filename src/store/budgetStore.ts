@@ -9,7 +9,7 @@ import {
   walletState,
 } from "../domain/wallet";
 import type { CanonicalMoney } from "../domain/wallet";
-import { monthFromDateInput, monthName, todayDateInput, weekFromDateInput } from "../domain/dates";
+import { monthFromDateInput, todayDateInput, weekFromDateInput } from "../domain/dates";
 import { isUsableAmount } from "../domain/wishlist";
 import type { WishlistLinkResult, WishlistPurchaseOverrides } from "../domain/wishlist";
 import type {
@@ -895,14 +895,14 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
            * `wallet.allocationSource` at render time, so the ledger reads in
            * whatever language the user is using today.
            */
-          source: source?.trim() || storedText("wallet.allocationSource", { month: monthName(month), year }),
+          source: source?.trim() || storedText("wallet.allocationSource", { month, year }),
           type: ALLOCATION_TYPE,
           note: note?.trim() ?? "",
           }),
         );
       },
       "wallet",
-      storedText("audit.budgetAllocated", { month: monthName(month), year }),
+      storedText("audit.budgetAllocated", { month, year }),
       { year, month, amount, currency },
     );
   },
@@ -1233,7 +1233,7 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
         }
       },
       "settings",
-      storedText(trimmed ? "audit.noteWritten" : "audit.noteCleared", { month: monthName(month), year }),
+      storedText(trimmed ? "audit.noteWritten" : "audit.noteCleared", { month, year }),
       { year, month },
     );
   },

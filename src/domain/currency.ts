@@ -283,7 +283,7 @@ export function formatMoney(
   mode: CurrencyDisplayMode = "symbol",
   options: { compact?: boolean; showSign?: boolean } = {},
 ): string {
-  if (amount == null || Number.isNaN(amount)) return "NaN";
+  if (amount == null || Number.isNaN(amount)) return "—";
   const sign = options.showSign && amount > 0 ? "+" : "";
   // The currency's own minor units, capped at two above a thousand and dropped
   // entirely when compact: a four-figure total does not need centimes, and the

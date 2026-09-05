@@ -4,9 +4,11 @@ import {
   type AuthUser,
   changeEmail as apiChangeEmail,
   changePassword as apiChangePassword,
+  deleteAccount as apiDeleteAccount,
   fetchCurrentUser,
   requestPasswordReset as apiRequestPasswordReset,
   resetPassword as apiResetPassword,
+  setUsername as apiSetUsername,
   signIn as apiSignIn,
   signOut as apiSignOut,
   signUp as apiSignUp,
@@ -28,13 +30,15 @@ interface AuthStore {
   error: string | null;
 
   checkSession: () => Promise<void>;
-  signIn: (email: string, password: string) => Promise<boolean>;
+  signIn: (email: string, password: string, rememberMe?: boolean) => Promise<boolean>;
   signUp: (email: string, password: string, inviteCode?: string) => Promise<boolean>;
   signOut: () => Promise<void>;
   requestPasswordReset: (email: string) => Promise<string | null>;
   resetPassword: (token: string, password: string) => Promise<boolean>;
   changePassword: (currentPassword: string, newPassword: string) => Promise<boolean>;
   changeEmail: (currentPassword: string, email: string) => Promise<boolean>;
+  setUsername: (username: string) => Promise<boolean>;
+  deleteAccount: (currentPassword: string, confirmEmail: string) => Promise<boolean>;
   /** Called when the API reports the session is gone mid-use. */
   handleSessionExpired: () => void;
   clearError: () => void;
@@ -54,10 +58,10 @@ export const useAuthStore = create<AuthStore>((set) => ({
     set({ user, checked: true });
   },
 
-  signIn: async (email, password) => {
+  signIn: async (email, password, rememberMe = false) => {
     set({ busy: true, error: null });
     try {
-      const user = await apiSignIn(email, password);
+      const user = await apiSignIn(email, password, rememberMe);
       setCacheOwner(user.id);
       set({ user, busy: false });
       return true;
@@ -148,6 +152,34 @@ export const useAuthStore = create<AuthStore>((set) => ({
     }
   },
 
+  setUsername: async (username) => {
+    set({ busy: true, error: null });
+    try {
+      const user = await apiSetUsername(username);
+      set({ user, busy: false });
+      return true;
+    } catch (error) {
+      set({ busy: false, error: messageFor(error) });
+      return false;
+    }
+  },
+
+  deleteAccount: async (currentPassword, confirmEmail) => {
+    set({ busy: true, error: null });
+    try {
+      await apiDeleteAccount(currentPassword, confirmEmail);
+      // Same cleanup as signOut: every cached budget, not just this one's —
+      // the device may be handed to someone else next.
+      await clearAllCachedSnapshots().catch(() => undefined);
+      setCacheOwner(null);
+      set({ user: null, busy: false, error: null });
+      return true;
+    } catch (error) {
+      set({ busy: false, error: messageFor(error) });
+      return false;
+    }
+  },
+
   handleSessionExpired: () => {
     setCacheOwner(null);
     void clearAllCachedSnapshots().catch(() => undefined);
@@ -182,6 +214,9 @@ const ERROR_KEYS: Record<string, string> = {
   missing_credentials: "auth.error.missingCredentials",
   weak_password: "auth.error.weakPassword",
   password_required: "auth.error.passwordRequired",
+  invalid_username: "auth.error.invalidUsername",
+  username_taken: "auth.error.usernameTaken",
+  confirmation_mismatch: "auth.error.confirmationMismatch",
   network: "auth.error.network",
   unauthenticated: "auth.sessionExpired",
 };
