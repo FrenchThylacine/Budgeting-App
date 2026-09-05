@@ -946,3 +946,144 @@ N/A — no code changed.
   phases is the one already noted in 5.9: the warp streaks were not
   cross-checked against every aircraft skin, which is unrelated to the
   smoke system.
+
+---
+
+## Phase 5.11 — Remember Me authentication
+
+**Date:** 2026-09-05
+**Environment:** `server/src/routes/auth.ts` and friends read in full first;
+`tests/auth-integration.test.ts` run against a disposable local Postgres
+schema (`TEST_DATABASE_URL`); manual pass in Chrome via chrome-devtools
+MCP against the project's own local-Postgres dev API, using a fresh
+disposable account (`mrintl.rememberme.test@example.com`).
+
+### Investigation
+
+Read the whole authentication stack before changing anything:
+`server/src/routes/auth.ts`, `server/src/auth/{cookies,tokens,middleware,
+AuthRepository}.ts`, `src/api/auth.ts`, `src/store/authStore.ts`,
+`src/components/auth/AuthScreen.tsx`. Findings that shaped the design:
+
+- Sessions are already the right architecture for this — opaque, CSPRNG
+  tokens, only a SHA-256 hash stored, revocable by deleting the row,
+  `SESSION_TTL_DAYS = 30` — the file's own comment explains this was
+  chosen over JWTs specifically because a session must be revocable
+  server-side. Nothing about the token scheme needed to change.
+- But there is currently no "Remember Me" concept at all: **every**
+  sign-in — checked box or not, since there was no box — gets a
+  persistent, 30-day cookie. That is the thing this phase has to
+  introduce a real distinction into, not merely surface a switch for.
+- `AuthRepository.createSession` already takes a `ttlDays` parameter, so
+  no schema or repository change was needed — only the route deciding
+  which number to pass, and the cookie deciding whether to carry an
+  expiry at all.
+- `AuthScreen.tsx` had one more hardcoded-English string in the exact
+  area being edited: the submit button showed literal `"Working…"` while
+  a request was in flight, never routed through `t()`. Fixed alongside
+  this phase's own change, same defect class as Phases 5.3–5.5.
+
+Design decision: unchecked is not "the current 30-day behaviour" — it is
+a cookie with **no `Max-Age`/`Expires` at all** (gone when the browser
+closes), backed by a one-day server-side session as a backstop for a
+browser that resurrects closed-session cookies. Checked keeps the
+existing, already-tested 30-day persistent behaviour unchanged. This
+reads as the industry-standard meaning of the checkbox (Gmail, banking
+apps: unchecked = this visit only), and it means signup, password reset,
+and change-password/change-email — none of which asked the brief to add
+a checkbox — keep exactly the cookie they always have, since
+`setSessionCookie`'s new `persistent` option defaults to `true`.
+
+### Implementation
+
+- `server/src/auth/tokens.ts`: added `UNREMEMBERED_SESSION_TTL_DAYS = 1`.
+  `SESSION_TTL_DAYS` (30) is unchanged and still used everywhere it was.
+- `server/src/auth/cookies.ts`: `setSessionCookie` takes an optional
+  `{ persistent?: boolean }`, defaulting to `true`. Only when `false` is
+  the `maxAge` field omitted from `res.cookie(...)` entirely — the
+  comment in the diff is explicit that a short `maxAge` is not the same
+  thing as no `maxAge`, since either one makes the cookie persistent.
+- `server/src/routes/auth.ts`: `/signin` reads `rememberMe` from the
+  body, treats anything other than `=== true` as unchecked (so an old
+  client that sends no field at all fails closed to the short session,
+  not open to 30 days), and passes the matching `ttlDays` to
+  `createSession` and `{ persistent: remember }` to `setSessionCookie`.
+- `src/api/auth.ts` / `src/store/authStore.ts`: `signIn` takes a third,
+  optional `rememberMe` argument (default `false`) and threads it to the
+  request body.
+- `src/components/auth/AuthScreen.tsx`: a checkbox between the password
+  field and the submit button, shown only in sign-in mode, plus the
+  `"Working…"` → `t("common.working")` fix.
+- `src/styles-extras.css`: `.auth-remember`, a plain flex row matching
+  the existing `.auth-field` spacing.
+- `src/i18n/{en,fr,de,es,ar}.ts`: added `auth.rememberMe` and
+  `common.working` to all five locales.
+
+### Tests
+
+- `npx tsc -b` — clean. `npx vitest run` — 1044 passed / 0 failed
+  (includes `no-hardcoded-english.test.ts`, which passed with the new
+  keys and the `"Working…"` fix in place).
+- `tests/auth-integration.test.ts`, extended with five new cases and run
+  against a disposable local-Postgres schema (30/30 passed, including the
+  25 pre-existing ones — nothing already there broke):
+  - unremembered sign-in's cookie carries neither `Max-Age` nor
+    `Expires`, and its session row is `~1` day (`EXTRACT(EPOCH FROM
+    (expires_at - created_at)) / 86400`);
+  - remembered sign-in's cookie carries `Max-Age`, and its row is `~30`
+    days;
+  - a request with no `rememberMe` field at all gets the short,
+    non-persistent cookie — the fail-closed case;
+  - sign-out still ends a Remember Me session immediately;
+  - an unremembered session is still rejected once its (shorter) server
+    row expires, by the same enforcement path `tests/auth-integration
+    .test.ts`'s existing "rejects an expired session" case already
+    covers for the long session.
+- `node scripts/verify-browser.mjs` — 66/66, unaffected (it drives
+  sign-up/sign-in but never touches Remember Me).
+- Manual, in a real browser, against the project's own local-Postgres dev
+  API — this is what actually exercises the React checkbox rather than
+  the API directly: signed up a fresh disposable account, then signed in
+  twice, once with the box unchecked and once checked, reading the raw
+  `Set-Cookie` header via the DevTools Network panel both times.
+  Unchecked: `budget_session=…; Path=/; HttpOnly; SameSite=Lax` — no
+  expiry attribute of any kind. Checked:
+  `budget_session=…; Max-Age=2592000; Path=/; Expires=Mon, 05 Oct 2026
+  …; HttpOnly; SameSite=Lax`. Reloaded after the remembered sign-in and
+  stayed signed in, confirming the persistent cookie actually survives a
+  refresh and not merely that the header looked right.
+
+### Regression
+
+None to existing behaviour: every call site other than `/signin`
+(`signup`, `reset-password`, `change-password`, `change-email`) calls
+`setSessionCookie` with no third argument, so `persistent` defaults to
+`true` and those flows are byte-for-byte what they were. The 25
+pre-existing cases in `tests/auth-integration.test.ts` all still pass.
+
+One process-level hazard surfaced while testing this phase, worth
+recording since it nearly produced a false result: the project's
+local-Postgres API server (`scripts/dev-server-local-pg.mjs`, launched
+via plain `tsx`, not `tsx watch`) had been running continuously since
+before this session started and does **not** reload on source changes —
+the first manual browser test showed a 30-day cookie for an unchecked
+box, which was the *old* code still running, not a bug in the new code.
+Restarting the process (and pointing it at the session's actual working
+database, `budget_mrintl_2026`, confirmed by checking which local
+database actually held `mrinternational.test@example.com`) resolved it.
+Recorded as its own memory (`dev-server-does-not-hot-reload`) so a future
+session does not lose time to the same thing.
+
+### Remaining concerns
+
+- Signup does not accept a `rememberMe` flag and always keeps the
+  existing persistent 30-day cookie, on the basis that the brief's own
+  test list ("login, checkbox off, checkbox on, refresh...") is about the
+  *sign-in* flow specifically, and immediately signing a brand-new
+  account out after registering would be a strange first impression. If
+  a genuinely-unremembered signup is wanted later, the same `{ persistent
+  }` plumbing already supports it.
+- "Close and reopen the browser" was verified by the mechanism that
+  governs it (the cookie's own `Max-Age`/`Expires` attributes, read
+  directly off the wire) rather than by literally quitting and relaunching
+  Chrome, which chrome-devtools MCP has no primitive for.

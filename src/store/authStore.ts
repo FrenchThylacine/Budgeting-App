@@ -28,7 +28,7 @@ interface AuthStore {
   error: string | null;
 
   checkSession: () => Promise<void>;
-  signIn: (email: string, password: string) => Promise<boolean>;
+  signIn: (email: string, password: string, rememberMe?: boolean) => Promise<boolean>;
   signUp: (email: string, password: string, inviteCode?: string) => Promise<boolean>;
   signOut: () => Promise<void>;
   requestPasswordReset: (email: string) => Promise<string | null>;
@@ -54,10 +54,10 @@ export const useAuthStore = create<AuthStore>((set) => ({
     set({ user, checked: true });
   },
 
-  signIn: async (email, password) => {
+  signIn: async (email, password, rememberMe = false) => {
     set({ busy: true, error: null });
     try {
-      const user = await apiSignIn(email, password);
+      const user = await apiSignIn(email, password, rememberMe);
       setCacheOwner(user.id);
       set({ user, busy: false });
       return true;

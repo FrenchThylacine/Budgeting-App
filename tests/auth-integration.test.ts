@@ -325,6 +325,89 @@ describeAuth("authentication", () => {
     expect((await alice.request("/api/snapshot")).status).toBe(401);
   });
 
+  // ─── Remember Me ──────────────────────────────────────────────────────────
+
+  it("leaves Remember Me sessions without a cookie expiry, but bounded server-side to a day", async () => {
+    const response = await fetch(`${baseUrl()}/api/auth/signin`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: "alice@example.test", password: PASSWORD, rememberMe: false }),
+    });
+    const setCookie = (response.headers as unknown as { getSetCookie?: () => string[] }).getSetCookie?.()
+      ?? [response.headers.get("set-cookie") ?? ""];
+    const session = setCookie.find((line) => line.startsWith("budget_session="))!;
+    // No Max-Age and no Expires at all — a cookie carrying either one is a
+    // persistent cookie by definition, whatever value it holds.
+    expect(session.toLowerCase()).not.toContain("max-age");
+    expect(session.toLowerCase()).not.toContain("expires=");
+
+    const row = await client.query(
+      `SELECT EXTRACT(EPOCH FROM (s.expires_at - s.created_at)) / 86400 AS days
+       FROM sessions s JOIN users u ON u.id = s.user_id
+       WHERE u.email_normalized = 'alice@example.test'
+       ORDER BY s.created_at DESC LIMIT 1`,
+    );
+    expect(Number(row.rows[0].days)).toBeCloseTo(1, 1);
+  });
+
+  it("gives a Remember Me session a persistent cookie and the full 30-day session", async () => {
+    const response = await fetch(`${baseUrl()}/api/auth/signin`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: "alice@example.test", password: PASSWORD, rememberMe: true }),
+    });
+    const setCookie = (response.headers as unknown as { getSetCookie?: () => string[] }).getSetCookie?.()
+      ?? [response.headers.get("set-cookie") ?? ""];
+    const session = setCookie.find((line) => line.startsWith("budget_session="))!;
+    expect(session.toLowerCase()).toContain("max-age");
+
+    const row = await client.query(
+      `SELECT EXTRACT(EPOCH FROM (s.expires_at - s.created_at)) / 86400 AS days
+       FROM sessions s JOIN users u ON u.id = s.user_id
+       WHERE u.email_normalized = 'alice@example.test'
+       ORDER BY s.created_at DESC LIMIT 1`,
+    );
+    expect(Number(row.rows[0].days)).toBeCloseTo(30, 1);
+  });
+
+  it("treats a missing rememberMe the same as unchecked, not as remembered", async () => {
+    // A client that predates this feature sends no field at all — that must
+    // fail closed to the short, non-persistent session, not silently inherit
+    // the 30-day behaviour every sign-in used to get unconditionally.
+    const response = await fetch(`${baseUrl()}/api/auth/signin`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: "alice@example.test", password: PASSWORD }),
+    });
+    const setCookie = (response.headers as unknown as { getSetCookie?: () => string[] }).getSetCookie?.()
+      ?? [response.headers.get("set-cookie") ?? ""];
+    const session = setCookie.find((line) => line.startsWith("budget_session="))!;
+    expect(session.toLowerCase()).not.toContain("max-age");
+  });
+
+  it("still signs a Remember Me session out immediately on sign-out", async () => {
+    const alice = createClient(baseUrl);
+    await alice.post("/api/auth/signin", { email: "alice@example.test", password: PASSWORD, rememberMe: true });
+    expect((await alice.request("/api/snapshot")).status).toBe(200);
+
+    await alice.post("/api/auth/signout", {});
+    expect((await alice.request("/api/snapshot")).status).toBe(401);
+  });
+
+  it("expires an unremembered session after its shorter server-side TTL", async () => {
+    const alice = createClient(baseUrl);
+    await alice.post("/api/auth/signin", { email: "alice@example.test", password: PASSWORD, rememberMe: false });
+    expect((await alice.request("/api/snapshot")).status).toBe(200);
+
+    // The same expiry check the "rejects an expired session" test uses —
+    // this just confirms an unremembered session is bound by the database
+    // row, the same enforcement path, and not by the cookie's own absence of
+    // Max-Age (a browser that never closes would otherwise stay signed in
+    // forever on an "unremembered" session).
+    await client.query(`UPDATE sessions SET expires_at = NOW() - INTERVAL '1 minute'`);
+    expect((await alice.request("/api/snapshot")).status).toBe(401);
+  });
+
   // ─── Password reset ───────────────────────────────────────────────────────
 
   it("answers identically whether or not the address has an account", async () => {

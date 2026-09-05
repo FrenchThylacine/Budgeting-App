@@ -4,7 +4,13 @@ import { clearSessionCookie, readSessionToken, setSessionCookie } from "../auth/
 import { sendPasswordResetEmail } from "../auth/email.js";
 import { requireAuth } from "../auth/middleware.js";
 import { hashPassword, needsRehash, validatePassword, verifyPassword } from "../auth/password.js";
-import { RESET_TTL_MINUTES, SESSION_TTL_DAYS, createToken, hashToken } from "../auth/tokens.js";
+import {
+  RESET_TTL_MINUTES,
+  SESSION_TTL_DAYS,
+  UNREMEMBERED_SESSION_TTL_DAYS,
+  createToken,
+  hashToken,
+} from "../auth/tokens.js";
 import { AppError, asyncHandler } from "../middleware/errorHandler.js";
 
 /** Attempts allowed in the window before a bucket is refused. */
@@ -86,11 +92,19 @@ export function createAuthRoutes(): Router {
    *
    * Answers identically for an unknown email and a wrong password, so the
    * endpoint cannot be used to discover which addresses hold an account.
+   *
+   * `rememberMe` is the only thing that changes here: checked, this is
+   * `SESSION_TTL_DAYS` behind a persistent cookie, same as every other
+   * sign-in-adjacent flow in this file. Left unchecked (or omitted, which a
+   * caller that predates Remember Me will do), the cookie carries no expiry
+   * at all — gone when the browser closes — backed by a session row that
+   * expires server-side in a day regardless, so a browser that resurrects
+   * closed-session cookies cannot turn "unchecked" into "indefinite."
    */
   router.post(
     "/signin",
     asyncHandler(async (req: Request, res: Response) => {
-      const { email, password } = req.body ?? {};
+      const { email, password, rememberMe } = req.body ?? {};
       if (typeof email !== "string" || typeof password !== "string") {
         throw new AppError(400, "Email and password are required.", "missing_credentials");
       }
@@ -121,9 +135,10 @@ export function createAuthRoutes(): Router {
 
       await Promise.all(buckets.map((bucket) => repo.clearAttempts(bucket)));
 
+      const remember = rememberMe === true;
       const token = createToken();
-      await repo.createSession(user.id, hashToken(token), SESSION_TTL_DAYS);
-      setSessionCookie(req, res, token);
+      await repo.createSession(user.id, hashToken(token), remember ? SESSION_TTL_DAYS : UNREMEMBERED_SESSION_TTL_DAYS);
+      setSessionCookie(req, res, token, { persistent: remember });
       res.json({ user: publicUser(user) });
     }),
   );

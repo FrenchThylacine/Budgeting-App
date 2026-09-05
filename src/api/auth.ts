@@ -79,8 +79,8 @@ export async function signUp(
   return body.user;
 }
 
-export async function signIn(email: string, password: string): Promise<AuthUser> {
-  const body = await post<{ user: AuthUser }>("/signin", { email, password });
+export async function signIn(email: string, password: string, rememberMe = false): Promise<AuthUser> {
+  const body = await post<{ user: AuthUser }>("/signin", { email, password, rememberMe });
   return body.user;
 }
 

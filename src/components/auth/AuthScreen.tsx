@@ -47,6 +47,7 @@ export const AuthScreen: React.FC = () => {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [inviteCode, setInviteCode] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [rememberMe, setRememberMe] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
 
@@ -90,7 +91,7 @@ export const AuthScreen: React.FC = () => {
     clearError();
 
     if (mode === "signin") {
-      await signIn(email, password);
+      await signIn(email, password, rememberMe);
       return;
     }
 
@@ -246,8 +247,19 @@ export const AuthScreen: React.FC = () => {
           </label>
         )}
 
+        {mode === "signin" && (
+          <label className="auth-remember">
+            <input
+              type="checkbox"
+              checked={rememberMe}
+              onChange={(e) => setRememberMe(e.target.checked)}
+            />
+            <span className="text-caption">{t("auth.rememberMe")}</span>
+          </label>
+        )}
+
         <button className="btn btn-primary btn-lg auth-submit" type="submit" disabled={busy}>
-          {busy ? "Working…" : copy.action}
+          {busy ? t("common.working") : copy.action}
         </button>
 
         <div className="auth-links">
