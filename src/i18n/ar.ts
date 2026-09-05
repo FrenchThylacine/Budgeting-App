@@ -680,6 +680,8 @@ export const ar: Dictionary = {
   "audit.wishlistBought": "تم وضع علامة «مُشترى» على {name}.",
   "audit.wishlistUnbought": "تمت إزالة علامة الشراء عن {name}.",
   "audit.budgetAllocated": "تم تخصيص ميزانية {month} {year}.",
+  "audit.noteWritten": "تمت إضافة ملاحظة لشهر {month} {year}.",
+  "audit.noteCleared": "تم حذف ملاحظة شهر {month} {year}.",
   "audit.wishlistUnlinkedFrom": "تم فصل {name} عن معاملته.",
   "audit.seasonCaptured_one": "مأخوذ من {count} نشاط.",
   "audit.seasonCaptured_other": "مأخوذ من {count} أنشطة.",

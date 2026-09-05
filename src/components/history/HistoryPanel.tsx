@@ -143,7 +143,7 @@ export const HistoryPanel: React.FC = () => {
               <div className="item-row" key={month} style={{ alignItems: "flex-start", flexWrap: "wrap" }}>
                 <div style={{ minWidth: 0, flex: "1 1 200px" }}>
                   <div className="text-callout" style={{ fontWeight: 600 }}>
-                    {period.label} {period.year}
+                    {monthNames()[month - 1] ?? period.label} {period.year}
                   </div>
                   <div className="text-footnote">
                     {t(statusLabelKey(period.status))} · {t("common.transactions", { count: period.entryCount })}
@@ -170,7 +170,7 @@ export const HistoryPanel: React.FC = () => {
                       <input
                         className="input"
                         autoFocus
-                        aria-label={t("history.noteFor", { period: `${period.label} ${period.year}` })}
+                        aria-label={t("history.noteFor", { period: `${monthNames()[month - 1] ?? period.label} ${period.year}` })}
                         placeholder={t("history.whyThisMonthLookedThe")}
                         value={noteDraft}
                         onChange={(event) => setNoteDraft(event.target.value)}
@@ -178,7 +178,7 @@ export const HistoryPanel: React.FC = () => {
                       />
                       <button className="btn btn-primary btn-sm" type="submit">{t("history.save")}</button>
                       <button className="btn btn-ghost btn-sm" type="button" onClick={() => setNoteMonth(null)}>
-                        Cancel
+                        {t("common.cancel")}
                       </button>
                     </form>
                   )}

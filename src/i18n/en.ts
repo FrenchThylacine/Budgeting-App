@@ -977,6 +977,8 @@ export const en = {
   "audit.wishlistBought": "Marked {name} as bought.",
   "audit.wishlistUnbought": "Marked {name} as not bought.",
   "audit.budgetAllocated": "Allocated budget for {month} {year}.",
+  "audit.noteWritten": "Wrote a note for {month} {year}.",
+  "audit.noteCleared": "Cleared the note for {month} {year}.",
   "audit.wishlistUnlinkedFrom": "Unlinked {name} from its transaction.",
   "audit.seasonCaptured_one": "Captured from {count} activity.",
   "audit.seasonCaptured_other": "Captured from {count} activities.",

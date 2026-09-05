@@ -656,6 +656,8 @@ export const fr: Dictionary = {
   "audit.wishlistBought": "{name} marqué comme acheté.",
   "audit.wishlistUnbought": "{name} marqué comme non acheté.",
   "audit.budgetAllocated": "Budget alloué pour {month} {year}.",
+  "audit.noteWritten": "Note ajoutée pour {month} {year}.",
+  "audit.noteCleared": "Note supprimée pour {month} {year}.",
   "audit.wishlistUnlinkedFrom": "{name} détaché de sa transaction.",
   "audit.seasonCaptured_one": "Capturé depuis {count} activité.",
   "audit.seasonCaptured_other": "Capturé depuis {count} activités.",

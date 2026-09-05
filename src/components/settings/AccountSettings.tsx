@@ -168,7 +168,7 @@ export const AccountSettings: React.FC = () => {
 
             <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
               <Button type="button" variant="ghost" size="sm" onClick={close}>
-                Cancel
+                {t("common.cancel")}
               </Button>
               <Button type="submit" variant="primary" size="sm" disabled={busy || mismatch}>
                 {busy ? t("common.saving") : t(mode === "email" ? "account.changeEmail" : "account.changePassword")}
