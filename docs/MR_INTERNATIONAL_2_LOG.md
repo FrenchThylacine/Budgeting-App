@@ -1635,3 +1635,231 @@ N/A — no code changed.
   Phase 5.17 explicitly names "keyboard navigation, focus... icon
   labels" as its own accessibility checklist, so fixing the mechanism is
   left there rather than folded in piecemeal here.
+
+---
+
+## Phase 5.17 — Account management + session reliability + accessibility
+
+**Date:** 2026-09-05
+**Environment:** local-Postgres dev API (restarted after every backend
+change — see [[dev-server-does-not-hot-reload]]); DB-integration tests
+against a disposable schema; a real disposable account
+(`mrintl.deleteme.test@example.com`) taken through account creation and
+deletion via the actual UI and, for the final end-to-end check, direct
+`curl` against the running API — browser automation was dropped partway
+through this phase at the user's request in favour of the project's own
+automated harnesses (`vitest`, `verify-browser.mjs`, `verify-tutorial
+.mjs`) and direct HTTP checks.
+
+### A. Account deletion
+
+**Investigation.** No deletion endpoint, repository method, or UI existed
+at all — confirmed by grep, not assumed. Self-service is appropriate
+here: a budget belongs to exactly one account, nothing else in the schema
+references it, and there is no shared state a deletion could strand
+anyone else in.
+
+Before writing the deletion query, checked what erasing an account
+actually requires by reading `server/src/db/schema.ts` in full.
+`categories`, `years`, `audit_log`, `seasonal_presets` and
+`scenario_presets` all cascade from `snapshots(id)` on their own
+`snapshot_id` foreign key — but `activities.category_id`,
+`spending_entries.category_id` and `wishlist_items.category_id` are
+`ON DELETE RESTRICT`, guarding against a category vanishing out from
+under spending that still names it during *ordinary* use. **Tested
+directly against a real database before writing any application code**:
+a bare `DELETE FROM snapshots WHERE id = $1` on an account with even one
+activity fails outright —
+
+    ERROR: update or delete on table "categories" violates foreign key
+    constraint "activities_category_id_fkey"
+
+— because Postgres does not guarantee it finishes the `year_id`-cascaded
+deletion of `activities` before it attempts the `snapshot_id`-cascaded
+deletion of `categories` within the same statement. A naive self-service
+"delete my account" built on that assumption would have thrown a raw
+database error for every account that had ever recorded anything, which
+is effectively all of them.
+
+**Implementation.**
+
+- `AuthRepository.deleteAccount(userId, snapshotId)`: every table deleted
+  explicitly, in dependency order — `spending_entries`, `wishlist_items`
+  and `activities` first (the RESTRICT-guarded children), then
+  `wallet_entries`, `closed_months`, `years`, `categories`,
+  `budget_approvals` (not FK-linked to `snapshots` at all — migration
+  006's own comment says why — so nothing would remove it otherwise),
+  `audit_log`, `seasonal_presets`, `scenario_presets`, `snapshots`, and
+  finally `users` (which cascades `sessions` and `password_reset_tokens`
+  per migration 007). One transaction, via the same `sql.transaction([...])`
+  batching `SnapshotRepository` already uses, with the same "no
+  transaction support → sequential, not atomic" fallback.
+- `POST /api/auth/delete-account` (`requireAuth`): two safeguards, not
+  one — the current password (the same bar `change-password` and
+  `change-email` already set), and typing the account's own email back
+  exactly, case-insensitively. A session hijacker who has a reused or
+  phished password will not necessarily know the second; a genuine owner
+  typing a full sentence-length action is a harder thing to do by
+  accident than a second button press.
+- Client: `deleteAccount()` in `api/auth.ts`, a store action that clears
+  the IndexedDB cache and signs the device out exactly like `signOut`
+  does, and a new "Delete account" control in `AccountSettings.tsx` —
+  visually separated below a divider from every reversible action above
+  it, with a `danger`-variant button, a plain-language warning sentence,
+  and the submit disabled until the typed email matches.
+
+**Tests.**
+
+- `tests/auth-integration.test.ts`: 6 new cases, including one built
+  specifically around the bug above — creates a real activity, category,
+  and spending entry (inserted directly, since this suite doesn't call
+  the budget API) under a fresh account, deletes it through the real
+  route, and asserts every one of seven tables (`users`, `snapshots`,
+  `categories`, `years`, `activities`, `spending_entries`, `sessions`) is
+  empty afterward. Also: wrong password rejected without touching the
+  account; mismatched confirmation email rejected the same way; deletion
+  refused with no session.
+- Manual: created a disposable account through the real sign-up form,
+  opened "Supprimer le compte," confirmed the warned copy and the
+  disabled-until-matching button. Completed the actual deletion via
+  direct `curl` calls against the running API (wrong password → 401
+  `invalid_credentials`; correct password + email → `{"success":true}`;
+  `/api/auth/me` → `user: null` afterward) and confirmed by direct query
+  that `SELECT count(*) FROM users WHERE email_normalized = '…'` was 0.
+- `npx tsc -b` clean; `npx vitest run` 1046 passed / 0 failed;
+  `verify-browser.mjs` 66/66.
+
+**While testing this, found and fixed a second, unrelated bug**:
+`AccountSettings.tsx` rendered `useAuthStore`'s `error` field directly.
+That field is a `storedText` sigil, not a sentence — resolved at render
+time so it can be said in whatever language is active then, exactly like
+`AuthScreen.tsx` already does with `resolveStoredText(storeError, t)`.
+Rendered raw, a wrong password on this screen printed the literal string
+`@auth.error.invalidCredentials` to the user. The bug predates this phase
+— it applied to every error this form could ever show, not only
+deletion's — but was only found live, by deliberately triggering an
+error path while testing a new feature. Fixed the same way `AuthScreen
+.tsx` already does it.
+
+### B. Session restoration ("the historical 409 / blank post-login state")
+
+**Investigation.** Phase 5.1's basic login → refresh round trip did not
+reproduce anything, and deferred a "more targeted repro (concurrent tabs,
+or a disposable-account-specific race)" to this phase. Read `hydrate()`
+in `budgetStore.ts` end to end: it already carries a `hydrateGeneration`
+ticket whose own comment describes the exact failure this phase is
+looking for — "a *rejected* earlier attempt lands after a successful
+later one and sets `hydrated: false` on a store that is already holding
+the account's real budget... the application then runs on a default
+snapshot with the session intact, which is the shape of the bug this
+guards" — and `App.tsx` gates `hydrate()` on `user` being known at all,
+which rules out the other obvious race (hydrating before the session
+check settles) by construction. `persistSnapshot`'s 409 handling
+(`SnapshotConflictError`) adopts the server's real snapshot and shows a
+`syncNotice`, rather than ever emptying the screen.
+
+None of this had a *test* exercising the ticket itself, though — every
+existing case in `tests/hydration-race.test.ts` drives one hydration plus
+a mutation, never two overlapping hydrations resolving out of order,
+which is the literal scenario the comment names ("a session check
+settles, the user signs in, and the effect that hydrates runs again").
+That gap, not a repro in a live browser, is what this phase's targeted
+attempt actually consisted of — a live browser can show a race happened
+to not occur on one run; a deterministic test with a controllable network
+delay can prove it cannot, on the exact mechanism responsible.
+
+**Implementation.** None to the application — this part of the phase adds
+test coverage, not a fix, because the mechanism it targets was already
+correct. Two new cases in `tests/hydration-race.test.ts`, using the
+file's existing mockable `loadDelay`/`remoteSnapshot`:
+
+- Start a slow hydration for "account A," then start a fast one for
+  "account B" before the first resolves. Asserts the store ends up
+  holding B's data — the later call must win because it started later,
+  not because it happened to finish first.
+- Confirms a superseded, slow hydration resolving *after* a faster,
+  newer one has already succeeded never flips `hydrated` back to
+  `false` — the literal shape of the historical bug's symptom.
+
+**Tests.** `npx vitest run tests/hydration-race.test.ts` — 8/8 (6
+pre-existing, 2 new). Full suite: 1046/0.
+
+**Results.** 🟢 Not reproduced, with new evidence rather than an absence
+of trying: the exact out-of-order scenario the bug report describes is
+now driven deterministically and proven handled, where before it was
+only "did not happen to occur in one manual pass."
+
+### C. Accessibility
+
+Checked the brief's list against the codebase rather than assuming any
+item was already covered:
+
+- **Colour contrast**: already exercised by `verify-browser.mjs`'s
+  Contrast section across three themes including a reader-built custom
+  one — 0 failures, re-confirmed after every change this phase made.
+- **Dialogs / keyboard navigation / focus**: every `role="dialog"` in the
+  app was checked individually rather than assumed consistent.
+  `EditorSheet`, `OccurrenceOverrideDialog`, and `ScenarioApplyDialog`
+  all already trap focus, restore it on close, and close on Escape.
+  **`RolloverDialog` (added in Phase 5.14) was the one exception** — no
+  focus management, no Tab containment, no Escape handling at all. Fixed
+  by giving it the same pattern the other three already use: initial
+  focus on the dialog, a Tab-cycle trap, Escape → the same `onClose` the
+  Cancel/Close buttons already call, and focus restored to whatever was
+  focused before the dialog opened.
+- **Icon labels / status indicators**: `FundingMark` (the funding-kind
+  chip flagged as a mechanism gap in Phase 5.16) now carries its hint as
+  a visually-hidden (`sr-only`) span alongside the existing `title`, so
+  the same sentence reaches a screen reader every time regardless of
+  hover, touch, or focus support, rather than only when a mouse happens
+  to rest on it.
+- **Semantic controls**: five icon-only-adjacent-to-text icons in
+  `AccountSettings.tsx` (including two added across this pass) were
+  missing `aria-hidden="true"` — lucide-react does not set it by
+  default (checked the library's own `defaultAttributes.js`, which
+  carries no ARIA attributes at all), so a screen reader could announce
+  an unlabelled graphic beside text that already says the same thing.
+  Fixed all five for internal consistency, in the one file this pass had
+  been actively extending — not as a codebase-wide sweep, which would be
+  a much larger, separately-scoped audit.
+- **Reduced motion**: already confirmed handled, over the course of this
+  session's own work, in `LoadingScreen.tsx` (Phase 5.9's warp streaks),
+  `TabTransition`, and the tutorial.
+- **Icon labels (the picker)**: the ~250 activity-icon labels and
+  keywords being English-only was already found and explicitly deferred
+  to this phase back in Phase 5.5. Re-confirmed the scope (251 static
+  icon entries × label + keywords × 5 locales) and made the same call
+  again: this is a substantial, self-contained localization project, not
+  a fix that fits inside an already three-part phase, and is named here
+  as a known, deliberately-deferred limitation rather than attempted
+  piecemeal.
+
+**Tests.** `npx tsc -b` clean; `npx vitest run` 1046 passed / 0 failed;
+`verify-browser.mjs` 66/66; `verify-tutorial.mjs` 12/12 (all re-run after
+the `RolloverDialog` and `AccountSettings` changes).
+
+### Regression
+
+- Account deletion is additive: no existing route, repository method, or
+  call site changed shape. `setSessionCookie`, `createUser`, and every
+  other auth flow are untouched.
+- The `hydrate()` mechanism itself was not modified — only tested — so
+  there is nothing there to regress.
+- `RolloverDialog`'s new effect only adds listeners and manages focus; no
+  existing prop, button, or handler changed. `FundingMark`'s added
+  `sr-only` span and `AccountSettings`'s added `aria-hidden` attributes
+  are both invisible to sighted, mouse-driven use, which
+  `verify-browser.mjs`'s full pass (including its Contrast and Console
+  sections) re-confirmed.
+
+### Remaining concerns
+
+- Icon-label/keyword translation for the icon picker (~250 entries × 5
+  locales) remains open, now deferred for the second time, from 5.5 and
+  again from here. It is the largest genuinely open item this whole pass
+  has surfaced.
+- The `aria-hidden` fix was scoped to `AccountSettings.tsx` specifically;
+  the same gap (a decorative icon beside visible text, missing
+  `aria-hidden`) likely exists elsewhere in the codebase and was not
+  swept for — this file was fixed because this phase had been actively
+  extending it, not because it was known to be the only offender.

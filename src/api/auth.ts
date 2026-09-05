@@ -113,6 +113,10 @@ export async function setUsername(username: string): Promise<AuthUser> {
   return body.user;
 }
 
+export async function deleteAccount(currentPassword: string, confirmEmail: string): Promise<void> {
+  await post<{ success: boolean }>("/delete-account", { currentPassword, confirmEmail });
+}
+
 /**
  * Who is signed in, if anyone.
  *

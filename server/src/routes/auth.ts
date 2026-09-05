@@ -380,5 +380,52 @@ export function createAuthRoutes(): Router {
     }),
   );
 
+  /**
+   * POST /api/auth/delete-account
+   *
+   * Phase 5.17.A: self-service is appropriate here — the budget belongs to
+   * exactly one account, nothing else references it, and there is no
+   * shared state a deletion could strand anyone else in.
+   *
+   * Two safeguards, not one, because this is the one action in the whole
+   * API a mistake cannot be undone from:
+   *
+   *  - the current password, the same bar `change-password` and
+   *    `change-email` already set for anything an unattended session must
+   *    not be able to do alone;
+   *  - typing the account's own email back, which a session hijacker who
+   *    *has* the password (a reused or phished one) will not necessarily
+   *    know, and which turns "misclick" into a sentence someone has to
+   *    read and act on rather than a second button press.
+   */
+  router.post(
+    "/delete-account",
+    requireAuth,
+    asyncHandler(async (req: Request, res: Response) => {
+      const { currentPassword, confirmEmail } = req.body ?? {};
+      if (typeof currentPassword !== "string") {
+        throw new AppError(400, "Your current password is required.", "password_required");
+      }
+
+      const repo = getRepo();
+      const user = await repo.findUserById(req.auth!.userId);
+      if (!user || !(await verifyPassword(currentPassword, user.passwordHash))) {
+        throw new AppError(401, "Your current password is incorrect.", "invalid_credentials");
+      }
+
+      if (typeof confirmEmail !== "string" || normalizeEmail(confirmEmail) !== user.emailNormalized) {
+        throw new AppError(
+          400,
+          "Type your account's email address exactly to confirm deletion.",
+          "confirmation_mismatch",
+        );
+      }
+
+      await repo.deleteAccount(user.id, user.snapshotId);
+      clearSessionCookie(req, res);
+      res.json({ success: true });
+    }),
+  );
+
   return router;
 }

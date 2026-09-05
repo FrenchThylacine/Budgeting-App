@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { CheckCircle2 } from "lucide-react";
 import { useBudgetStore } from "../../store/budgetStore";
 import { formatDualMoney } from "../../utils/formatters";
@@ -37,6 +37,53 @@ export const RolloverDialog: React.FC<RolloverDialogProps> = ({ onClose, calcula
   const closeMonth = useBudgetStore((s) => s.closeMonth);
   const unavailable = calculation.rolloverDelta === null;
   const [outcome, setOutcome] = useState<{ applied: boolean } | null>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
+  /*
+   * Phase 5.17.C: every other dialog in this app (`EditorSheet`,
+   * `OccurrenceOverrideDialog`, `ScenarioApplyDialog`) already traps focus
+   * and closes on Escape; this one, added in Phase 5.14, was the one
+   * exception — found by checking this dialog specifically against that
+   * established pattern, not by a codebase-wide sweep.
+   */
+  useEffect(() => {
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+    dialogRef.current?.focus();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onCloseRef.current();
+        return;
+      }
+      if (event.key === "Tab" && dialogRef.current) {
+        const focusable = Array.from(
+          dialogRef.current.querySelectorAll<HTMLElement>(
+            'button:not([disabled]), input:not([disabled]), [href], select, textarea, [tabindex]:not([tabindex="-1"])',
+          ),
+        );
+        if (focusable.length === 0) return;
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault();
+          last.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault();
+          first.focus();
+        }
+      }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      previouslyFocused?.focus?.();
+    };
+    // Deliberately empty: open/close set-up, not per-render work — the same
+    // reasoning `EditorSheet` documents for its own identical effect.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const close = (applyRollover: boolean) => {
     if (unavailable) return;
@@ -54,7 +101,15 @@ export const RolloverDialog: React.FC<RolloverDialogProps> = ({ onClose, calcula
 
   return (
     <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
-      <div className="modal" role="dialog" aria-modal="true" aria-labelledby="rollover-title" onMouseDown={(event) => event.stopPropagation()}>
+      <div
+        ref={dialogRef}
+        className="modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="rollover-title"
+        tabIndex={-1}
+        onMouseDown={(event) => event.stopPropagation()}
+      >
         {outcome ? (
           <>
             <h2 id="rollover-title" className="text-title" style={{ display: "flex", alignItems: "center", gap: 8 }}>

@@ -664,6 +664,116 @@ describeAuth("authentication", () => {
     expect(res.status).toBe(401);
   });
 
+  // ─── Account deletion ─────────────────────────────────────────────────────
+
+  it("refuses deletion with the wrong password", async () => {
+    const erin = createClient(baseUrl);
+    await erin.post("/api/auth/signup", { email: "erin@example.test", password: PASSWORD });
+    const res = await erin.post("/api/auth/delete-account", {
+      currentPassword: "definitely-wrong",
+      confirmEmail: "erin@example.test",
+    });
+    expect(res.status).toBe(401);
+    expect(res.body.code).toBe("invalid_credentials");
+  });
+
+  it("refuses deletion when the confirmation email does not match", async () => {
+    const erin = createClient(baseUrl);
+    await erin.post("/api/auth/signin", { email: "erin@example.test", password: PASSWORD });
+    const res = await erin.post("/api/auth/delete-account", {
+      currentPassword: PASSWORD,
+      confirmEmail: "not-erin@example.test",
+    });
+    expect(res.status).toBe(400);
+    expect(res.body.code).toBe("confirmation_mismatch");
+
+    // Neither rejection touched the account: it can still sign in.
+    const check = await createClient(baseUrl).post("/api/auth/signin", {
+      email: "erin@example.test",
+      password: PASSWORD,
+    });
+    expect(check.status).toBe(200);
+  });
+
+  it(
+    "erases an account and every row of its budget, atomically — the exact case that used to violate " +
+      "activities_category_id_fkey",
+    async () => {
+      const erin = createClient(baseUrl);
+      const signup = await erin.post("/api/auth/signup", { email: "erin2@example.test", password: PASSWORD });
+      expect(signup.status).toBe(201);
+      const snapshotRow = await client.query(`SELECT snapshot_id FROM users WHERE id = $1`, [signup.body.user.id]);
+      const snapshotId = snapshotRow.rows[0].snapshot_id;
+      expect(snapshotId).toBeTruthy();
+
+      // `snapshotIdForNewUser()` only mints the id; the `snapshots` row itself
+      // is created lazily, on the first real save through `/api/snapshot` —
+      // which this auth-only suite never calls. Inserted directly here so
+      // the foreign keys below have something real to reference.
+      await client.query(
+        `INSERT INTO snapshots (id, version, revision, settings, created_at, updated_at) VALUES ($1, 1, 0, '{}', NOW()::text, NOW()::text)`,
+        [snapshotId],
+      );
+
+      // A real activity referencing a real category, in a real year — the
+      // shape that made a bare `DELETE FROM snapshots` fail outright before
+      // this phase's fix, because activities.category_id is ON DELETE
+      // RESTRICT and nothing guaranteed the year→activity cascade ran before
+      // the snapshot→category cascade did.
+      await client.query(
+        `INSERT INTO categories (id, snapshot_id, name, bucket, color) VALUES ('erin-cat', $1, 'Test', 'spending', '#000000')`,
+        [snapshotId],
+      );
+      await client.query(
+        `INSERT INTO years (id, snapshot_id, year, created_at, updated_at) VALUES ('erin-year', $1, 2026, NOW()::text, NOW()::text)`,
+        [snapshotId],
+      );
+      await client.query(
+        `INSERT INTO activities (id, year_id, name, category_id, currency, recurrence_type, recurrence_interval, active, visible, seasonal_tag, "order", created_at, updated_at)
+         VALUES ('erin-act', 'erin-year', 'Test activity', 'erin-cat', 'EUR', 'monthly', 1, true, true, '', 0, NOW()::text, NOW()::text)`,
+      );
+      await client.query(
+        `INSERT INTO spending_entries (id, year_id, month, week, date, category_id, amount, currency, recurrence_type, source, created_at, updated_at)
+         VALUES ('erin-spend', 'erin-year', 1, 1, '2026-01-01', 'erin-cat', 10, 'EUR', 'monthly', 'personal', NOW()::text, NOW()::text)`,
+      );
+
+      const res = await erin.post("/api/auth/delete-account", {
+        currentPassword: PASSWORD,
+        confirmEmail: "ERIN2@example.test", // case-insensitive, like every other identifier here
+      });
+      expect(res.status).toBe(200);
+
+      const counts = await client.query(
+        `SELECT
+           (SELECT count(*) FROM users WHERE email_normalized = 'erin2@example.test') AS users,
+           (SELECT count(*) FROM snapshots WHERE id = $1) AS snapshots,
+           (SELECT count(*) FROM categories WHERE id = 'erin-cat') AS categories,
+           (SELECT count(*) FROM years WHERE id = 'erin-year') AS years,
+           (SELECT count(*) FROM activities WHERE id = 'erin-act') AS activities,
+           (SELECT count(*) FROM spending_entries WHERE id = 'erin-spend') AS spending_entries,
+           (SELECT count(*) FROM sessions s JOIN users u ON u.id = s.user_id WHERE u.email_normalized = 'erin2@example.test') AS sessions`,
+        [snapshotId],
+      );
+      const row = counts.rows[0];
+      for (const key of Object.keys(row)) {
+        expect(Number(row[key]), `${key} should be gone`).toBe(0);
+      }
+
+      // The cookie is cleared, not merely the account: this device cannot
+      // keep acting as if it were still signed in.
+      expect((await erin.request("/api/auth/me")).body.user).toBeNull();
+    },
+  );
+
+  it("refuses account deletion without a session", async () => {
+    const anon = createClient(baseUrl);
+    const res = await anon.post("/api/auth/delete-account", {
+      currentPassword: PASSWORD,
+      confirmEmail: "nobody@example.test",
+    });
+    expect(res.status).toBe(401);
+  });
+
   // ─── Rate limiting ────────────────────────────────────────────────────────
 
   it("throttles repeated failed sign-ins", async () => {

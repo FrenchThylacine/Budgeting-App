@@ -338,6 +338,78 @@ export class AuthRepository {
     await this.query(`DELETE FROM password_reset_tokens WHERE expires_at < NOW()`);
     await this.query(`DELETE FROM auth_attempts WHERE created_at < NOW() - INTERVAL '1 day'`);
   }
+
+  // ─── Account deletion ─────────────────────────────────────────────────────
+
+  /** Build an unexecuted Neon query for batched transaction execution. */
+  private buildQuery(text: string, params: unknown[]): unknown {
+    const parts = text.split(/\$\d+/);
+    const strings = Object.assign([...parts], { raw: [...parts] }) as unknown as TemplateStringsArray;
+    return (this.sql as any)(strings, ...params);
+  }
+
+  /**
+   * Erase an account and every row of the budget it owns, atomically.
+   *
+   * Deliberately explicit and ordered, rather than one `DELETE FROM
+   * snapshots` left to cascade: `activities`, `spending_entries` and
+   * `wishlist_items` all reference `categories(id)` with `ON DELETE
+   * RESTRICT` — a category must not vanish out from under spending that
+   * still names it during *ordinary* use, where the app checks first. But
+   * `categories` and `years` both cascade independently from `snapshots`
+   * on their own `snapshot_id` foreign keys, and Postgres does not
+   * guarantee it will finish deleting the `year_id`-cascaded activities
+   * before it attempts the `snapshot_id`-cascaded categories in the same
+   * statement. Tested directly against a real database: a bare `DELETE
+   * FROM snapshots` on an account with even one activity fails outright
+   * with `violates foreign key constraint "activities_category_id_fkey"`
+   * — the whole deletion aborts, the account survives, and a self-service
+   * "delete my account" would throw a raw database error for every
+   * account that has ever recorded anything. Deleting the RESTRICT-guarded
+   * children first, explicitly, sidesteps the ordering question rather
+   * than hoping a particular Postgres version resolves it favourably.
+   *
+   * One transaction: a partially erased account — data gone, login still
+   * working, or the reverse — is a worse failure than the deletion simply
+   * not happening.
+   */
+  async deleteAccount(userId: string, snapshotId: string): Promise<void> {
+    const byYear = (table: string) =>
+      this.buildQuery(`DELETE FROM ${table} WHERE year_id IN (SELECT id FROM years WHERE snapshot_id = $1)`, [
+        snapshotId,
+      ]);
+    const bySnapshot = (table: string) => this.buildQuery(`DELETE FROM ${table} WHERE snapshot_id = $1`, [snapshotId]);
+
+    const writes = [
+      // RESTRICT-guarded children of `categories`, first and explicitly.
+      byYear("spending_entries"),
+      byYear("wishlist_items"),
+      byYear("activities"),
+      // The rest of a year's own data.
+      byYear("wallet_entries"),
+      byYear("closed_months"),
+      bySnapshot("years"),
+      bySnapshot("categories"),
+      // Not FK-linked to `snapshots` at all (see migration 006's own
+      // comment on `budget_approvals`), so nothing would remove it
+      // otherwise.
+      bySnapshot("budget_approvals"),
+      bySnapshot("audit_log"),
+      bySnapshot("seasonal_presets"),
+      bySnapshot("scenario_presets"),
+      this.buildQuery(`DELETE FROM snapshots WHERE id = $1`, [snapshotId]),
+      // Cascades sessions and password_reset_tokens (migration 007).
+      this.buildQuery(`DELETE FROM users WHERE id = $1`, [userId]),
+    ];
+
+    const sqlAny = this.sql as any;
+    if (typeof sqlAny.transaction === "function") {
+      await sqlAny.transaction(writes);
+      return;
+    }
+    // A driver without transaction support: still ordered, just not atomic.
+    for (const write of writes) await write;
+  }
 }
 
 function toUser(row: Record<string, any>): UserRecord {

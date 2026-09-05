@@ -233,3 +233,71 @@ describe("a change made while hydration is in flight", () => {
     expect(useBudgetStore.getState().snapshot.settings.monthlyBudget).not.toBe(555);
   });
 });
+
+/**
+ * Phase 5.17.B — the historical "409 / blank post-login state / session
+ * restoration failure"
+ * ====================================================================
+ *
+ * Phase 5.1's basic login → refresh round trip did not reproduce it, and
+ * `hydrate()`'s own `hydrateGeneration` ticket (see its header comment) is
+ * clearly built for exactly this shape of bug — but nothing in the test
+ * suite exercised the ticket directly: every existing hydration-race test
+ * above drives *one* hydration plus a mutation, never two overlapping
+ * hydrations. This is the targeted repro Phase 5.1 deferred: a session
+ * check and a fresh sign-in both call `hydrate()`, and — because the first
+ * one happened to be answered by a slower network path — they settle in
+ * the opposite order they were issued in.
+ */
+describe("two hydrations in flight at once, resolving out of order", () => {
+  it("keeps the later sign-in's budget even though the earlier attempt's network call lands second", async () => {
+    const accountA = serverBudget();
+    accountA.settings.monthlyBudget = 111;
+    const accountB = serverBudget();
+    accountB.settings.monthlyBudget = 222;
+
+    // The first hydration — say, a session check that found an existing
+    // cookie — goes out over a slow connection.
+    remoteSnapshot.current = accountA;
+    loadDelay.ms = 150;
+    const earlier = useBudgetStore.getState().hydrate();
+
+    // Before it lands, something re-runs `hydrate()` — the sign-in effect,
+    // or the session check settling a second time — and this one is fast.
+    remoteSnapshot.current = accountB;
+    loadDelay.ms = 0;
+    const later = useBudgetStore.getState().hydrate();
+
+    await Promise.all([earlier, later]);
+
+    // The later call must win — not because it finished first, but because
+    // it started second. Without the generation ticket, the slow `earlier`
+    // attempt lands after `later` already set the real budget and silently
+    // replaces it with account A's, which is the account switching itself
+    // to different data than the one just signed into.
+    const state = useBudgetStore.getState();
+    expect(state.hydrated).toBe(true);
+    expect(state.snapshot.settings.monthlyBudget).toBe(222);
+  });
+
+  it("never flips a signed-in store back to unhydrated once a newer load has already succeeded", async () => {
+    remoteSnapshot.current = serverBudget();
+    loadDelay.ms = 150;
+    const stale = useBudgetStore.getState().hydrate();
+
+    remoteSnapshot.current = serverBudget();
+    loadDelay.ms = 0;
+    await useBudgetStore.getState().hydrate();
+    expect(useBudgetStore.getState().hydrated).toBe(true);
+
+    // The superseded attempt finally resolves, well after the real one.
+    await stale;
+
+    // This is the literal bug the ticket exists to prevent: a discarded
+    // hydration setting `hydrated: false` on a store already holding the
+    // account's real budget — which is what put a signed-in account behind
+    // a loading screen, or an apparently empty budget, for no reason
+    // visible anywhere in the interface.
+    expect(useBudgetStore.getState().hydrated).toBe(true);
+  });
+});
