@@ -195,7 +195,7 @@ export const ScenarioLab: React.FC = () => {
                             setConfirmDelete(null);
                           }}
                         >
-                          Delete
+                          {t("common.delete")}
                         </Button>
                         <Button variant="ghost" size="sm" onClick={() => setConfirmDelete(null)}>
                           Keep
@@ -323,7 +323,7 @@ export const ScenarioLab: React.FC = () => {
                             setConfirmSeason(null);
                           }}
                         >
-                          Delete
+                          {t("common.delete")}
                         </Button>
                         <Button variant="ghost" size="sm" onClick={() => setConfirmSeason(null)}>
                           Keep

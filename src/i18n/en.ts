@@ -1333,6 +1333,7 @@ export const en = {
   "a11y.tutorialDialog": "Guided tour",
   "common.recurring": "Recurring",
   "common.oneOff": "One-off",
+  "common.approve": "Approve",
   "common.approved": "Approved",
   "common.rejected": "Rejected",
   "chart.actual": "Actual",

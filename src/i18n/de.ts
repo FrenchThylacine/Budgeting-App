@@ -1289,6 +1289,7 @@ export const de: Dictionary = {
   "rollover.delta": "Die erfasste Monatsend-Differenz beträgt {amount}. Entscheiden Sie, ob sie der Geldbörse gutgeschrieben wird; ein Monatsabschluss ändert seine Buchungen nicht.",
   "common.recurring": "Wiederkehrend",
   "common.oneOff": "Einmalig",
+  "common.approve": "Genehmigen",
   "common.approved": "Genehmigt",
   "common.rejected": "Abgelehnt",
   "chart.actual": "Ist",

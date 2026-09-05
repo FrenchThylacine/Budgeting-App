@@ -1321,6 +1321,7 @@ export const ar: Dictionary = {
   "rollover.delta": "فرق نهاية الشهر المُسجَّل هو {amount}. اختر ما إذا كنت ستضيفه إلى المحفظة؛ فإغلاق الشهر لا يغيّر معاملاته.",
   "common.recurring": "متكرر",
   "common.oneOff": "مرة واحدة",
+  "common.approve": "اعتماد",
   "common.approved": "معتمد",
   "common.rejected": "مرفوض",
   "chart.actual": "الفعلي",

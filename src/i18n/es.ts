@@ -1289,6 +1289,7 @@ export const es: Dictionary = {
   "rollover.delta": "La diferencia registrada al cierre del mes es {amount}. Elige si añadirla al monedero; cerrar un mes no altera sus transacciones.",
   "common.recurring": "Recurrente",
   "common.oneOff": "Puntual",
+  "common.approve": "Aprobar",
   "common.approved": "Aprobado",
   "common.rejected": "Rechazado",
   "chart.actual": "Real",

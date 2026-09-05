@@ -354,3 +354,85 @@ Full suites above cover it; no other consumer of the changed keys or of
   Wishlist's editor, Excel import preview) — covered the highest-traffic
   ones; will pick up any stragglers opportunistically in later phases that
   touch those features directly.
+
+---
+
+## Phase 5.4 — Visual language validation and refinement
+
+**Date:** 2026-09-05
+**Environment:** same account, desktop 1440×900, light and dark themes.
+
+### Investigation
+
+Read `docs/DESIGN_SYSTEM.md` in full first — it already documents a mature,
+measured system (a real contrast sweep across ten tabs and both themes at
+zero failures, a semantic colour table with `-text` variants for the
+4.5:1 problem, tabular numerals on every money figure, a fixed-direction
+motion system, a documented icon-resolution order). The mandate here is
+"preserve the successful funding-state system" and "do not regress into
+colour-only communication," so the job was to verify that mature system
+still holds under real content, not to re-derive it from scratch.
+
+### Tests
+
+Toggled light↔dark on Dashboard, Wallet, and re-checked the funding-state
+triple-channel (colour + icon + label) on every card and badge already
+captured in earlier phases' screenshots. Swept the codebase for the same
+"hardcoded-English-string" defect class Phase 5.3 found, since it is a
+visual-language issue as much as a translation one — a single untranslated
+word breaks the typographic consistency of an otherwise fully-localized
+screen.
+
+### Results
+
+🔴 **Confirmed bugs** (same defect class as 5.3, different screens — a
+prior localization pass evidently didn't reach these three):
+
+1. Dashboard's primary "Approve" button on the suggested-budget card — the
+   most prominent call-to-action on the busiest screen in the app — was
+   hardcoded English next to a correctly-translated "Passer" right beside
+   it. No `common.approve` key existed at all; added it to all 5 locales.
+2. Dashboard's "Personnaliser ce tableau de bord" editor's "Done" button.
+3. Two "Delete" confirmation buttons in the Scenario Lab (preset delete,
+   season delete). Both `common.done` and `common.delete` already existed
+   and are used correctly everywhere else — these two call sites just
+   never picked them up.
+
+A grep sweep for the same shape (`^\s*Word\s*$` inside JSX, across every
+component) after fixing these five found nothing further.
+
+🟢 **Visual language: no regressions, nothing to change.**
+
+- Funding states (Payé par moi / Payé par un tiers / Hors budget) carry
+  colour, a distinct icon (circle / diamond / triangle), and a text label
+  together on every screen checked — Dashboard, Wallet ledger history, and
+  the tone-card badges. Colour is never the only signal.
+- Dark mode: soft near-black surfaces (never pure black), the same
+  three-rail treasury cards, correctly re-tinted status badges, tabular
+  numerals aligned in the "Budget par mois" table — matches the design
+  doc's dark-mode requirements exactly.
+- Empty states (the Concorde silhouette, the "PAS ASSEZ DE DONNÉES" gauge)
+  render identically in both themes with no missing assets or contrast
+  loss.
+
+### Implementation
+
+`common.approve` added to all 5 locale files; `Dashboard.tsx`'s "Approve"
+and "Done" buttons and `ScenarioLab.tsx`'s two "Delete" buttons now call
+`t(...)` with existing or new keys.
+
+### Tests (fix verification)
+
+`npx tsc -b` clean; `npx vitest run` 1044 passed/0 failed; manually
+confirmed "Approuver" now renders in place of "Approve" on the Dashboard.
+
+### Regression
+
+No CSS, token, or component-structure changes this phase — pure text-layer
+fixes, so no visual regression surface beyond the five strings touched.
+
+### Remaining concerns
+
+- None new. The two open 5.1 minor items (native `prompt()`/`confirm()`
+  dialogs, "EN COURS" wording) remain queued for 5.14/later polish, as
+  before — they're interaction/wording choices, not defects.

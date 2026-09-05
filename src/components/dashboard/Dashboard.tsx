@@ -661,7 +661,7 @@ export const Dashboard: React.FC<{ onNavigate?: (tab: "spending" | "activities" 
                   <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
                     <div className="text-headline money">{money(suggestion.suggestedAmount)}</div>
                     <Button variant="primary" onClick={() => handleApproveBudget("approved")}>
-                      Approve <ArrowRight size={16} />
+                      {t("common.approve")} <ArrowRight size={16} />
                     </Button>
                     <Button variant="ghost" onClick={() => handleApproveBudget("rejected")}>{t("tutorial.skip")}</Button>
                   </div>
@@ -845,7 +845,7 @@ const DashboardCustomiser: React.FC<{
     onClose={onClose}
     footer={
       <Button type="button" variant="primary" onClick={onClose}>
-        Done
+        {t("common.done")}
       </Button>
     }
   >

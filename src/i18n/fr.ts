@@ -1297,6 +1297,7 @@ export const fr: Dictionary = {
   "rollover.delta": "L'écart de fin de mois enregistré est {amount}. Choisissez de l'ajouter ou non au portefeuille ; clôturer un mois ne modifie pas ses transactions.",
   "common.recurring": "Récurrent",
   "common.oneOff": "Ponctuel",
+  "common.approve": "Approuver",
   "common.approved": "Approuvé",
   "common.rejected": "Refusé",
   "chart.actual": "Réel",
