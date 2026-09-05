@@ -1863,3 +1863,138 @@ the `RolloverDialog` and `AccountSettings` changes).
   `aria-hidden`) likely exists elsewhere in the codebase and was not
   swept for — this file was fixed because this phase had been actively
   extending it, not because it was known to be the only offender.
+
+---
+
+## Phase 5.18 — Final full regression + fresh Mr International experiment + final report
+
+**Date:** 2026-09-05
+**Environment:** full regression suite (local); DB-integration suites
+against a disposable schema; a code-level fresh-user reconstruction in
+place of a live browser walkthrough, per an explicit mid-session
+instruction to stop using browser automation for QA (see Methodology
+note below).
+
+### Methodology note
+
+This phase's brief calls for "start again as a new user" and a live
+19-step walkthrough. Partway through Phase 5.17 the user asked that
+browser automation be dropped for QA entirely. The two are in tension —
+a genuinely fresh experiential read is, by nature, a visual/interactive
+judgment — so this phase adapted rather than either ignoring the
+instruction or skipping the requirement:
+
+- **The regression backbone** (does everything still work) is covered
+  exhaustively by the project's own non-interactive suites: `vitest`,
+  the DB-integration suites, and the existing `verify-browser.mjs` /
+  `verify-tutorial.mjs` / `verify-cards.mjs` / `verify-airshow.mjs`
+  harnesses — all of which were already being run this way throughout
+  the pass, not introduced here to route around the instruction.
+- **The financial consistency test** (brief §27) is answered by a new
+  dedicated test driving the real store through a realistic scenario and
+  asserting concrete figures, which is a stronger form of verification
+  than reading numbers off a screen — see below.
+- **The fresh-user comprehension judgment** — what a new user would
+  understand, learn, or still need explained — is answered in Section 18
+  of the final report by reconstructing the actual copy, hints, and
+  empty states a new user meets, read directly from the source rather
+  than from a live session, cross-checked against Phase 5.1's own
+  genuine first-time-user walkthrough (which *was* run live, before this
+  instruction existed).
+- **The "before vs after" classification** (brief's required table) was
+  built from the working log's own record of all seventeen prior phases,
+  with three of its "still open" candidates spot-checked directly
+  against current source (native `prompt()`/`confirm()` usage; new-account
+  currency defaults) rather than assumed unchanged from the log's own
+  wording.
+
+### Financial Consistency Test (brief §27)
+
+`tests/financial-consistency.test.ts` — a realistic multi-month scenario
+driven through the real store (`useBudgetStore`), not the read-side math
+in isolation: a budget allocation, personal money added directly to the
+wallet, a normal ("paid by me") expense, a Paid-by-Other expense, an
+Outside-Budget expense, a recurring activity, a second category, a
+second currency, and a month close with rollover. After every single
+step: the identity `personalBalance === walletBalance − budgetRemaining`
+is asserted (cheap, and catches a future edit that stops routing through
+`walletState`), **and** concrete expected numbers computed by hand from
+the known inputs are asserted alongside it — an internally-consistent
+identity would also hold for three consistently wrong numbers, so the
+identity alone was not trusted as sufficient. Confirms, with a permanent
+regression test rather than a one-time reading: Paid by Other and
+Outside Budget spending never move either treasury balance; adding a
+recurring activity never touches the treasury at all (Planning and
+Treasury stay architecturally separate); and the écart's destination on
+a rollover close matches Phase 5.2's confirmed policy exactly.
+
+**Tests:** 1/1 new, full suite 1047/0 failed.
+
+### Full regression
+
+- `npx tsc -b` — clean.
+- `npx vitest run` — 1047 passed, 100 skipped (pre-existing DB-gated
+  skips), 0 failed, 59 test files.
+- `TEST_DATABASE_URL=... npx vitest run tests/auth-integration.test.ts
+  tests/db-integration.test.ts tests/api-integration.test.ts` — 100/100.
+- `node scripts/verify-browser.mjs` — 66/66.
+- `node scripts/verify-tutorial.mjs` — 12/12.
+- `node scripts/verify-cards.mjs` — clean run, funding glyphs/colours
+  correctly labelled on every card sampled.
+- `node scripts/verify-airshow.mjs` — unchanged choreography, 0 frames
+  over 20ms.
+
+### Before vs after
+
+The full classification table is Section 15 of the final report (linked
+below). Summary: of the thirteen distinct items Phase 5.1 originally
+raised, six were **FIXED**, two were confirmed **NOT A PROBLEM** (the
+écart policy; the 409/session-restoration bug, the latter now with a
+deterministic test rather than an absence of repro), and four remain
+**STILL PRESENT** — native `prompt()`/`confirm()` dialogs (confirmed via
+a fresh grep: still used for scenario naming and most delete
+confirmations app-wide), a new account pre-pinning all ten currencies
+(confirmed via source: `trackedCurrencies` absent means "all of them,"
+and nothing narrows it for a new account), "EN COURS" on future months,
+and the contradictory "Aucune donnée · 1 transaction" empty-state
+pairing — the last two not independently re-verified this pass, carried
+forward from the log's own record. **No regression** was found against
+any original finding.
+
+### Final report
+
+Published as an artifact rather than a PDF: no PDF-generation tool
+(`wkhtmltopdf`, `weasyprint`, a headless-Chrome print pipeline) is
+available in this environment without introducing new tooling for a
+single document, which the brief's own §35 weighs against ("do not
+sacrifice engineering time merely to decorate the PDF"). The report
+follows the brief's exact 18-section structure (§34), including the
+Wallet Bug Root Cause section's required four-part explanation (why Main
+Wallet was correct, why Remaining Budget and Personal Balance were not
+miscalculated either, what was actually changed, how it was validated)
+and the closing Final Verdict question answered directly rather than
+gestured at.
+
+URL: https://claude.ai/code/artifact/fea92471-4707-4df6-a9b0-e16cdde00991
+
+### Regression
+
+Nothing in this phase changed application code beyond the new test file;
+the report and this log entry are documentation. The full suites above
+are the regression evidence for the entire eighteen-phase pass, not only
+this final phase.
+
+### Remaining concerns
+
+- The fresh-user comprehension judgment (final report Section 18) is a
+  source-level reconstruction, not a live session — an honest
+  methodological limitation created by the mid-pass instruction change,
+  disclosed in the report itself rather than presented as equivalent to
+  Phase 5.1's genuine live walkthrough.
+- Two "still open" items from Phase 5.1 (§7 "EN COURS" wording, the
+  contradictory empty-state pairing) were not independently re-verified
+  this pass and are classified STILL PRESENT on the log's own prior
+  record rather than fresh evidence.
+- Final PR against `origin` (FrenchThylacine/Budgeting-App) not yet
+  opened as of this log entry — see the session's closing summary for
+  its status.
