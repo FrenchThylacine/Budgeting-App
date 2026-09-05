@@ -49,6 +49,42 @@ async function waitForJson(url, timeoutMs = 15000) {
   throw new Error(`Timed out waiting for ${url}: ${lastError ?? "no response"}`);
 }
 
+/**
+ * Ask the browser for a tab.
+ *
+ * **PUT first.** Modern Chrome answers `/json/new` with 405 to a GET, and this
+ * used to reach for `waitForJson` — which is a *poller*, written for "wait for
+ * the browser to come up" — before falling back. So every tab spent the
+ * poller's full fifteen-second timeout being told no, over and over, by a
+ * server that was already up and had already given its final answer.
+ *
+ * Measured: 15,059ms, 15,020ms and 15,043ms to open three tabs. It is the
+ * single largest cost in the harness — `verify-airshow.mjs` opens fourteen, so
+ * three and a half minutes of a four-minute run were this — and it was
+ * invisible because the checks all passed at the end of it.
+ *
+ * A 405 is an answer, not a "not yet", so there is nothing here to poll. Two
+ * methods, one retry apiece for a genuinely dropped connection, and a tab now
+ * takes about ten milliseconds.
+ */
+async function newTarget(endpoint, url) {
+  const address = `${endpoint}/json/new?${encodeURIComponent(url)}`;
+  let last = "no response";
+  for (let attempt = 0; attempt < 2; attempt++) {
+    // GET is kept for older Chrome, which is the one that accepts it.
+    for (const method of ["PUT", "GET"]) {
+      const response = await fetch(address, { method }).catch((error) => {
+        last = error.message;
+        return null;
+      });
+      if (response?.ok) return await response.json();
+      if (response) last = `${method} ${response.status}`;
+    }
+    if (attempt === 0) await sleep(150);
+  }
+  throw new Error(`Could not open a tab at ${address}: ${last}`);
+}
+
 class Session {
   constructor(socket) {
     this.socket = socket;
@@ -71,6 +107,19 @@ class Session {
       const handlers = this.listeners.get(message.method);
       if (handlers) for (const handler of handlers) handler(message.params);
     });
+
+    /*
+     * A closed socket settles everything still waiting on it.
+     *
+     * `send` resolves from a message that will now never arrive, so without
+     * this a caller that is mid-`evaluate` when the tab goes away waits for
+     * ever — and because the harness runs its checks inside a `try`, "for
+     * ever" means a run that neither passes nor fails.
+     */
+    socket.addEventListener("close", () => {
+      for (const [, entry] of this.pending) entry.reject(new Error("The page was closed while a command was in flight"));
+      this.pending.clear();
+    });
   }
 
   send(method, params = {}) {
@@ -84,6 +133,34 @@ class Session {
   on(method, handler) {
     if (!this.listeners.has(method)) this.listeners.set(method, []);
     this.listeners.get(method).push(handler);
+  }
+
+  /**
+   * Close this tab.
+   *
+   * Over HTTP rather than with `Page.close`, because the socket is the thing
+   * being closed: a command sent down it races its own answer. `launch` sets
+   * `endpoint` and `targetId`; a session without them just drops its socket,
+   * which is what a caller wants either way.
+   *
+   * Scripts that open one tab need never call this — `close()` on the browser
+   * takes everything with it. It is here for the ones that open many:
+   * `verify-airshow.mjs` loads the page fourteen times to photograph fourteen
+   * moments of the same animation, and fourteen live tabs is fourteen renderer
+   * processes.
+   */
+  async close() {
+    try {
+      this.socket.close();
+    } catch {
+      /* already gone */
+    }
+    if (!this.endpoint || !this.targetId) return;
+    try {
+      await fetch(`${this.endpoint}/json/close/${this.targetId}`);
+    } catch {
+      /* the browser may already be down; the group kill covers it */
+    }
   }
 
   /**
@@ -263,7 +340,26 @@ export async function launch({ headless = true, width = 1440, height = 900 } = {
   ];
   if (headless) args.push("--headless=new", "--hide-scrollbars");
 
-  const child = spawn(binary, args, { stdio: ["ignore", "pipe", "pipe"] });
+  /*
+   * Its own process group, which is the whole of the leak fix.
+   *
+   * Chrome is not one process. A headless run is a browser process, a GPU
+   * process, a zygote, a network service and one renderer per tab — eight or
+   * nine of them — and `child.kill()` signals **only the one Node spawned**.
+   * The rest are reparented to init and carry on holding their share of a
+   * gigabyte of profile each. Measured over about twenty harness runs in one
+   * session: 180 orphaned processes and 7.0 GB of temp directories, with every
+   * run reporting its checks and exiting 0.
+   *
+   * `detached` makes the child a process-group leader, so its group id is its
+   * pid and `process.kill(-pid)` reaches every process in the tree. There is
+   * no POSIX way to do that without the group — which is why this is a spawn
+   * option rather than something `close()` can fix on its own.
+   */
+  const child = spawn(binary, args, {
+    stdio: ["ignore", "pipe", "pipe"],
+    detached: process.platform !== "win32",
+  });
 
   // The port is printed on stderr because it was asked for as 0 — a fixed port
   // is what makes a second run collide with a browser somebody forgot to close.
@@ -285,11 +381,7 @@ export async function launch({ headless = true, width = 1440, height = 900 } = {
   const sessions = [];
 
   const open = async (url) => {
-    const target = await waitForJson(`${endpoint}/json/new?${encodeURIComponent(url)}`).catch(async () => {
-      // Newer Chrome requires PUT for /json/new.
-      const response = await fetch(`${endpoint}/json/new?${encodeURIComponent(url)}`, { method: "PUT" });
-      return response.json();
-    });
+    const target = await newTarget(endpoint, url);
     const socket = new WebSocket(target.webSocketDebuggerUrl);
     await new Promise((resolve, reject) => {
       socket.addEventListener("open", resolve, { once: true });
@@ -297,6 +389,7 @@ export async function launch({ headless = true, width = 1440, height = 900 } = {
     });
     const session = new Session(socket);
     session.targetId = target.id;
+    session.endpoint = endpoint;
     await session.send("Page.enable");
     await session.send("Runtime.enable");
     await session.send("Log.enable");
@@ -318,7 +411,35 @@ export async function launch({ headless = true, width = 1440, height = 900 } = {
     return session;
   };
 
+  /**
+   * Signal the browser's whole process group.
+   *
+   * `-pid` is the group, and the group is the point: see the spawn above.
+   * Windows has no process groups to signal, so it falls back to the single
+   * child, which is what the code did everywhere before.
+   */
+  const signalGroup = (signal) => {
+    try {
+      if (process.platform === "win32") child.kill(signal);
+      else process.kill(-child.pid, signal);
+    } catch {
+      /* already gone, or never started */
+    }
+  };
+
+  /**
+   * Tear everything down, once, whatever happened.
+   *
+   * Registered on `exit` as well as returned, because the harness's own
+   * failures are exactly the runs that used to leak: a check that throws
+   * outside the `try`, a `Ctrl-C` during a twenty-second wait, an unhandled
+   * rejection in a page callback. All three left a browser running.
+   */
+  let closed = false;
   const close = async () => {
+    if (closed) return;
+    closed = true;
+
     for (const session of sessions) {
       try {
         session.socket.close();
@@ -326,14 +447,49 @@ export async function launch({ headless = true, width = 1440, height = 900 } = {
         /* already gone */
       }
     }
-    child.kill();
-    await sleep(200);
+
+    // Ask, then insist. Chrome flushes its profile on SIGTERM, and a profile
+    // deleted out from under a browser that is still writing to it is how a
+    // directory survives the `rmSync` below.
+    const exited = new Promise((resolve) => child.once("exit", resolve));
+    signalGroup("SIGTERM");
+    const gaveUp = await Promise.race([exited.then(() => false), sleep(3000).then(() => true)]);
+    if (gaveUp) {
+      signalGroup("SIGKILL");
+      await Promise.race([exited, sleep(500)]);
+    }
+
     try {
       rmSync(profile, { recursive: true, force: true });
     } catch {
       /* a profile left behind is not worth failing a run over */
     }
   };
+
+  /*
+   * The last resort, and it has to be synchronous: `process.on("exit")` runs no
+   * asynchronous work, so this is the one place that kills without waiting.
+   * `rmSync` is synchronous too, so the profile goes with it.
+   */
+  const onExit = () => {
+    if (closed) return;
+    closed = true;
+    signalGroup("SIGKILL");
+    try {
+      rmSync(profile, { recursive: true, force: true });
+    } catch {
+      /* nothing left to do at exit */
+    }
+  };
+  process.once("exit", onExit);
+  // A signal does not run `exit` handlers on its own; these re-raise so the
+  // caller still sees the interrupt as an interrupt.
+  for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"]) {
+    process.once(signal, () => {
+      onExit();
+      process.exit(signal === "SIGINT" ? 130 : 143);
+    });
+  }
 
   return { open, close, endpoint };
 }
