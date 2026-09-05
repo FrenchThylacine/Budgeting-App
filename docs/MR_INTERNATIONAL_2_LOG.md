@@ -679,3 +679,87 @@ since both new names are unique.
   not a one-line fix — and Phase 5.17's brief explicitly names "icon
   labels" as one of its accessibility checks, so it is deliberately left
   there rather than folded in piecemeal here.
+
+---
+
+## Phase 5.8 — Airshow / loading transition continuity
+
+**Date:** 2026-09-05
+**Environment:** same account, desktop, plus a second pass with Chrome's
+CPU (4×) and network (Slow 4G) throttling to force a long display phase,
+via chrome-devtools MCP.
+
+### Investigation
+
+The brief describes a specific, concrete defect: "final animation
+finishes, aircraft reset, smoke resets, entire animation restarts, then
+normal loading animation begins" — i.e. two animations bolted together
+with a visible seam between them.
+
+`domain/airshow.ts`'s own header says this bug used to exist and names
+five prior versions that had it in one form or another, and the
+`CHANGELOG.md` entries for **4.0.0** ("a real 3D loading sequence") and
+**4.4.0** ("the aeroplane was not where the arithmetic put it, a
+choreographed routine") show it was rebuilt from scratch for exactly this
+reason, well before this pass started. The current architecture is one
+pure function of elapsed time and a single break-off timestamp
+(`sceneAt()`), driving one `requestAnimationFrame` loop with one set of
+DOM nodes and one pair of smoke canvases for the whole sequence — display,
+join, settle, depart. There is no second animation for it to hand off to:
+`Stage` is `"display" | "join" | "settle" | "depart" | "done"`, and `done`
+unmounts the overlay directly. So the question was whether that rebuild
+actually closed the seam, not which pixel to patch.
+
+### Tests
+
+- `node scripts/verify-airshow.mjs` — the project's own frame-stepped
+  harness for this exact question. 387 frames, 0 over 20ms, and the
+  decile table shows every escort's position, heading and depth changing
+  continuously through `display → join → settle → depart`, no jump.
+- `npx vitest run tests/airshow-choreography.test.ts` — 15/15, including
+  the assertions that the world-velocity x-component never goes negative
+  and no escort teleports at the break-off.
+- Live, instrumented, twice: a `MutationObserver`-driven poll logging
+  `boot-screen`'s class and every `.boot-escort`'s `transform` at 50ms
+  resolution, once on a normal local load and once with Chrome's CPU
+  throttled 4× and network capped at Slow 4G (which stretched the display
+  phase from ~2.6s to ~14.8s before break-off). In both runs the phase
+  sequence was `display → join → settle → depart → gone` with no repeated
+  phase, no reset of any escort's transform to its start-of-display value,
+  and no gap where `.boot-screen` was absent before the real content
+  (`.main-area`) was present. `.panel-loading` (the *actual* other loading
+  indicator in the app, used by lazy tab panels) never appeared during
+  boot in either run, because the initial tab (`Dashboard`) is imported
+  eagerly rather than lazily — so there is no second, unrelated "loading
+  animation" for the sequence to hand off to even in principle.
+- Screenshots at every decile (`scripts/verify-airshow.mjs`'s output):
+  the display's helix, the join's roll-out, the tricolour formation at
+  settle, and the departure's stretched ribbons are continuous frame to
+  frame with no visible pop.
+
+### Results
+
+🟢 Not reproduced. The literal defect the brief describes — a restart with
+a visible reset — does not exist in the current implementation, under
+normal or artificially slow loading. This matches the pattern already
+seen in this pass (Phase 5.1's stale `KNOWN_ISSUES.md`, Phase 5.2's
+already-correct Main Wallet): the brief was written against know-how of
+an older failure mode that a prior rebuild (`CHANGELOG.md` 4.0.0/4.4.0,
+well before this session) had already structurally eliminated by
+replacing two animations with one continuous state function.
+
+### Implementation
+
+None. Verified rather than patched, per the brief's own instruction not
+to fix what was not shown to be broken.
+
+### Regression
+
+N/A — no code changed.
+
+### Remaining concerns
+
+- None found for the "restart" defect itself. Phases 5.9 and 5.10 test
+  the two things the brief asks for *within* this same continuous
+  sequence (a warp effect on departure, cloudier smoke), and are recorded
+  separately below since they are separate phases.
