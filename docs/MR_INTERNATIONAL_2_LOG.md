@@ -436,3 +436,91 @@ fixes, so no visual regression surface beyond the five strings touched.
 - None new. The two open 5.1 minor items (native `prompt()`/`confirm()`
   dialogs, "EN COURS" wording) remain queued for 5.14/later polish, as
   before — they're interaction/wording choices, not defects.
+
+---
+
+## Phase 5.5 — Expanded activity iconography
+
+**Date:** 2026-09-05
+**Environment:** same account, desktop 1440×900.
+
+### Investigation
+
+Read `src/components/ui/IconPicker.tsx` in full before adding anything —
+251 icon options across 17 categories already exist, every one a real
+`lucide-react` export chosen deliberately (a documented decision record
+explains why brand logos are never drawn, why the mark-resolution order is
+fixed, and why an icon may deliberately appear in more than one group).
+Cross-referenced the brief's full requested list — sports, transport,
+food, home, medical, subscriptions, family, salary, investment, etc. —
+against this existing set, item by item, rather than assuming a gap:
+
+- **Already covered, verified by name or keyword:** swimming (Waves), gym
+  (Dumbbell), running (Footprints), cycling (Bike), skiing
+  (MountainSnow/Snowflake), hiking (Mountain/TentTree), airplane/train/
+  bus/car/fuel (Transportation), taxi (`Car`'s own keywords already say
+  "taxi uber"), hotel, restaurant, coffee, groceries, shopping, cinema,
+  gaming, music, books, school, university, medical, pharmacy, phone,
+  internet, electricity, water, rent/home, tools, subscriptions, travel,
+  luggage, pets, gifts, family, childcare, clothing, electronics,
+  software, cloud services, work, and — via `Banknote`'s existing
+  keywords — salary. Tennis racket / table-tennis / football / basketball
+  are already searchable through `Volleyball` ("Ball sport") and
+  `CircleDot` ("Court sport")'s keyword lists, and `Goal` covers football/
+  soccer by name.
+- **Not available anywhere in the library** (checked the installed
+  `lucide-react@0.468.0`, the newest `0.x` release `0.577.0`, and the
+  current `1.41.0` — none of the three ship it): a gun, pistol, or rifle
+  icon. Per this app's own documented icon philosophy ("avoid mixing icon
+  libraries," brand marks are never hand-drawn) and the brief's own
+  instruction not to import a library just for this, no substitute was
+  added — `Target`'s existing keywords already include "shooting", so a
+  shooting-range or similar activity is already findable without a
+  literal weapon glyph, which also keeps the set in line with the calm,
+  premium tone the design system asks for.
+- **Genuinely missing:** a general insurance icon (health insurance had a
+  keyword on `HeartPulse`, but car/home/life insurance had nothing), and a
+  dedicated salary/income icon distinct from generic cash.
+
+### Implementation
+
+Added two icons to the existing Finance category (no new category, no new
+dependency): `Shield` → **Insurance**, and `BadgeDollarSign` → **Salary**,
+both already available in the project's pinned `lucide-react` version.
+
+Separately, opening the icon picker with nothing selected surfaced three
+more hardcoded-English strings from the same defect class as Phases 5.3–
+5.4 — "No icon" (twice, one as a visible button label, one baked into the
+`iconLabel()` fallback that feeds an aria-label) and "Choose icon" (the
+picker's placeholder text). Added `icons.noIcon` and `icons.chooseIcon` to
+all 5 locales and wired them in.
+
+### Tests
+
+`npx tsc -b` clean; `npx vitest run` 1044 passed/0 failed;
+`verify-browser.mjs` 66/66. Manually opened the icon picker on the Netflix
+activity: confirmed "Salary" and "Insurance" appear in the Finance group
+in the correct position, the picker's clear-icon control now reads
+"Aucune icône" instead of "No icon", and the trigger's accessible name
+reads "…: Aucune icône" instead of "…: No icon".
+
+### Regression
+
+Pure additions to `ICON_CATEGORIES` plus three text-layer fixes; no
+existing icon entry, category, or the resolution/fallback logic was
+touched. `ICON_INDEX`'s dedup-by-first-occurrence behavior is unaffected
+since both new names are unique.
+
+### Remaining concerns (carried to Phase 5.17)
+
+- **All 251 icon options' `label` and `keywords` are English-only**,
+  including the two just added. They are used for the picker's visible
+  grid tooltips, screen-reader `aria-label`/`title`, and the search
+  match — so a French (or Arabic, German, Spanish) screen-reader user
+  hears "Insurance" rather than "Assurance", and typing "assurance" in the
+  search box finds nothing. This is the same defect class already found
+  in 5.3/5.4/5.5, but translating ~250 labels and their keyword lists
+  across 5 locales is a substantial, self-contained localization project,
+  not a one-line fix — and Phase 5.17's brief explicitly names "icon
+  labels" as one of its accessibility checks, so it is deliberately left
+  there rather than folded in piecemeal here.

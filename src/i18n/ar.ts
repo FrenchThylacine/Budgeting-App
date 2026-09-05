@@ -853,6 +853,8 @@ export const ar: Dictionary = {
   "icons.activityIcons": "أيقونات الأنشطة",
   "icons.activityColour": "لون النشاط",
   "icons.noColour": "بدون لون",
+  "icons.noIcon": "بدون أيقونة",
+  "icons.chooseIcon": "اختيار أيقونة",
   "icons.customColour": "لون مخصّص",
   "mark.preview": "معاينة",
   "mark.fromTheLibrary": "من المكتبة",

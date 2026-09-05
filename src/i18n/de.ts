@@ -821,6 +821,8 @@ export const de: Dictionary = {
   "icons.activityIcons": "Aktivitätssymbole",
   "icons.activityColour": "Farbe der Aktivität",
   "icons.noColour": "Keine Farbe",
+  "icons.noIcon": "Kein Symbol",
+  "icons.chooseIcon": "Symbol wählen",
   "icons.customColour": "Eigene Farbe",
   "mark.preview": "Vorschau",
   "mark.fromTheLibrary": "Aus der Bibliothek",

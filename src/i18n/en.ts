@@ -859,6 +859,8 @@ export const en = {
   "icons.activityIcons": "Activity icons",
   "icons.activityColour": "Activity colour",
   "icons.noColour": "No colour",
+  "icons.noIcon": "No icon",
+  "icons.chooseIcon": "Choose icon",
   "icons.customColour": "Custom colour",
   "mark.preview": "Preview",
   "mark.fromTheLibrary": "From the library",
