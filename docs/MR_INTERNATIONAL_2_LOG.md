@@ -1244,3 +1244,90 @@ than a formality:
   `server/src`; a drift between them would produce a confusing "the form
   said this was fine but the server rejected it" rather than a security
   issue, since the server always re-checks.
+
+---
+
+## Phase 5.13 — Monthly Budget / Wallet conceptual bridge
+
+**Date:** 2026-09-05
+**Environment:** same account, desktop, chrome-devtools MCP.
+
+### Investigation
+
+Re-read `domain/wallet.ts`'s own header before assuming anything needed
+building: it already states the exact confusion the brief describes
+("Planning" vs "Treasury" are not meant to converge) and names it as a
+solved problem from an earlier pass. Checked the two places a user
+actually meets these numbers:
+
+- **`WalletPanel.tsx`** already answers three of the brief's four
+  questions directly, per-card: `wallet.walletBalanceHint` → "Actual
+  money you have" (What is actual money?), `wallet.budgetRemainingHint`
+  → "Still available; it does not expire" (What remains?),
+  `wallet.personalBalanceHint` → "Money outside your budget" (What
+  belongs to me personally?). A fourth card, visually and structurally
+  separated from the three balances specifically so a plan can never be
+  read as money in hand (per that section's own comment), answers "What
+  is allocated budget?" This is already exactly what the brief asks for
+  — contextual microcopy, visual relationship, no wall of text — and
+  matches `CHANGELOG.md`'s 4.2.0 "the funding ambiguity" and 4.3.0 "one
+  visual vocabulary" entries: built before this pass, not missing.
+- **`Dashboard.tsx`'s "Remaining" tile** (the Planning/pacing figure,
+  `dashboard.approvedBudgetRemaining`) is the actual gap. It sits on the
+  same screen as the Dashboard's own separate Wallet-balance card (itself
+  deliberately simplified in an earlier pass — see that section's
+  comment, "a treasury summary on a dashboard... the breakdown lives one
+  press away") and gives no indication that the two figures answer
+  different questions, which is precisely the confusion this phase's
+  brief describes and the one place in the app it had not yet been
+  addressed.
+
+### Implementation
+
+One `InfoDot` (the project's existing accessible tooltip/popover
+component, already used in `ActivityPanel.tsx` — no new UI primitive)
+added to the Dashboard's "Remaining" tile header:
+
+- One sentence: "This is your planning target for the month, not money
+  in hand — your wallet balance can be higher or lower."
+- One button beneath it, "See wallet balance", calling `onNavigate?
+  .("wallet")` — **linked navigation** to the number that *is* money,
+  rather than restating the Wallet panel's own explanation.
+
+`Dashboard`'s `onNavigate` prop type was widened from `"spending" |
+"activities" | "settings"` to include `"wallet"`; `App.tsx` already
+passes `setActiveTab` (typed over the full `TabKey`), so no call-site
+change was needed there.
+
+Three new keys × 5 locales: `dashboard.aboutApprovedBudgetRemaining`
+(the trigger's accessible name), `dashboard.approvedBudgetRemainingExplainer`,
+`dashboard.seeWalletBalance`.
+
+### Tests
+
+- `npx tsc -b` clean; `npx vitest run` 1044 passed / 0 failed.
+- Manual, in a real browser: recorded one transaction to leave the
+  Dashboard's empty state, confirmed the "Remaining" tile renders its new
+  info trigger. Opening it via a real click event (the CDP `click` tool's
+  synthetic sequence fires `mouseenter` immediately before `click`, which
+  toggles this component open-then-closed in one automated gesture —
+  not a bug in the component, just a mismatch with how a script clicks
+  versus how a cursor arrives; confirmed by dispatching the click via
+  `element.click()` directly and reading the DOM a tick later) showed the
+  exact configured text, and pressing "Voir le solde du portefeuille"
+  navigated straight to the Wallet tab, landing on the same three-balance
+  cards this phase's investigation already found to be correct.
+
+### Regression
+
+Additive only: one new import, one widened prop type (backward
+compatible — every existing caller already satisfies the wider type),
+one new `InfoDot` usage. No existing calculation, card, or navigation
+path changed.
+
+### Remaining concerns
+
+- None found in the two places a user actually meets these numbers. The
+  wallet-vs-planning bridge is now linked in both directions a user could
+  arrive confused: from the Wallet panel's own hints (already existed)
+  and now from the Dashboard's Planning tile (this phase).

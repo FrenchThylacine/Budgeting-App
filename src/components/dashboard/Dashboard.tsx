@@ -29,6 +29,7 @@ import {
 } from "../charts";
 import { Badge } from "../ui/Badge";
 import { Card, CardBody } from "../ui/Card";
+import { InfoDot } from "../ui/InfoDot";
 import { UpcomingSchedule } from "./UpcomingSchedule";
 import { EmptyState } from "../ui/EmptyState";
 import { Button } from "../ui/Button";
@@ -137,7 +138,7 @@ const Figure: React.FC<{
   </div>
 );
 
-export const Dashboard: React.FC<{ onNavigate?: (tab: "spending" | "activities" | "settings") => void }> = ({
+export const Dashboard: React.FC<{ onNavigate?: (tab: "spending" | "activities" | "settings" | "wallet") => void }> = ({
   onNavigate,
 }) => {
   const { t, language, monthNames } = useTranslation();
@@ -427,6 +428,23 @@ export const Dashboard: React.FC<{ onNavigate?: (tab: "spending" | "activities" 
                 <CardBody>
                   <div className="text-footnote" style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
                     <PiggyBank size={14} /> {t("dashboard.approvedBudgetRemaining")}
+                    {/* Phase 5.13: this figure and the Wallet's own balance are
+                        both "how much is left", answer different questions, and
+                        sit on the same screen — see `domain/wallet.ts`'s header
+                        for why they are not meant to converge. One compact
+                        explanation plus a press to the number that *is* money,
+                        rather than a paragraph neither card has room for. */}
+                    <InfoDot label={t("dashboard.aboutApprovedBudgetRemaining")}>
+                      <p style={{ margin: 0 }}>{t("dashboard.approvedBudgetRemainingExplainer")}</p>
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-sm"
+                        style={{ marginTop: 8 }}
+                        onClick={() => onNavigate?.("wallet")}
+                      >
+                        {t("dashboard.seeWalletBalance")} <ArrowRight size={12} aria-hidden="true" />
+                      </button>
+                    </InfoDot>
                   </div>
                   <div className="text-headline money">{pacing != null ? money(pacing.remaining) : "—"}</div>
                   <div className="text-caption" style={{ marginTop: 4 }}>
