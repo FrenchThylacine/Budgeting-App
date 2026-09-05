@@ -44,9 +44,16 @@ login → refresh.
 3. **Month-close debits the wrong pot.** Closing September with a recorded
    "écart de fin de mois" of `−€25,00` and choosing "Clôturer et reporter"
    posted a `−€25,00` "Report de fin de mois" wallet entry that came out of
-   **Personal Balance** (€40→€15), not Remaining Budget (stayed €75,00) —
-   and the "Budget par mois" table's September row was left stale,
-   unchanged by the new ledger entry. Also assigned to Phase 5.2.
+   **Personal Balance** (€40→€15), not Remaining Budget (stayed €75,00).
+   Follow-up: deleting the €25 "paid by me" transaction afterwards correctly
+   zeroed DÉPENSÉ and restored Remaining Budget to €100 everywhere (Wallet
+   page total and the "Budget par mois" row agreed) — so the per-month table
+   isn't stale, it simply never reflects wallet-ledger-only entries (Report
+   de fin de mois, Argent personnel) by design, only actual transactions.
+   The open question is narrower than first thought: why does a shortfall
+   against an *unset* monthly budget cap get taken out of Personal Balance
+   at all, and where does the −25 figure itself come from. Also assigned to
+   Phase 5.2.
 4. **Mislabeled required field.** The wallet's "Enregistrer une entrée ou
    une sortie" dialog has a required text field labelled **"Total"** whose
    placeholder ("Salaire, retrait d'espèces…") shows it's actually a
@@ -124,3 +131,131 @@ N/A — no code changed this phase.
   settings tabs. Will cover opportunistically in later phases that touch
   those areas (5.3 responsive pass, 5.15 recurring activities, 5.16
   outside-budget model).
+
+---
+
+## Phase 5.2 — Wallet / Remaining Budget / Personal Balance root-cause
+
+**Date:** 2026-09-05
+**Environment:** same as 5.1, continuing on the same test account and data.
+
+### Investigation
+
+Traced all three balances to their source (`src/domain/wallet.ts`'s module
+header is itself the map: wallet balance = every ledger movement minus
+budget spending; budget remaining = allocations minus budget spending minus
+transfers; personal balance = wallet balance − budget remaining, "the third
+being a subtraction is the point"). Confirmed empirically in 5.1 that this
+arithmetic holds for every ledger mutation tried.
+
+**Why Main Wallet is correct:** `WalletPanel.tsx` and the Dashboard's own
+wallet-balance card both read the same ledger-derived `walletState()` /
+`calculation.wallet.walletTotal` — one source, already unified in a prior
+pass (the Dashboard card carries an explicit comment documenting this).
+
+**Root causes found, one per 5.1 finding:**
+
+1. **Dashboard "RESTANT" vs Wallet "BUDGET RESTANT."** Not a calculation
+   bug. `wallet.ts`'s header states these are two *deliberately* different
+   concepts: "Planning" (`budgetPacing()` in `src/domain/analytics.ts`,
+   `settings.monthlyBudget − spent`, an approved cap) vs. "Treasury" (this
+   module's ledger-derived figure) — "not the same number and not meant to
+   converge." The bug is that `Dashboard.tsx:429` borrowed the ambiguous
+   `wallet.remaining` i18n key for the Planning tile, and its empty-state
+   copy ("no monthly budget defined") wrongly implied no budget money
+   existed at all when Treasury had a healthy positive balance.
+2. **Personal Balance divergence.** No separate Dashboard figure exists for
+   it, so no display-divergence surface — its corruption showed up only via
+   item 5 below.
+3. **NaN.** `src/domain/currency.ts:286` — `formatMoney` literally
+   `return`ed the string `"NaN"` for a null/NaN amount, rather than the
+   app's own "—" convention used everywhere else for empty money. The three
+   sibling spending tiles are shielded from this by `formatDualMoney`'s own
+   null guard; the "Payé par moi" tile alone calls `formatMoney` directly.
+4. **Mislabeled "Total" field.** `WalletPanel.tsx:813` used the shared
+   `common.total` key for what is actually the ledger entry's descriptive
+   title (`WalletEntry.source`) — the same field rendered as "Pharmacie" /
+   "Cadeau" / "Budget de September 2026" in the ledger history. No dedicated
+   label key existed for it.
+5. **Month-close "écart."** `calculateRolloverDelta()`
+   (`src/domain/calculations.ts:375`) computes `settings.monthlyBudget −
+   spent` — the same Planning figure as item 1 — and `closeMonth()`
+   (`src/store/budgetStore.ts:1102`) posts it as a `type: "rollover"` wallet
+   entry. `walletEffect()` counts every non-transfer entry as real cash
+   movement, but `budgetEffect()` only recognizes `"budget"`/`"transfer"` —
+   so a rollover entry silently drains/credits **Personal Balance**
+   (`personalBalance = walletTotal − budgetRemaining`) rather than
+   Remaining Budget, and `budgetPeriods()` (the "Budget par mois" table)
+   skips it entirely for the same reason.
+
+### Product decision
+
+Put the month-close question to the project owner directly, since nothing
+in the code or docs states an intended policy and both readings are
+defensible: **confirmed as intended** — overspending your approved monthly
+cap is meant to be charged to Personal Balance (money that's "yours," not
+the budget's), and underspending is meant to roll into Personal Balance as
+a reward; Remaining Budget (real wallet cash) is correctly left untouched
+because it is a separate, already-continuous ledger that never needs a
+close-month step. **No calculation change made for this item.** What's
+still wrong is purely communication — the close dialog doesn't say where
+the money is going, and the "Budget par mois" table looks stale next to it
+— both assigned to Phase 5.14 (Month Close UX).
+
+### Implementation
+
+Fixed the three items that were genuinely bugs, each the smallest change
+that corrects it without touching wallet.ts's architecture:
+
+- `src/domain/currency.ts:286` — `formatMoney` now returns `"—"` instead of
+  the literal string `"NaN"` for a null/NaN amount.
+- `src/components/wallet/WalletPanel.tsx:813` — the entry-label field now
+  uses a new `wallet.entryLabel` key ("Libellé"/"Label"/etc.) instead of
+  `common.total`, added across all 5 locale files (en/fr/de/es/ar).
+- `src/components/dashboard/Dashboard.tsx:429` — the Planning-cap tile now
+  uses a new `dashboard.approvedBudgetRemaining` key instead of borrowing
+  `wallet.remaining` (same visible text today, but no longer the same key
+  as the Wallet tab's Treasury figure, so Phase 5.13 can word them
+  differently without touching the Wallet tab). Its empty-state caption
+  (`dashboard.noMonthlyBudget`, all 5 locales) now reads "No monthly
+  spending cap approved" rather than implying no budget money exists.
+
+Left untouched, deliberately: `wallet.ts`'s three-balance arithmetic,
+`budgetPeriods()`'s automatic carry-forward, `calculateRolloverDelta()`,
+and `closeMonth()`'s rollover entry — all confirmed correct or intended.
+
+### Tests
+
+- `npx tsc -b` — clean.
+- `npx vitest run` — 1044 passed, 83 skipped (pre-existing skips), 0
+  failed, across all 58 non-skipped test files.
+- `node scripts/verify-browser.mjs --url http://localhost:5173` — 66/66
+  browser checks passed (tour, themes, aircraft, wallet, second currency,
+  reports, small screens 320–430px, contrast, console).
+- `node scripts/verify-tutorial.mjs --url http://localhost:5173` — 12/12
+  passed.
+- Manually re-verified in the running app: "Payé par moi" now shows "—" at
+  zero transactions; the Dashboard caption reads "Aucun plafond mensuel
+  approuvé"; the wallet entry dialog's field now reads "Libellé".
+
+### Regression
+
+Full existing suites above all still pass; no other screen references the
+three changed i18n keys or the changed `formatMoney` branch's old string
+value (`common.total`, `wallet.remaining` usages other than the two named
+sites, and the literal `"NaN"` were each individually grepped before
+editing).
+
+### Remaining concerns
+
+- Phase 5.13 should design the actual conceptual bridge between Planning
+  and Treasury (the "approve a suggested budget" flow vs. the wallet's own
+  deposits) — this phase only fixed the mislabeling, not the underlying
+  comprehension gap.
+- Phase 5.14 owns the close-month dialog/copy fix now that the "écart"
+  policy itself is confirmed correct.
+- Two 5.1 minor findings (native `prompt()`/`confirm()` dialogs for
+  scenario naming and transaction deletion; "EN COURS" on unstarted future
+  months; the contradictory "Aucune donnée · 1 transaction" pairing on a
+  month with only a wallet-ledger entry) remain open, assigned to later
+  visual-language/UX phases (5.4, 5.14).

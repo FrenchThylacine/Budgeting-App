@@ -810,7 +810,7 @@ const MovementSheet: React.FC<{
               ))}
             </select>
           </Field>
-          <Field label={t("common.total")} span>
+          <Field label={t("wallet.entryLabel")} span>
             <input
               className="input"
               required

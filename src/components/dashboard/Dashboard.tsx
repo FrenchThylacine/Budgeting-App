@@ -426,7 +426,7 @@ export const Dashboard: React.FC<{ onNavigate?: (tab: "spending" | "activities" 
               <Card className={pacing && pacing.remaining < 0 ? "tone-card-danger" : "tone-card-accent"}>
                 <CardBody>
                   <div className="text-footnote" style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
-                    <PiggyBank size={14} /> {t("wallet.remaining")}
+                    <PiggyBank size={14} /> {t("dashboard.approvedBudgetRemaining")}
                   </div>
                   <div className="text-headline money">{pacing != null ? money(pacing.remaining) : "—"}</div>
                   <div className="text-caption" style={{ marginTop: 4 }}>
