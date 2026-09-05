@@ -244,6 +244,57 @@ function spriteAt(
 }
 
 /**
+ * Phase 5.9 — the environment's side of "high speed"
+ * ====================================================
+ *
+ * The departure already has the aircraft's side of acceleration: they pull
+ * away from CRUISE toward `DEPART_SPEED` and outrun their own smoke. What is
+ * missing is the cockpit's side of the same fact — the sense that the *world*
+ * is rushing past, the way a windscreen streaks at speed. A dozen thin,
+ * feathered bars do that: laid out once, at a fixed height and length each,
+ * they run continuously left to right and are silent — `opacity: 0` via
+ * `--warp-strength` — until the departure says otherwise.
+ *
+ * They are `sin`-hashed rather than `Math.random()`, for the same reason the
+ * smoke's turbulence is: a fixed layout reads as designed, and a reshuffled
+ * one on every mount would make two loads of the same screen look like two
+ * different effects. `WARP_STREAKS` is computed once, at module scope, for
+ * exactly that reason.
+ */
+interface WarpStreak {
+  top: number;
+  length: number;
+  thickness: number;
+  duration: number;
+  delay: number;
+  peak: number;
+}
+
+function warpStreaks(count: number): WarpStreak[] {
+  const streaks: WarpStreak[] = [];
+  for (let i = 0; i < count; i++) {
+    // A small deterministic scramble — a hash, not a generator with state.
+    const at = (k: number) => {
+      const v = Math.sin((i + 1) * k) * 10000;
+      return v - Math.floor(v);
+    };
+    streaks.push({
+      top: 4 + at(12.9898) * 92,
+      length: 14 + at(78.233) * 20,
+      thickness: 1 + at(37.719) * 1.6,
+      duration: 460 + at(94.673) * 380,
+      // Negative, so the streaks are already mid-flight on the first frame
+      // they are ever visible instead of starting bunched at the left edge.
+      delay: -at(51.291) * 900,
+      peak: 0.3 + at(23.411) * 0.4,
+    });
+  }
+  return streaks;
+}
+
+const WARP_STREAKS = warpStreaks(12);
+
+/**
  * One puff of smoke.
  *
  * Laid down at the tailpipe and thereafter owned by the air: `x`/`y` are scene
@@ -305,6 +356,7 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({ ready, onFinished,
   const leadRef = useRef<HTMLDivElement>(null);
   const escortRefs = useRef<(HTMLDivElement | null)[]>([]);
   const rootRef = useRef<HTMLDivElement>(null);
+  const warpRef = useRef<HTMLDivElement>(null);
   const backRef = useRef<HTMLCanvasElement>(null);
   const frontRef = useRef<HTMLCanvasElement>(null);
   const [phase, setPhase] = useState<Phase>("display");
@@ -699,6 +751,17 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({ ready, onFinished,
         // follows the aeroplanes out rather than running to its own clock.
         const root = rootRef.current;
         if (root) root.style.clipPath = `inset(0 0 0 ${(smootherstep((t - 0.12) / 0.88) * 100).toFixed(2)}%)`;
+        /*
+         * The streaks build with `t`, not with the phase class.
+         *
+         * Reaching full strength at 55% of the departure rather than at 100%
+         * is what makes the sequence read as "accelerating, then at speed"
+         * instead of "accelerating right up to the moment it stops" — the
+         * brief's own "high-speed flight → transition", not a ramp that
+         * peaks exactly when the clip-path is about to hide it anyway.
+         */
+        const warp = warpRef.current;
+        if (warp) warp.style.setProperty("--warp-strength", clamp01(t / 0.55).toFixed(3));
         if (frame.stage === "done") {
           setPhaseOnce("gone");
           finishedRef.current();
@@ -809,6 +872,24 @@ export const LoadingScreen: React.FC<LoadingScreenProps> = ({ ready, onFinished,
       aria-label={caption}
     >
       <div className="boot-sky" aria-hidden="true" />
+      <div className="boot-warp" ref={warpRef} aria-hidden="true">
+        {WARP_STREAKS.map((streak, index) => (
+          <span
+            key={index}
+            className="boot-warp-streak"
+            style={
+              {
+                "--warp-top": `${streak.top.toFixed(1)}%`,
+                "--warp-length": `${streak.length.toFixed(1)}vw`,
+                "--warp-thickness": `${streak.thickness.toFixed(2)}px`,
+                "--warp-duration": `${streak.duration.toFixed(0)}ms`,
+                "--warp-delay": `${streak.delay.toFixed(0)}ms`,
+                "--warp-peak": streak.peak.toFixed(2),
+              } as React.CSSProperties
+            }
+          />
+        ))}
+      </div>
       <div className="boot-stage" aria-hidden="true">
         <div className="boot-scene">
           {/* The smoke laid down on the far side of the lead. */}

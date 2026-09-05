@@ -763,3 +763,97 @@ N/A — no code changed.
   the two things the brief asks for *within* this same continuous
   sequence (a warp effect on departure, cloudier smoke), and are recorded
   separately below since they are separate phases.
+
+---
+
+## Phase 5.9 — High-speed warp acceleration effect
+
+**Date:** 2026-09-05
+**Environment:** same account, desktop, chrome-devtools MCP.
+
+### Investigation
+
+The brief asks for a genuinely new visual, not a fix: "directional
+streaks, moving lines, depth, motion, acceleration, controlled blur,
+environmental speed cues" during the departure, with the sequence reading
+as "normal flight → acceleration → high-speed flight → transition."
+
+The departure (`domain/airshow.ts`'s `departure()`) already gives the
+*aircraft* that arc — they pull from `CRUISE` (375px/s) to `DEPART_SPEED`
+(5600px/s) on a cubic ease, which is why their own smoke stretches into
+long ribbons on the way out (§1.23's "the aircraft outran them"). What
+does not exist anywhere in `LoadingScreen.tsx` or `styles-extras.css` is
+an *environmental* cue — nothing represents the camera's own sense of
+speed, only the aircraft's. So this phase is additive: there was no
+existing streak effect to find, confirmed by reading both files in full
+before writing anything.
+
+### Implementation
+
+Added `.boot-warp`: a layer of 12 thin, feathered horizontal bars
+(`WARP_STREAKS` in `LoadingScreen.tsx`, laid out with a deterministic
+sine-hash — the same idiom the smoke turbulence already uses — rather than
+`Math.random()`, so two loads of the same screen look like the same
+effect) that run continuously left to right via one CSS `@keyframes`,
+always animating, silent by default.
+
+The "always animating, silent by default" half is deliberate and is the
+direct lesson of Phase 5.8: a speed effect that starts and stops on the
+`depart` phase class is a second animation handed off to, which is the
+exact shape of bug that phase went looking for and didn't find elsewhere.
+So instead a single CSS custom property, `--warp-strength`, is written
+every frame in the same block that already computes the departure's `t`
+and the clip-path reveal (`LoadingScreen.tsx`'s `tick()`), reaching full
+strength at 55% of the 900ms departure rather than at 100% — which is
+what makes it read as "accelerate, then travel at speed" instead of
+"accelerate right up until it stops."
+
+The layer carries no `z-index`: every aircraft and both smoke canvases
+already have one (1–4), which is its own stacking level above the
+default layer these elements sit in, so the streaks paint underneath
+the whole formation by construction rather than by a number chosen to be
+smaller than the others. `@media (prefers-reduced-motion: reduce)` hides
+the layer outright, matching `.boot-lead-art`'s existing rule in the same
+stylesheet — though it is close to redundant: the `reduced` branch in
+`LoadingScreen.tsx` never reaches the `depart` stage at all, so
+`--warp-strength` never leaves its zero default either way.
+
+### Tests
+
+- `npx tsc -b` — clean.
+- `npx vitest run` — 1044 passed / 0 failed (unchanged from Phase 5.7;
+  this phase touches no domain logic, only rendering).
+- `node scripts/verify-airshow.mjs` — identical choreography output to
+  the Phase 5.8 baseline run (same 387 frames, same positions at every
+  decile, same "0 over 20ms" frame cost) — confirms the new CSS layer
+  costs nothing measurable on the animation's own clock and changes no
+  aircraft position.
+- Screenshots at 90%, 95% and 100% of the sequence: faint streaks visible
+  behind the formation and clipped correctly by the reveal, distinctly
+  thinner and dimmer than the smoke ribbons so they read as background
+  rather than competing with the aircraft — "do not obscure the aircraft"
+  checked by looking, not just by z-index arithmetic.
+- Reduced motion: overrode `window.matchMedia` before load so the
+  component's own `reduced` branch fires (verified this is the real
+  effective gate, since the component reads reduced-motion once via
+  `useMemo` at mount, not the live CSS media query) — the sequence skips
+  straight to `settle` and finishes on the data with no `depart` stage,
+  so `--warp-strength` is never written and the streaks are never
+  visible, independent of the CSS media rule.
+
+### Regression
+
+Additive only: one new ref, one new `useEffect`-scoped `style.setProperty`
+call inside an existing block, one new CSS block. No existing transform,
+z-index, or timing constant was changed. The unchanged
+`verify-airshow.mjs` output is the regression check for the choreography
+itself.
+
+### Remaining concerns
+
+- The effect was tuned by eye against this one lead aircraft (Concorde,
+  200px). It was not re-checked against every aircraft skin in
+  `domain/aircraft.ts`; the streaks are laid out independently of the
+  lead's own artwork (they don't touch or scale with it) so there is no
+  specific reason to expect a difference, but it was not exhaustively
+  verified across the fleet.
