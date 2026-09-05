@@ -310,7 +310,32 @@ export const WalletPanel: React.FC = () => {
               <tbody>
                 {periods.map((period) => (
                   <tr key={`${period.year}-${period.month}`}>
-                    <td>{`${localMonth(period.month)} ${period.year}`}</td>
+                    <td>
+                      {`${localMonth(period.month)} ${period.year}`}
+                      {/* Phase 5.14: the close is a fact about the month, not
+                          a fourth number — it says what happened rather than
+                          changing what the existing columns already say
+                          correctly (see `close`'s comment in domain/wallet.ts). */}
+                      {period.close && (
+                        <div style={{ marginTop: 4 }}>
+                          <Badge tone={period.close.status === "blocked-missing-data" ? "warning" : "neutral"}>
+                            {t("wallet.periodClosed")}
+                          </Badge>
+                          {period.close.status === "closed-with-rollover" && (
+                            <div className="text-caption" style={{ marginTop: 2 }}>
+                              {t("wallet.periodClosedRollover", {
+                                amount: formatDualMoney(period.close.delta ?? 0, snapshot.settings, { showSign: true }),
+                              })}
+                            </div>
+                          )}
+                          {period.close.status === "closed-without-rollover" && (
+                            <div className="text-caption" style={{ marginTop: 2 }}>
+                              {t("wallet.periodClosedNoRollover")}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </td>
                     <td className="num">{money(period.carriedIn)}</td>
                     <td className="num">{money(period.allocated)}</td>
                     <td className="num">{money(period.spent)}</td>

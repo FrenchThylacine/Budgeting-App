@@ -1331,3 +1331,120 @@ path changed.
   wallet-vs-planning bridge is now linked in both directions a user could
   arrive confused: from the Wallet panel's own hints (already existed)
   and now from the Dashboard's Planning tile (this phase).
+
+---
+
+## Phase 5.14 — Month close UX
+
+**Date:** 2026-09-05
+**Environment:** same account, desktop, chrome-devtools MCP, using a real
+close (one €50 transaction, no monthly cap approved, so the recorded
+écart came from `settings.monthlyBudget` defaulting to 0 minus the €50
+spent).
+
+### Investigation
+
+Phase 5.2 already put the only real open question — is the écart policy
+itself correct — to the project owner and got an explicit answer:
+overspend/underspend against the approved cap is *meant* to move Personal
+Balance, Remaining Budget is *meant* to stay untouched (it is a separate,
+continuous ledger), and no calculation was to change. That phase named
+two remaining problems, both purely communication, and assigned both
+here: the close dialog doesn't say where the money is going, and the
+"Budget par mois" table looks stale next to it.
+
+Reading `RolloverDialog.tsx` confirmed the first half directly: it showed
+the delta and two buttons, said transactions are preserved (already
+correct), but never named the period, never said where a rolled-over
+écart goes, and called `onClose()` the instant `closeMonth()` returned —
+no confirmation, no next action. Every other item on the brief's checklist
+("tell the user what happened," "clearly indicate the current period,"
+"provide an obvious next action") had no surface to appear on at all.
+
+For the second half, read `budgetPeriods()` (`domain/wallet.ts`) against
+what a closed row actually looks like. Its `remaining` column is correct
+and does not need to change — it does not count a `"rollover"` entry at
+all, which matches `budgetEffect()` giving rollover zero effect on budget
+arithmetic by the very policy Phase 5.2 confirmed. The staleness is not a
+wrong number: it is that closing a month leaves **no visible trace** in
+the table that summarizes months, so a closed September looks identical
+to an untouched one next to the dialog that just said something happened
+to it.
+
+### Implementation
+
+**The dialog** (`RolloverDialog.tsx`) is now two screens rather than a
+question that vanishes on answer:
+
+- The question screen names the period ("Close September 2026" —
+  `rollover.closeMonthFor`, using the existing numeric-`month`
+  auto-localization `interpolate()` already provides) and adds one
+  sentence naming the destination and what stays untouched either way
+  (`rollover.deltaDestination`): the écart goes to Personal Balance if
+  rolled over, never to Remaining Budget.
+- Answering it (`closeMonth()` still called exactly as before — no
+  calculation touched) swaps the same dialog to a confirmation screen:
+  which period closed, where the écart went (or that it was not carried
+  over), that Remaining Budget and every transaction are unchanged, and
+  a primary "See wallet" button (`onNavigate?.("wallet")`) as the
+  obvious next action, plus "Close" to dismiss.
+- `onNavigate` threads from `App.tsx`'s existing `setActiveTab` — the
+  same pattern Phase 5.13 used for the Dashboard's InfoDot.
+
+**The table** (`domain/wallet.ts` + `WalletPanel.tsx`): `BudgetPeriod`
+gained a `close: MonthCloseRecord | null` field, looked up from
+`snapshot.years[year].closedMonths` — the record `closeMonth()` already
+writes, not a new one. No arithmetic field changed. The table now shows a
+small "Closed" badge under a closed month's name, plus one line saying
+where its écart went (or that it was closed without rollover) — a fact
+about the month, not a fourth number competing with the five that were
+already correct.
+
+Nine new keys × 5 locales: `rollover.closeMonthFor` (replaces the
+now-unused static `rollover.closeMonth`), `rollover.deltaDestination`,
+`rollover.monthClosedTitle`, `rollover.doneWithRollover`,
+`rollover.doneWithoutRollover`, `rollover.doneReassurance`,
+`rollover.seeWallet`, `wallet.periodClosed`, `wallet.periodClosedRollover`,
+`wallet.periodClosedNoRollover`. Also fixed, while in the exact area: a
+pre-existing terminology drift in `es.ts`'s `rollover.delta`, which said
+"monedero" where every other Spanish wallet string (`nav.wallet`,
+`wallet.walletBalance`, …) says "cartera."
+
+### Tests
+
+- `npx tsc -b` clean; `npx vitest run` 1044 passed / 0 failed.
+- `node scripts/verify-browser.mjs` — 66/66, unaffected (the harness's
+  own rollover-adjacent flows, if any, do not assert on this dialog's
+  copy or the table's new column content).
+- Manual, in a real browser, full close cycle: recorded a €50 "paid by
+  me" transaction, opened "Clôturer le mois," confirmed the pre-close
+  screen now reads "Clôturer septembre 2026" with the destination
+  sentence, chose "Clôturer et reporter," confirmed the post-close screen
+  reads "septembre 2026 clôturé / € -50,00 ont été ajoutés à votre Solde
+  personnel / Le Budget restant est inchangé, et toutes les transactions
+  sont conservées," pressed "Voir le portefeuille," landed on the Wallet
+  tab, and confirmed the three balances there matched exactly what the
+  dialog had just said (Solde du portefeuille € -100,00, Budget restant
+  € -50,00 unchanged by the rollover specifically, Solde personnel
+  € -50,00) — cross-checking the dialog's claim against the actual
+  ledger rather than trusting the copy to be honest. The "Budget par
+  mois" table's September row showed the new "Clôturé" badge and "€
+  -50,00 reporté vers le Solde personnel" line.
+
+### Regression
+
+- No change to `closeMonth()`, `calculateRolloverDelta()`, `budgetEffect()`,
+  `walletEffect()`, or any existing column of `budgetPeriods()` — the one
+  new field (`close`) is additive and every existing caller of
+  `BudgetPeriod` ignores fields it doesn't read.
+- `RolloverDialog`'s `onClose` behavior for the "Annuler"/pre-close path
+  is unchanged; only the post-`closeMonth()` path gained a step.
+
+### Remaining concerns
+
+- The confirmation screen's wording was written for the two reachable
+  outcomes (`closed-with-rollover`, `closed-without-rollover`); the third
+  status the domain type allows, `blocked-missing-data`, is handled by the
+  pre-existing `unavailable` branch before a user can ever reach the
+  close buttons, so it was not exercised as a *post-close* screen — by
+  construction, not by omission.
