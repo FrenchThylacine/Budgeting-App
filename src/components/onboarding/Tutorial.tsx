@@ -13,6 +13,36 @@ import {
 import { notificationStatus, requestNotificationPermission } from "../../domain/notifications";
 import { useTranslation } from "../../i18n/useTranslation";
 import { Button } from "../ui/Button";
+import { Thylacine, type ThylacinePose } from "./Thylacine";
+
+/**
+ * Which pose the guide strikes on each step.
+ *
+ * Not an attempt to point precisely at the control — the spotlight ring
+ * already does that exactly, from the real DOM rect. The character's job is
+ * tone: a wave hello, a thinking look on the two steps that are a nuance
+ * rather than an action, a raised hand toward the step that is about to ask
+ * the browser for something, a cheer at the end. Every task step defaults to
+ * "pointing-right" for the same reason the tour fixes its motion direction
+ * one way (see styles-extras.css) — one consistent gesture reads as "look
+ * over here", where a different pose per step would read as a new signal
+ * each time.
+ */
+const STEP_POSE: Record<string, ThylacinePose> = {
+  welcome: "waving",
+  dashboard: "explaining",
+  currencies: "pointing-right",
+  activities: "pointing-right",
+  schedule: "thinking",
+  spending: "pointing-right",
+  funding: "explaining",
+  wallet: "pointing-right",
+  scenarios: "pointing-right",
+  stats: "explaining",
+  reports: "explaining",
+  notifications: "pointing-up",
+  done: "celebrating",
+};
 
 /**
  * The first-run tour.
@@ -394,9 +424,12 @@ export const Tutorial: React.FC<{
           />
         </div>
 
-        <h2 id={titleId} className="text-title tutorial-title">
-          {t(step.titleKey)}
-        </h2>
+        <div className="tutorial-character-row">
+          <Thylacine pose={STEP_POSE[step.id] ?? "neutral"} size={56} className="tutorial-character" />
+          <h2 id={titleId} className="text-title tutorial-title">
+            {t(step.titleKey)}
+          </h2>
+        </div>
         <p className="text-body tutorial-body">{t(step.bodyKey)}</p>
 
         {step.task && (

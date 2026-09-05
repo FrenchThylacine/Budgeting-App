@@ -482,6 +482,84 @@ against this existing set, item by item, rather than assuming a gap:
   keyword on `HeartPulse`, but car/home/life insurance had nothing), and a
   dedicated salary/income icon distinct from generic cash.
 
+---
+
+## Phase 5.6 — Thylacine pilot interactive tutorial
+
+**Date:** 2026-09-05
+**Environment:** same account, desktop 1440×900 and mobile 390×844.
+
+### Investigation
+
+Read `Tutorial.tsx` and `domain/tutorial.ts` in full first — the tour is
+already a data-driven, 13-step, task-gated walkthrough (documented at
+length in its own header comment) with a spotlight that anchors to real
+DOM rects. The brief for this phase is specifically the *character*: a
+consistent illustrated guide across a fixed set of poses, not a rebuild of
+the tour mechanics.
+
+### Implementation
+
+Drafted the character outside the app first (`scratchpad/thylacine-
+draft*.html`, `thylacine-poses.html`) to iterate on the drawing without a
+rebuild loop, checking each version in a real browser before writing any
+React:
+
+- Draft 1 (a quadruped-ish stance, arms the same fill colour as the body)
+  was rejected on sight — the arms were invisible against the torso and
+  the pilot cap read as an odd brown blob rather than a helmet.
+- Draft 2 added a consistent stroke outline to every shape (the fix for
+  "arms invisible against the body"), an upright stance with the two arms
+  free to gesture, ear flaps that actually separate from the head, and a
+  tricolour scarf tying the character to the app's own identity. This is
+  the design that shipped.
+- Verified all 10 required poses (neutral, waving, pointing ×4, explaining,
+  thinking, warning, celebrating) render clearly at a glance before writing
+  the component — one pose ("pointing down") didn't read as a downward
+  point on the first attempt (the arm looked like a resting neutral arm)
+  and was redrawn to extend the arm past the feet.
+
+Built as `src/components/onboarding/Thylacine.tsx`: one shared body/head/
+cap/goggles/scarf, a `pose` prop that swaps in only the arms, eyes and
+(for two poses) an open mouth or sparkle marks. Colours are fixed literals
+rather than theme tokens, matching the existing precedent for brand
+artwork (`docs/DESIGN_SYSTEM.md`'s tricolour band and the loading-screen
+aircraft) — the guide should look the same in a custom purple theme as in
+the default one.
+
+Wired into `Tutorial.tsx` via a `STEP_POSE` map keyed by step id (waving on
+welcome, thinking on the two nuance-only steps, pointing-right as the
+default for task steps, pointing-up on the notifications step, celebrating
+on the last step, explaining elsewhere) and a new `.tutorial-character-row`
+that sits the 56px (44px on phones, `max-width: 480px`) character beside
+the step title.
+
+### Tests
+
+`npx tsc -b` clean; `npx vitest run` 1044 passed/0 failed;
+`verify-tutorial.mjs` 12/12; `verify-browser.mjs` 66/66. Manually walked
+the full 13-step tour end to end at both 1440px and 390px, checking the
+character on the welcome (waving), dashboard (explaining), currencies
+(pointing-right, mid-tab-switch), notifications (pointing-up) and final
+(celebrating) steps — legible and correctly posed at both sizes, no layout
+shift or card-width regression on the narrower anchored-card path.
+
+### Regression
+
+Purely additive: no existing tutorial markup, CSS class, or step data was
+changed beyond the two intentional additions (the character row, the
+`STEP_POSE` map). The harnesses' own DOM-hook assertions (`data-step`,
+`data-task-done`) are untouched.
+
+### Remaining concerns
+
+- The character is currently only used in the onboarding tour. If a later
+  phase wants it elsewhere (an empty-state illustration, an error page),
+  the component already supports that — it takes no tour-specific props.
+- Colours are fixed literals, so a custom theme user never sees their own
+  accent colour reflected in the guide. Confirmed as consistent with the
+  tricolour band's own precedent rather than an oversight.
+
 ### Implementation
 
 Added two icons to the existing Finance category (no new category, no new

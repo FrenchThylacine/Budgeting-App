@@ -2734,6 +2734,14 @@ label:has(> input[type="radio"]) {
 .tutorial-title { margin: 0; }
 .tutorial-body { margin: 0; color: var(--text-secondary); }
 
+.tutorial-character-row { display: flex; align-items: flex-start; gap: var(--space-3); }
+.tutorial-character { flex: 0 0 auto; }
+.tutorial-character-row .tutorial-title { padding-top: 6px; }
+
+@media (max-width: 480px) {
+  .tutorial-character { width: 44px; height: 44px; }
+}
+
 .tutorial-action {
   display: flex;
   align-items: center;
