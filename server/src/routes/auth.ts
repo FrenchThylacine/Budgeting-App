@@ -1,5 +1,5 @@
 import { Router, type Request, type Response } from "express";
-import { AuthRepository, isPlausibleEmail, normalizeEmail } from "../auth/AuthRepository.js";
+import { AuthRepository, isPlausibleEmail, isValidUsername, normalizeEmail } from "../auth/AuthRepository.js";
 import { clearSessionCookie, readSessionToken, setSessionCookie } from "../auth/cookies.js";
 import { sendPasswordResetEmail } from "../auth/email.js";
 import { requireAuth } from "../auth/middleware.js";
@@ -35,8 +35,12 @@ function publicOrigin(): string {
 }
 
 /** Client-visible shape of an account. Never includes the password hash. */
-function publicUser(user: { id: string; email: string }): { id: string; email: string } {
-  return { id: user.id, email: user.email };
+function publicUser(user: { id: string; email: string; username?: string | null }): {
+  id: string;
+  email: string;
+  username: string | null;
+} {
+  return { id: user.id, email: user.email, username: user.username ?? null };
 }
 
 function clientIp(req: Request): string {
@@ -90,8 +94,15 @@ export function createAuthRoutes(): Router {
   /**
    * POST /api/auth/signin
    *
-   * Answers identically for an unknown email and a wrong password, so the
-   * endpoint cannot be used to discover which addresses hold an account.
+   * `email` is a misnomer kept for backward compatibility with every
+   * existing caller — it is really "identifier", and accepts either an
+   * email address or a username. `AuthRepository.findUserByIdentifier`
+   * decides which by whether it contains `@`, which every plausible email
+   * does and no valid username (`USERNAME_PATTERN`) can.
+   *
+   * Answers identically for an unknown identifier and a wrong password, so
+   * the endpoint cannot be used to discover which addresses or usernames
+   * hold an account.
    *
    * `rememberMe` is the only thing that changes here: checked, this is
    * `SESSION_TTL_DAYS` behind a persistent cookie, same as every other
@@ -104,15 +115,15 @@ export function createAuthRoutes(): Router {
   router.post(
     "/signin",
     asyncHandler(async (req: Request, res: Response) => {
-      const { email, password, rememberMe } = req.body ?? {};
-      if (typeof email !== "string" || typeof password !== "string") {
+      const { email: identifier, password, rememberMe } = req.body ?? {};
+      if (typeof identifier !== "string" || typeof password !== "string") {
         throw new AppError(400, "Email and password are required.", "missing_credentials");
       }
 
       const repo = getRepo();
       // Two buckets: one stops a single account being ground through, the other
       // stops one source spraying many accounts. Neither alone covers both.
-      const buckets = [`signin:email:${normalizeEmail(email)}`, `signin:ip:${clientIp(req)}`];
+      const buckets = [`signin:id:${identifier.trim().toLowerCase()}`, `signin:ip:${clientIp(req)}`];
       for (const bucket of buckets) {
         const prior = await repo.recordAndCountAttempts(bucket, SIGNIN_WINDOW_MINUTES);
         if (prior >= SIGNIN_MAX_ATTEMPTS) {
@@ -120,11 +131,11 @@ export function createAuthRoutes(): Router {
         }
       }
 
-      const user = await repo.findUserByEmail(email);
+      const user = await repo.findUserByIdentifier(identifier);
       const ok = user ? await verifyPassword(password, user.passwordHash) : false;
 
       if (!user || !ok) {
-        throw new AppError(401, "Incorrect email or password.", "invalid_credentials");
+        throw new AppError(401, "Incorrect email/username or password.", "invalid_credentials");
       }
 
       // Cost parameters are stored inside the hash, so raising them does not
@@ -174,7 +185,7 @@ export function createAuthRoutes(): Router {
         res.json({ user: null });
         return;
       }
-      res.json({ user: { id: req.auth.userId, email: req.auth.email } });
+      res.json({ user: { id: req.auth.userId, email: req.auth.email, username: req.auth.username } });
     }),
   );
 
@@ -332,7 +343,40 @@ export function createAuthRoutes(): Router {
       }
 
       await repo.updateEmail(user.id, email, new Date().toISOString());
-      res.json({ user: { id: user.id, email: email.trim() } });
+      res.json({ user: publicUser({ id: user.id, email: email.trim(), username: user.username }) });
+    }),
+  );
+
+  /**
+   * POST /api/auth/set-username
+   *
+   * Not behind the current password, unlike change-email and change-password:
+   * a username is a second way to *sign in*, not a channel anything gets
+   * recovered through, so an unattended session choosing or changing it
+   * cannot hand the account to anyone — the attacker would still need the
+   * password. `requireAuth` alone is the right bar.
+   */
+  router.post(
+    "/set-username",
+    requireAuth,
+    asyncHandler(async (req: Request, res: Response) => {
+      const { username } = req.body ?? {};
+      if (typeof username !== "string" || !isValidUsername(username)) {
+        throw new AppError(
+          400,
+          "Usernames are 3-24 characters, start with a letter, and contain only letters, numbers, - and _.",
+          "invalid_username",
+        );
+      }
+
+      const repo = getRepo();
+      const ok = await repo.setUsername(req.auth!.userId, username, new Date().toISOString());
+      if (!ok) {
+        throw new AppError(409, "That username is already taken.", "username_taken");
+      }
+
+      const user = await repo.findUserById(req.auth!.userId);
+      res.json({ user: publicUser(user!) });
     }),
   );
 

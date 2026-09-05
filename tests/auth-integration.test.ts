@@ -570,6 +570,100 @@ describeAuth("authentication", () => {
     expect((await fresh.post("/api/auth/signin", { email: "rotate@example.test", password: next })).status).toBe(200);
   });
 
+  // ─── Username authentication ─────────────────────────────────────────────
+  //
+  // Placed before rate limiting deliberately: "throttles repeated failed
+  // sign-ins" below drives the shared per-IP bucket past its limit and never
+  // resets it, since the whole point is to prove the limit sticks. Every
+  // signin attempt in this suite shares one IP (the test server), so a
+  // username test placed after it inherits a 429 that has nothing to do with
+  // its own username.
+
+  it("has no username until one is set", async () => {
+    const bea = createClient(baseUrl);
+    await bea.post("/api/auth/signup", { email: "bea@example.test", password: PASSWORD });
+    const me = await bea.request("/api/auth/me");
+    expect(me.body.user.username).toBeNull();
+  });
+
+  it("sets a username and signs in with it instead of the email", async () => {
+    const bea = createClient(baseUrl);
+    await bea.post("/api/auth/signin", { email: "bea@example.test", password: PASSWORD });
+    const set = await bea.post("/api/auth/set-username", { username: "bea_the_budgeter" });
+    expect(set.status).toBe(200);
+    expect(set.body.user.username).toBe("bea_the_budgeter");
+
+    const bySameName = createClient(baseUrl);
+    const res = await bySameName.post("/api/auth/signin", {
+      email: "BEA_THE_BUDGETER", // case-insensitive, like email
+      password: PASSWORD,
+    });
+    expect(res.status).toBe(200);
+    expect(res.body.user.email).toBe("bea@example.test");
+  });
+
+  it("keeps signing in by email once a username exists", async () => {
+    const bea = createClient(baseUrl);
+    const res = await bea.post("/api/auth/signin", { email: "bea@example.test", password: PASSWORD });
+    expect(res.status).toBe(200);
+  });
+
+  it("rejects a username that collides, case-insensitively, without touching the holder's account", async () => {
+    const cara = createClient(baseUrl);
+    await cara.post("/api/auth/signup", { email: "cara@example.test", password: PASSWORD });
+    const res = await cara.post("/api/auth/set-username", { username: "Bea_The_Budgeter" });
+    expect(res.status).toBe(409);
+    expect(res.body.code).toBe("username_taken");
+
+    // The rejection did not silently overwrite the original owner's row.
+    const check = await createClient(baseUrl).post("/api/auth/signin", {
+      email: "bea_the_budgeter",
+      password: PASSWORD,
+    });
+    expect(check.body.user.email).toBe("bea@example.test");
+  });
+
+  it("rejects usernames outside the allowed shape without reaching the database", async () => {
+    const dan = createClient(baseUrl);
+    await dan.post("/api/auth/signup", { email: "dan@example.test", password: PASSWORD });
+    for (const bad of ["ab", "1abc", "has space", "has@sign", "-leadinghyphen", "x".repeat(25)]) {
+      const res = await dan.post("/api/auth/set-username", { username: bad });
+      expect(res.status, `"${bad}" must be refused`).toBe(400);
+      expect(res.body.code).toBe("invalid_username");
+    }
+  });
+
+  it("answers identically for an unknown username and a wrong password", async () => {
+    const anon = createClient(baseUrl);
+    const unknownUsername = await anon.post("/api/auth/signin", {
+      email: "no_such_handle",
+      password: PASSWORD,
+    });
+    const wrongPassword = await anon.post("/api/auth/signin", {
+      email: "bea_the_budgeter",
+      password: "wrong-passphrase",
+    });
+    expect(unknownUsername.status).toBe(wrongPassword.status);
+    expect(unknownUsername.body.error).toBe(wrongPassword.body.error);
+  });
+
+  it("lets a username change without requiring the current password", async () => {
+    // Unlike change-email and change-password: a username is a second way to
+    // sign in, not a channel anything is recovered through, so requireAuth
+    // alone is the bar — no currentPassword field is sent here at all.
+    const bea = createClient(baseUrl);
+    await bea.post("/api/auth/signin", { email: "bea@example.test", password: PASSWORD });
+    const res = await bea.post("/api/auth/set-username", { username: "bobby" });
+    expect(res.status).toBe(200);
+    expect(res.body.user.username).toBe("bobby");
+  });
+
+  it("refuses set-username without a session", async () => {
+    const anon = createClient(baseUrl);
+    const res = await anon.post("/api/auth/set-username", { username: "ghost_user" });
+    expect(res.status).toBe(401);
+  });
+
   // ─── Rate limiting ────────────────────────────────────────────────────────
 
   it("throttles repeated failed sign-ins", async () => {

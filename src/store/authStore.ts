@@ -7,6 +7,7 @@ import {
   fetchCurrentUser,
   requestPasswordReset as apiRequestPasswordReset,
   resetPassword as apiResetPassword,
+  setUsername as apiSetUsername,
   signIn as apiSignIn,
   signOut as apiSignOut,
   signUp as apiSignUp,
@@ -35,6 +36,7 @@ interface AuthStore {
   resetPassword: (token: string, password: string) => Promise<boolean>;
   changePassword: (currentPassword: string, newPassword: string) => Promise<boolean>;
   changeEmail: (currentPassword: string, email: string) => Promise<boolean>;
+  setUsername: (username: string) => Promise<boolean>;
   /** Called when the API reports the session is gone mid-use. */
   handleSessionExpired: () => void;
   clearError: () => void;
@@ -148,6 +150,18 @@ export const useAuthStore = create<AuthStore>((set) => ({
     }
   },
 
+  setUsername: async (username) => {
+    set({ busy: true, error: null });
+    try {
+      const user = await apiSetUsername(username);
+      set({ user, busy: false });
+      return true;
+    } catch (error) {
+      set({ busy: false, error: messageFor(error) });
+      return false;
+    }
+  },
+
   handleSessionExpired: () => {
     setCacheOwner(null);
     void clearAllCachedSnapshots().catch(() => undefined);
@@ -182,6 +196,8 @@ const ERROR_KEYS: Record<string, string> = {
   missing_credentials: "auth.error.missingCredentials",
   weak_password: "auth.error.weakPassword",
   password_required: "auth.error.passwordRequired",
+  invalid_username: "auth.error.invalidUsername",
+  username_taken: "auth.error.usernameTaken",
   network: "auth.error.network",
   unauthenticated: "auth.sessionExpired",
 };

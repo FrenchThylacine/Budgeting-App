@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { AtSign, KeyRound, LogOut } from "lucide-react";
+import { AtSign, KeyRound, LogOut, User as UserIcon } from "lucide-react";
 import { useAuthStore } from "../../store/authStore";
 import { Button } from "../ui/Button";
 import { Field } from "../ui/Field";
@@ -28,14 +28,23 @@ export const AccountSettings: React.FC = () => {
   const clearError = useAuthStore((s) => s.clearError);
   const changePassword = useAuthStore((s) => s.changePassword);
   const changeEmail = useAuthStore((s) => s.changeEmail);
+  const setUsernameAction = useAuthStore((s) => s.setUsername);
   const signOut = useAuthStore((s) => s.signOut);
 
-  const [mode, setMode] = useState<"none" | "email" | "password">("none");
+  const [mode, setMode] = useState<"none" | "email" | "password" | "username">("none");
   const [currentPassword, setCurrentPassword] = useState("");
   const [email, setEmail] = useState(user?.email ?? "");
+  const [username, setUsername] = useState(user?.username ?? "");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [done, setDone] = useState<string | null>(null);
+
+  // Letters, digits, - and _, 3-24 characters, starting with a letter — the
+  // same rule the server enforces (`USERNAME_PATTERN`). Checked here too so
+  // an obviously invalid attempt is caught before a round trip, not instead
+  // of the server check.
+  const usernamePattern = /^[a-z][a-z0-9_-]{2,23}$/i;
+  const usernameInvalid = mode === "username" && username.length > 0 && !usernamePattern.test(username);
 
   const close = () => {
     setMode("none");
@@ -43,6 +52,7 @@ export const AccountSettings: React.FC = () => {
     setNewPassword("");
     setConfirmPassword("");
     setEmail(user?.email ?? "");
+    setUsername(user?.username ?? "");
     clearError();
   };
 
@@ -66,6 +76,14 @@ export const AccountSettings: React.FC = () => {
         setDone(t("account.emailUpdated"));
         close();
       }
+      return;
+    }
+    if (mode === "username") {
+      if (usernameInvalid || username.length === 0) return;
+      if (await setUsernameAction(username)) {
+        setDone(t("account.usernameUpdated"));
+        close();
+      }
     }
   };
 
@@ -78,6 +96,10 @@ export const AccountSettings: React.FC = () => {
           <div className="text-footnote">{t("account.signedInAs")}</div>
           <div className="text-callout" style={{ fontWeight: 600, overflowWrap: "anywhere" }}>
             {user.email}
+          </div>
+          <div className="text-footnote" style={{ marginTop: 8 }}>{t("account.username")}</div>
+          <div className="text-callout" style={{ fontWeight: 600, overflowWrap: "anywhere" }}>
+            {user.username ?? t("account.noUsernameSet")}
           </div>
         </div>
 
@@ -92,6 +114,9 @@ export const AccountSettings: React.FC = () => {
             <Button variant="secondary" size="sm" onClick={() => { setDone(null); setMode("email"); }}>
               <AtSign size={14} /> {t("account.changeEmail")}
             </Button>
+            <Button variant="secondary" size="sm" onClick={() => { setDone(null); setMode("username"); }}>
+              <UserIcon size={14} /> {t(user.username ? "account.changeUsername" : "account.setUsername")}
+            </Button>
             <Button variant="secondary" size="sm" onClick={() => { setDone(null); setMode("password"); }}>
               <KeyRound size={14} /> {t("account.changePassword")}
             </Button>
@@ -101,21 +126,27 @@ export const AccountSettings: React.FC = () => {
           </div>
         ) : (
           <form onSubmit={submit} style={{ display: "grid", gap: 12 }}>
-            <Field
-              label={t("account.currentPassword")}
-              hint={t("account.askedForEveryChangeHere")}
-            >
-              <input
-                className="input"
-                type="password"
-                autoComplete="current-password"
-                required
-                value={currentPassword}
-                onChange={(event) => setCurrentPassword(event.target.value)}
-              />
-            </Field>
+            {mode !== "username" && (
+              // Not asked for a username: it is a second way to sign in, not
+              // a channel anything gets recovered through, so an unattended
+              // session choosing one cannot hand the account to anyone —
+              // whoever holds it would still need the password.
+              <Field
+                label={t("account.currentPassword")}
+                hint={t("account.askedForEveryChangeHere")}
+              >
+                <input
+                  className="input"
+                  type="password"
+                  autoComplete="current-password"
+                  required
+                  value={currentPassword}
+                  onChange={(event) => setCurrentPassword(event.target.value)}
+                />
+              </Field>
+            )}
 
-            {mode === "email" ? (
+            {mode === "email" && (
               <Field label={t("account.newEmailAddress")} hint={t("account.yourBudgetIsUnaffectedOnly")}>
                 <input
                   className="input"
@@ -126,7 +157,23 @@ export const AccountSettings: React.FC = () => {
                   onChange={(event) => setEmail(event.target.value)}
                 />
               </Field>
-            ) : (
+            )}
+
+            {mode === "username" && (
+              <Field label={t("account.newUsername")} hint={t("account.usernameHint")}>
+                <input
+                  className="input"
+                  type="text"
+                  autoComplete="username"
+                  required
+                  value={username}
+                  onChange={(event) => setUsername(event.target.value)}
+                  style={{ borderColor: usernameInvalid ? "var(--danger)" : undefined }}
+                />
+              </Field>
+            )}
+
+            {mode === "password" && (
               <>
                 <Field label={t("account.newPassword")}>
                   <input
@@ -170,8 +217,21 @@ export const AccountSettings: React.FC = () => {
               <Button type="button" variant="ghost" size="sm" onClick={close}>
                 {t("common.cancel")}
               </Button>
-              <Button type="submit" variant="primary" size="sm" disabled={busy || mismatch}>
-                {busy ? t("common.saving") : t(mode === "email" ? "account.changeEmail" : "account.changePassword")}
+              <Button
+                type="submit"
+                variant="primary"
+                size="sm"
+                disabled={busy || mismatch || (mode === "username" && (usernameInvalid || username.length === 0))}
+              >
+                {busy
+                  ? t("common.saving")
+                  : t(
+                      mode === "email"
+                        ? "account.changeEmail"
+                        : mode === "username"
+                          ? "account.saveUsername"
+                          : "account.changePassword",
+                    )}
               </Button>
             </div>
           </form>

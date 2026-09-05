@@ -1087,3 +1087,160 @@ session does not lose time to the same thing.
   governs it (the cookie's own `Max-Age`/`Expires` attributes, read
   directly off the wire) rather than by literally quitting and relaunching
   Chrome, which chrome-devtools MCP has no primitive for.
+
+---
+
+## Phase 5.12 — Username authentication
+
+**Date:** 2026-09-05
+**Environment:** `server/src/auth/*` and `server/src/migrations/index.ts`
+read in full first; `tests/auth-integration.test.ts` extended and run
+against a disposable local Postgres schema; manual pass in Chrome via
+chrome-devtools MCP against the project's own local-Postgres dev API
+(restarted first — see [[dev-server-does-not-hot-reload]]), using the same
+disposable account this pass created for Phase 5.11.
+
+### Investigation
+
+No username infrastructure existed anywhere — not in the schema, not in
+`AuthRepository`, not in any route. The brief's "if it does not exist, add
+it coherently" applied in full, so the design questions (character set,
+length, normalization, uniqueness) were this phase's real content rather
+than a formality:
+
+- **Uniqueness collisions.** Mirrored `email`/`email_normalized` exactly:
+  a raw column for display and a case-folded column carrying the actual
+  `UNIQUE` constraint, so "Alice" and "alice" cannot become two different
+  handles — the same reasoning `normalizeEmail`'s own comment already
+  gives for addresses.
+- **Character set and length.** Deliberately narrower than email's own
+  `isPlausibleEmail` (which is permissive because mail delivery is the
+  real test): a username is chosen, not verified externally, so the shape
+  itself has to rule out confusion. `^[a-z][a-z0-9_-]{2,23}$` — 3–24
+  characters, starts with a letter, and **excludes `@`** specifically
+  because that is what lets sign-in tell a username from an email without
+  a database round trip (see below).
+- **"Keep email login."** Read literally: a second *field* for username
+  would make sign-in a choice ("which one is this?"), not an addition.
+  Instead the existing identifier field accepts either, and
+  `AuthRepository.findUserByIdentifier` decides which column to query by
+  whether the string contains `@` — reliable in both directions, since
+  every plausible email requires one and the character set forbids it in
+  every valid username.
+- **"Authentication errors should not unnecessarily reveal account
+  existence."** Already true for email (identical status/body for unknown
+  address vs. wrong password) and unaffected by construction: an unknown
+  *username* now takes the same code path as an unknown *email* through
+  the same `findUserByIdentifier` → null → same 401.
+- Scope boundary: the brief's explicit list for this phase is "login UI
+  ... account settings" — not signup UI. So `/signup` is untouched and a
+  username is only ever acquired afterward, through Account Settings. That
+  sidesteps a question sign-up would otherwise raise (does a username
+  collision at signup get its own error code alongside `email_taken`?)
+  without dropping any requirement the brief actually stated.
+
+### Implementation
+
+- `server/src/migrations/index.ts`: migration `016-username-authentication`
+  — `users.username` (display form) and `users.username_normalized TEXT
+  UNIQUE` (nullable; a `UNIQUE` column permits any number of `NULL`s, so
+  every existing account is valid with no backfill).
+- `server/src/auth/AuthRepository.ts`: `normalizeUsername`,
+  `isValidUsername` (the pattern above), `findUserByIdentifier` (the `@`
+  branch), `setUsername` (unique-violation → `false`, the same
+  detect-by-consequence pattern `createUser`/`updateEmail` already use).
+  `UserRecord`, `SessionRecord`, and every `SELECT` that builds one now
+  carry `username`.
+- `server/src/auth/middleware.ts`: `AuthContext` gains `username`, read
+  once per request from the same session join that already reads `email`
+  — no extra query.
+- `server/src/routes/auth.ts`: `/signin`'s `email` field is now
+  documented as "really identifier" and resolved through
+  `findUserByIdentifier`; its rate-limit bucket renamed from
+  `signin:email:` to `signin:id:` to match. New `POST /api/auth/set-username`
+  behind `requireAuth` only — **not** behind the current password like
+  change-email/change-password, because a username is a second way to
+  sign in, not a channel anything gets recovered through, so choosing one
+  from an unattended session cannot hand the account to anyone who does
+  not already have the password. `publicUser()` and `/me` now include
+  `username`.
+- `src/api/auth.ts`, `src/store/authStore.ts`: `AuthUser.username`,
+  `setUsername()`, two new `ERROR_KEYS` entries.
+- `src/components/auth/AuthScreen.tsx`: the sign-in identifier field is
+  `type="text"`/`autoComplete="username"` with a relabelled "Email or
+  username" — only in sign-in mode; sign-up and password reset still
+  require a real address and keep `type="email"`. (An `email` input
+  enforces the browser's own format constraint on submit, which would
+  make a bare username unsubmittable — this is not cosmetic.)
+- `src/components/settings/AccountSettings.tsx`: a third mode alongside
+  email/password, showing the current username (or "Not set") and a
+  set/change form with no current-password field, matching the
+  password-not-required design above.
+- Five locales: `auth.emailOrUsername(Placeholder)`, `auth.error
+  .invalidUsername`/`usernameTaken`, seven `account.*` strings, and
+  `auth.error.invalidCredentials`'s existing text updated in all five to
+  mention username alongside email/password.
+
+### Tests
+
+- `npx tsc -b` clean; `npx vitest run` 1044 passed / 0 failed.
+- `tests/auth-integration.test.ts`, extended with 8 new cases (38/38
+  total, all pre-existing ones still passing). Placed **before** the
+  file's existing "throttles repeated failed sign-ins" test deliberately
+  — that test drives the shared per-IP rate-limit bucket past its cap and
+  never resets it, so anything added after it inherits a 429 unrelated to
+  its own assertions. Found this the hard way: the first run of these
+  tests failed with 401s/429s that had nothing to do with username logic,
+  traced to (a) an email address that collided with an earlier test's
+  fixture and (b) the rate-limit ordering, both fixed before the suite
+  was trusted. New cases: no username until one is set; setting one and
+  signing in with it (case-insensitively, like email); still signing in
+  by the original email afterward; a case-insensitive collision rejected
+  with `username_taken` *without* touching the original holder's account;
+  every invalid shape (`ab`, `1abc`, `has space`, `has@sign`,
+  `-leadinghyphen`, 25 characters) rejected with `invalid_username`
+  before touching the database; identical error for an unknown username
+  vs. a wrong password; a username change succeeding with no
+  `currentPassword` field sent at all; `set-username` refused with no
+  session.
+- `node scripts/verify-browser.mjs` — 66/66 after one fix: the harness's
+  "a failed sign-in is reported in the reader's language" check selected
+  `input[type=email]` on the sign-in screen, which this phase's own
+  change to `type="text"` broke. Reselected on `input[autocomplete
+  =username]`, which is stable across both input types. `node
+  scripts/verify-tutorial.mjs` — 12/12, unaffected.
+- Manual, in a real browser: set a username ("mrintl_flyer") on the
+  disposable account from Phase 5.11 through the new Account Settings
+  form — button disabled until the pattern matched, success message on
+  save, and the display line updated live. Signed out, then signed back
+  in typing **only the username** (no `@`, nothing email-shaped) — landed
+  back on the same account. This is what actually exercises the relabelled
+  field and the `@`-based routing rather than the API directly.
+
+### Regression
+
+- Rediscovered [[dev-server-does-not-hot-reload]] applies to every backend
+  phase, not just 5.11 — restarted the local-pg dev server before trusting
+  any of this phase's manual browser testing.
+- `/change-email`'s response previously hand-built
+  `{ id, email }` rather than going through `publicUser()`, which would
+  have silently dropped `username` from the response on every email
+  change once one existed. Fixed as part of wiring `publicUser()` through
+  consistently — a genuine latent bug this phase's own addition would
+  otherwise have introduced.
+- No existing call site of `setSessionCookie`, `createUser`, or
+  `findUserByEmail` changed shape; all three are still called exactly as
+  they were everywhere except `/signin`.
+
+### Remaining concerns
+
+- Usernames cannot be chosen at signup, only afterward in Account
+  Settings — a deliberate scope boundary (see Investigation), not an
+  oversight, but worth naming if a future phase wants it.
+- `isValidUsername`'s pattern is enforced both client-side (a mirrored
+  regex in `AccountSettings.tsx`, for instant feedback) and server-side
+  (authoritative). The two are currently kept in sync by hand rather than
+  imported from one place, since the client bundle has no access to
+  `server/src`; a drift between them would produce a confusing "the form
+  said this was fine but the server rejected it" rather than a security
+  issue, since the server always re-checks.
