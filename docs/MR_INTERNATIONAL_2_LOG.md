@@ -857,3 +857,92 @@ itself.
   lead's own artwork (they don't touch or scale with it) so there is no
   specific reason to expect a difference, but it was not exhaustively
   verified across the fleet.
+
+---
+
+## Phase 5.10 — Cloud-like aircraft smoke
+
+**Date:** 2026-09-05
+**Environment:** same account, desktop, screenshots from the Phase 5.8/5.9
+`verify-airshow.mjs` runs — same PNGs, read again against this phase's own
+checklist rather than re-captured, since nothing about the smoke changed
+between them.
+
+### Investigation
+
+The brief's complaint is specific: "The current smoke reads too much like
+thin lines... Do not simply make three rigid coloured lines thicker,"
+with a checklist — soft volume, billowing, turbulence, density variation,
+fading, dispersion, persistence, aircraft-relative emission, correct path
+history, and (on a turn) smoke that follows the flight path and does not
+rotate like a rigid object.
+
+`components/loading/LoadingScreen.tsx` already implements a full
+particle-advection system for the trails, not a drawn line: every frame
+each escort emits a `Puff` at its tailpipe, and from then on the puff
+belongs to the air (`advect()`) — it drifts, gains turbulence as it ages
+(`curl`, scaled from 0 to 1 over its first 0.9s), wanders on two sine
+frequencies, and fades to exactly zero opacity by `PUFF_LIFE` (`PLUME()`).
+Width grows with the *puff's own age* on a square root curve
+(`36 * Math.sqrt(life)`), not linearly, and a per-puff `bulk` term makes
+the ribbon's thickness uneven along its own length rather than a uniform
+tube. Four passes per ribbon (three widening/fading halos plus a dense
+"hot core" over the newest quarter-second) are drawn as one polygon each
+through Catmull-Rom-style quadratic midpoints, then the whole canvas gets
+a 2px blur. None of this was written for this phase — it is the existing
+implementation, and the file's own comments narrate it having already
+been rebuilt away from "the brief's... digital bars" and "three perfectly
+straight bars" in an earlier pass (matching `CHANGELOG.md`'s 4.2.0 "an
+aerobatic routine" and 4.4.0 entries).
+
+### Tests
+
+Read the screenshots from the two prior phases' harness runs against the
+brief's own checklist, at deciles spanning the whole sequence rather than
+one favorable frame:
+
+- **005pc** (333ms in): even this early, both ribbons are already soft
+  and tapered, not a hard line — thin at the tailpipe by design ("thin at
+  the nozzle, billowing as it decays" — real jet exhaust does this too),
+  not thin throughout.
+- **040pc**: full display, mid-manoeuvre — both ribbons show visible
+  curvature, soft edges, and uneven width along their length (the `bulk`
+  lumps), not a uniform tube.
+- **060pc**: the join — the white ribbon curves through the roll-out
+  independently of where the aircraft that laid it now is, which is the
+  brief's specific "smoke follows the flight path... does not rotate like
+  a rigid object" requirement, checked on the one manoeuvre (a roll-out)
+  that would expose a rigid-body implementation immediately.
+- **090pc**: departure — all three ribbons visibly stretch and thin as
+  their aircraft outrun them, which is the brief's "when aircraft
+  accelerate, smoke stretches... older smoke disperses" requirement.
+- Colour: blue, white, red preserved throughout, white deliberately drawn
+  at lower ink (`0.85×`) than blue/red per an existing comment about white
+  reading brighter than the other two at equal alpha against the navy sky
+  — a density-matching decision already made, not a rigid-line artefact.
+
+### Results
+
+🟢 Not reproduced, on the same evidence pattern as Phase 5.8: the brief's
+checklist reads as a description of the smoke system's *design goals*,
+and every one of them is independently implemented and visible in the
+existing screenshots, including the one case (the join) most likely to
+expose a rigid-line shortcut. `CHANGELOG.md`'s 4.2.0–4.4.0 entries and
+this file's own header comments (`§1.17`–`§1.22` references) indicate
+this was rebuilt from a "three rigid coloured lines" version some time
+before this pass, for the reasons the brief now describes.
+
+### Implementation
+
+None. As with Phase 5.8, verified rather than patched.
+
+### Regression
+
+N/A — no code changed.
+
+### Remaining concerns
+
+- None specific to smoke quality. The one open item from this cluster of
+  phases is the one already noted in 5.9: the warp streaks were not
+  cross-checked against every aircraft skin, which is unrelated to the
+  smoke system.
