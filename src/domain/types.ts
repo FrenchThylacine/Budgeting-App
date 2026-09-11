@@ -160,6 +160,8 @@ export interface Settings {
   selectedPeriodMode: PeriodMode;
   selectedSeason: string;
   baseCurrency: CurrencyCode;
+  /** Currency used for wallet totals; absent means the app currency. */
+  walletCurrency?: CurrencyCode;
   /**
    * The currencies offered in the app's dropdowns.
    *
@@ -593,6 +595,10 @@ export interface SpendingEntry {
   activityId?: string;
   amount: number;
   currency: CurrencyCode;
+  /** Historical wallet conversion, captured when this transaction was recorded. */
+  walletAmount?: number;
+  walletCurrency?: CurrencyCode;
+  walletRate?: number;
   recurrenceType: RecurrenceType;
   /**
    * @deprecated Follows from nothing and is read by nothing.
@@ -694,6 +700,10 @@ export interface WalletEntry {
    */
   amount: number;
   currency: CurrencyCode;
+  /** Historical wallet conversion, captured when this movement was recorded. */
+  walletAmount?: number;
+  walletCurrency?: CurrencyCode;
+  walletRate?: number;
   source: string;
   type: WalletEntryType;
   note: string;

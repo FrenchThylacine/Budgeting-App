@@ -336,6 +336,17 @@ export async function runMigrations(
         await sql`ALTER TABLE wallet_entries ADD COLUMN IF NOT EXISTS date TEXT;`;
       },
     },
+    {
+      name: "016-historical-wallet-conversion",
+      run: async (sql: NeonQueryFunction<any, any>) => {
+        await sql`ALTER TABLE spending_entries ADD COLUMN IF NOT EXISTS wallet_amount DOUBLE PRECISION;`;
+        await sql`ALTER TABLE spending_entries ADD COLUMN IF NOT EXISTS wallet_currency TEXT;`;
+        await sql`ALTER TABLE spending_entries ADD COLUMN IF NOT EXISTS wallet_rate DOUBLE PRECISION;`;
+        await sql`ALTER TABLE wallet_entries ADD COLUMN IF NOT EXISTS wallet_amount DOUBLE PRECISION;`;
+        await sql`ALTER TABLE wallet_entries ADD COLUMN IF NOT EXISTS wallet_currency TEXT;`;
+        await sql`ALTER TABLE wallet_entries ADD COLUMN IF NOT EXISTS wallet_rate DOUBLE PRECISION;`;
+      },
+    },
   ];
 
 

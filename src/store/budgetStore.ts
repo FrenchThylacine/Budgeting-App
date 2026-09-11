@@ -37,6 +37,7 @@ import { useAuthStore } from "./authStore";
 import { isViewingHistoricalPeriod } from "../utils/formatters";
 import { periodToken } from "../domain/periods";
 import { storedText } from "../domain/storedText";
+import { convertAmount } from "../domain/currency";
 
 /** Settings fields that define which period is being viewed. */
 const PERIOD_SETTING_KEYS = [
@@ -569,12 +570,15 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
       get,
       (snapshot) => {
         const year = entry.year;
+        const walletCurrency = snapshot.settings.walletCurrency ?? snapshot.settings.baseCurrency;
+        const walletAmount = convertAmount(entry.amount, entry.currency, walletCurrency, snapshot.settings.exchangeRates);
         ensureYearRecord(snapshot, year).spendingEntries.push({
           ...entry,
           year,
           id: entry.id ?? id("spend"),
           createdAt: timestamp,
           updatedAt: timestamp,
+          ...(walletAmount != null ? { walletAmount, walletCurrency, walletRate: entry.amount ? walletAmount / entry.amount : undefined } : {}),
         });
       },
       "spending",
@@ -593,6 +597,13 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
         const entry = sourceRecord?.spendingEntries.find((item) => item.id === idValue);
         if (!entry || !sourceRecord) return;
         Object.assign(entry, patch);
+        if (patch.amount !== undefined || patch.currency !== undefined) {
+          const walletCurrency = snapshot.settings.walletCurrency ?? snapshot.settings.baseCurrency;
+          const walletAmount = convertAmount(entry.amount, entry.currency, walletCurrency, snapshot.settings.exchangeRates);
+          entry.walletAmount = walletAmount ?? undefined;
+          entry.walletCurrency = walletAmount == null ? undefined : walletCurrency;
+          entry.walletRate = walletAmount == null || entry.amount === 0 ? undefined : walletAmount / entry.amount;
+        }
         if (patch.date) {
           entry.month = monthFromDateInput(patch.date);
           entry.week = weekFromDateInput(patch.date);
@@ -854,6 +865,8 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
       set,
       get,
       (snapshot) => {
+        const walletCurrency = snapshot.settings.walletCurrency ?? snapshot.settings.baseCurrency;
+        const walletAmount = convertAmount(entry.amount, entry.currency, walletCurrency, snapshot.settings.exchangeRates);
         currentYear(snapshot).walletEntries.push(
           // The caller states both halves of the money, which is the whole
           // contract; `movement` is what makes that impossible to half-do.
@@ -863,6 +876,8 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
             source: entry.source,
             note: entry.note ?? "",
             date: entry.date,
+            ...(walletAmount != null ? { walletAmount, walletCurrency, walletRate: entry.amount ? walletAmount / entry.amount : undefined } : {}),
+            settings: snapshot.settings,
           }),
         );
       },
@@ -898,6 +913,7 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
           source: source?.trim() || storedText("wallet.allocationSource", { month: monthName(month), year }),
           type: ALLOCATION_TYPE,
           note: note?.trim() ?? "",
+            settings: snapshot.settings,
           }),
         );
       },
@@ -931,6 +947,7 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
             type: TRANSFER_TYPE,
             source: storedText("wallet.transferSource"),
             note: note?.trim() || storedText("wallet.transferLedgerNote"),
+            settings: snapshot.settings,
           }),
         );
       },
@@ -977,6 +994,7 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
               type: TRANSFER_TYPE,
               source: storedText("wallet.transferSource"),
               note: note?.trim() || storedText("wallet.transferLedgerNote"),
+              settings: draft.settings,
             }),
           );
         }
@@ -1033,6 +1051,7 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
               type: TRANSFER_TYPE,
               source: storedText("wallet.resetSource"),
               note: storedText("wallet.resetClaimNote"),
+              settings: draft.settings,
             }),
           );
         }
@@ -1058,6 +1077,7 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
               type: "adjustment",
               source: storedText("wallet.resetSource"),
               note: storedText("wallet.resetLedgerNote"),
+              settings: draft.settings,
             }),
           );
         }
@@ -1076,7 +1096,16 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
       get,
       (snapshot) => {
         const entry = currentYear(snapshot).walletEntries.find((item) => item.id === idValue);
-        if (entry) Object.assign(entry, patch);
+        if (entry) {
+          Object.assign(entry, patch);
+          if (patch.amount !== undefined || patch.currency !== undefined) {
+            const walletCurrency = snapshot.settings.walletCurrency ?? snapshot.settings.baseCurrency;
+            const walletAmount = convertAmount(entry.amount, entry.currency, walletCurrency, snapshot.settings.exchangeRates);
+            entry.walletAmount = walletAmount ?? undefined;
+            entry.walletCurrency = walletAmount == null ? undefined : walletCurrency;
+            entry.walletRate = walletAmount == null || entry.amount === 0 ? undefined : walletAmount / entry.amount;
+          }
+        }
       },
       "wallet",
       storedText("audit.walletUpdated"),
@@ -1152,6 +1181,7 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
               type: "rollover",
               source: storedText("wallet.monthEndRollover"),
               note: delta < 0 ? storedText("audit.rolloverNegative") : storedText("audit.rolloverPositive"),
+              settings: snapshot.settings,
             }),
           );
           closeRecord = {
@@ -1694,8 +1724,12 @@ function movement(
   year: number,
   month: number,
   money: CanonicalMoney,
-  rest: { id: string; type: WalletEntry["type"]; source: string; note: string; date?: string },
+  rest: { id: string; type: WalletEntry["type"]; source: string; note: string; date?: string; settings?: Settings },
 ): WalletEntry {
+  const walletCurrency = rest.settings?.walletCurrency ?? rest.settings?.baseCurrency;
+  const walletAmount = walletCurrency && rest.settings
+    ? convertAmount(money.amount, money.currency, walletCurrency, rest.settings.exchangeRates) ?? undefined
+    : undefined;
   return {
     id: rest.id,
     year,
@@ -1703,6 +1737,7 @@ function movement(
     date: rest.date ?? todayDateInput(),
     amount: money.amount,
     currency: money.currency,
+    ...(walletAmount != null && walletCurrency ? { walletAmount, walletCurrency, walletRate: money.amount ? walletAmount / money.amount : undefined } : {}),
     source: rest.source,
     type: rest.type,
     note: rest.note,

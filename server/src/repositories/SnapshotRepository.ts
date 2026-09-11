@@ -600,8 +600,8 @@ export class SnapshotRepository {
         text: `
         INSERT INTO spending_entries
         (id, year_id, month, week, date, category_id, activity_id, amount, currency,
-         recurrence_type, is_piloting, source, note, wishlist_item_id, created_at, updated_at)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+         wallet_amount, wallet_currency, wallet_rate, recurrence_type, is_piloting, source, note, wishlist_item_id, created_at, updated_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
         ON CONFLICT (id) DO UPDATE SET
           month = EXCLUDED.month,
           week = EXCLUDED.week,
@@ -610,6 +610,9 @@ export class SnapshotRepository {
           activity_id = EXCLUDED.activity_id,
           amount = EXCLUDED.amount,
           currency = EXCLUDED.currency,
+          wallet_amount = EXCLUDED.wallet_amount,
+          wallet_currency = EXCLUDED.wallet_currency,
+          wallet_rate = EXCLUDED.wallet_rate,
           recurrence_type = EXCLUDED.recurrence_type,
           is_piloting = EXCLUDED.is_piloting,
           source = EXCLUDED.source,
@@ -628,6 +631,9 @@ export class SnapshotRepository {
           entry.activityId ?? null,
           entry.amount,
           entry.currency,
+          entry.walletAmount ?? null,
+          entry.walletCurrency ?? null,
+          entry.walletRate ?? null,
           entry.recurrenceType,
           entry.isPiloting === true,
           entry.source || "personal",
@@ -734,13 +740,16 @@ export class SnapshotRepository {
     for (const entry of yearRecord.walletEntries) {
       writes.push({
         text: `
-        INSERT INTO wallet_entries (id, year_id, month, date, amount, currency, source, type, note, created_at)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        INSERT INTO wallet_entries (id, year_id, month, date, amount, currency, wallet_amount, wallet_currency, wallet_rate, source, type, note, created_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
         ON CONFLICT (id) DO UPDATE SET
           month = EXCLUDED.month,
           date = EXCLUDED.date,
           amount = EXCLUDED.amount,
           currency = EXCLUDED.currency,
+          wallet_amount = EXCLUDED.wallet_amount,
+          wallet_currency = EXCLUDED.wallet_currency,
+          wallet_rate = EXCLUDED.wallet_rate,
           source = EXCLUDED.source,
           type = EXCLUDED.type,
           note = EXCLUDED.note
@@ -772,6 +781,9 @@ export class SnapshotRepository {
           entry.date ?? null,
           Number.isFinite(entry.amount) ? entry.amount : 0,
           entry.currency ?? "EUR",
+          entry.walletAmount ?? null,
+          entry.walletCurrency ?? null,
+          entry.walletRate ?? null,
           entry.source ?? "",
           entry.type ?? "adjustment",
           entry.note ?? null,
@@ -999,6 +1011,9 @@ export class SnapshotRepository {
       activityId: row.activity_id ?? undefined,
       amount: Number(row.amount),
       currency: row.currency,
+      walletAmount: row.wallet_amount != null ? Number(row.wallet_amount) : undefined,
+      walletCurrency: row.wallet_currency ?? undefined,
+      walletRate: row.wallet_rate != null ? Number(row.wallet_rate) : undefined,
       recurrenceType: row.recurrence_type,
       isPiloting: row.is_piloting === 1 || row.is_piloting === true,
       source: row.source,
@@ -1044,6 +1059,9 @@ export class SnapshotRepository {
       date: row.date ?? undefined,
       amount: Number(row.amount),
       currency: row.currency,
+      walletAmount: row.wallet_amount != null ? Number(row.wallet_amount) : undefined,
+      walletCurrency: row.wallet_currency ?? undefined,
+      walletRate: row.wallet_rate != null ? Number(row.wallet_rate) : undefined,
       source: row.source,
       type: row.type,
       note: row.note ?? "",

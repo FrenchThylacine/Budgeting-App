@@ -240,6 +240,7 @@ function compose(
   effect: (entry: Pick<WalletEntry, "type" | "amount">) => number,
 ): WalletCurrencySlice[] {
   const byCurrency = new Map<CurrencyCode, number>();
+  const convertedByCurrency = new Map<CurrencyCode, number>();
 
   for (const entry of allWalletEntries(snapshot)) {
     const moved = effect(entry);
@@ -247,6 +248,11 @@ function compose(
     // Accumulated in the entry's own currency: this is the number the reader
     // put in, and it stays that number.
     byCurrency.set(entry.currency, (byCurrency.get(entry.currency) ?? 0) + moved);
+    const target = snapshot.settings.walletCurrency ?? snapshot.settings.baseCurrency;
+    const converted = entry.walletCurrency === target && entry.walletAmount != null
+      ? entry.walletAmount * (moved / entry.amount)
+      : normalizeAmount(moved, entry.currency, snapshot.settings);
+    convertedByCurrency.set(entry.currency, (convertedByCurrency.get(entry.currency) ?? 0) + converted);
   }
 
   /*
@@ -264,13 +270,18 @@ function compose(
   for (const entry of walletSpending(snapshot, ledgerEpoch(snapshot))) {
     if (!entry.amount) continue;
     byCurrency.set(entry.currency, (byCurrency.get(entry.currency) ?? 0) - Math.abs(entry.amount));
+    const target = snapshot.settings.walletCurrency ?? snapshot.settings.baseCurrency;
+    const converted = entry.walletCurrency === target && entry.walletAmount != null
+      ? -Math.abs(entry.walletAmount)
+      : -Math.abs(normalizeAmount(entry.amount, entry.currency, snapshot.settings));
+    convertedByCurrency.set(entry.currency, (convertedByCurrency.get(entry.currency) ?? 0) + converted);
   }
 
   const slices = [...byCurrency.entries()]
     .map(([currency, amount]) => ({
       currency,
       amount,
-      converted: normalizeAmount(amount, currency, snapshot.settings),
+      converted: convertedByCurrency.get(currency) ?? normalizeAmount(amount, currency, snapshot.settings),
       share: null as number | null,
     }))
     // A currency whose balance has netted to nothing is not part of the
@@ -329,7 +340,11 @@ export function walletState(snapshot: BudgetSnapshot): WalletState {
   const entries = allWalletEntries(snapshot);
   const spending = walletSpending(snapshot, epoch);
 
-  const base = (amount: number, currency: CurrencyCode) => normalizeAmount(amount, currency, snapshot.settings);
+  const walletCurrency = snapshot.settings.walletCurrency ?? snapshot.settings.baseCurrency;
+  const base = (amount: number, currency: CurrencyCode, historical?: { amount?: number; walletAmount?: number; walletCurrency?: CurrencyCode }) =>
+    amount !== 0 && historical?.amount && historical.walletCurrency === walletCurrency && historical.walletAmount != null
+      ? historical.walletAmount * (amount / historical.amount)
+      : normalizeAmount(amount, currency, { ...snapshot.settings, baseCurrency: walletCurrency });
 
   const movements: WalletMovement[] = [];
 
@@ -341,12 +356,12 @@ export function walletState(snapshot: BudgetSnapshot): WalletState {
   let moneyOut = 0;
 
   for (const entry of entries) {
-    const walletDelta = base(walletEffect(entry), entry.currency);
-    const budgetDelta = base(budgetEffect(entry), entry.currency);
+    const walletDelta = base(walletEffect(entry), entry.currency, entry);
+    const budgetDelta = base(budgetEffect(entry), entry.currency, entry);
     walletBalance += walletDelta;
     budgetRemaining += budgetDelta;
-    if (entry.type === ALLOCATION_TYPE) allocatedTotal += base(entry.amount, entry.currency);
-    if (entry.type === TRANSFER_TYPE) transferredToPersonal += base(entry.amount, entry.currency);
+    if (entry.type === ALLOCATION_TYPE) allocatedTotal += base(entry.amount, entry.currency, entry);
+    if (entry.type === TRANSFER_TYPE) transferredToPersonal += base(entry.amount, entry.currency, entry);
     if (walletDelta > 0) moneyIn += walletDelta;
     if (walletDelta < 0) moneyOut += -walletDelta;
 
@@ -368,7 +383,7 @@ export function walletState(snapshot: BudgetSnapshot): WalletState {
   }
 
   for (const entry of spending) {
-    const amount = base(entry.amount, entry.currency);
+    const amount = base(entry.amount, entry.currency, entry);
     walletBalance -= amount;
     budgetRemaining -= amount;
     moneyOut += amount;
@@ -404,7 +419,7 @@ export function walletState(snapshot: BudgetSnapshot): WalletState {
     // money has been spent on things this ledger never received cash for.
     personalBalance: walletBalance - budgetRemaining,
     allocatedTotal,
-    budgetSpent: spending.reduce((total, entry) => total + base(entry.amount, entry.currency), 0),
+    budgetSpent: spending.reduce((total, entry) => total + base(entry.amount, entry.currency, entry), 0),
     transferredToPersonal,
     moneyIn,
     moneyOut,

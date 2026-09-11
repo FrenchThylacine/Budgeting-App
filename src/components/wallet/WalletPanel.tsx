@@ -3,7 +3,6 @@ import { ArrowDownLeft, ArrowUpRight, Info, Plus, RotateCcw, Trash2, Wallet as W
 import { currencyOptionsFor, formatMoney } from "../../domain/currency";
 import { monthName, todayDateInput, isLastDayOfMonth, monthKey } from "../../domain/dates";
 import { useBudgetStore } from "../../store/budgetStore";
-import { formatDualMoney } from "../../utils/formatters";
 import {
   budgetPeriods,
   leftoverBudget,
@@ -145,7 +144,8 @@ export const WalletPanel: React.FC = () => {
   const askNow = hasLeftover && monthEnds && !deferred;
   const deferredMark = hasLeftover && monthEnds && deferred;
 
-  const money = (value: number | null | undefined) => formatDualMoney(value, snapshot.settings);
+  const walletCurrency = snapshot.settings.walletCurrency ?? snapshot.settings.baseCurrency;
+  const money = (value: number | null | undefined) => formatMoney(value, walletCurrency, snapshot.settings.currencyDisplayMode);
   // Through `Intl`, not the English-only `monthName()`: "Prévu pour August"
   // is an English word in a French sentence.
   const localMonth = (month: number) => monthNames()[month - 1] ?? monthName(month);
@@ -187,6 +187,18 @@ export const WalletPanel: React.FC = () => {
           </div>
         }
       >
+        <label className="field" style={{ maxWidth: 220 }}>
+          <span className="field-label">{t("wallet.title")}</span>
+          <select
+            className="select"
+            value={walletCurrency}
+            onChange={(event) => updateSettings({ walletCurrency: event.target.value as CurrencyCode })}
+          >
+            {currencyOptionsFor(snapshot.settings, walletCurrency).map((currency) => (
+              <option key={currency}>{currency}</option>
+            ))}
+          </select>
+        </label>
 
         {!mutable && <div className="historical-banner">{t("common.readOnly")}</div>}
 
@@ -204,19 +216,19 @@ export const WalletPanel: React.FC = () => {
             <div className="text-footnote">
               <WalletIcon size={13} aria-hidden="true" /> {t("wallet.walletBalance")}
             </div>
-            <div className="money wallet-balance-value"><Total amount={wallet.walletBalance} /></div>
+            <div className="money wallet-balance-value"><Total amount={wallet.walletBalance} currency={walletCurrency} /></div>
             <div className="text-caption">{t("wallet.walletBalanceHint")}</div>
           </div>
 
           <div className="wallet-balance" data-tone="budget">
             <div className="text-footnote">{t("wallet.budgetRemaining")}</div>
-            <div className="money wallet-balance-value"><Total amount={wallet.budgetRemaining} /></div>
+            <div className="money wallet-balance-value"><Total amount={wallet.budgetRemaining} currency={walletCurrency} /></div>
             <div className="text-caption">{t("wallet.budgetRemainingHint")}</div>
           </div>
 
           <div className="wallet-balance" data-tone="personal">
             <div className="text-footnote">{t("wallet.personalBalance")}</div>
-            <div className="money wallet-balance-value"><Total amount={wallet.personalBalance} /></div>
+            <div className="money wallet-balance-value"><Total amount={wallet.personalBalance} currency={walletCurrency} /></div>
             <div className="text-caption">{t("wallet.personalBalanceHint")}</div>
           </div>
         </div>
@@ -355,7 +367,7 @@ export const WalletPanel: React.FC = () => {
                   <MovementRow
                     movement={movement}
                     mutable={editable}
-                    displayCurrency={snapshot.settings.baseCurrency}
+                    displayCurrency={walletCurrency}
                     displayMode={snapshot.settings.currencyDisplayMode}
                     money={money}
                     formatDate={formatDate}
