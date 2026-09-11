@@ -596,6 +596,14 @@ const MoneySettings: React.FC = () => {
               </select>
             </label>
           </div>
+          <label className="settings-check" style={{ marginTop: 12 }}>
+            <input
+              type="checkbox"
+              checked={settings.walletRoundUp === true}
+              onChange={(e) => update({ walletRoundUp: e.target.checked })}
+            />
+            <span>{t("settings.walletRoundUp")}</span>
+          </label>
         </div>
       </Section>
 

@@ -208,15 +208,6 @@ export const WalletPanel: React.FC = () => {
             ))}
           </select>
         </label>
-        <label className="settings-check">
-          <input
-            type="checkbox"
-            checked={snapshot.settings.walletRoundUp === true}
-            onChange={(event) => updateSettings({ walletRoundUp: event.target.checked })}
-          />
-          <span>{t("settings.walletRoundUp")}</span>
-        </label>
-
         {!mutable && <div className="historical-banner">{t("common.readOnly")}</div>}
 
         {notice && (
