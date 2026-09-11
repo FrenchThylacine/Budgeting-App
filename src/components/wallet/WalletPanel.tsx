@@ -10,7 +10,7 @@ import {
   walletState,
   type WalletMovement,
 } from "../../domain/wallet";
-import type { BudgetSnapshot, CurrencyCode, CurrencyDisplayMode, SwipeActionId, WalletEntry, WalletEntryType } from "../../domain/types";
+import type { BudgetSnapshot, CurrencyCode, CurrencyDisplayMode, Loan, SwipeActionId, WalletEntry, WalletEntryType } from "../../domain/types";
 import { useTranslation } from "../../i18n/useTranslation";
 import { Badge } from "../ui/Badge";
 import { Button } from "../ui/Button";
@@ -84,6 +84,10 @@ export const WalletPanel: React.FC = () => {
   const allocateBudget = useBudgetStore((s) => s.allocateBudget);
   const sweepBudgetToPersonal = useBudgetStore((s) => s.sweepBudgetToPersonal);
   const transferPersonalToBudget = useBudgetStore((s) => s.transferPersonalToBudget);
+  const loans = snapshot.settings.loans ?? [];
+  const addLoan = useBudgetStore((s) => s.addLoan);
+  const updateLoan = useBudgetStore((s) => s.updateLoan);
+  const convertLoan = useBudgetStore((s) => s.convertLoan);
   const mutable = useBudgetStore((s) => s.isCurrentPeriodMutable)();
 
   const wallet = useMemo(() => walletState(snapshot), [snapshot]);
@@ -121,6 +125,7 @@ export const WalletPanel: React.FC = () => {
 
   /** The entry currently open for editing, or null. */
   const [editingEntry, setEditingEntry] = useState<WalletEntry | null>(null);
+  const [loanOpen, setLoanOpen] = useState(false);
 
   /*
    * The same gesture preferences the other lists read, for a surface that is
@@ -394,6 +399,18 @@ export const WalletPanel: React.FC = () => {
         )}
       </Section>
 
+      <Section title={t("wallet.loans")} action={<Button size="sm" variant="secondary" onClick={() => setLoanOpen(true)} disabled={!mutable}><Plus size={14} /> {t("wallet.addLoan")}</Button>}>
+        {loans.length === 0 ? <EmptyState title={t("wallet.loans")} description={t("wallet.ledgerEmptyBody")} /> : loans.map((loan) => (
+          <div className="item-row" key={loan.id}>
+            <div style={{ flex: 1 }}><strong>{loan.person}</strong><div className="text-footnote">{formatDate(loan.date)} · {formatMoney(loan.amount, loan.currency, snapshot.settings.currencyDisplayMode)}</div></div>
+            {!loan.returnedAt && !loan.convertedAt && <div className="row-actions"><Button size="sm" variant="ghost" onClick={() => updateLoan(loan.id, { returnedAt: new Date().toISOString() })}>{t("wallet.loanReturned")}</Button><Button size="sm" variant="ghost" onClick={() => convertLoan(loan.id)}>{t("wallet.loanConvert")}</Button></div>}
+            {(loan.returnedAt || loan.convertedAt) && <span className="text-footnote">{loan.convertedAt ? t("wallet.loanConverted") : t("wallet.loanReturned")}</span>}
+          </div>
+        ))}
+      </Section>
+
+      {loanOpen && <LoanSheet onClose={() => setLoanOpen(false)} onSubmit={(loan) => { addLoan(loan); setLoanOpen(false); }} />}
+
       {allocationOpen && (
         <AllocationSheet
           suggested={plan.suggested}
@@ -605,6 +622,26 @@ const MovementRow: React.FC<{
  * user: the app calculating that €600 is needed is not evidence that €600 was
  * received, and a treasury that assumes otherwise is fiction.
  */
+const LoanSheet: React.FC<{ onClose: () => void; onSubmit: (loan: Omit<Loan, "id">) => void }> = ({ onClose, onSubmit }) => {
+  const { t } = useTranslation();
+  const settings = useBudgetStore((s) => s.snapshot.settings);
+  const [direction, setDirection] = useState<Loan["direction"]>("lent");
+  const [amount, setAmount] = useState("");
+  const [currency, setCurrency] = useState<CurrencyCode>(settings.walletCurrency ?? settings.baseCurrency);
+  const [person, setPerson] = useState("");
+  const [date, setDate] = useState(todayDateInput());
+  const valid = Number(amount) > 0 && person.trim() !== "" && date !== "";
+  return <EditorSheet title={t("wallet.addLoan")} onClose={onClose} footer={<><Button variant="ghost" onClick={onClose}>{t("common.cancel")}</Button><Button variant="primary" type="submit" form="loan-form" disabled={!valid}>{t("common.add")}</Button></>}>
+    <form id="loan-form" onSubmit={(event) => { event.preventDefault(); if (valid) onSubmit({ direction, amount: Number(amount), currency, person, date }); }} style={{ display: "grid", gap: 12 }}>
+      <Field label={t("wallet.loanPerson")}><input className="input" value={person} onChange={(e) => setPerson(e.target.value)} required autoFocus /></Field>
+      <Field label={t("spending.amount")}><input className="input" type="number" min="0" step="any" value={amount} onChange={(e) => setAmount(e.target.value)} required /></Field>
+      <Field label={t("spending.currency")}><select className="select" value={currency} onChange={(e) => setCurrency(e.target.value as CurrencyCode)}>{currencyOptionsFor(settings, currency).map((code) => <option key={code}>{code}</option>)}</select></Field>
+      <Field label={t("wallet.loanLent")}><select className="select" value={direction} onChange={(e) => setDirection(e.target.value as Loan["direction"])}><option value="lent">{t("wallet.loanLent")}</option><option value="borrowed">{t("wallet.loanBorrowed")}</option></select></Field>
+      <Field label={t("spending.date")}><input className="input" type="date" value={date} onChange={(e) => setDate(e.target.value)} required /></Field>
+    </form>
+  </EditorSheet>;
+};
+
 const AllocationSheet: React.FC<{
   suggested: number;
   monthLabel: string;

@@ -164,6 +164,7 @@ export interface Settings {
   walletCurrency?: CurrencyCode;
   /** Round newly captured wallet conversions upward once. */
   walletRoundUp?: boolean;
+  loans?: Loan[];
   /**
    * The currencies offered in the app's dropdowns.
    *
@@ -337,6 +338,17 @@ export interface Settings {
    * round-trip unchanged rather than losing a key on every save.
    */
   ignoreNonBudgetSpending?: boolean;
+}
+
+export interface Loan {
+  id: string;
+  direction: "lent" | "borrowed";
+  amount: number;
+  currency: CurrencyCode;
+  person: string;
+  date: string;
+  returnedAt?: string;
+  convertedAt?: string;
 }
 
 /**

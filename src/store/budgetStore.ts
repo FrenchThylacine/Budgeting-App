@@ -25,6 +25,7 @@ import type {
   Settings,
   SpendingEntry,
   WalletEntry,
+  Loan,
   WishlistItem,
   YearRecord,
 } from "../domain/types";
@@ -185,6 +186,9 @@ interface BudgetStore {
    */
   transferBudgetToPersonal: (money: CanonicalMoney, note?: string) => void;
   transferPersonalToBudget: (money: CanonicalMoney, note?: string) => void;
+  addLoan: (loan: Omit<Loan, "id">) => void;
+  updateLoan: (id: string, patch: Partial<Loan>) => void;
+  convertLoan: (id: string) => void;
   /** Move the whole leftover budget claim across, one entry per currency. */
   sweepBudgetToPersonal: (note?: string) => void;
   updateWalletEntry: (id: string, patch: Partial<WalletEntry>) => void;
@@ -978,6 +982,37 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
         }),
       );
     }, "wallet", storedText("audit.walletAdded"), { year, amount: money.amount, currency: money.currency });
+  },
+
+  addLoan: (loan) => {
+    if (!get().isCurrentPeriodMutable() || loan.amount <= 0 || !loan.person.trim()) return;
+    commit(set, get, (snapshot) => {
+      snapshot.settings.loans = [...(snapshot.settings.loans ?? []), { ...loan, id: id("loan"), person: loan.person.trim() }];
+    }, "wallet", storedText("audit.walletAdded"), loan);
+  },
+
+  updateLoan: (loanId, patch) => {
+    commit(set, get, (snapshot) => {
+      const loan = snapshot.settings.loans?.find((item) => item.id === loanId);
+      if (loan) Object.assign(loan, patch);
+    }, "wallet", storedText("audit.walletUpdated"), { loanId, patch });
+  },
+
+  convertLoan: (loanId) => {
+    if (!get().isCurrentPeriodMutable()) return;
+    const loan = get().snapshot.settings.loans?.find((item) => item.id === loanId);
+    if (!loan || loan.convertedAt || loan.returnedAt) return;
+    const date = loan.date;
+    commit(set, get, (snapshot) => {
+      const target = snapshot.settings.loans?.find((item) => item.id === loanId);
+      if (!target) return;
+      const year = Number(date.slice(0, 4));
+      ensureYearRecord(snapshot, year).walletEntries.push(movement(year, Number(date.slice(5, 7)), {
+        amount: target.direction === "lent" ? target.amount : -target.amount,
+        currency: target.currency,
+      }, { id: id("loan-conversion"), type: "adjustment", source: storedText("wallet.loanConversion"), note: target.person, date, settings: snapshot.settings }));
+      target.convertedAt = new Date().toISOString();
+    }, "wallet", storedText("audit.walletAdded"), { loanId });
   },
 
   /**
