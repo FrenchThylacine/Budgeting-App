@@ -46,6 +46,7 @@ import { gesturesFor } from "../../domain/gestures";
 /** Ledger types the "record a movement" form offers, in the order it offers them. */
 const MOVEMENT_TYPES: { value: WalletEntryType; labelKey: string }[] = [
   { value: "personal", labelKey: "wallet.typePersonal" },
+  { value: "transfer-in", labelKey: "wallet.typeTransferIn" },
   { value: "adjustment", labelKey: "wallet.typeAdjustment" },
   { value: "opening", labelKey: "wallet.typeOpening" },
 ];
@@ -57,6 +58,7 @@ const TYPE_LABEL: Record<WalletEntryType | "spending", string> = {
   rollover: "wallet.typeRollover",
   adjustment: "wallet.typeAdjustment",
   transfer: "wallet.typeTransfer",
+  "transfer-in": "wallet.typeTransferIn",
   spending: "wallet.spendingMovement",
 };
 
@@ -67,6 +69,7 @@ const TYPE_TONE: Record<WalletEntryType | "spending", "neutral" | "info" | "succ
   rollover: "info",
   adjustment: "neutral",
   transfer: "info",
+  "transfer-in": "info",
   spending: "warning",
 };
 
@@ -80,6 +83,7 @@ export const WalletPanel: React.FC = () => {
   const resetWallet = useBudgetStore((s) => s.resetWallet);
   const allocateBudget = useBudgetStore((s) => s.allocateBudget);
   const sweepBudgetToPersonal = useBudgetStore((s) => s.sweepBudgetToPersonal);
+  const transferPersonalToBudget = useBudgetStore((s) => s.transferPersonalToBudget);
   const mutable = useBudgetStore((s) => s.isCurrentPeriodMutable)();
 
   const wallet = useMemo(() => walletState(snapshot), [snapshot]);
@@ -198,6 +202,14 @@ export const WalletPanel: React.FC = () => {
               <option key={currency}>{currency}</option>
             ))}
           </select>
+        </label>
+        <label className="settings-check">
+          <input
+            type="checkbox"
+            checked={snapshot.settings.walletRoundUp === true}
+            onChange={(event) => updateSettings({ walletRoundUp: event.target.checked })}
+          />
+          <span>{t("settings.walletRoundUp")}</span>
         </label>
 
         {!mutable && <div className="historical-banner">{t("common.readOnly")}</div>}
@@ -532,7 +544,7 @@ const MovementRow: React.FC<{
   onDelete: () => void;
 }> = ({ movement, mutable, displayCurrency, displayMode, money, formatDate, t, onEdit, onDelete }) => {
   const out = movement.direction === "out";
-  const isTransfer = movement.kind === "transfer";
+  const isTransfer = movement.kind === "transfer" || movement.kind === "transfer-in";
 
   return (
     <div className="item-row wallet-row" data-direction={movement.direction}>

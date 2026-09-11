@@ -162,6 +162,7 @@ const SETTINGS_FIELDS: Record<string, SettingsFieldCheck> = {
   autoWishlistFlushEnabled: isBoolean,
   liveClockEnabled: isBoolean,
   saveTimestampEnabled: isBoolean,
+  walletRoundUp: isBoolean,
   darkMode: isBoolean,
   // Structured values are checked for shape rather than field by field: their
   // own contents are validated where they are used, and the point here is to

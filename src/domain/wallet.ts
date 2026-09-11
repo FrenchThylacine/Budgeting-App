@@ -92,7 +92,7 @@ export function walletEffect(entry: Pick<WalletEntry, "type" | "amount">): numbe
   // A budget→personal transfer is an internal reclassification. Treating it as
   // an inflow or an outflow would make the total cash jump for a move that
   // did not involve any money leaving or arriving.
-  if (entry.type === TRANSFER_TYPE) return 0;
+  if (entry.type === TRANSFER_TYPE || entry.type === "transfer-in") return 0;
   return entry.amount;
 }
 
@@ -100,6 +100,7 @@ export function walletEffect(entry: Pick<WalletEntry, "type" | "amount">): numbe
 export function budgetEffect(entry: Pick<WalletEntry, "type" | "amount">): number {
   if (entry.type === ALLOCATION_TYPE) return entry.amount;
   if (entry.type === TRANSFER_TYPE) return -entry.amount;
+  if (entry.type === "transfer-in") return entry.amount;
   return 0;
 }
 

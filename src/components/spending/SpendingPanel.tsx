@@ -63,6 +63,8 @@ interface Draft {
   activityId: string;
   /** Wishlist item this transaction fulfils; "" when it stands on its own. */
   wishlistItemId: string;
+  transactionAt: string;
+  recordTimestamp: boolean;
 }
 
 export const SpendingPanel: React.FC = () => {
@@ -86,6 +88,8 @@ export const SpendingPanel: React.FC = () => {
     recurrenceType: "none",
     activityId: "",
     wishlistItemId: "",
+    transactionAt: new Date().toISOString().slice(0, 16),
+    recordTimestamp: true,
   });
 
   const [search, setSearch] = useState("");
@@ -288,6 +292,7 @@ export const SpendingPanel: React.FC = () => {
       // Carried from the form so editing an entry cannot silently reset a
       // recurring transaction to one-off.
       recurrenceType: draft.recurrenceType,
+      transactionAt: draft.recordTimestamp && draft.transactionAt ? new Date(draft.transactionAt).toISOString() : undefined,
     };
 
     if (editing) {
@@ -343,6 +348,8 @@ export const SpendingPanel: React.FC = () => {
       recurrenceType: entry.recurrenceType ?? "none",
       activityId: entry.activityId ?? "",
       wishlistItemId: entry.wishlistItemId ?? "",
+      transactionAt: entry.transactionAt ? entry.transactionAt.slice(0, 16) : "",
+      recordTimestamp: Boolean(entry.transactionAt),
     });
   };
 
@@ -459,6 +466,24 @@ export const SpendingPanel: React.FC = () => {
                 value={draft.date}
                 onChange={(e) => setDraft({ ...draft, date: e.target.value })}
               />
+            </Field>
+            <Field label={t("spending.timestamp")} name="transactionAt">
+              <label className="settings-check">
+                <input
+                  type="checkbox"
+                  checked={draft.recordTimestamp}
+                  onChange={(e) => setDraft({ ...draft, recordTimestamp: e.target.checked })}
+                />
+                <span>{t("spending.recordTimestamp")}</span>
+              </label>
+              {draft.recordTimestamp && (
+                <input
+                  className="input"
+                  type="datetime-local"
+                  value={draft.transactionAt}
+                  onChange={(e) => setDraft({ ...draft, transactionAt: e.target.value })}
+                />
+              )}
             </Field>
             <Field label={t("spending.category")} name="category">
               <select

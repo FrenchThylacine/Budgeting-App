@@ -50,7 +50,7 @@ export type BudgetBucket = "general" | "piloting" | "personal" | "wallet";
  *
  * See `domain/wallet.ts` for what each does to the three balances.
  */
-export type WalletEntryType = "opening" | "personal" | "budget" | "rollover" | "adjustment" | "transfer";
+export type WalletEntryType = "opening" | "personal" | "budget" | "rollover" | "adjustment" | "transfer" | "transfer-in";
 export type PeriodStatus = "value" | "zero" | "pending" | "nan";
 export type AuditType =
   | "import"
@@ -162,6 +162,8 @@ export interface Settings {
   baseCurrency: CurrencyCode;
   /** Currency used for wallet totals; absent means the app currency. */
   walletCurrency?: CurrencyCode;
+  /** Round newly captured wallet conversions upward once. */
+  walletRoundUp?: boolean;
   /**
    * The currencies offered in the app's dropdowns.
    *
@@ -599,6 +601,8 @@ export interface SpendingEntry {
   walletAmount?: number;
   walletCurrency?: CurrencyCode;
   walletRate?: number;
+  /** User-entered transaction timestamp, when timestamp capture was enabled. */
+  transactionAt?: string;
   recurrenceType: RecurrenceType;
   /**
    * @deprecated Follows from nothing and is read by nothing.

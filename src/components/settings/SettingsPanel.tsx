@@ -47,6 +47,7 @@ import type { Appearance } from "../../domain/theme";
 import type { CurrencyCode, CurrencyDisplayMode, RoundingRule } from "../../domain/types";
 import { ACTION_DESCRIPTION_KEYS, ACTION_LABEL_KEYS, AVAILABLE_ACTIONS, gesturesFor } from "../../domain/gestures";
 import { ImportControl } from "../data/ImportControl";
+const HistoryPanel = lazy(() => import("../history/HistoryPanel").then((module) => ({ default: module.HistoryPanel })));
 import { AccountSettings } from "./AccountSettings";
 import { Section } from "../ui/Section";
 import { SyncStatus } from "../layout/SyncStatus";
@@ -740,6 +741,9 @@ const DataSettings: React.FC = () => {
         <p className="text-note settings-note" style={{ marginBottom: 12 }}>{t("settings.importHint")}</p>
         <ImportControl />
       </Section>
+      <Suspense fallback={null}>
+        <HistoryPanel />
+      </Suspense>
     </>
   );
 };

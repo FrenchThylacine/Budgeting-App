@@ -184,6 +184,7 @@ interface BudgetStore {
    * budget comes up, and never performed without being asked for.
    */
   transferBudgetToPersonal: (money: CanonicalMoney, note?: string) => void;
+  transferPersonalToBudget: (money: CanonicalMoney, note?: string) => void;
   /** Move the whole leftover budget claim across, one entry per currency. */
   sweepBudgetToPersonal: (note?: string) => void;
   updateWalletEntry: (id: string, patch: Partial<WalletEntry>) => void;
@@ -571,7 +572,8 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
       (snapshot) => {
         const year = entry.year;
         const walletCurrency = snapshot.settings.walletCurrency ?? snapshot.settings.baseCurrency;
-        const walletAmount = convertAmount(entry.amount, entry.currency, walletCurrency, snapshot.settings.exchangeRates);
+        const converted = convertAmount(entry.amount, entry.currency, walletCurrency, snapshot.settings.exchangeRates);
+        const walletAmount = converted == null ? null : snapshot.settings.walletRoundUp ? Math.ceil(converted) : converted;
         ensureYearRecord(snapshot, year).spendingEntries.push({
           ...entry,
           year,
@@ -599,7 +601,8 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
         Object.assign(entry, patch);
         if (patch.amount !== undefined || patch.currency !== undefined) {
           const walletCurrency = snapshot.settings.walletCurrency ?? snapshot.settings.baseCurrency;
-          const walletAmount = convertAmount(entry.amount, entry.currency, walletCurrency, snapshot.settings.exchangeRates);
+          const converted = convertAmount(entry.amount, entry.currency, walletCurrency, snapshot.settings.exchangeRates);
+          const walletAmount = converted == null ? null : snapshot.settings.walletRoundUp ? Math.ceil(converted) : converted;
           entry.walletAmount = walletAmount ?? undefined;
           entry.walletCurrency = walletAmount == null ? undefined : walletCurrency;
           entry.walletRate = walletAmount == null || entry.amount === 0 ? undefined : walletAmount / entry.amount;
@@ -866,7 +869,8 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
       get,
       (snapshot) => {
         const walletCurrency = snapshot.settings.walletCurrency ?? snapshot.settings.baseCurrency;
-        const walletAmount = convertAmount(entry.amount, entry.currency, walletCurrency, snapshot.settings.exchangeRates);
+        const converted = convertAmount(entry.amount, entry.currency, walletCurrency, snapshot.settings.exchangeRates);
+        const walletAmount = converted == null ? null : snapshot.settings.walletRoundUp ? Math.ceil(converted) : converted;
         currentYear(snapshot).walletEntries.push(
           // The caller states both halves of the money, which is the whole
           // contract; `movement` is what makes that impossible to half-do.
@@ -955,6 +959,25 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
       storedText("audit.walletTransferred"),
       { year, month, amount: money.amount, currency: money.currency },
     );
+  },
+
+  transferPersonalToBudget: (money, note) => {
+    if (!get().isCurrentPeriodMutable()) return;
+    if (!Number.isFinite(money.amount) || money.amount <= 0) return;
+    const snapshot = get().snapshot;
+    const year = snapshot.settings.selectedYear;
+    const month = snapshot.settings.selectedMonth;
+    commit(set, get, (draft) => {
+      ensureYearRecord(draft, year).walletEntries.push(
+        movement(year, month, money, {
+          id: id("wallet-transfer-in"),
+          type: "transfer-in",
+          source: storedText("wallet.personalToBudgetSource"),
+          note: note?.trim() || storedText("wallet.personalToBudgetNote"),
+          settings: draft.settings,
+        }),
+      );
+    }, "wallet", storedText("audit.walletAdded"), { year, amount: money.amount, currency: money.currency });
   },
 
   /**

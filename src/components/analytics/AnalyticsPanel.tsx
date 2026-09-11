@@ -29,10 +29,6 @@ import { useTranslation } from "../../i18n/useTranslation";
 import { formatDualMoney } from "../../utils/formatters";
 import { EmptyState } from "../ui/EmptyState";
 import { Section } from "../ui/Section";
-/* Split, as it was when it was a tab. */
-const HistoryPanel = lazy(() =>
-  import("../history/HistoryPanel").then((module) => ({ default: module.HistoryPanel })),
-);
 import {
   BarChart,
   ChartPlaceholder,
@@ -966,10 +962,6 @@ export const AnalyticsPanel: React.FC = () => {
         </div>
       </Section>
 
-      {/* The record, where the analysis is. It was a top-level tab. */}
-      <Suspense fallback={null}>
-        <HistoryPanel />
-      </Suspense>
     </div>
   );
 };

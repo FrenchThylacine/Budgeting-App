@@ -347,6 +347,12 @@ export async function runMigrations(
         await sql`ALTER TABLE wallet_entries ADD COLUMN IF NOT EXISTS wallet_rate DOUBLE PRECISION;`;
       },
     },
+    {
+      name: "017-spending-transaction-timestamp",
+      run: async (sql: NeonQueryFunction<any, any>) => {
+        await sql`ALTER TABLE spending_entries ADD COLUMN IF NOT EXISTS transaction_at TEXT;`;
+      },
+    },
   ];
 
 
