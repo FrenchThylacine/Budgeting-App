@@ -226,6 +226,7 @@ export function convertAmount(
   fromCurrency: CurrencyCode,
   toCurrency: CurrencyCode,
   rates: ExchangeRates,
+  roundUp = false,
 ): number | null {
   if (amount == null || Number.isNaN(amount)) return null;
   if (fromCurrency === toCurrency) return amount;
@@ -339,13 +340,14 @@ function equivalent(
   currency: CurrencyCode,
   target: CurrencyCode | undefined,
   rates: ExchangeRates,
+  roundUp = false,
 ): { amount: number; currency: CurrencyCode } | null {
   if (!target || target === currency) return null;
   if (amount == null || !Number.isFinite(amount)) return null;
   if (!canConvert(currency, target, rates)) return null;
   const converted = convertAmount(amount, currency, target, rates);
   if (converted == null || !Number.isFinite(converted)) return null;
-  return { amount: converted, currency: target };
+  return { amount: roundUp ? Math.ceil(converted) : converted, currency: target };
 }
 
 /**
@@ -358,9 +360,9 @@ function equivalent(
 export function displayEquivalent(
   amount: number | null | undefined,
   currency: CurrencyCode,
-  settings: Pick<Settings, "baseCurrency" | "exchangeRates">,
+  settings: Pick<Settings, "baseCurrency" | "exchangeRates"> & { walletRoundUp?: boolean },
 ): { amount: number; currency: CurrencyCode } | null {
-  return equivalent(amount, currency, settings.baseCurrency, settings.exchangeRates);
+  return equivalent(amount, currency, settings.baseCurrency, settings.exchangeRates, settings.walletRoundUp);
 }
 
 /**
@@ -373,9 +375,9 @@ export function displayEquivalent(
 export function secondaryEquivalent(
   amount: number | null | undefined,
   currency: CurrencyCode,
-  settings: Pick<Settings, "secondaryCurrency" | "exchangeRates">,
+  settings: Pick<Settings, "secondaryCurrency" | "exchangeRates"> & { walletRoundUp?: boolean },
 ): { amount: number; currency: CurrencyCode } | null {
-  return equivalent(amount, currency, settings.secondaryCurrency, settings.exchangeRates);
+  return equivalent(amount, currency, settings.secondaryCurrency, settings.exchangeRates, settings.walletRoundUp);
 }
 
 /**

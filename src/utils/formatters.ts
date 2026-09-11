@@ -98,7 +98,7 @@ export function formatDualMoney(
   options: FormatOptions = {}
 ): string {
   if (value == null || !Number.isFinite(value)) return "—";
-  const formatted = formatMoney(value, settings.baseCurrency, settings.currencyDisplayMode);
+  const formatted = formatMoney(settings.walletRoundUp ? Math.ceil(value) : value, settings.baseCurrency, settings.currencyDisplayMode);
   if (options.showSign && value > 0) return `+${formatted}`;
   return formatted;
 }

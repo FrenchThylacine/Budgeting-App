@@ -90,7 +90,7 @@ export const Total: React.FC<{
   const from = currency ?? settings.baseCurrency;
   // Nothing to say about zero. "€0.00 ≈ $0.00" is true and is noise.
   const secondary = amount ? secondaryEquivalent(amount, from, settings) : null;
-  const primary = children ?? formatMoney(amount, from, settings.currencyDisplayMode);
+  const primary = children ?? formatMoney(settings.walletRoundUp && amount != null ? Math.ceil(amount) : amount, from, settings.currencyDisplayMode);
 
   if (!secondary) return <span className={className}>{primary}</span>;
 

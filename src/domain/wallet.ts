@@ -251,7 +251,7 @@ function compose(
     byCurrency.set(entry.currency, (byCurrency.get(entry.currency) ?? 0) + moved);
     const target = snapshot.settings.walletCurrency ?? snapshot.settings.baseCurrency;
     const converted = entry.walletCurrency === target && entry.walletAmount != null
-      ? entry.walletAmount * (moved / entry.amount)
+      ? (snapshot.settings.walletRoundUp ? Math.ceil(entry.walletAmount * (moved / entry.amount)) : entry.walletAmount * (moved / entry.amount))
       : normalizeAmount(moved, entry.currency, snapshot.settings);
     convertedByCurrency.set(entry.currency, (convertedByCurrency.get(entry.currency) ?? 0) + converted);
   }
@@ -273,7 +273,7 @@ function compose(
     byCurrency.set(entry.currency, (byCurrency.get(entry.currency) ?? 0) - Math.abs(entry.amount));
     const target = snapshot.settings.walletCurrency ?? snapshot.settings.baseCurrency;
     const converted = entry.walletCurrency === target && entry.walletAmount != null
-      ? -Math.abs(entry.walletAmount)
+      ? -Math.abs(snapshot.settings.walletRoundUp ? Math.ceil(entry.walletAmount) : entry.walletAmount)
       : -Math.abs(normalizeAmount(entry.amount, entry.currency, snapshot.settings));
     convertedByCurrency.set(entry.currency, (convertedByCurrency.get(entry.currency) ?? 0) + converted);
   }
@@ -344,7 +344,7 @@ export function walletState(snapshot: BudgetSnapshot): WalletState {
   const walletCurrency = snapshot.settings.walletCurrency ?? snapshot.settings.baseCurrency;
   const base = (amount: number, currency: CurrencyCode, historical?: { amount?: number; walletAmount?: number; walletCurrency?: CurrencyCode }) =>
     amount !== 0 && historical?.amount && historical.walletCurrency === walletCurrency && historical.walletAmount != null
-      ? historical.walletAmount * (amount / historical.amount)
+      ? (snapshot.settings.walletRoundUp ? Math.ceil(historical.walletAmount * (amount / historical.amount)) : historical.walletAmount * (amount / historical.amount))
       : normalizeAmount(amount, currency, { ...snapshot.settings, baseCurrency: walletCurrency });
 
   const movements: WalletMovement[] = [];
