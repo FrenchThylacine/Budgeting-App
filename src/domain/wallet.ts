@@ -252,7 +252,7 @@ function compose(
     const target = snapshot.settings.walletCurrency ?? snapshot.settings.baseCurrency;
     const converted = entry.walletCurrency === target && entry.walletAmount != null
       ? (snapshot.settings.walletRoundUp ? Math.ceil(entry.walletAmount * (moved / entry.amount)) : entry.walletAmount * (moved / entry.amount))
-      : normalizeAmount(moved, entry.currency, snapshot.settings);
+      : (snapshot.settings.walletRoundUp ? Math.ceil(normalizeAmount(moved, entry.currency, snapshot.settings)) : normalizeAmount(moved, entry.currency, snapshot.settings));
     convertedByCurrency.set(entry.currency, (convertedByCurrency.get(entry.currency) ?? 0) + converted);
   }
 
@@ -274,7 +274,7 @@ function compose(
     const target = snapshot.settings.walletCurrency ?? snapshot.settings.baseCurrency;
     const converted = entry.walletCurrency === target && entry.walletAmount != null
       ? -Math.abs(snapshot.settings.walletRoundUp ? Math.ceil(entry.walletAmount) : entry.walletAmount)
-      : -Math.abs(normalizeAmount(entry.amount, entry.currency, snapshot.settings));
+      : -Math.abs(snapshot.settings.walletRoundUp ? Math.ceil(normalizeAmount(entry.amount, entry.currency, snapshot.settings)) : normalizeAmount(entry.amount, entry.currency, snapshot.settings));
     convertedByCurrency.set(entry.currency, (convertedByCurrency.get(entry.currency) ?? 0) + converted);
   }
 
@@ -345,7 +345,9 @@ export function walletState(snapshot: BudgetSnapshot): WalletState {
   const base = (amount: number, currency: CurrencyCode, historical?: { amount?: number; walletAmount?: number; walletCurrency?: CurrencyCode }) =>
     amount !== 0 && historical?.amount && historical.walletCurrency === walletCurrency && historical.walletAmount != null
       ? (snapshot.settings.walletRoundUp ? Math.ceil(historical.walletAmount * (amount / historical.amount)) : historical.walletAmount * (amount / historical.amount))
-      : normalizeAmount(amount, currency, { ...snapshot.settings, baseCurrency: walletCurrency });
+      : (snapshot.settings.walletRoundUp
+          ? Math.ceil(normalizeAmount(amount, currency, { ...snapshot.settings, baseCurrency: walletCurrency }))
+          : normalizeAmount(amount, currency, { ...snapshot.settings, baseCurrency: walletCurrency }));
 
   const movements: WalletMovement[] = [];
 
