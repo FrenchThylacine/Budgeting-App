@@ -389,6 +389,7 @@ describe("every view reads the same principal", () => {
       amount: 1_500_000, currency: "LBP", source: "Cash", type: "personal", note: "",
     });
 
+    let stableWalletBalance: number | undefined;
     for (const base of ["EUR", "USD", "LBP", "GBP"] as CurrencyCode[]) {
       display(base);
       const snapshot = snapshotNow();
@@ -399,9 +400,11 @@ describe("every view reads the same principal", () => {
       expect(slices.find((slice) => slice.currency === "USD")?.amount, base).toBe(200);
       expect(slices.find((slice) => slice.currency === "LBP")?.amount, base).toBe(1_500_000);
 
-      // And the headline balance is those same two amounts, converted once.
-      const converted = slices.reduce((total, slice) => total + slice.converted, 0);
-      expect(walletState(snapshot).walletBalance).toBeCloseTo(converted, 6);
+      // The display lens may change, but the wallet headline remains in its
+      // independently selected wallet currency.
+      const walletBalance = walletState(snapshot).walletBalance;
+      if (stableWalletBalance == null) stableWalletBalance = walletBalance;
+      expect(walletBalance).toBeCloseTo(stableWalletBalance, 6);
     }
   });
 });

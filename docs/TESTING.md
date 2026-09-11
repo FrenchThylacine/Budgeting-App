@@ -517,3 +517,19 @@ Before every release:
 ✔ Deploy
 
 Never release without verification.
+# Manual user-flow account — 5.1.9
+
+Use this dedicated local test account for the currency/rounding flow:
+
+- Email: `rounding-hotfix@example.test`
+- Password: `RoundingHotfix-2026-09-11!`
+
+When a local database is configured, the flow records two foreign-currency spending transactions, enables
+**Round each converted amount up to whole units** in Settings, changes the app
+display currency while keeping the wallet currency unchanged, and verifies
+that each converted transaction is rounded independently while original
+amounts remain unchanged.
+
+This account was reserved for the 5.1.9 user-flow test; it could not be
+created in the current environment because no database connection is
+configured.

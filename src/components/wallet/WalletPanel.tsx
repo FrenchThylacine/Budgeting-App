@@ -196,18 +196,6 @@ export const WalletPanel: React.FC = () => {
           </div>
         }
       >
-        <label className="field" style={{ maxWidth: 220 }}>
-          <span className="field-label">{t("wallet.title")}</span>
-          <select
-            className="select"
-            value={walletCurrency}
-            onChange={(event) => updateSettings({ walletCurrency: event.target.value as CurrencyCode })}
-          >
-            {currencyOptionsFor(snapshot.settings, walletCurrency).map((currency) => (
-              <option key={currency}>{currency}</option>
-            ))}
-          </select>
-        </label>
         {!mutable && <div className="historical-banner">{t("common.readOnly")}</div>}
 
         {notice && (

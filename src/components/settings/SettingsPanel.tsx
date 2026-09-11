@@ -595,6 +595,17 @@ const MoneySettings: React.FC = () => {
                 ))}
               </select>
             </label>
+            <label className="field">
+              <span className="field-label">{t("settings.walletCurrency")}</span>
+              <select
+                className="select"
+                data-setting="walletCurrency"
+                value={settings.walletCurrency ?? settings.baseCurrency}
+                onChange={(e) => update({ walletCurrency: e.target.value as CurrencyCode })}
+              >
+                {tracked.map((currency) => <option key={currency}>{currency}</option>)}
+              </select>
+            </label>
           </div>
           <label className="settings-check" style={{ marginTop: 12 }}>
             <input

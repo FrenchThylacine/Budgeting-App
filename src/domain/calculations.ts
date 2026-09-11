@@ -332,7 +332,8 @@ export function summarizeWeek(
 }
 
 export function normalizeEntry(entry: SpendingEntry | WalletEntry, snapshot: BudgetSnapshot): number {
-  return normalizeAmount(entry.amount, entry.currency, snapshot.settings);
+  const converted = normalizeAmount(entry.amount, entry.currency, snapshot.settings);
+  return snapshot.settings.walletRoundUp ? Math.ceil(converted) : converted;
 }
 
 export function summarizeWishlist(items: WishlistItem[], snapshot: BudgetSnapshot): WishlistSummary {

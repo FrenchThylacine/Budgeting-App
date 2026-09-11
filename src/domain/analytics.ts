@@ -89,10 +89,7 @@ export function fundingSplit(entries: SpendingEntry[], snapshot: BudgetSnapshot)
   const external = externalEntries(entries);
   const otherFunded = otherFundedEntries(entries);
   const outsideBudget = outsideBudgetEntries(entries);
-  const total = (list: SpendingEntry[]) => list.reduce((sum, entry) => {
-    const converted = normalizeEntry(entry, snapshot);
-    return sum + (snapshot.settings.walletRoundUp ? Math.ceil(converted) : converted);
-  }, 0);
+  const total = (list: SpendingEntry[]) => list.reduce((sum, entry) => sum + normalizeEntry(entry, snapshot), 0);
   return {
     personal: personal.length > 0 ? total(personal) : null,
     external: external.length > 0 ? total(external) : null,

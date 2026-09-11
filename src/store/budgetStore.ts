@@ -426,7 +426,10 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
       set,
       get,
       (snapshot) => {
-        snapshot.settings = { ...snapshot.settings, ...patch };
+        const walletCurrency = patch.baseCurrency && snapshot.settings.walletCurrency == null
+          ? snapshot.settings.baseCurrency
+          : undefined;
+        snapshot.settings = { ...snapshot.settings, ...(walletCurrency ? { walletCurrency } : {}), ...patch };
       },
       "settings",
       storedText("audit.settings"),

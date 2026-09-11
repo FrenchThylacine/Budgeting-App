@@ -249,10 +249,11 @@ function compose(
     // Accumulated in the entry's own currency: this is the number the reader
     // put in, and it stays that number.
     byCurrency.set(entry.currency, (byCurrency.get(entry.currency) ?? 0) + moved);
-    const target = snapshot.settings.walletCurrency ?? snapshot.settings.baseCurrency;
-    const converted = entry.walletCurrency === target && entry.walletAmount != null
-      ? (snapshot.settings.walletRoundUp ? Math.ceil(entry.walletAmount * (moved / entry.amount)) : entry.walletAmount * (moved / entry.amount))
-      : (snapshot.settings.walletRoundUp ? Math.ceil(normalizeAmount(moved, entry.currency, snapshot.settings)) : normalizeAmount(moved, entry.currency, snapshot.settings));
+    // Composition is a display-currency lens. The wallet headline itself uses
+    // the independent wallet currency and historical conversion below.
+    const converted = snapshot.settings.walletRoundUp
+      ? Math.ceil(normalizeAmount(moved, entry.currency, snapshot.settings))
+      : normalizeAmount(moved, entry.currency, snapshot.settings);
     convertedByCurrency.set(entry.currency, (convertedByCurrency.get(entry.currency) ?? 0) + converted);
   }
 
@@ -271,10 +272,9 @@ function compose(
   for (const entry of walletSpending(snapshot, ledgerEpoch(snapshot))) {
     if (!entry.amount) continue;
     byCurrency.set(entry.currency, (byCurrency.get(entry.currency) ?? 0) - Math.abs(entry.amount));
-    const target = snapshot.settings.walletCurrency ?? snapshot.settings.baseCurrency;
-    const converted = entry.walletCurrency === target && entry.walletAmount != null
-      ? -Math.abs(snapshot.settings.walletRoundUp ? Math.ceil(entry.walletAmount) : entry.walletAmount)
-      : -Math.abs(snapshot.settings.walletRoundUp ? Math.ceil(normalizeAmount(entry.amount, entry.currency, snapshot.settings)) : normalizeAmount(entry.amount, entry.currency, snapshot.settings));
+    const converted = -Math.abs(snapshot.settings.walletRoundUp
+      ? Math.ceil(normalizeAmount(entry.amount, entry.currency, snapshot.settings))
+      : normalizeAmount(entry.amount, entry.currency, snapshot.settings));
     convertedByCurrency.set(entry.currency, (convertedByCurrency.get(entry.currency) ?? 0) + converted);
   }
 
