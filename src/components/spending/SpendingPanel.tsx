@@ -519,6 +519,9 @@ export const SpendingPanel: React.FC = () => {
                 ))}
               </select>
             </Field>
+            <details className="transaction-advanced">
+              <summary>{t("common.optional")}</summary>
+              <div className="transaction-advanced-fields">
             <Field
               label={t("funding.label")}
               name="funding"
@@ -641,6 +644,8 @@ export const SpendingPanel: React.FC = () => {
                 onChange={(e) => setDraft({ ...draft, note: e.target.value })}
               />
             </Field>
+              </div>
+            </details>
           </form>
           </EditorSheet>
         )}

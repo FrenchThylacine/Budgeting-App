@@ -1017,13 +1017,15 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
       const loan = snapshot.settings.loans?.find((item) => item.id === loanId);
       if (!loan) return;
       Object.assign(loan, patch);
-      const entry = Object.values(snapshot.years).flatMap((record) => record.walletEntries).find((item) => item.loanId === loanId && item.loanMovement === "principal");
+      const owner = Object.values(snapshot.years).find((record) => record.walletEntries.some((item) => item.loanId === loanId && item.loanMovement === "principal"));
+      const entry = owner?.walletEntries.find((item) => item.loanId === loanId && item.loanMovement === "principal");
       if (entry) {
         entry.amount = loan.direction === "lent" ? -loan.amount : loan.amount;
         entry.currency = loan.currency;
         entry.date = loan.date;
         entry.year = Number(loan.date.slice(0, 4));
         entry.month = Number(loan.date.slice(5, 7));
+        entry.source = loan.source?.trim() || storedText("wallet.loanMovement");
         entry.note = loan.destination?.trim() || loan.person;
         entry.loanBudgetEffect = (loan.direction === "lent" ? -loan.amount : loan.amount)
           * ((loan.direction === "lent" ? loan.source : loan.destination) === "Budget" ? 1 : 0);
@@ -1031,6 +1033,11 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
         const walletCurrency = snapshot.settings.walletCurrency ?? snapshot.settings.baseCurrency;
         const converted = convertAmount(entry.amount, entry.currency, walletCurrency, snapshot.settings.exchangeRates);
         if (converted != null) { entry.walletAmount = snapshot.settings.walletRoundUp ? Math.ceil(converted) : converted; entry.walletCurrency = walletCurrency; entry.walletRate = entry.amount ? entry.walletAmount / entry.amount : undefined; }
+        const destination = ensureYearRecord(snapshot, entry.year);
+        if (owner && owner !== destination) {
+          owner.walletEntries = owner.walletEntries.filter((item) => item.id !== entry.id);
+          destination.walletEntries.push(entry);
+        }
       }
     }, "wallet", storedText("audit.walletUpdated"), { loanId, patch });
   },
@@ -1222,7 +1229,8 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
       set,
       get,
       (snapshot) => {
-        const entry = Object.values(snapshot.years).flatMap((record) => record.walletEntries).find((item) => item.id === idValue);
+        const owner = Object.values(snapshot.years).find((record) => record.walletEntries.some((item) => item.id === idValue));
+        const entry = owner?.walletEntries.find((item) => item.id === idValue);
         if (entry) {
           Object.assign(entry, patch);
           if (patch.amount !== undefined || patch.currency !== undefined) {
@@ -1231,6 +1239,11 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
             entry.walletAmount = walletAmount ?? undefined;
             entry.walletCurrency = walletAmount == null ? undefined : walletCurrency;
             entry.walletRate = walletAmount == null || entry.amount === 0 ? undefined : walletAmount / entry.amount;
+          }
+          const destination = ensureYearRecord(snapshot, entry.year);
+          if (owner && owner !== destination) {
+            owner.walletEntries = owner.walletEntries.filter((item) => item.id !== entry.id);
+            destination.walletEntries.push(entry);
           }
         }
       },

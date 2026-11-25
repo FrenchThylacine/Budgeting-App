@@ -742,8 +742,8 @@ export class SnapshotRepository {
     for (const entry of yearRecord.walletEntries) {
       writes.push({
         text: `
-        INSERT INTO wallet_entries (id, year_id, month, date, amount, currency, wallet_amount, wallet_currency, wallet_rate, source, type, note, created_at)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+        INSERT INTO wallet_entries (id, year_id, month, date, amount, currency, wallet_amount, wallet_currency, wallet_rate, source, type, note, loan_id, loan_movement, loan_budget_effect, created_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
         ON CONFLICT (id) DO UPDATE SET
           month = EXCLUDED.month,
           date = EXCLUDED.date,
@@ -754,7 +754,10 @@ export class SnapshotRepository {
           wallet_rate = EXCLUDED.wallet_rate,
           source = EXCLUDED.source,
           type = EXCLUDED.type,
-          note = EXCLUDED.note
+          note = EXCLUDED.note,
+          loan_id = EXCLUDED.loan_id,
+          loan_movement = EXCLUDED.loan_movement,
+          loan_budget_effect = EXCLUDED.loan_budget_effect
         WHERE wallet_entries.year_id = EXCLUDED.year_id
       `,
         params: [
@@ -789,6 +792,9 @@ export class SnapshotRepository {
           entry.source ?? "",
           entry.type ?? "adjustment",
           entry.note ?? null,
+          entry.loanId ?? null,
+          entry.loanMovement ?? null,
+          entry.loanBudgetEffect ?? null,
           entry.createdAt ?? new Date().toISOString(),
         ],
       });
@@ -1068,6 +1074,9 @@ export class SnapshotRepository {
       source: row.source,
       type: row.type,
       note: row.note ?? "",
+      loanId: row.loan_id ?? undefined,
+      loanMovement: row.loan_movement === "principal" || row.loan_movement === "repayment" ? row.loan_movement : undefined,
+      loanBudgetEffect: row.loan_budget_effect != null ? Number(row.loan_budget_effect) : undefined,
       createdAt: row.created_at,
     };
   }

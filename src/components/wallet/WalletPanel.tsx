@@ -174,8 +174,8 @@ export const WalletPanel: React.FC = () => {
   const monthLabel = localMonth(snapshot.settings.selectedMonth);
   const movementGroups = useMemo(() => [
     { key: "spending", label: t("nav.spending"), items: wallet.movements.filter((item) => item.kind === "spending") },
-    { key: "general", label: t("wallet.ledger"), items: wallet.movements.filter((item) => item.kind !== "spending" && !item.loanId && item.kind !== "adjustment" && item.kind !== "opening" && item.kind !== "rollover") },
-    { key: "adjustments", label: t("wallet.typeAdjustment"), items: wallet.movements.filter((item) => !item.loanId && ["adjustment", "opening", "rollover"].includes(item.kind)) },
+    { key: "general", label: t("wallet.ledger"), items: wallet.movements.filter((item) => item.kind !== "spending" && !item.loanId && !["personal", "adjustment", "opening", "rollover"].includes(item.kind)) },
+    { key: "adjustments", label: t("wallet.typeAdjustment"), items: wallet.movements.filter((item) => !item.loanId && ["personal", "adjustment", "opening", "rollover"].includes(item.kind)) },
   ].filter((group) => group.items.length > 0), [wallet.movements, t]);
 
   return (
@@ -410,11 +410,16 @@ export const WalletPanel: React.FC = () => {
 
       <Section title={t("wallet.loans")} action={<Button size="sm" variant="secondary" onClick={() => setLoanOpen(true)} disabled={!mutable}><Plus size={14} /> {t("wallet.addLoan")}</Button>}>
         {loans.length === 0 ? <EmptyState title={t("wallet.loans")} description={t("wallet.ledgerEmptyBody")} /> : loans.map((loan) => (
-          <div className="item-row" key={loan.id}>
+          <div className="item-row" key={loan.id} style={{ flexWrap: "wrap" }}>
             <div style={{ flex: 1 }}><strong>{loan.person}</strong><div className="text-footnote">{formatDate(loan.date)} · {formatMoney(loan.amount, loan.currency, snapshot.settings.currencyDisplayMode)}</div></div>
             {!loan.returnedAt && !loan.convertedAt && <div className="row-actions"><Button size="sm" variant="ghost" onClick={() => { const value = window.prompt("Repayment amount", String(Math.max(0, loan.amount - (loan.repaidAmount ?? 0)))); if (value != null) repayLoan(loan.id, Number(value)); }}>{t("wallet.loanReturned")}</Button></div>}
             {mutable && <div className="row-actions"><Button size="sm" variant="ghost" icon onClick={() => setEditingLoan(loan)} aria-label={t("common.edit")}><Pencil size={15} /></Button><Button size="sm" variant="ghost" icon onClick={() => window.confirm(t("common.delete") + "?") && deleteLoan(loan.id)} aria-label={t("common.delete")}><Trash2 size={15} /></Button></div>}
             {(loan.returnedAt || loan.convertedAt) && <span className="text-footnote">{loan.convertedAt ? t("wallet.loanConverted") : t("wallet.loanReturned")}</span>}
+            {wallet.movements.filter((movement) => movement.loanId === loan.id && movement.loanMovement === "repayment").map((movement) => (
+              <div key={movement.id} className="text-footnote" style={{ flexBasis: "100%", paddingLeft: 24 }}>
+                {formatDate(movement.date)} · {formatMoney(movement.amountNative, movement.currency, snapshot.settings.currencyDisplayMode)} {t("wallet.loanReturned")}
+              </div>
+            ))}
           </div>
         ))}
       </Section>

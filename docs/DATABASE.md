@@ -73,6 +73,11 @@ These could not be observed with a mocked driver and were all failing in real Po
 | `011-monthly-notes` | `years.monthly_notes` (JSONB, `DEFAULT '{}'`) — see below |
 | `012-activity-next-renewal` | `activities.next_renewal_date` — a renewal date the recurrence rule cannot derive |
 | `013-payment-cycles-and-icons` | `activities.sessions_per_period`, `session_period`, `sessions_per_payment`, `icon_url`, `icon_source_url`; `wishlist_items.icon_url` |
+| `014-activity-funding-and-scenario-activity-states` | Activity funding fields and scenario activity-state JSON |
+| `015-wallet-entry-date` | `wallet_entries.date` |
+| `016-historical-wallet-conversion` | Frozen wallet conversion columns on spending and wallet entries |
+| `017-spending-transaction-timestamp` | `spending_entries.transaction_at` |
+| `018-wallet-loan-links` | `wallet_entries.loan_id`, `loan_movement`, `loan_budget_effect` |
 
 ### `schema.ts` runs before the migrations, and that constrains what may go in it
 
@@ -103,6 +108,8 @@ Every `ON CONFLICT (id) DO UPDATE` now also carries `WHERE <table>.<owner> = EXC
 Removed categories are deleted **after** the year writes, not before. `activities.category_id`, `spending_entries.category_id` and `wishlist_items.category_id` are `ON DELETE RESTRICT`, and PostgreSQL checks those statement by statement rather than at commit — so deleting a category before the rows referencing it have been rewritten aborts the whole transaction with a bare foreign-key error. Replacing a budget's entire category set, which an Excel import or a reset to seed does, hit exactly that.
 
 Migration 005 exists because the repository writes a **fixed column list**: a field added to the TypeScript model but not to the schema, the upsert and the parser is silently dropped on the next server round-trip. Adding a persisted field means touching all four places, and the integration suite has a round-trip test per field group to catch the omission.
+
+Migration 018 follows this rule for loans. A loan's descriptive record lives in snapshot settings, but its principal and repayment are wallet rows. Their link and signed Budget-side effect must be stored with those rows; otherwise a reload turns them into ordinary adjustments and loses the accounting category. The migration is additive and nullable, so existing wallets remain valid.
 
 `activities.weekdays` stores a JSON array of ISO weekday numbers. A malformed value is read as "no schedule" rather than throwing, so one bad row cannot make the whole snapshot unloadable.
 

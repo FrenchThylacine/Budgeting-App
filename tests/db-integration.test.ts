@@ -141,6 +141,9 @@ describeDb("PostgreSQL integration", () => {
     // records shared across every budget in the database.
     expect(await columnsOf("budget_approvals")).toContain("snapshot_id");
     expect(await columnsOf("categories")).toContain("seed_key");
+    expect(await columnsOf("wallet_entries")).toEqual(expect.arrayContaining([
+      "loan_id", "loan_movement", "loan_budget_effect",
+    ]));
 
     // Every migration must be recorded, or it re-runs on every boot.
     const applied = await client.query(`SELECT name FROM migrations ORDER BY name`);
@@ -202,6 +205,32 @@ describeDb("PostgreSQL integration", () => {
     const activity = loaded!.years[String(year.year)].activities.find((a) => a.id === year.activities[0].id)!;
     expect(activity.active).toBe(true);
     expect(activity.visible).toBe(false);
+  });
+
+  it("round-trips loan-linked wallet movements", async () => {
+    const snapshot = createSeedBudgetSnapshot();
+    snapshot.revision = 21;
+    const year = Object.values(snapshot.years)[0];
+    year.walletEntries.push({
+      id: "loan-wallet-integration",
+      year: year.year,
+      month: 7,
+      date: `${year.year}-07-14`,
+      amount: -120,
+      currency: "EUR",
+      source: "Budget",
+      type: "adjustment",
+      note: "Loan to parent",
+      loanId: "loan-integration",
+      loanMovement: "principal",
+      loanBudgetEffect: -120,
+      createdAt: new Date().toISOString(),
+    });
+    await repo.saveSnapshot(snapshot, "active");
+
+    const loaded = await repo.loadSnapshot("active");
+    const entry = loaded!.years[String(year.year)].walletEntries.find((item) => item.id === "loan-wallet-integration");
+    expect(entry).toMatchObject({ loanId: "loan-integration", loanMovement: "principal", loanBudgetEffect: -120 });
   });
 
   it("assigns spending entries the correct year even when year ids carry suffixes", async () => {

@@ -120,6 +120,14 @@ src/domain/report.ts        report model + printable HTML, from the same selecto
 src/components/charts/      dependency-free SVG chart library
 ```
 
+### Wallet, loans, and historical allocations
+
+`src/domain/wallet.ts` is the only place that derives wallet cash, allocated-budget claim, personal balance, and month-by-month allocation history. A loan is represented by a normal wallet movement linked with `loanId`; it is never a spending or income transaction. Lending writes a cash outflow, borrowing writes a cash inflow, and each repayment writes the inverse movement. When the selected side is **Budget**, the linked movement also carries a signed `loanBudgetEffect`; Personal-side loans leave the budget claim unchanged.
+
+Loan links and Budget-side effects are persisted on `wallet_entries`, not inferred from labels, so edit/delete/reload remain safe. The store moves a wallet row between year records when an edit changes its date across a year boundary. `budgetPeriods()` derives allocations, spending, transfers, and carry-in from the ledger. A `closed-without-rollover` record resets the next period's carry-in to zero; all other periods carry their actual remaining amount once.
+
+Analytics reads those period allocations for historical comparison. It does not apply the current month's setting to months that have their own recorded allocation.
+
 ### Leaf modules for rules that must not be expressible twice
 
 `funding.ts`, `schedule.ts`, `payments.ts` and `dashboard.ts` import nothing from the rest of the domain. That is the point: a rule with one definition cannot be honoured by one view and ignored by another.

@@ -353,6 +353,20 @@ export async function runMigrations(
         await sql`ALTER TABLE spending_entries ADD COLUMN IF NOT EXISTS transaction_at TEXT;`;
       },
     },
+    {
+      /*
+       * Loan movements are wallet rows, but their identity and Budget-side
+       * claim must survive a server round-trip. Without these fields a reload
+       * turns a linked repayment into an ordinary adjustment and loses whether
+       * the loan came from / returned to Budget funds.
+       */
+      name: "018-wallet-loan-links",
+      run: async (sql: NeonQueryFunction<any, any>) => {
+        await sql`ALTER TABLE wallet_entries ADD COLUMN IF NOT EXISTS loan_id TEXT;`;
+        await sql`ALTER TABLE wallet_entries ADD COLUMN IF NOT EXISTS loan_movement TEXT;`;
+        await sql`ALTER TABLE wallet_entries ADD COLUMN IF NOT EXISTS loan_budget_effect DOUBLE PRECISION;`;
+      },
+    },
   ];
 
 

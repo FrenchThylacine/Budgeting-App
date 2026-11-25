@@ -27,6 +27,10 @@ Run this checklist before every release.
 - `npm test` with `TEST_DATABASE_URL` set: passed — **542 tests across 30 files** (467 unit, 75 integration against local PostgreSQL 17).
 - `npm run build` and `npm run server:build`: passed.
 
+### Wallet/loan release check (5.4.1)
+
+The focused Wallet, Analytics, and Report suites cover carryover/reset derivation, monthly allocation history, loan-linked movement accounting, projections, and report generation. Database integration additionally round-trips `wallet_entries.loan_id`, `loan_movement`, and `loan_budget_effect`; this catches the failure mode where a client-only loan feature disappears after a server reload.
+
 New this pass:
 
 | Suite | Covers |

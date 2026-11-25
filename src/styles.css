@@ -1204,6 +1204,9 @@ strong {
 .transaction-editor-grid { gap: 8px !important; }
 .transaction-timestamp-toggle { margin: -2px 0 4px; font-size: 0.72rem; }
 .transaction-timestamp-toggle input { width: 13px; height: 13px; }
+.transaction-advanced { grid-column: 1 / -1; border-top: 1px solid var(--border); padding-top: 6px; }
+.transaction-advanced summary { cursor: pointer; color: var(--text-secondary); font-size: 0.78rem; }
+.transaction-advanced-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 170px), 1fr)); gap: 8px; padding-top: 8px; }
 
 /* Editing a closed period: a deliberately louder, unmistakable state.
 
