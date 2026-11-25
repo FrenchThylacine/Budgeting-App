@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { Pencil, Plus, ShoppingBag, Trash2, X } from "lucide-react";
+import { Calendar, Clock, Pencil, Plus, ShoppingBag, Trash2, X } from "lucide-react";
 import { currencyOptionsFor, formatMoney } from "../../domain/currency";
 import { Money, Total } from "../ui/Money";
 import { CadenceMark } from "../ui/CadenceMark";
@@ -34,6 +34,14 @@ import { gesturesFor } from "../../domain/gestures";
 import type { SwipeActionId } from "../../domain/types";
 
 const today = () => todayDateInput();
+
+const localDateTimeInput = (now = new Date()): string => {
+  const date = todayDateInput(now);
+  const time = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+  return `${date}T${time}`;
+};
+
+const localDateTimeFromIso = (value: string): string => localDateTimeInput(new Date(value));
 
 const RECURRENCE_OPTIONS: { value: RecurrenceType; labelKey: string }[] = [
   { value: "none", labelKey: "recurrence.none" },
@@ -88,7 +96,7 @@ export const SpendingPanel: React.FC = () => {
     recurrenceType: "none",
     activityId: "",
     wishlistItemId: "",
-    transactionAt: new Date().toISOString().slice(0, 16),
+    transactionAt: localDateTimeInput(),
     recordTimestamp: true,
   });
 
@@ -348,7 +356,7 @@ export const SpendingPanel: React.FC = () => {
       recurrenceType: entry.recurrenceType ?? "none",
       activityId: entry.activityId ?? "",
       wishlistItemId: entry.wishlistItemId ?? "",
-      transactionAt: entry.transactionAt ? entry.transactionAt.slice(0, 16) : "",
+      transactionAt: entry.transactionAt ? localDateTimeFromIso(entry.transactionAt) : "",
       recordTimestamp: Boolean(entry.transactionAt),
     });
   };
@@ -458,15 +466,6 @@ export const SpendingPanel: React.FC = () => {
                 ))}
               </select>
             </Field>
-            <Field label={t("spending.date")} name="date">
-              <input
-                className="input"
-                type="date"
-                required
-                value={draft.date}
-                onChange={(e) => setDraft({ ...draft, date: e.target.value })}
-              />
-            </Field>
             <Field label={t("spending.timestamp")} name="transactionAt">
               <label className="settings-check">
                 <input
@@ -476,14 +475,34 @@ export const SpendingPanel: React.FC = () => {
                 />
                 <span>{t("spending.recordTimestamp")}</span>
               </label>
-              {draft.recordTimestamp && (
-                <input
-                  className="input"
-                  type="datetime-local"
-                  value={draft.transactionAt}
-                  onChange={(e) => setDraft({ ...draft, transactionAt: e.target.value })}
-                />
-              )}
+              <div className="transaction-datetime">
+                  <label className="transaction-datetime-part">
+                    <Calendar size={14} aria-hidden="true" />
+                    <span className="sr-only">{t("spending.date")}</span>
+                    <input
+                      className="input"
+                      type="date"
+                      required
+                      value={draft.date}
+                      onChange={(e) => {
+                        const date = e.target.value;
+                        const time = draft.transactionAt.includes("T") ? draft.transactionAt.slice(11, 16) : localDateTimeInput().slice(11, 16);
+                        setDraft({ ...draft, date, transactionAt: draft.recordTimestamp ? `${date}T${time}` : draft.transactionAt });
+                      }}
+                    />
+                  </label>
+                  {draft.recordTimestamp && <label className="transaction-datetime-part">
+                    <Clock size={14} aria-hidden="true" />
+                    <span className="sr-only">{t("spending.timestamp")}</span>
+                    <input
+                      className="input"
+                      type="time"
+                      required
+                      value={draft.transactionAt.slice(11, 16)}
+                      onChange={(e) => setDraft({ ...draft, transactionAt: `${draft.date}T${e.target.value}` })}
+                    />
+                  </label>}
+                </div>
             </Field>
             <Field label={t("spending.category")} name="category">
               <select

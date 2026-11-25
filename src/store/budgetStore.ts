@@ -188,6 +188,8 @@ interface BudgetStore {
   transferPersonalToBudget: (money: CanonicalMoney, note?: string) => void;
   addLoan: (loan: Omit<Loan, "id">) => void;
   updateLoan: (id: string, patch: Partial<Loan>) => void;
+  deleteLoan: (id: string) => void;
+  repayLoan: (id: string, amount?: number) => void;
   convertLoan: (id: string) => void;
   /** Move the whole leftover budget claim across, one entry per currency. */
   sweepBudgetToPersonal: (note?: string) => void;
@@ -990,15 +992,68 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
   addLoan: (loan) => {
     if (!get().isCurrentPeriodMutable() || loan.amount <= 0 || !loan.person.trim()) return;
     commit(set, get, (snapshot) => {
-      snapshot.settings.loans = [...(snapshot.settings.loans ?? []), { ...loan, id: id("loan"), person: loan.person.trim() }];
+      const loanId = id("loan");
+      const movementId = id("loan-principal");
+      const year = Number(loan.date.slice(0, 4));
+      const month = Number(loan.date.slice(5, 7));
+      const principal = loan.direction === "lent" ? -loan.amount : loan.amount;
+      ensureYearRecord(snapshot, year).walletEntries.push(movement(year, month, {
+        amount: principal,
+        currency: loan.currency,
+      }, { id: movementId, type: "adjustment", source: loan.source?.trim() || storedText("wallet.loanMovement"), note: loan.destination?.trim() || loan.person.trim(), date: loan.date, settings: snapshot.settings }));
+      const entry = ensureYearRecord(snapshot, year).walletEntries.find((item) => item.id === movementId);
+      if (entry) { entry.loanId = loanId; entry.loanMovement = "principal"; }
+      snapshot.settings.loans = [...(snapshot.settings.loans ?? []), { ...loan, id: loanId, walletEntryId: movementId, repaidAmount: 0, person: loan.person.trim() }];
     }, "wallet", storedText("audit.walletAdded"), loan);
   },
 
   updateLoan: (loanId, patch) => {
     commit(set, get, (snapshot) => {
       const loan = snapshot.settings.loans?.find((item) => item.id === loanId);
-      if (loan) Object.assign(loan, patch);
+      if (!loan) return;
+      Object.assign(loan, patch);
+      const entry = Object.values(snapshot.years).flatMap((record) => record.walletEntries).find((item) => item.loanId === loanId && item.loanMovement === "principal");
+      if (entry) {
+        entry.amount = loan.direction === "lent" ? -loan.amount : loan.amount;
+        entry.currency = loan.currency;
+        entry.date = loan.date;
+        entry.year = Number(loan.date.slice(0, 4));
+        entry.month = Number(loan.date.slice(5, 7));
+        entry.note = loan.destination?.trim() || loan.person;
+        entry.walletAmount = undefined; entry.walletCurrency = undefined; entry.walletRate = undefined;
+        const walletCurrency = snapshot.settings.walletCurrency ?? snapshot.settings.baseCurrency;
+        const converted = convertAmount(entry.amount, entry.currency, walletCurrency, snapshot.settings.exchangeRates);
+        if (converted != null) { entry.walletAmount = snapshot.settings.walletRoundUp ? Math.ceil(converted) : converted; entry.walletCurrency = walletCurrency; entry.walletRate = entry.amount ? entry.walletAmount / entry.amount : undefined; }
+      }
     }, "wallet", storedText("audit.walletUpdated"), { loanId, patch });
+  },
+
+  deleteLoan: (loanId) => {
+    if (!get().isCurrentPeriodMutable()) return;
+    commit(set, get, (snapshot) => {
+      snapshot.settings.loans = (snapshot.settings.loans ?? []).filter((loan) => loan.id !== loanId);
+      for (const record of Object.values(snapshot.years)) record.walletEntries = record.walletEntries.filter((entry) => entry.loanId !== loanId);
+    }, "delete", storedText("audit.walletDeleted"), { loanId });
+  },
+
+  repayLoan: (loanId, requestedAmount) => {
+    if (!get().isCurrentPeriodMutable()) return;
+    commit(set, get, (snapshot) => {
+      const loan = snapshot.settings.loans?.find((item) => item.id === loanId);
+      if (!loan) return;
+      const outstanding = Math.max(0, loan.amount - (loan.repaidAmount ?? 0));
+      const amount = Math.min(requestedAmount ?? outstanding, outstanding);
+      if (!(amount > 0)) return;
+      const date = todayDateInput();
+      const year = Number(date.slice(0, 4)); const month = Number(date.slice(5, 7));
+      const repayment = loan.direction === "lent" ? amount : -amount;
+      const repaymentId = id("loan-repayment");
+      ensureYearRecord(snapshot, year).walletEntries.push(movement(year, month, { amount: repayment, currency: loan.currency }, { id: repaymentId, type: "adjustment", source: storedText("wallet.loanRepayment"), note: loan.person, date, settings: snapshot.settings }));
+      const entry = ensureYearRecord(snapshot, year).walletEntries.find((item) => item.id === repaymentId);
+      if (entry) { entry.loanId = loanId; entry.loanMovement = "repayment"; }
+      loan.repaidAmount = (loan.repaidAmount ?? 0) + amount;
+      if (loan.repaidAmount >= loan.amount) loan.returnedAt = new Date().toISOString();
+    }, "wallet", storedText("audit.walletAdded"), { loanId, requestedAmount });
   },
 
   convertLoan: (loanId) => {

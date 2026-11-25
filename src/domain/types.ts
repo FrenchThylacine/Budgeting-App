@@ -347,6 +347,12 @@ export interface Loan {
   currency: CurrencyCode;
   person: string;
   date: string;
+  /** Wallet movement that records the principal leaving/entering the wallet. */
+  walletEntryId?: string;
+  /** Total principal repaid so far, in the loan currency. */
+  repaidAmount?: number;
+  source?: string;
+  destination?: string;
   returnedAt?: string;
   convertedAt?: string;
 }
@@ -723,6 +729,9 @@ export interface WalletEntry {
   source: string;
   type: WalletEntryType;
   note: string;
+  /** Links generated movements to a loan without affecting ordinary entries. */
+  loanId?: string;
+  loanMovement?: "principal" | "repayment";
   createdAt: string;
 }
 

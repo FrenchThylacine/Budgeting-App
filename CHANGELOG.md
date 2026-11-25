@@ -9,6 +9,8 @@ with one small fix gets a patch rather than a new minor.
 
 | Version | What it was |
 | --- | --- |
+| **5.3.0** | Unified local transaction date/time control with independent calendar and clock editing |
+| **5.2.0** | Loans now create linked wallet movements, support repayment, edit/delete safely, and show remaining-budget percentages |
 | **5.1.9** | Consistent per-transaction conversion round-up, independent wallet currency, timestamped transactions, loans, transfers, and History in Data Settings |
 | **5.1.0** | A tour that points at the button, a theme you build that cannot come out unreadable, and English found in the layer no dictionary check looks at |
 | **5.0.0** | Ten destinations instead of eleven, a report you can read before you print it, and three bugs that were costing an account its data |

@@ -87,11 +87,16 @@ export const WalletPanel: React.FC = () => {
   const loans = snapshot.settings.loans ?? [];
   const addLoan = useBudgetStore((s) => s.addLoan);
   const updateLoan = useBudgetStore((s) => s.updateLoan);
-  const convertLoan = useBudgetStore((s) => s.convertLoan);
+  const deleteLoan = useBudgetStore((s) => s.deleteLoan);
+  const repayLoan = useBudgetStore((s) => s.repayLoan);
   const mutable = useBudgetStore((s) => s.isCurrentPeriodMutable)();
 
   const wallet = useMemo(() => walletState(snapshot), [snapshot]);
   const periods = useMemo(() => budgetPeriods(snapshot), [snapshot]);
+  const selectedBudgetPeriod = periods.find((item) => item.year === snapshot.settings.selectedYear && item.month === snapshot.settings.selectedMonth);
+  const remainingPercent = selectedBudgetPeriod && selectedBudgetPeriod.allocated !== 0
+    ? (selectedBudgetPeriod.remaining / selectedBudgetPeriod.allocated) * 100
+    : null;
   const plan = useMemo(() => monthlyBudgetPlan(snapshot), [snapshot]);
   const leftover = useMemo(() => leftoverBudget(snapshot), [snapshot]);
 
@@ -126,6 +131,7 @@ export const WalletPanel: React.FC = () => {
   /** The entry currently open for editing, or null. */
   const [editingEntry, setEditingEntry] = useState<WalletEntry | null>(null);
   const [loanOpen, setLoanOpen] = useState(false);
+  const [editingLoan, setEditingLoan] = useState<Loan | null>(null);
 
   /*
    * The same gesture preferences the other lists read, for a surface that is
@@ -220,6 +226,7 @@ export const WalletPanel: React.FC = () => {
             <div className="text-footnote">{t("wallet.budgetRemaining")}</div>
             <div className="money wallet-balance-value"><Total amount={wallet.budgetRemaining} currency={walletCurrency} /></div>
             <div className="text-caption">{t("wallet.budgetRemainingHint")}</div>
+            {remainingPercent != null && <div className="text-footnote" style={{ color: remainingPercent >= 0 ? "var(--success)" : "var(--danger)" }}>{remainingPercent.toFixed(0)}%</div>}
           </div>
 
           <div className="wallet-balance" data-tone="personal">
@@ -382,13 +389,15 @@ export const WalletPanel: React.FC = () => {
         {loans.length === 0 ? <EmptyState title={t("wallet.loans")} description={t("wallet.ledgerEmptyBody")} /> : loans.map((loan) => (
           <div className="item-row" key={loan.id}>
             <div style={{ flex: 1 }}><strong>{loan.person}</strong><div className="text-footnote">{formatDate(loan.date)} · {formatMoney(loan.amount, loan.currency, snapshot.settings.currencyDisplayMode)}</div></div>
-            {!loan.returnedAt && !loan.convertedAt && <div className="row-actions"><Button size="sm" variant="ghost" onClick={() => updateLoan(loan.id, { returnedAt: new Date().toISOString() })}>{t("wallet.loanReturned")}</Button><Button size="sm" variant="ghost" onClick={() => convertLoan(loan.id)}>{t("wallet.loanConvert")}</Button></div>}
+            {!loan.returnedAt && !loan.convertedAt && <div className="row-actions"><Button size="sm" variant="ghost" onClick={() => repayLoan(loan.id)}>{t("wallet.loanReturned")}</Button></div>}
+            {mutable && <div className="row-actions"><Button size="sm" variant="ghost" icon onClick={() => setEditingLoan(loan)} aria-label={t("common.edit")}><Pencil size={15} /></Button><Button size="sm" variant="ghost" icon onClick={() => window.confirm(t("common.delete") + "?") && deleteLoan(loan.id)} aria-label={t("common.delete")}><Trash2 size={15} /></Button></div>}
             {(loan.returnedAt || loan.convertedAt) && <span className="text-footnote">{loan.convertedAt ? t("wallet.loanConverted") : t("wallet.loanReturned")}</span>}
           </div>
         ))}
       </Section>
 
       {loanOpen && <LoanSheet onClose={() => setLoanOpen(false)} onSubmit={(loan) => { addLoan(loan); setLoanOpen(false); }} />}
+      {editingLoan && <LoanSheet editing={editingLoan} onClose={() => setEditingLoan(null)} onSubmit={(loan) => { updateLoan(editingLoan.id, loan); setEditingLoan(null); }} />}
 
       {allocationOpen && (
         <AllocationSheet
@@ -601,18 +610,22 @@ const MovementRow: React.FC<{
  * user: the app calculating that €600 is needed is not evidence that €600 was
  * received, and a treasury that assumes otherwise is fiction.
  */
-const LoanSheet: React.FC<{ onClose: () => void; onSubmit: (loan: Omit<Loan, "id">) => void }> = ({ onClose, onSubmit }) => {
+const LoanSheet: React.FC<{ editing?: Loan; onClose: () => void; onSubmit: (loan: Omit<Loan, "id">) => void }> = ({ editing, onClose, onSubmit }) => {
   const { t } = useTranslation();
   const settings = useBudgetStore((s) => s.snapshot.settings);
-  const [direction, setDirection] = useState<Loan["direction"]>("lent");
-  const [amount, setAmount] = useState("");
-  const [currency, setCurrency] = useState<CurrencyCode>(settings.walletCurrency ?? settings.baseCurrency);
-  const [person, setPerson] = useState("");
-  const [date, setDate] = useState(todayDateInput());
+  const [direction, setDirection] = useState<Loan["direction"]>(editing?.direction ?? "lent");
+  const [amount, setAmount] = useState(editing ? String(editing.amount) : "");
+  const [currency, setCurrency] = useState<CurrencyCode>(editing?.currency ?? settings.walletCurrency ?? settings.baseCurrency);
+  const [person, setPerson] = useState(editing?.person ?? "");
+  const [date, setDate] = useState(editing?.date ?? todayDateInput());
+  const [source, setSource] = useState(editing?.source ?? "Personal");
+  const [destination, setDestination] = useState(editing?.destination ?? "");
   const valid = Number(amount) > 0 && person.trim() !== "" && date !== "";
-  return <EditorSheet title={t("wallet.addLoan")} onClose={onClose} footer={<><Button variant="ghost" onClick={onClose}>{t("common.cancel")}</Button><Button variant="primary" type="submit" form="loan-form" disabled={!valid}>{t("common.add")}</Button></>}>
-    <form id="loan-form" onSubmit={(event) => { event.preventDefault(); if (valid) onSubmit({ direction, amount: Number(amount), currency, person, date }); }} style={{ display: "grid", gap: 12 }}>
+  return <EditorSheet title={editing ? t("common.edit") : t("wallet.addLoan")} onClose={onClose} footer={<><Button variant="ghost" onClick={onClose}>{t("common.cancel")}</Button><Button variant="primary" type="submit" form="loan-form" disabled={!valid}>{editing ? t("common.saveChanges") : t("common.add")}</Button></>}>
+    <form id="loan-form" onSubmit={(event) => { event.preventDefault(); if (valid) onSubmit({ direction, amount: Number(amount), currency, person, date, source, destination }); }} style={{ display: "grid", gap: 12 }}>
       <Field label={t("wallet.loanPerson")}><input className="input" value={person} onChange={(e) => setPerson(e.target.value)} required autoFocus /></Field>
+      <Field label="Source"><input className="input" value={source} onChange={(e) => setSource(e.target.value)} /></Field>
+      <Field label="Destination"><input className="input" value={destination} onChange={(e) => setDestination(e.target.value)} /></Field>
       <Field label={t("spending.amount")}><input className="input" type="number" min="0" step="any" value={amount} onChange={(e) => setAmount(e.target.value)} required /></Field>
       <Field label={t("spending.currency")}><select className="select" value={currency} onChange={(e) => setCurrency(e.target.value as CurrencyCode)}>{currencyOptionsFor(settings, currency).map((code) => <option key={code}>{code}</option>)}</select></Field>
       <Field label={t("wallet.loanLent")}><select className="select" value={direction} onChange={(e) => setDirection(e.target.value as Loan["direction"])}><option value="lent">{t("wallet.loanLent")}</option><option value="borrowed">{t("wallet.loanBorrowed")}</option></select></Field>
@@ -805,7 +818,7 @@ const MovementSheet: React.FC<{
               </button>
             </div>
           </Field>
-          <Field label={t("spending.amount")}>
+      <Field label={t("spending.amount")}>
             <input
               className="input"
               type="number"

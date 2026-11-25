@@ -1182,6 +1182,25 @@ strong {
   font-weight: 600;
 }
 
+.transaction-datetime {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+  gap: 8px;
+}
+
+.transaction-datetime-part {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: var(--text-secondary);
+}
+
+.transaction-datetime-part .input {
+  min-width: 0;
+  flex: 1;
+}
+
 /* Editing a closed period: a deliberately louder, unmistakable state.
 
    Opaque like the banner it replaces, and in the signature red rather than a
