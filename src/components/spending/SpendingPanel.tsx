@@ -436,6 +436,7 @@ export const SpendingPanel: React.FC = () => {
             }
           >
           <form
+            className="transaction-editor-grid"
             id="spending-editor-form"
             onSubmit={save}
             style={{
@@ -467,7 +468,7 @@ export const SpendingPanel: React.FC = () => {
               </select>
             </Field>
             <Field label={t("spending.timestamp")} name="transactionAt">
-              <label className="settings-check">
+              <label className="settings-check transaction-timestamp-toggle">
                 <input
                   type="checkbox"
                   checked={draft.recordTimestamp}

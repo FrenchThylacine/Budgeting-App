@@ -9,6 +9,7 @@ with one small fix gets a patch rather than a new minor.
 
 | Version | What it was |
 | --- | --- |
+| **5.4.1** | Bug-fix pass: projection breakdown, duplicate loan-history removal, denser transaction editor, and report layout polish |
 | **5.4.0** | Wallet accounting and history improvements, editable monthly allocations with reset-aware carryover, per-month Analytics budget variance colors, and a repaired report opener |
 | **5.3.0** | Unified local transaction date/time control with independent calendar and clock editing |
 | **5.2.0** | Loans now create linked wallet movements, support repayment, edit/delete safely, and show remaining-budget percentages |

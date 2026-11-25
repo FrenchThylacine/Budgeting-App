@@ -175,7 +175,6 @@ export const WalletPanel: React.FC = () => {
   const movementGroups = useMemo(() => [
     { key: "spending", label: t("nav.spending"), items: wallet.movements.filter((item) => item.kind === "spending") },
     { key: "general", label: t("wallet.ledger"), items: wallet.movements.filter((item) => item.kind !== "spending" && !item.loanId && item.kind !== "adjustment" && item.kind !== "opening" && item.kind !== "rollover") },
-    { key: "loans", label: t("wallet.loans"), items: wallet.movements.filter((item) => item.loanId) },
     { key: "adjustments", label: t("wallet.typeAdjustment"), items: wallet.movements.filter((item) => !item.loanId && ["adjustment", "opening", "rollover"].includes(item.kind)) },
   ].filter((group) => group.items.length > 0), [wallet.movements, t]);
 
@@ -413,7 +412,7 @@ export const WalletPanel: React.FC = () => {
         {loans.length === 0 ? <EmptyState title={t("wallet.loans")} description={t("wallet.ledgerEmptyBody")} /> : loans.map((loan) => (
           <div className="item-row" key={loan.id}>
             <div style={{ flex: 1 }}><strong>{loan.person}</strong><div className="text-footnote">{formatDate(loan.date)} · {formatMoney(loan.amount, loan.currency, snapshot.settings.currencyDisplayMode)}</div></div>
-            {!loan.returnedAt && !loan.convertedAt && <div className="row-actions"><Button size="sm" variant="ghost" onClick={() => repayLoan(loan.id)}>{t("wallet.loanReturned")}</Button></div>}
+            {!loan.returnedAt && !loan.convertedAt && <div className="row-actions"><Button size="sm" variant="ghost" onClick={() => { const value = window.prompt("Repayment amount", String(Math.max(0, loan.amount - (loan.repaidAmount ?? 0)))); if (value != null) repayLoan(loan.id, Number(value)); }}>{t("wallet.loanReturned")}</Button></div>}
             {mutable && <div className="row-actions"><Button size="sm" variant="ghost" icon onClick={() => setEditingLoan(loan)} aria-label={t("common.edit")}><Pencil size={15} /></Button><Button size="sm" variant="ghost" icon onClick={() => window.confirm(t("common.delete") + "?") && deleteLoan(loan.id)} aria-label={t("common.delete")}><Trash2 size={15} /></Button></div>}
             {(loan.returnedAt || loan.convertedAt) && <span className="text-footnote">{loan.convertedAt ? t("wallet.loanConverted") : t("wallet.loanReturned")}</span>}
           </div>
@@ -665,8 +664,8 @@ const LoanSheet: React.FC<{ editing?: Loan; onClose: () => void; onSubmit: (loan
   return <EditorSheet title={editing ? t("common.edit") : t("wallet.addLoan")} onClose={onClose} footer={<><Button variant="ghost" onClick={onClose}>{t("common.cancel")}</Button><Button variant="primary" type="submit" form="loan-form" disabled={!valid}>{editing ? t("common.saveChanges") : t("common.add")}</Button></>}>
     <form id="loan-form" onSubmit={(event) => { event.preventDefault(); if (valid) onSubmit({ direction, amount: Number(amount), currency, person, date, source, destination }); }} style={{ display: "grid", gap: 12 }}>
       <Field label={t("wallet.loanPerson")}><input className="input" value={person} onChange={(e) => setPerson(e.target.value)} required autoFocus /></Field>
-      <Field label="Source"><input className="input" value={source} onChange={(e) => setSource(e.target.value)} /></Field>
-      <Field label="Destination"><input className="input" value={destination} onChange={(e) => setDestination(e.target.value)} /></Field>
+      <Field label="Source"><select className="select" value={source} onChange={(e) => setSource(e.target.value)}><option>Personal</option><option>Budget</option><option>Person</option></select></Field>
+      <Field label="Destination"><select className="select" value={destination} onChange={(e) => setDestination(e.target.value)}><option>Person</option><option>Personal</option><option>Budget</option></select></Field>
       <Field label={t("spending.amount")}><input className="input" type="number" min="0" step="any" value={amount} onChange={(e) => setAmount(e.target.value)} required /></Field>
       <Field label={t("spending.currency")}><select className="select" value={currency} onChange={(e) => setCurrency(e.target.value as CurrencyCode)}>{currencyOptionsFor(settings, currency).map((code) => <option key={code}>{code}</option>)}</select></Field>
       <Field label={t("wallet.loanLent")}><select className="select" value={direction} onChange={(e) => setDirection(e.target.value as Loan["direction"])}><option value="lent">{t("wallet.loanLent")}</option><option value="borrowed">{t("wallet.loanBorrowed")}</option></select></Field>

@@ -3916,6 +3916,19 @@ label:has(> input[type="radio"]) {
    The preview is the real document in a frame, so almost nothing here styles
    the report itself — this is the chrome around it. */
 .report-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.report-section .section-head { align-items: flex-start; }
+.report-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding: 12px;
+  margin-bottom: 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-inset);
+}
 
 .report-scope {
   display: inline-flex;
@@ -3923,7 +3936,7 @@ label:has(> input[type="radio"]) {
   gap: 2px;
   border-radius: var(--radius-md);
   background: var(--bg-inset);
-  margin-bottom: 12px;
+  margin-bottom: 0;
   flex-wrap: wrap;
 }
 
@@ -3946,7 +3959,7 @@ label:has(> input[type="radio"]) {
   box-shadow: var(--shadow-sm, 0 1px 3px rgba(0, 0, 0, 0.1));
 }
 
-.report-range { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+.report-range { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 0; }
 .report-range label { display: grid; gap: 4px; }
 
 .report-preview {
@@ -3970,6 +3983,9 @@ label:has(> input[type="radio"]) {
   .report-frame { height: 70vh; }
   .report-actions { width: 100%; }
   .report-actions .btn { flex: 1 1 auto; }
+  .report-controls { align-items: stretch; }
+  .report-scope { width: 100%; }
+  .report-scope-option { flex: 1 1 0; }
 }
 
 /* ── Status colours in Settings ───────────────────────────────────────────────

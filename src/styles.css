@@ -1201,6 +1201,10 @@ strong {
   flex: 1;
 }
 
+.transaction-editor-grid { gap: 8px !important; }
+.transaction-timestamp-toggle { margin: -2px 0 4px; font-size: 0.72rem; }
+.transaction-timestamp-toggle input { width: 13px; height: 13px; }
+
 /* Editing a closed period: a deliberately louder, unmistakable state.
 
    Opaque like the banner it replaces, and in the signature red rather than a

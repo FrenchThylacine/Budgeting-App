@@ -146,6 +146,7 @@ export const ReportPanel: React.FC = () => {
   return (
     <div className="page-enter report-page">
       <Section
+        className="report-section"
         title={t("nav.report")}
         action={
           <div className="report-actions">
@@ -163,6 +164,7 @@ export const ReportPanel: React.FC = () => {
       >
         {/* One control, three answers. The range fields appear only for the
             answer that needs them. */}
+        <div className="report-controls">
         <div className="report-scope" role="radiogroup" aria-label={t("report.period")}>
           {(["month", "year", "custom"] as const).map((option) => (
             <button
@@ -190,6 +192,7 @@ export const ReportPanel: React.FC = () => {
             </label>
           </div>
         )}
+        </div>
 
         <div className="report-preview">
           {failed ? (

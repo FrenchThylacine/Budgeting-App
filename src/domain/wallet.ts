@@ -97,7 +97,8 @@ export function walletEffect(entry: Pick<WalletEntry, "type" | "amount">): numbe
 }
 
 /** How much a ledger entry changes the allocated budget still available. */
-export function budgetEffect(entry: Pick<WalletEntry, "type" | "amount">): number {
+export function budgetEffect(entry: Pick<WalletEntry, "type" | "amount" | "loanBudgetEffect">): number {
+  if ("loanBudgetEffect" in entry && entry.loanBudgetEffect != null) return entry.loanBudgetEffect;
   if (entry.type === ALLOCATION_TYPE) return entry.amount;
   if (entry.type === TRANSFER_TYPE) return -entry.amount;
   if (entry.type === "transfer-in") return entry.amount;

@@ -608,6 +608,15 @@ export const AnalyticsPanel: React.FC = () => {
                       detail: utilisation != null ? t("stats.ofBudgetPercent", { percent: Math.round(utilisation) }) : undefined,
                       tone: utilisation != null && utilisation >= 100 ? "negative" : undefined,
                     },
+                    {
+                      label: t("dashboard.upcoming"),
+                      value: money(pacing.upcomingScheduled),
+                      detail: pacing.historicalComparable != null ? t("stats.projectedAtPace") : undefined,
+                    },
+                    {
+                      label: t("stats.projectedAtPace"),
+                      value: money(pacing.estimatedAdditional),
+                    },
                   ]}
                 />
               )}

@@ -732,6 +732,8 @@ export interface WalletEntry {
   /** Links generated movements to a loan without affecting ordinary entries. */
   loanId?: string;
   loanMovement?: "principal" | "repayment";
+  /** Signed budget-claim effect for loans moved through the Budget side. */
+  loanBudgetEffect?: number;
   createdAt: string;
 }
 

@@ -1002,7 +1002,12 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
         currency: loan.currency,
       }, { id: movementId, type: "adjustment", source: loan.source?.trim() || storedText("wallet.loanMovement"), note: loan.destination?.trim() || loan.person.trim(), date: loan.date, settings: snapshot.settings }));
       const entry = ensureYearRecord(snapshot, year).walletEntries.find((item) => item.id === movementId);
-      if (entry) { entry.loanId = loanId; entry.loanMovement = "principal"; }
+      if (entry) {
+        entry.loanId = loanId;
+        entry.loanMovement = "principal";
+        entry.loanBudgetEffect = (loan.direction === "lent" ? -loan.amount : loan.amount)
+          * ((loan.direction === "lent" ? loan.source : loan.destination) === "Budget" ? 1 : 0);
+      }
       snapshot.settings.loans = [...(snapshot.settings.loans ?? []), { ...loan, id: loanId, walletEntryId: movementId, repaidAmount: 0, person: loan.person.trim() }];
     }, "wallet", storedText("audit.walletAdded"), loan);
   },
@@ -1020,6 +1025,8 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
         entry.year = Number(loan.date.slice(0, 4));
         entry.month = Number(loan.date.slice(5, 7));
         entry.note = loan.destination?.trim() || loan.person;
+        entry.loanBudgetEffect = (loan.direction === "lent" ? -loan.amount : loan.amount)
+          * ((loan.direction === "lent" ? loan.source : loan.destination) === "Budget" ? 1 : 0);
         entry.walletAmount = undefined; entry.walletCurrency = undefined; entry.walletRate = undefined;
         const walletCurrency = snapshot.settings.walletCurrency ?? snapshot.settings.baseCurrency;
         const converted = convertAmount(entry.amount, entry.currency, walletCurrency, snapshot.settings.exchangeRates);
@@ -1050,7 +1057,11 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
       const repaymentId = id("loan-repayment");
       ensureYearRecord(snapshot, year).walletEntries.push(movement(year, month, { amount: repayment, currency: loan.currency }, { id: repaymentId, type: "adjustment", source: storedText("wallet.loanRepayment"), note: loan.person, date, settings: snapshot.settings }));
       const entry = ensureYearRecord(snapshot, year).walletEntries.find((item) => item.id === repaymentId);
-      if (entry) { entry.loanId = loanId; entry.loanMovement = "repayment"; }
+      if (entry) {
+        entry.loanId = loanId;
+        entry.loanMovement = "repayment";
+        entry.loanBudgetEffect = repayment * ((loan.direction === "lent" ? loan.source : loan.destination) === "Budget" ? 1 : 0);
+      }
       loan.repaidAmount = (loan.repaidAmount ?? 0) + amount;
       if (loan.repaidAmount >= loan.amount) loan.returnedAt = new Date().toISOString();
     }, "wallet", storedText("audit.walletAdded"), { loanId, requestedAmount });

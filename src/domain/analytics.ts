@@ -233,6 +233,12 @@ export interface BudgetPacing {
   /** Max spend per remaining day to finish exactly on budget. */
   requiredDailyPace: number | null;
   daysLeft: number;
+  /** Known scheduled personal charges due later in the month. */
+  upcomingScheduled: number;
+  /** Estimated discretionary spending for the remaining days. */
+  estimatedAdditional: number;
+  /** Same-month-last-year spend when enough historical data exists. */
+  historicalComparable: number | null;
 }
 
 
@@ -314,9 +320,20 @@ export function budgetPacing(
     .reduce((total, entry) => total + normalizeEntry(entry, snapshot), 0);
   const discretionaryRate = elapsedDays > 0 ? discretionarySpent / elapsedDays : 0;
 
+  const previous = snapshot.years[String(settings.selectedYear - 1)]?.spendingEntries
+    .filter((entry) => entry.month === settings.selectedMonth && entry.source !== "external" && entry.source !== "shared") ?? [];
+  const historicalComparable = previous.length >= 3
+    ? previous.reduce((sum, entry) => sum + normalizeEntry(entry, snapshot), 0)
+    : null;
+  const historicalRate = historicalComparable != null ? historicalComparable / totalDays : null;
+  const estimatedRate = historicalRate != null
+    ? discretionaryRate * 0.6 + historicalRate * 0.4
+    : discretionaryRate;
+
   const upcoming = upcomingPersonalCharges(snapshot, now);
+  const estimatedAdditional = estimatedRate * daysLeft;
   const projectedTotal =
-    elapsedDays > 0 ? spent + discretionaryRate * daysLeft + upcoming : null;
+    elapsedDays > 0 ? spent + estimatedAdditional + upcoming : null;
 
   return {
     budget,
@@ -328,6 +345,9 @@ export function budgetPacing(
     projectedRemaining: projectedTotal != null ? budget - projectedTotal : null,
     requiredDailyPace: daysLeft > 0 ? Math.max(remaining, 0) / daysLeft : null,
     daysLeft,
+    upcomingScheduled: upcoming,
+    estimatedAdditional,
+    historicalComparable,
   };
 }
 
