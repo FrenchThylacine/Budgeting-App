@@ -1211,7 +1211,7 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
       set,
       get,
       (snapshot) => {
-        const entry = currentYear(snapshot).walletEntries.find((item) => item.id === idValue);
+        const entry = Object.values(snapshot.years).flatMap((record) => record.walletEntries).find((item) => item.id === idValue);
         if (entry) {
           Object.assign(entry, patch);
           if (patch.amount !== undefined || patch.currency !== undefined) {
@@ -1235,8 +1235,9 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
       set,
       get,
       (snapshot) => {
-        const year = currentYear(snapshot);
-        year.walletEntries = year.walletEntries.filter((item) => item.id !== idValue);
+        for (const year of Object.values(snapshot.years)) {
+          year.walletEntries = year.walletEntries.filter((item) => item.id !== idValue);
+        }
       },
       "delete",
       storedText("audit.walletDeleted"),

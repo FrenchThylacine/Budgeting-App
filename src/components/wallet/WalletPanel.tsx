@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { ArrowDownLeft, ArrowUpRight, Info, Plus, RotateCcw, Trash2, Wallet as WalletIcon, AlertTriangle, Pencil } from "lucide-react";
-import { currencyOptionsFor, formatMoney } from "../../domain/currency";
+import { currencyOptionsFor, formatMoney, normalizeAmount } from "../../domain/currency";
 import { monthName, todayDateInput, isLastDayOfMonth, monthKey } from "../../domain/dates";
 import { useBudgetStore } from "../../store/budgetStore";
 import {
@@ -8,6 +8,7 @@ import {
   leftoverBudget,
   monthlyBudgetPlan,
   walletState,
+  type BudgetPeriod,
   type WalletMovement,
 } from "../../domain/wallet";
 import type { BudgetSnapshot, CurrencyCode, CurrencyDisplayMode, Loan, SwipeActionId, WalletEntry, WalletEntryType } from "../../domain/types";
@@ -92,6 +93,11 @@ export const WalletPanel: React.FC = () => {
   const mutable = useBudgetStore((s) => s.isCurrentPeriodMutable)();
 
   const wallet = useMemo(() => walletState(snapshot), [snapshot]);
+  const loanBalance = useMemo(() => loans.reduce((total, loan) => {
+    const outstanding = Math.max(0, loan.amount - (loan.repaidAmount ?? 0));
+    const sign = loan.direction === "lent" ? 1 : -1;
+    return total + sign * normalizeAmount(outstanding, loan.currency, { ...snapshot.settings, baseCurrency: snapshot.settings.walletCurrency ?? snapshot.settings.baseCurrency });
+  }, 0), [loans, snapshot.settings]);
   const periods = useMemo(() => budgetPeriods(snapshot), [snapshot]);
   const selectedBudgetPeriod = periods.find((item) => item.year === snapshot.settings.selectedYear && item.month === snapshot.settings.selectedMonth);
   const remainingPercent = selectedBudgetPeriod && selectedBudgetPeriod.allocated !== 0
@@ -132,6 +138,7 @@ export const WalletPanel: React.FC = () => {
   const [editingEntry, setEditingEntry] = useState<WalletEntry | null>(null);
   const [loanOpen, setLoanOpen] = useState(false);
   const [editingLoan, setEditingLoan] = useState<Loan | null>(null);
+  const [editingAllocation, setEditingAllocation] = useState<BudgetPeriod | null>(null);
 
   /*
    * The same gesture preferences the other lists read, for a surface that is
@@ -165,6 +172,12 @@ export const WalletPanel: React.FC = () => {
   // is an English word in a French sentence.
   const localMonth = (month: number) => monthNames()[month - 1] ?? monthName(month);
   const monthLabel = localMonth(snapshot.settings.selectedMonth);
+  const movementGroups = useMemo(() => [
+    { key: "spending", label: t("nav.spending"), items: wallet.movements.filter((item) => item.kind === "spending") },
+    { key: "general", label: t("wallet.ledger"), items: wallet.movements.filter((item) => item.kind !== "spending" && !item.loanId && item.kind !== "adjustment" && item.kind !== "opening" && item.kind !== "rollover") },
+    { key: "loans", label: t("wallet.loans"), items: wallet.movements.filter((item) => item.loanId) },
+    { key: "adjustments", label: t("wallet.typeAdjustment"), items: wallet.movements.filter((item) => !item.loanId && ["adjustment", "opening", "rollover"].includes(item.kind)) },
+  ].filter((group) => group.items.length > 0), [wallet.movements, t]);
 
   return (
     <div className="page-enter wallet-page" style={{ display: "grid", gap: 20 }}>
@@ -220,6 +233,12 @@ export const WalletPanel: React.FC = () => {
             </div>
             <div className="money wallet-balance-value"><Total amount={wallet.walletBalance} currency={walletCurrency} /></div>
             <div className="text-caption">{t("wallet.walletBalanceHint")}</div>
+          </div>
+
+          <div className="wallet-balance" data-tone={loanBalance >= 0 ? "success" : "warning"}>
+            <div className="text-footnote">{t("wallet.loans")}</div>
+            <div className="money wallet-balance-value">{money(loanBalance)}</div>
+            <div className="text-caption">{loanBalance >= 0 ? "Receivable" : "Payable"}</div>
           </div>
 
           <div className="wallet-balance" data-tone="budget">
@@ -325,7 +344,7 @@ export const WalletPanel: React.FC = () => {
               <tbody>
                 {periods.map((period) => (
                   <tr key={`${period.year}-${period.month}`}>
-                    <td>{`${localMonth(period.month)} ${period.year}`}</td>
+                    <td>{`${localMonth(period.month)} ${period.year}`} {period.allocationEntryId && mutable && <Button size="sm" variant="ghost" icon onClick={() => setEditingAllocation(period)} aria-label={t("common.edit")}><Pencil size={13} /></Button>}</td>
                     <td className="num">{money(period.carriedIn)}</td>
                     <td className="num">{money(period.allocated)}</td>
                     <td className="num">{money(period.spent)}</td>
@@ -343,8 +362,11 @@ export const WalletPanel: React.FC = () => {
         {wallet.movements.length === 0 ? (
           <EmptyState title={t("wallet.ledgerEmpty")} description={t("wallet.ledgerEmptyBody")} />
         ) : (
-          <div className="item-list">
-            {wallet.movements.map((movement) => {
+          <div style={{ display: "grid", gap: 18 }}>
+            {movementGroups.map((group) => <div key={group.key}>
+              <div className="text-footnote" style={{ margin: "0 0 6px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em" }}>{group.label}</div>
+              <div className="item-list">
+            {group.items.map((movement) => {
               /*
                * A movement that came from a transaction is edited where it was
                * written — in Spending — so the ledger never offers two places
@@ -381,6 +403,8 @@ export const WalletPanel: React.FC = () => {
                 </SwipeRow>
               );
             })}
+              </div>
+            </div>)}
           </div>
         )}
       </Section>
@@ -398,6 +422,23 @@ export const WalletPanel: React.FC = () => {
 
       {loanOpen && <LoanSheet onClose={() => setLoanOpen(false)} onSubmit={(loan) => { addLoan(loan); setLoanOpen(false); }} />}
       {editingLoan && <LoanSheet editing={editingLoan} onClose={() => setEditingLoan(null)} onSubmit={(loan) => { updateLoan(editingLoan.id, loan); setEditingLoan(null); }} />}
+      {editingAllocation && editingAllocation.allocationEntryId && <AllocationSheet
+        editing={editingAllocation}
+        suggested={editingAllocation.allocated}
+        monthLabel={`${localMonth(editingAllocation.month)} ${editingAllocation.year}`}
+        onClose={() => setEditingAllocation(null)}
+        onSubmit={(input) => {
+          updateWalletEntry(editingAllocation.allocationEntryId!, {
+            amount: input.amount,
+            currency: input.currency,
+            date: input.date,
+            year: Number(input.date.slice(0, 4)),
+            month: Number(input.date.slice(5, 7)),
+            note: input.note,
+          });
+          setEditingAllocation(null);
+        }}
+      />}
 
       {allocationOpen && (
         <AllocationSheet
@@ -635,16 +676,17 @@ const LoanSheet: React.FC<{ editing?: Loan; onClose: () => void; onSubmit: (loan
 };
 
 const AllocationSheet: React.FC<{
+  editing?: BudgetPeriod;
   suggested: number;
   monthLabel: string;
   onClose: () => void;
   onSubmit: (input: { amount: number; currency: CurrencyCode; date: string; note: string }) => void;
-}> = ({ suggested, monthLabel, onClose, onSubmit }) => {
+}> = ({ editing, suggested, monthLabel, onClose, onSubmit }) => {
   const { t } = useTranslation();
   const settings = useBudgetStore((s) => s.snapshot.settings);
   const [amount, setAmount] = useState(suggested > 0 ? String(suggested) : "");
   const [currency, setCurrency] = useState<CurrencyCode>(settings.monthlyBudgetCurrency ?? settings.baseCurrency);
-  const [date, setDate] = useState(todayDateInput());
+  const [date, setDate] = useState(editing ? `${editing.year}-${String(editing.month).padStart(2, "0")}-01` : todayDateInput());
   const [note, setNote] = useState("");
 
   const parsed = Number(amount);
@@ -652,7 +694,7 @@ const AllocationSheet: React.FC<{
 
   return (
     <EditorSheet
-      title={t("wallet.addAllocationTitle")}
+      title={editing ? t("common.edit") : t("wallet.addAllocationTitle")}
       subtitle={t("wallet.addAllocationHint")}
       onClose={onClose}
       footer={
@@ -661,7 +703,7 @@ const AllocationSheet: React.FC<{
             {t("common.cancel")}
           </Button>
           <Button type="submit" variant="primary" form="wallet-allocation-form" disabled={!valid}>
-            {t("common.add")}
+            {editing ? t("common.saveChanges") : t("common.add")}
           </Button>
         </>
       }

@@ -23,7 +23,7 @@ import {
 import { useBudgetStore } from "../../store/budgetStore";
 import { activityBudgetSummary, fundingShares } from "../../domain/activityBudget";
 import { FUNDING_KINDS, FUNDING_META } from "../../domain/funding";
-import { walletComposition, type WalletCurrencySlice } from "../../domain/wallet";
+import { budgetPeriods, walletComposition, type WalletCurrencySlice } from "../../domain/wallet";
 import { formatMoney } from "../../domain/currency";
 import { useTranslation } from "../../i18n/useTranslation";
 import { formatDualMoney } from "../../utils/formatters";
@@ -231,6 +231,25 @@ export const AnalyticsPanel: React.FC = () => {
     () => monthlyTrendBars(calc.monthlyTrend, mode === "year" ? -1 : settings.selectedMonth, monthNames("short")),
     [calc.monthlyTrend, mode, settings.selectedMonth],
   );
+  const monthlyBudgets = useMemo(() => new Map(
+    budgetPeriods(snapshot)
+      .filter((period) => period.year === settings.selectedYear)
+      .map((period) => [period.month, period.allocated] as const),
+  ), [snapshot, settings.selectedYear]);
+  const colouredMonthlyBars = useMemo(() => monthlyBars.map((bar, index) => {
+    const budget = monthlyBudgets.get(index + 1);
+    const actual = bar.value;
+    if (actual == null || budget == null) return { ...bar, color: undefined, overlayColor: undefined, detail: undefined };
+    const over = actual > budget;
+    const exact = Math.abs(actual - budget) < 0.005;
+    const current = index + 1 === settings.selectedMonth;
+    return {
+      ...bar,
+      color: current ? "var(--warning)" : over ? "var(--danger)" : "var(--success)",
+      overlayColor: current ? (exact ? "var(--success)" : over ? "var(--danger)" : "var(--success)") : exact ? "var(--accent)" : undefined,
+      detail: `${money(budget)} budget`,
+    };
+  }), [monthlyBars, monthlyBudgets, settings.selectedMonth]);
   const weeklyBars = useMemo(
     () => weeklyTrendBars(calc.weeklyTrend, settings.selectedWeek, weekAxis, 12),
     [calc.weeklyTrend, settings.selectedWeek],
@@ -510,10 +529,13 @@ export const AnalyticsPanel: React.FC = () => {
             ) : (
               <BarChart
                 title={t("stats.ariaBudget", { currency: settings.baseCurrency })}
-                bars={monthlyBars.map((bar) => ({
+                bars={colouredMonthlyBars.map((bar) => ({
                   label: bar.label,
                   value: bar.value,
                   highlight: bar.highlight,
+                  color: bar.color,
+                  overlayColor: bar.overlayColor,
+                  detail: bar.detail,
                 }))}
                 referenceLines={budgetBase > 0 ? [{ value: budgetBase, label: t("chart.budgetLine", { amount: money(budgetBase) }) }] : []}
                 formatValue={money}

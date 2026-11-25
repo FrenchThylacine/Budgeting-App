@@ -173,6 +173,8 @@ export interface WalletMovement {
   budgetDelta: number;
   /** Set when the movement is a spending transaction rather than a ledger row. */
   spendingId?: string;
+  loanId?: string;
+  loanMovement?: "principal" | "repayment";
 }
 
 export interface WalletState {
@@ -382,6 +384,8 @@ export function walletState(snapshot: BudgetSnapshot): WalletState {
       kind: entry.type,
       walletDelta,
       budgetDelta,
+      loanId: entry.loanId,
+      loanMovement: entry.loanMovement,
     });
   }
 
@@ -447,6 +451,8 @@ export interface BudgetPeriod {
   transferred: number;
   /** Still available at the end of the month: it does not expire. */
   remaining: number;
+  /** First allocation entry for this month, when one exists. */
+  allocationEntryId?: string;
 }
 
 /**
@@ -461,7 +467,7 @@ export function budgetPeriods(snapshot: BudgetSnapshot): BudgetPeriod[] {
   const epoch = ledgerEpoch(snapshot);
   const base = (amount: number, currency: CurrencyCode) => normalizeAmount(amount, currency, snapshot.settings);
 
-  const buckets = new Map<string, { year: number; month: number; allocated: number; spent: number; transferred: number }>();
+  const buckets = new Map<string, { year: number; month: number; allocated: number; spent: number; transferred: number; allocationEntryId?: string }>();
   const bucket = (date: string) => {
     const year = Number(date.slice(0, 4));
     const month = Number(date.slice(5, 7));
@@ -477,7 +483,10 @@ export function budgetPeriods(snapshot: BudgetSnapshot): BudgetPeriod[] {
   for (const entry of allWalletEntries(snapshot)) {
     if (entry.type !== ALLOCATION_TYPE && entry.type !== TRANSFER_TYPE) continue;
     const target = bucket(walletEntryDate(entry));
-    if (entry.type === ALLOCATION_TYPE) target.allocated += base(entry.amount, entry.currency);
+    if (entry.type === ALLOCATION_TYPE) {
+      target.allocated += base(entry.amount, entry.currency);
+      target.allocationEntryId ??= entry.id;
+    }
     else target.transferred += base(entry.amount, entry.currency);
   }
 
@@ -485,13 +494,17 @@ export function budgetPeriods(snapshot: BudgetSnapshot): BudgetPeriod[] {
     bucket(entry.date).spent += base(entry.amount, entry.currency);
   }
 
+  const closes = new Map(
+    Object.values(snapshot.years).flatMap((record) => record.closedMonths.map((close) => [`${close.year}-${close.month}`, close] as const)),
+  );
   let running = 0;
   return [...buckets.entries()]
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([, value]) => {
       const carriedIn = running;
       const remaining = carriedIn + value.allocated - value.spent - value.transferred;
-      running = remaining;
+      const close = closes.get(`${value.year}-${value.month}`);
+      running = close?.status === "closed-without-rollover" ? 0 : remaining;
       return {
         year: value.year,
         month: value.month,
@@ -501,6 +514,7 @@ export function budgetPeriods(snapshot: BudgetSnapshot): BudgetPeriod[] {
         spent: value.spent,
         transferred: value.transferred,
         remaining,
+        allocationEntryId: value.allocationEntryId,
       };
     })
     .reverse();

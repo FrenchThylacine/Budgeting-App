@@ -20,6 +20,8 @@ export interface ChartBar {
   highlight?: boolean;
   /** Overrides the default emphasis colouring (e.g. a category's own colour). */
   color?: string;
+  /** Optional variance wash drawn over the bar, useful for the active month. */
+  overlayColor?: string;
   detail?: string;
 }
 
@@ -137,13 +139,13 @@ export const BarChart: React.FC<BarChartProps> = ({
               const opacity = bar.color ? (bar.highlight === false ? 0.55 : 1) : bar.highlight ? 1 : 0.32;
 
               return (
-                <path
-                  key={`${bar.label}-${index}`}
-                  d={barPath(cx - barWidth / 2, bottom - barHeight, barWidth, barHeight, 4)}
-                  fill={fill}
-                  opacity={isActive ? Math.min(opacity + 0.25, 1) : opacity}
-                  pointerEvents="all"
-                  onPointerEnter={() =>
+                <g key={`${bar.label}-${index}`}>
+                  <path
+                    d={barPath(cx - barWidth / 2, bottom - barHeight, barWidth, barHeight, 4)}
+                    fill={fill}
+                    opacity={isActive ? Math.min(opacity + 0.25, 1) : opacity}
+                    pointerEvents="all"
+                    onPointerEnter={() =>
                     show({
                       x: cx,
                       y: bottom - barHeight,
@@ -154,8 +156,10 @@ export const BarChart: React.FC<BarChartProps> = ({
                       ],
                     })
                   }
-                  onPointerLeave={hide}
-                />
+                    onPointerLeave={hide}
+                  />
+                  {bar.overlayColor && <path d={barPath(cx - barWidth / 2 + barWidth * 0.2, bottom - barHeight, barWidth * 0.6, barHeight, 4)} fill={bar.overlayColor} opacity={0.55} pointerEvents="none" />}
+                </g>
               );
             })}
 

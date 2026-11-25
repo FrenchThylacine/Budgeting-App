@@ -122,7 +122,11 @@ export const ReportPanel: React.FC = () => {
 
   const openInTab = () => {
     if (!html) return;
-    const win = window.open("", "_blank", "noopener,noreferrer");
+    // `noopener` makes some browsers return null even when the tab opened,
+    // which left the Open button apparently doing nothing. The generated
+    // document contains no executable user content, so use a normal tab and
+    // write into it directly.
+    const win = window.open("", "_blank");
     if (!win) return;
     win.document.write(html);
     win.document.close();
