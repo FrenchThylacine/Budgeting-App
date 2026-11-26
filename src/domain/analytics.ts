@@ -532,6 +532,67 @@ export interface TrendBar {
   month?: number;
 }
 
+export interface MonthlyBudgetTrendBar extends TrendBar {
+  budget: number | null;
+  color?: string;
+  overlayColor?: string;
+  overlayPattern: boolean;
+  markerColor?: string;
+  statusColor: boolean;
+  exact: boolean;
+  over: boolean;
+}
+
+/**
+ * Attach the correct allocation and status to every monthly data point.
+ * Month/year metadata is the key; array position and localized labels are not.
+ * Historical months without a recorded allocation are neutral, never blue or
+ * compared against the current settings budget.
+ */
+export function monthlyBudgetTrendBars(
+  snapshot: BudgetSnapshot,
+  bars: readonly TrendBar[],
+  fallbackYear: number,
+  now = new Date(),
+): MonthlyBudgetTrendBar[] {
+  const allocations = new Map<string, number>();
+  for (const period of budgetPeriods(snapshot)) {
+    if (period.allocationEntryId) allocations.set(`${period.year}-${period.month}`, period.allocated);
+  }
+  const currentYear = now.getFullYear();
+  const currentMonth = now.getMonth() + 1;
+  const currentBudget = normalizeAmount(
+    snapshot.settings.monthlyBudget,
+    snapshot.settings.monthlyBudgetCurrency,
+    snapshot.settings,
+  );
+
+  return bars.map((bar, index) => {
+    const year = bar.year ?? fallbackYear;
+    const month = bar.month ?? index + 1;
+    const key = `${year}-${month}`;
+    const isCurrent = year === currentYear && month === currentMonth;
+    const budget = allocations.has(key)
+      ? allocations.get(key)!
+      : isCurrent ? currentBudget : null;
+    const status = monthlyBudgetBarStyle(bar.value, budget, isCurrent);
+    return {
+      ...bar,
+      year,
+      month,
+      budget,
+      // A recorded month without an allocation is visibly unscored.
+      color: status.color ?? (bar.value == null ? undefined : isCurrent ? "var(--warning)" : "var(--text-tertiary)"),
+      overlayColor: status.overlayColor,
+      overlayPattern: status.overlayPattern || (isCurrent && bar.value != null),
+      markerColor: status.overlayColor ?? status.color,
+      statusColor: Boolean(status.color),
+      exact: status.exact,
+      over: status.over,
+    };
+  });
+}
+
 /**
  * The twelve short month names, supplied by the caller.
  *

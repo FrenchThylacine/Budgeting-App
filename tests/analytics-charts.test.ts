@@ -27,6 +27,8 @@ import {
   cumulativeForecast,
   dailySpendingCalendar,
   financialHealth,
+  monthlyBudgetTrendBars,
+  monthlyTrendBars,
   periodComparison,
   recentPeriodTotals,
   recurringMonthlySplit,
@@ -36,7 +38,7 @@ import { createSeedBudgetSnapshot } from "../src/data/seedBudget";
 import { catId } from "./helpers/seedIds";
 import type { BudgetSnapshot, SpendingEntry } from "../src/domain/types";
 import { monthNames } from "../src/domain/i18n";
-import { summarizeMonth } from "../src/domain/calculations";
+import { calculateYear, summarizeMonth } from "../src/domain/calculations";
 
 /**
  * The twelve short month names, as `Intl` writes them in English.
@@ -478,6 +480,57 @@ describe("the axis label under each bar", () => {
 });
 
 // ─── cumulativeForecast ──────────────────────────────────────────────────────
+
+describe("monthly budget statuses stay attached to their month data", () => {
+  it("uses the active-month setting only as fallback and keeps its orange identity", () => {
+    const snap = snapshotWith([]);
+    const bars = monthlyBudgetTrendBars(
+      snap,
+      [{ label: "Jul", value: 900, highlight: false, year: 2026, month: 7 }],
+      2026,
+      new Date("2026-07-15T12:00:00Z"),
+    );
+    expect(bars[0]).toMatchObject({
+      budget: 1000,
+      color: "var(--warning)",
+      overlayColor: "var(--success)",
+      overlayPattern: true,
+    });
+  });
+
+  it("uses each bar's month/year allocation even when chart data is reordered", () => {
+    const snap = snapshotWith([
+      entry({ id: "may-converted", amount: 510, currency: "USD", month: 5, date: "2026-05-18" }),
+      entry({ id: "june-exact", amount: 500, currency: "USD", month: 6, date: "2026-06-18" }),
+      entry({ id: "july-below", amount: 510, currency: "USD", month: 7, date: "2026-07-18" }),
+      entry({ id: "august-over", amount: 510, currency: "USD", month: 8, date: "2026-08-18" }),
+      entry({ id: "september-below", amount: 260, currency: "USD", month: 9, date: "2026-09-18" }),
+      entry({ id: "october-no-budget", amount: 200, currency: "USD", month: 10, date: "2026-10-18" }),
+    ]);
+    for (const [month, amount, currency] of [[5, 500, "EUR"], [6, 500, "USD"], [7, 600, "USD"], [8, 500, "USD"], [9, 500, "USD"]] as const) {
+      const date = `2026-${String(month).padStart(2, "0")}-01`;
+      snap.years["2026"].walletEntries.push({
+        id: `allocation-${month}`, year: 2026, month, date, amount, currency,
+        source: "Monthly budget", type: "budget", note: "", createdAt: `${date}T00:00:00.000Z`,
+      });
+    }
+    snap.settings.baseCurrency = "USD";
+    snap.settings.monthlyBudgetCurrency = "USD";
+
+    const now = new Date("2026-12-01T12:00:00Z");
+    const trend = monthlyTrendBars(calculateYear(snap, now).monthlyTrend, -1, SHORT_MONTHS);
+    const styled = monthlyBudgetTrendBars(snap, [trend[8], trend[7], trend[5], trend[6], trend[4], trend[9]], 2026, now);
+
+    expect(styled.map(({ month, value, budget, color, overlayColor }) => ({ month, value, budget, color, overlayColor }))).toEqual([
+      { month: 9, value: 260, budget: 500, color: "var(--success)", overlayColor: undefined },
+      { month: 8, value: 510, budget: 500, color: "var(--danger)", overlayColor: undefined },
+      { month: 6, value: 500, budget: 500, color: "var(--success)", overlayColor: "var(--budget-exact)" },
+      { month: 7, value: 510, budget: 600, color: "var(--success)", overlayColor: undefined },
+      { month: 5, value: 510, budget: 595, color: "var(--success)", overlayColor: undefined },
+      { month: 10, value: 200, budget: null, color: "var(--text-tertiary)", overlayColor: undefined },
+    ]);
+  });
+});
 
 describe("cumulativeForecast", () => {
   const now = new Date("2026-07-15T12:00:00Z");

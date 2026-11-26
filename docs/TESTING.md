@@ -95,9 +95,9 @@ It was written against the *broken* code first and confirmed to fail. A regressi
 - two devices reading the same base: the first write wins, the second gets 409 with the current snapshot;
 - after adopting the server revision, the loser's retry succeeds.
 
-### Historical budget and chart-data release check (5.4.6)
+### Monthly chart alignment and forecast release check (5.4.7)
 
-Run `npm.cmd test -- --reporter=dot --silent=true tests/wallet-treasury.test.ts tests/wallet-reset.test.ts tests/analytics-selectors.test.ts tests/analytics-charts.test.ts tests/analytics-budget-bars.test.ts tests/projection.test.ts tests/i18n.test.ts`. Confirm two months with distinct allocations retain separate Analytics comparisons; edit a historical allocation while History is unlocked and verify both that month's comparison and later carry-in recompute. Cover positive/negative/zero remaining percentages, reset and normal carry-over, and below/above/exact budget states for past and current months. Then run `npm.cmd run build` and `npm.cmd run server:build`; inspect Home and Analytics/Stats in desktop and mobile browsers with deterministic snapshot data. No migration is required for this release.
+Run `npm.cmd test -- --configLoader runner --reporter=dot --silent=true tests/analytics-charts.test.ts tests/analytics-budget-bars.test.ts tests/analytics-selectors.test.ts tests/projection.test.ts tests/i18n.test.ts`. Confirm reordered monthly bars retain their own year/month allocation, foreign-currency allocations compare in base currency, absent historical allocations are unscored, and below/above/exact statuses stay distinct. Confirm actual cumulative points equal transaction totals, actual future days remain null, and projection begins at the last actual point. Then run `npm.cmd run build -- --configLoader runner` and `npm.cmd run server:build`; inspect Home and Analytics/Stats in desktop and mobile browsers with different historical allocations and below/exact/above current-month fixtures. No migration is required for this release.
 
 ## Test layers
 

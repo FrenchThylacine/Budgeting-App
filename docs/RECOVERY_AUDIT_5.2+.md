@@ -2,7 +2,7 @@
 
 Reviewed from Git history and current behavior at `5.4.1` plus the unversioned
 2026-11-25 loan/accounting commit. Follow-up verification and fixes are now at
-`5.4.6`. No semantic release tags exist; changelog and
+`5.4.7`. No semantic release tags exist; changelog and
 package metadata were the version records. Existing claims were treated as
 unverified until checked in code or tests.
 
@@ -18,18 +18,27 @@ unverified until checked in code or tests.
 | 7 Edit past-month allocations in Wallet | Incomplete | Wallet has an in-place month editor and preserves other months; direct interaction could not be verified in a browser. |
 | 8 Remaining amount percentage and tones | Correct and verified | Percentage uses selected allocation; zero/unavailable budget suppresses division and negative values are red. |
 | 9 Carry-over and reset behavior | Correct and verified | Ledger derives carry-in and reset close status; wallet treasury and reset suites passed in the focused release run. |
-| 10 Monthly Analytics bar and graph colors | Correct and verified | Per-month allocations drive historical/current status across bars, trend lines and recent-period charts; deterministic browser fixture shows below/exact/above months and exact gold markers. |
+| 10 Monthly Analytics bar and graph colors | Correct and verified | In 5.4.7, explicit bar year/month metadata selects each ledger allocation, independent of order; converted currencies, missing allocations and current fallback are covered by tests and browser fixtures. |
 | 11 Combined date and time control | Incomplete | Shared editor has local date and clock controls and stores one timestamp; user interaction was not browser-tested. |
 | 12 Transaction form density and responsive layout | Incomplete | Shared editor structure reviewed and production build passed; responsive interaction lacks browser verification. |
 | 13 Report redesign and opening | Incomplete | Responsive report HTML and panel/tab actions are covered by report tests; report opening was not part of the 5.4.6 browser inspection. |
 | 14 Local website/browser bug hunt | Partially verified | Home and Analytics/Stats were inspected in local desktop/mobile Chromium with deterministic API fixtures; persisted database workflows remain unverified because `.env` and `TEST_DATABASE_URL` are absent. |
-| 15 Tests and regression prevention | Verified for chart release | Focused wallet, chart, projection and i18n suites: 180 passed; frontend production and backend TypeScript builds passed. The full suite was not run for 5.4.6. |
-| 16 Documentation and changelog | Correct and verified | README, architecture, database notes, testing guide, recovery checklist and 5.4.6 changelog reviewed and reread. |
+| 15 Tests and regression prevention | Verified for chart release | 5.4.7 focused chart, selector, projection and i18n suites: 133 passed; frontend production and backend TypeScript builds passed. The full suite was not run. |
+| 16 Documentation and changelog | Correct and verified | README, architecture, database notes, testing guide, recovery checklist and 5.4.7 changelog reviewed and reread. |
 | 17 Token-efficient execution and persistent checklist | Correct and verified | Targeted audit, concise progress updates and this persistent recovery checklist. |
 | 18 Re-audit existing implementation | Correct and verified | Current implementation and history were inspected; found and fixed historical budget, future transaction and loan-history defects. |
-| 19 Semantic versioning | Correct and verified | Patch release `5.4.6`, following Git HEAD `5.4.5`; package and lockfile aligned. |
-| 20 Final completion requirements | Incomplete | Chart requirements are verified in 5.4.6; intermediary accounts and database-backed browser verification remain incomplete. |
+| 19 Semantic versioning | Correct and verified | Patch release `5.4.7`, following Git HEAD `5.4.6`; package and lockfile aligned. |
+| 20 Final completion requirements | Incomplete | Chart requirements are verified in 5.4.7; intermediary accounts and database-backed browser verification remain incomplete. |
 | Database migration | Not applicable | Required loan link fields (`loan_id`, `loan_movement`, `loan_budget_effect`) already exist and round-trip in the existing schema. |
+
+## 5.4.7 monthly chart alignment and forecast checklist
+
+- [x] Monthly budget status joins each value to its explicit year/month, not its array index; a reordered-bar regression covers distinct allocations, exact/above/below status, EUR-to-USD normalization and a missing historical allocation.
+- [x] Home, Stats and Analytics monthly bars and trend markers use the shared status calculation; current month remains orange with status overlay and hatch.
+- [x] Actual cumulative forecast remains a solid, unfilled line; projection starts at the actual endpoint as a dashed line; budget remains a separate dashed reference.
+- [x] Browser fixture checked Home, Stats and Analytics at desktop/mobile sizes, with historical and current below/exact/above cases; no page errors or mobile horizontal overflow.
+- [x] Focused suite: 133 passed. Frontend production build and backend TypeScript build passed. Full suite and database-backed browser flows were not run.
+- [x] README, CHANGELOG, architecture, database notes, testing guide and this checklist reread; no schema change.
 
 ## 5.4.6 verification
 

@@ -9,6 +9,7 @@ with one small fix gets a patch rather than a new minor.
 
 | Version | What it was |
 | --- | --- |
+| **5.4.7** | Binds every monthly status to its calendar allocation and separates actual from projected chart lines |
 | **5.4.6** | Aligns chart data to transaction dates and funding; standardizes budget status and missing-data rendering |
 | **5.4.5** | Applies shared budget-status colors to Stats and Home charts, with exact-match indicators and orange current-month hatching |
 | **5.4.4** | Fixes reset-month carry-over gaps, shows period-matched remaining percentages, and distinguishes exact current-month budget in Analytics |
@@ -30,6 +31,16 @@ with one small fix gets a patch rather than a new minor.
 | **2.0.0**–**2.1.0** | Accounts, Excel import, dedicated editors, scenarios, swipe, the first identity |
 | **1.0.0**–**1.1.0** | The first working budget: activities, spending, wishlist, reports |
 | **0.1.0**–**0.2.0** | Before it was an application |
+
+## 5.4.7 — 2026-11-26 — Monthly chart alignment and forecast readability
+
+- Shared monthly chart styling now keys allocations by the bar's explicit year
+  and month, normalizes budgets and spending into the same currency, and uses a
+  neutral tone when a historical allocation is absent.
+- The daily forecast draws actual cumulative spending as an unfilled solid line;
+  the projection starts at its endpoint as a dashed line, with the budget kept
+  as its own dashed reference.
+- Home and Stats/Analytics use the same mapping. No schema migration.
 
 ## 5.4.6 — 2026-11-26 — Chart data and status consistency
 

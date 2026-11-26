@@ -3,7 +3,6 @@ import { calculateYear } from "../../domain/calculations";
 import { isHistoricalPeriod, periodLabel } from "../../domain/periods";
 import {
   budgetPacing,
-  budgetForMonth,
   budgetRelevantEntries,
   categoriesOverCap,
   categoryBreakdown,
@@ -15,17 +14,19 @@ import {
   financialHealth,
   monthlyTrendBars,
   monthlyBudgetBarStyle,
+  monthlyBudgetTrendBars,
   periodComparison,
   recentPeriodTotals,
   recurringMonthlySplit,
   selectedPeriodWindow,
   spendingStats,
   weeklyTrendBars,
+  type MonthlyBudgetTrendBar,
 } from "../../domain/analytics";
 import { useBudgetStore } from "../../store/budgetStore";
 import { activityBudgetSummary, fundingShares } from "../../domain/activityBudget";
 import { FUNDING_KINDS, FUNDING_META } from "../../domain/funding";
-import { budgetPeriods, walletComposition, type WalletCurrencySlice } from "../../domain/wallet";
+import { walletComposition, type WalletCurrencySlice } from "../../domain/wallet";
 import { formatMoney } from "../../domain/currency";
 import { useTranslation } from "../../i18n/useTranslation";
 import { formatDualMoney } from "../../utils/formatters";
@@ -215,30 +216,19 @@ export const AnalyticsPanel: React.FC = () => {
     () => recentPeriodTotals(snapshot, settings, monthNames("short"), weekAxis, mode === "year" ? 5 : 8),
     [snapshot, settings, mode, monthNames, weekAxis],
   );
-  const colouredRecentBars = useMemo(() => recentBars.map((bar) => {
-    const base = {
-      ...bar,
-      color: undefined as string | undefined,
-      overlayColor: undefined as string | undefined,
-      overlayPattern: false,
-      markerColor: undefined as string | undefined,
-      statusColor: false,
-      detail: undefined as string | undefined,
-    };
-    if (mode !== "month" || bar.year == null || bar.month == null) return base;
-    const budget = budgetForMonth(snapshot, bar.year, bar.month);
-    const current = bar.year === new Date().getFullYear() && bar.month === new Date().getMonth() + 1;
-    const style = monthlyBudgetBarStyle(bar.value, budget > 0 ? budget : null, current);
-    return {
-      ...base,
-      color: style.color,
-      overlayColor: style.overlayColor,
-      overlayPattern: style.overlayPattern,
-      markerColor: style.overlayColor ?? style.color,
-      statusColor: Boolean(style.color),
-      detail: style.color ? `${formatDualMoney(budget, settings)} budget${style.exact ? ` · ${t("stats.exactBudget")}` : ""}` : undefined,
-    };
-  }), [recentBars, mode, snapshot, settings, t]);
+  const colouredRecentBars = useMemo<MonthlyBudgetTrendBar[]>(() => mode === "month"
+    ? monthlyBudgetTrendBars(snapshot, recentBars, settings.selectedYear)
+    : recentBars.map((bar) => ({
+        ...bar,
+        budget: null,
+        color: undefined,
+        overlayColor: undefined,
+        overlayPattern: false,
+        markerColor: undefined,
+        statusColor: false,
+        exact: false,
+        over: false,
+      })), [recentBars, mode, snapshot, settings.selectedYear]);
 
   // Same period last year (month mode only)
   const lastYearComparison = useMemo(() => {
@@ -261,29 +251,13 @@ export const AnalyticsPanel: React.FC = () => {
   const money = (value: number | null | undefined) => formatDualMoney(value, settings);
   const tick = (value: number) => compactNumber(value);
 
-  const monthlyBudgets = useMemo(() => {
-    const budgets = new Map<number, number>();
-    for (const period of budgetPeriods(snapshot).filter((item) => item.year === settings.selectedYear)) {
-      if (period.allocated > 0) budgets.set(period.month, period.allocated);
-    }
-    const selectedBudget = budgetForMonth(snapshot, settings.selectedYear, settings.selectedMonth);
-    if (selectedBudget > 0) budgets.set(settings.selectedMonth, selectedBudget);
-    return budgets;
-  }, [snapshot, settings.selectedYear, settings.selectedMonth]);
-  const colouredMonthlyBars = useMemo(() => monthlyBars.map((bar, index) => {
-    const budget = monthlyBudgets.get(index + 1);
-    const current = settings.selectedYear === new Date().getFullYear() && index + 1 === new Date().getMonth() + 1;
-    const style = monthlyBudgetBarStyle(bar.value, budget ?? null, current);
-    if (!style.color) return { ...bar, color: undefined, overlayColor: undefined, markerColor: undefined, overlayPattern: undefined, detail: undefined };
-    return {
+  const colouredMonthlyBars = useMemo(() => monthlyBudgetTrendBars(snapshot, monthlyBars, settings.selectedYear)
+    .map((bar) => ({
       ...bar,
-      color: style.color,
-      overlayColor: style.overlayColor,
-      markerColor: style.overlayColor ?? style.color,
-      overlayPattern: style.overlayPattern,
-      detail: `${money(budget)} budget${style.exact ? ` · ${t("stats.exactBudget")}` : ""}`,
-    };
-  }), [monthlyBars, monthlyBudgets, settings, settings.selectedMonth, t]);
+      detail: bar.budget != null && bar.budget > 0
+        ? `${money(bar.budget)} budget${bar.exact ? ` · ${t("stats.exactBudget")}` : ""}`
+        : undefined,
+    })), [snapshot, monthlyBars, settings.selectedYear, money, t]);
   const weeklyBars = useMemo(
     () => weeklyTrendBars(calc.weeklyTrend, settings.selectedWeek, weekAxis, 12),
     [calc.weeklyTrend, settings.selectedWeek, weekAxis],
@@ -589,7 +563,6 @@ export const AnalyticsPanel: React.FC = () => {
                     color: forecastStatus.color ?? "var(--accent)",
                     pointMarkerColors: forecastMarkerColors,
                     values: forecast.actual,
-                    area: true,
                   },
                   {
                     id: "projected",
@@ -984,7 +957,9 @@ export const AnalyticsPanel: React.FC = () => {
                 statusColor: bar.statusColor,
                 overlayColor: bar.overlayColor,
                 overlayPattern: bar.overlayPattern,
-                detail: bar.detail,
+                detail: bar.budget != null && bar.budget > 0
+                  ? `${money(bar.budget)} budget${bar.exact ? ` · ${t("stats.exactBudget")}` : ""}`
+                  : undefined,
               }))}
               formatValue={money}
               formatTick={tick}

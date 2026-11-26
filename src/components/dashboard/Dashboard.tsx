@@ -12,12 +12,11 @@ import {
   fundingSplit,
   monthlyTrendBars,
   monthlyBudgetBarStyle,
-  budgetForMonth,
+  monthlyBudgetTrendBars,
   periodComparison,
   spendingStats,
   weeklyTrendBars,
 } from "../../domain/analytics";
-import { budgetPeriods } from "../../domain/wallet";
 import { periodLabel } from "../../domain/periods";
 import { formatDualMoney, isViewingCurrentMonth } from "../../utils/formatters";
 import {
@@ -205,31 +204,19 @@ export const Dashboard: React.FC<{ onNavigate?: (tab: "spending" | "activities" 
         : monthlyTrendBars(calculation.monthlyTrend, mode === "year" ? -1 : settings.selectedMonth, monthNames("short")),
     [mode, calculation.weeklyTrend, calculation.monthlyTrend, settings.selectedWeek, settings.selectedMonth],
   );
-  const budgetByMonth = useMemo(() => {
-    const values = new Map<number, number>();
-    for (const period of budgetPeriods(snapshot)) {
-      if (period.year === settings.selectedYear) values.set(period.month, period.allocated);
-    }
-    const current = new Date();
-    if (settings.selectedYear === current.getFullYear()) {
-      const month = current.getMonth() + 1;
-      values.set(month, budgetForMonth(snapshot, settings.selectedYear, month));
-    }
-    return values;
-  }, [snapshot, settings.selectedYear]);
-  const coloredTrendBars = trendBars.map((bar, index) => {
-    if (mode === "week") return { ...bar, color: undefined as string | undefined, overlayColor: undefined as string | undefined, overlayPattern: false, statusColor: false };
-    const month = index + 1;
-    const budget = budgetByMonth.get(month);
-    const status = monthlyBudgetBarStyle(bar.value, budget ?? null, settings.selectedYear === new Date().getFullYear() && month === new Date().getMonth() + 1);
-    return {
-      ...bar,
-      color: status.color,
-      overlayColor: status.overlayColor,
-      overlayPattern: status.overlayPattern,
-      statusColor: Boolean(status.color),
-    };
-  });
+  const coloredTrendBars = mode === "week"
+    ? trendBars.map((bar) => ({
+        ...bar,
+        budget: null as number | null,
+        color: undefined as string | undefined,
+        overlayColor: undefined as string | undefined,
+        overlayPattern: false,
+        markerColor: undefined as string | undefined,
+        statusColor: false,
+        exact: false,
+        over: false,
+      }))
+    : monthlyBudgetTrendBars(snapshot, trendBars, settings.selectedYear);
   /** Two months is the floor for a trend; below it there is nothing to draw. */
   const hasTrend = trendBars.filter((bar) => bar.value != null).length >= 2;
 
@@ -572,6 +559,9 @@ export const Dashboard: React.FC<{ onNavigate?: (tab: "spending" | "activities" 
                     overlayColor: bar.overlayColor,
                     overlayPattern: bar.overlayPattern,
                     statusColor: bar.statusColor,
+                    detail: bar.budget != null && bar.budget > 0
+                      ? `${money(bar.budget)} budget${bar.exact ? ` · ${t("stats.exactBudget")}` : ""}`
+                      : undefined,
                   }))}
                   height={190}
                   formatValue={(v) => money(v)}
@@ -591,7 +581,7 @@ export const Dashboard: React.FC<{ onNavigate?: (tab: "spending" | "activities" 
                     title={t("dashboard.forecast")}
                     labels={forecast.labels}
                     series={[
-                      { id: "actual", name: t("chart.actual"), color: forecastStatus.color ?? "var(--series-1)", pointMarkerColors: forecastMarkerColors, values: forecast.actual, area: true },
+                      { id: "actual", name: t("chart.actual"), color: forecastStatus.color ?? "var(--series-1)", pointMarkerColors: forecastMarkerColors, values: forecast.actual },
                       { id: "projected", name: t("chart.projected"), color: "var(--warning-text)", values: forecast.projected, dashed: true },
                     ]}
                     referenceLines={
