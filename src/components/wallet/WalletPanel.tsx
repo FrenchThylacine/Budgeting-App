@@ -59,6 +59,7 @@ const TYPE_LABEL: Record<WalletEntryType | "spending", string> = {
   budget: "wallet.typeBudget",
   rollover: "wallet.typeRollover",
   adjustment: "wallet.typeAdjustment",
+  "budget-carry": "wallet.typeCarryAdjustment",
   transfer: "wallet.typeTransfer",
   "transfer-in": "wallet.typeTransferIn",
   spending: "wallet.spendingMovement",
@@ -70,6 +71,7 @@ const TYPE_TONE: Record<WalletEntryType | "spending", "neutral" | "info" | "succ
   budget: "success",
   rollover: "info",
   adjustment: "neutral",
+  "budget-carry": "info",
   transfer: "info",
   "transfer-in": "info",
   spending: "warning",
@@ -82,6 +84,7 @@ export const WalletPanel: React.FC = () => {
   const add = useBudgetStore((s) => s.addWalletEntry);
   const remove = useBudgetStore((s) => s.removeWalletEntry);
   const updateWalletEntry = useBudgetStore((state) => state.updateWalletEntry);
+  const updateBudgetPeriod = useBudgetStore((state) => state.updateBudgetPeriod);
   const resetWallet = useBudgetStore((s) => s.resetWallet);
   const allocateBudget = useBudgetStore((s) => s.allocateBudget);
   const sweepBudgetToPersonal = useBudgetStore((s) => s.sweepBudgetToPersonal);
@@ -173,7 +176,7 @@ export const WalletPanel: React.FC = () => {
     { key: "spending", label: t("nav.spending"), items: wallet.movements.filter((item) => item.kind === "spending") },
     { key: "general", label: t("wallet.ledger"), items: wallet.movements.filter((item) => item.kind !== "spending" && !item.loanId && !["personal", "adjustment", "opening", "rollover"].includes(item.kind)) },
     { key: "loans", label: t("wallet.loans"), items: wallet.movements.filter((item) => Boolean(item.loanId)) },
-    { key: "adjustments", label: t("wallet.typeAdjustment"), items: wallet.movements.filter((item) => !item.loanId && ["personal", "adjustment", "opening", "rollover"].includes(item.kind)) },
+    { key: "adjustments", label: t("wallet.typeAdjustment"), items: wallet.movements.filter((item) => !item.loanId && ["personal", "adjustment", "opening", "rollover", "budget-carry"].includes(item.kind)) },
   ].filter((group) => group.items.length > 0), [wallet.movements, t]);
 
   return (
@@ -339,14 +342,14 @@ export const WalletPanel: React.FC = () => {
               <tbody>
                 {periods.map((period) => (
                   <tr key={`${period.year}-${period.month}`}>
-                    <td>{`${localMonth(period.month)} ${period.year}`} {period.allocationEntryId && mutable && <Button size="sm" variant="ghost" icon onClick={() => setEditingAllocation(period)} aria-label={t("common.edit")}><Pencil size={13} /></Button>}</td>
-                    <td className="num">{periodMoney(period.carriedIn)}</td>
-                    <td className="num">{periodMoney(period.allocated)}</td>
+                    <td>{`${localMonth(period.month)} ${period.year}`} {mutable && <Button size="sm" variant="ghost" icon onClick={() => setEditingAllocation(period)} aria-label={t("common.edit")}><Pencil size={13} /></Button>}</td>
+                    <td className="num">{period.tracked ? periodMoney(period.carriedIn) : "—"}</td>
+                    <td className="num">{period.tracked ? periodMoney(period.allocated) : "—"}</td>
                     <td className="num">{periodMoney(period.spent)}</td>
-                    <td className="num">{period.transferred > 0 ? periodMoney(period.transferred) : "—"}</td>
+                    <td className="num">{period.tracked && period.transferred > 0 ? periodMoney(period.transferred) : "—"}</td>
                     <td className="num wallet-period-remaining">
-                      {periodMoney(period.remaining)}
-                      {budgetRemainingPercent(period) != null && <span className="text-footnote" style={{ marginInlineStart: 6, color: period.remaining > 0 ? "var(--success)" : period.remaining < 0 ? "var(--danger)" : "var(--text-tertiary)" }}>{budgetRemainingPercent(period)!.toFixed(0)}%</span>}
+                      {period.tracked ? periodMoney(period.remaining) : "—"}
+                      {period.tracked && budgetRemainingPercent(period) != null && <span className="text-footnote" style={{ marginInlineStart: 6, color: period.remaining > 0 ? "var(--success)" : period.remaining < 0 ? "var(--danger)" : "var(--text-tertiary)" }}>{budgetRemainingPercent(period)!.toFixed(0)}%</span>}
                     </td>
                   </tr>
                 ))}
@@ -370,7 +373,7 @@ export const WalletPanel: React.FC = () => {
                * written — in Spending — so the ledger never offers two places
                * to change one fact.
                */
-              const editable = mutable && !movement.spendingId && !movement.loanId;
+              const editable = mutable && !movement.spendingId && !movement.loanId && movement.kind !== "budget-carry";
               const onDelete = () => {
                 if (!editable) return;
                 if (window.confirm(t("spending.confirmDelete"))) remove(movement.id);
@@ -425,28 +428,13 @@ export const WalletPanel: React.FC = () => {
 
       {loanOpen && <LoanSheet onClose={() => setLoanOpen(false)} onSubmit={(loan) => { addLoan(loan); setLoanOpen(false); }} />}
       {editingLoan && <LoanSheet editing={editingLoan} onClose={() => setEditingLoan(null)} onSubmit={(loan) => { updateLoan(editingLoan.id, loan); setEditingLoan(null); }} />}
-      {editingAllocation && editingAllocation.allocationEntryId && <AllocationSheet
+      {editingAllocation && <AllocationSheet
         editing={editingAllocation}
         suggested={editingAllocation.allocated}
         monthLabel={`${localMonth(editingAllocation.month)} ${editingAllocation.year}`}
         onClose={() => setEditingAllocation(null)}
         onSubmit={(input) => {
-          const allocationId = editingAllocation.allocationEntryId!;
-          const otherAllocations = Object.values(snapshot.years)
-            .flatMap((record) => record.walletEntries)
-            .filter((entry) => entry.type === "budget" && entry.id !== allocationId
-              && entry.year === editingAllocation.year && entry.month === editingAllocation.month)
-            .reduce((sum, entry) => sum + normalizeAmount(entry.amount, entry.currency, snapshot.settings), 0);
-          updateWalletEntry(allocationId, {
-            // The editor changes the month's total while retaining the other
-            // original ledger rows; this row carries the signed difference.
-            amount: input.amount - otherAllocations,
-            currency: snapshot.settings.baseCurrency,
-            date: `${editingAllocation.year}-${String(editingAllocation.month).padStart(2, "0")}-01`,
-            year: editingAllocation.year,
-            month: editingAllocation.month,
-            note: input.note,
-          });
+          updateBudgetPeriod(editingAllocation.year, editingAllocation.month, input.amount, input.carriedIn, input.note);
           setEditingAllocation(null);
         }}
       />}
@@ -691,17 +679,20 @@ const AllocationSheet: React.FC<{
   suggested: number;
   monthLabel: string;
   onClose: () => void;
-  onSubmit: (input: { amount: number; currency: CurrencyCode; date: string; note: string }) => void;
+  onSubmit: (input: { amount: number; currency: CurrencyCode; date: string; note: string; carriedIn: number }) => void;
 }> = ({ editing, suggested, monthLabel, onClose, onSubmit }) => {
   const { t } = useTranslation();
   const settings = useBudgetStore((s) => s.snapshot.settings);
-  const [amount, setAmount] = useState(suggested > 0 ? String(suggested) : "");
+  const [amount, setAmount] = useState(editing ? String(editing.allocated) : suggested > 0 ? String(suggested) : "");
+  const [carriedIn, setCarriedIn] = useState(editing ? String(editing.carriedIn) : "");
   const [currency, setCurrency] = useState<CurrencyCode>(editing ? settings.baseCurrency : settings.monthlyBudgetCurrency ?? settings.baseCurrency);
   const [date, setDate] = useState(editing ? `${editing.year}-${String(editing.month).padStart(2, "0")}-01` : todayDateInput());
-  const [note, setNote] = useState("");
+  const [note, setNote] = useState(editing?.allocationNote ?? "");
 
   const parsed = Number(amount);
-  const valid = Number.isFinite(parsed) && parsed > 0 && date !== "";
+  const parsedCarryIn = Number(carriedIn);
+  const valid = Number.isFinite(parsed) && parsed >= 0 && date !== ""
+    && (editing ? carriedIn.trim() !== "" && Number.isFinite(parsedCarryIn) : parsed > 0);
 
   return (
     <EditorSheet
@@ -723,7 +714,7 @@ const AllocationSheet: React.FC<{
         id="wallet-allocation-form"
         onSubmit={(event) => {
           event.preventDefault();
-          if (valid) onSubmit({ amount: parsed, currency, date, note });
+          if (valid) onSubmit({ amount: parsed, currency, date, note, carriedIn: editing ? parsedCarryIn : 0 });
         }}
         style={{ display: "grid", gap: 20 }}
       >
@@ -740,6 +731,9 @@ const AllocationSheet: React.FC<{
               onChange={(event) => setAmount(event.target.value)}
             />
           </Field>
+          {editing && <Field label={t("wallet.carriedIn")} hint={t("wallet.carryAdjustmentHint")}>
+            <input className="input" type="number" step="any" value={carriedIn} onChange={(event) => setCarriedIn(event.target.value)} required />
+          </Field>}
           <Field label={t("spending.currency")}>
             <select
               className="select"

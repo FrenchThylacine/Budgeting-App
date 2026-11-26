@@ -86,13 +86,14 @@ export interface CanonicalMoney {
  */
 export const ALLOCATION_TYPE: WalletEntryType = "budget";
 export const TRANSFER_TYPE: WalletEntryType = "transfer";
+export const CARRY_IN_ADJUSTMENT_TYPE: WalletEntryType = "budget-carry";
 
 /** How much a ledger entry changes the amount of cash held. */
 export function walletEffect(entry: Pick<WalletEntry, "type" | "amount">): number {
   // A budget→personal transfer is an internal reclassification. Treating it as
   // an inflow or an outflow would make the total cash jump for a move that
   // did not involve any money leaving or arriving.
-  if (entry.type === TRANSFER_TYPE || entry.type === "transfer-in") return 0;
+  if (entry.type === TRANSFER_TYPE || entry.type === "transfer-in" || entry.type === CARRY_IN_ADJUSTMENT_TYPE) return 0;
   return entry.amount;
 }
 
@@ -102,6 +103,7 @@ export function budgetEffect(entry: Pick<WalletEntry, "type" | "amount" | "loanB
   if (entry.type === ALLOCATION_TYPE) return entry.amount;
   if (entry.type === TRANSFER_TYPE) return -entry.amount;
   if (entry.type === "transfer-in") return entry.amount;
+  if (entry.type === CARRY_IN_ADJUSTMENT_TYPE) return entry.amount;
   return 0;
 }
 
@@ -467,8 +469,14 @@ export interface BudgetPeriod {
   year: number;
   month: number;
   label: string;
+  /** False only for spending dates before the wallet's first ledger entry. */
+  tracked: boolean;
   /** Budget money still available when the month began. */
   carriedIn: number;
+  /** Carry before any explicit correction recorded for this month. */
+  carriedInBeforeAdjustment: number;
+  /** Signed adjustment to the month's carry-in. */
+  carryAdjustment: number;
   /** Allocated during the month. */
   allocated: number;
   /** Budget spending during the month. */
@@ -479,6 +487,8 @@ export interface BudgetPeriod {
   remaining: number;
   /** First allocation entry for this month, when one exists. */
   allocationEntryId?: string;
+  /** Note on the first allocation entry, when one exists. */
+  allocationNote?: string;
 }
 
 /** Percentage of the month's available budget (allocation plus carry-in). */
@@ -489,7 +499,8 @@ export function budgetRemainingPercent(period: Pick<BudgetPeriod, "carriedIn" | 
 }
 
 /**
- * The allocation history, one row per month that saw any budget activity.
+ * The allocation history, including untracked spending months before the
+ * wallet ledger begins so their actual allocations can be recorded.
  *
  * `carriedIn` is what makes the point: September's budget starts with whatever
  * August did not spend, because a month ending is not an event that consumes
@@ -500,31 +511,57 @@ export function budgetPeriods(snapshot: BudgetSnapshot): BudgetPeriod[] {
   const epoch = ledgerEpoch(snapshot);
   const base = (amount: number, currency: CurrencyCode) => normalizeAmount(amount, currency, snapshot.settings);
 
-  const buckets = new Map<string, { year: number; month: number; allocated: number; spent: number; transferred: number; allocationEntryId?: string }>();
+  const buckets = new Map<string, { year: number; month: number; tracked: boolean; allocated: number; spent: number; transferred: number; carryAdjustment: number; allocationEntryId?: string; allocationNote?: string }>();
   const bucket = (date: string) => {
     const year = Number(date.slice(0, 4));
     const month = Number(date.slice(5, 7));
     const key = `${year}-${String(month).padStart(2, "0")}`;
     let found = buckets.get(key);
     if (!found) {
-      found = { year, month, allocated: 0, spent: 0, transferred: 0 };
+      found = { year, month, tracked: true, allocated: 0, spent: 0, transferred: 0, carryAdjustment: 0 };
       buckets.set(key, found);
-    }
+    } else found.tracked = true;
     return found;
   };
 
   for (const entry of allWalletEntries(snapshot)) {
-    if (entry.type !== ALLOCATION_TYPE && entry.type !== TRANSFER_TYPE) continue;
+    if (entry.type !== ALLOCATION_TYPE && entry.type !== TRANSFER_TYPE && entry.type !== CARRY_IN_ADJUSTMENT_TYPE) continue;
     const target = bucket(walletEntryDate(entry));
     if (entry.type === ALLOCATION_TYPE) {
       target.allocated += base(entry.amount, entry.currency);
-      target.allocationEntryId ??= entry.id;
+      if (!target.allocationEntryId) {
+        target.allocationEntryId = entry.id;
+        target.allocationNote = entry.note;
+      }
     }
-    else target.transferred += base(entry.amount, entry.currency);
+    else if (entry.type === TRANSFER_TYPE) target.transferred += base(entry.amount, entry.currency);
+    else target.carryAdjustment += base(entry.amount, entry.currency);
   }
 
   for (const entry of walletSpending(snapshot, epoch)) {
     bucket(entry.date).spent += base(entry.amount, entry.currency);
+  }
+
+  // Show spending from before the wallet ledger began as editable, untracked
+  // months. They do not affect balances unless the user records an allocation.
+  const untrackedSpend = new Map<string, { year: number; month: number; spent: number }>();
+  for (const entry of Object.values(snapshot.years).flatMap((record) => record.spendingEntries ?? [])) {
+    if (!isPersonallyFunded(entry) || (epoch && entry.date.slice(0, 10) >= epoch)) continue;
+    const year = Number(entry.date.slice(0, 4));
+    const month = Number(entry.date.slice(5, 7));
+    const key = `${year}-${String(month).padStart(2, "0")}`;
+    const item = untrackedSpend.get(key) ?? { year, month, spent: 0 };
+    item.spent += base(entry.amount, entry.currency);
+    untrackedSpend.set(key, item);
+  }
+  for (const [key, item] of untrackedSpend) {
+    if (!buckets.has(key)) buckets.set(key, {
+      ...item,
+      tracked: false,
+      allocated: 0,
+      transferred: 0,
+      carryAdjustment: 0,
+    });
   }
 
   const closes = new Map(
@@ -533,13 +570,29 @@ export function budgetPeriods(snapshot: BudgetSnapshot): BudgetPeriod[] {
   // A close is a ledger event even when the month had no allocations, spending
   // or transfers. Include it so a skipped month-end reset still stops carry.
   for (const close of closes.values()) {
-    bucket(`${close.year}-${String(close.month).padStart(2, "0")}-01`);
+    const date = `${close.year}-${String(close.month).padStart(2, "0")}-01`;
+    const key = `${close.year}-${String(close.month).padStart(2, "0")}`;
+    if (epoch ? date >= epoch : !buckets.has(key)) bucket(date);
   }
   let running = 0;
   return [...buckets.entries()]
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([, value]) => {
-      const carriedIn = running;
+      if (!value.tracked) return {
+        year: value.year,
+        month: value.month,
+        label: `${monthName(value.month)} ${value.year}`,
+        tracked: false,
+        carriedIn: 0,
+        carriedInBeforeAdjustment: 0,
+        carryAdjustment: 0,
+        allocated: 0,
+        spent: value.spent,
+        transferred: 0,
+        remaining: 0,
+      };
+      const carriedInBeforeAdjustment = running;
+      const carriedIn = carriedInBeforeAdjustment + value.carryAdjustment;
       const close = closes.get(`${value.year}-${value.month}`);
       const calculatedRemaining = carriedIn + value.allocated - value.spent - value.transferred;
       const remaining = close?.status === "closed-without-rollover" ? 0 : calculatedRemaining;
@@ -548,12 +601,16 @@ export function budgetPeriods(snapshot: BudgetSnapshot): BudgetPeriod[] {
         year: value.year,
         month: value.month,
         label: `${monthName(value.month)} ${value.year}`,
+        tracked: true,
         carriedIn,
+        carriedInBeforeAdjustment,
+        carryAdjustment: value.carryAdjustment,
         allocated: value.allocated,
         spent: value.spent,
         transferred: value.transferred,
         remaining,
         allocationEntryId: value.allocationEntryId,
+        allocationNote: value.allocationNote,
       };
     })
     .reverse();

@@ -561,7 +561,7 @@ export const Dashboard: React.FC<{ onNavigate?: (tab: "spending" | "activities" 
                     statusColor: bar.statusColor,
                     detail: bar.budget != null && bar.budget > 0
                       ? `${money(bar.budget)} budget${bar.exact ? ` · ${t("stats.exactBudget")}` : ""}`
-                      : undefined,
+                      : mode === "week" ? undefined : t("stats.noBudgetRecorded"),
                   }))}
                   height={190}
                   formatValue={(v) => money(v)}

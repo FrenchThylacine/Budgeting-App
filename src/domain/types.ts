@@ -47,10 +47,11 @@ export type BudgetBucket = "general" | "piloting" | "personal" | "wallet";
  *                   effect on the wallet balance is deliberately zero.
  *  - `rollover`   : a month-close adjustment from the older rollover feature.
  *  - `adjustment` : a correction, including the one "Reset wallet" writes.
+ *  - `budget-carry` : a budget-only correction to a month's carried-in balance.
  *
  * See `domain/wallet.ts` for what each does to the three balances.
  */
-export type WalletEntryType = "opening" | "personal" | "budget" | "rollover" | "adjustment" | "transfer" | "transfer-in";
+export type WalletEntryType = "opening" | "personal" | "budget" | "rollover" | "adjustment" | "transfer" | "transfer-in" | "budget-carry";
 export type PeriodStatus = "value" | "zero" | "pending" | "nan";
 export type AuditType =
   | "import"

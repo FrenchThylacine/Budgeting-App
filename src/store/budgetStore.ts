@@ -2,8 +2,10 @@ import { create } from "zustand";
 import { calculateRolloverDelta, createNextYearRecord } from "../domain/calculations";
 import {
   ALLOCATION_TYPE,
+  CARRY_IN_ADJUSTMENT_TYPE,
   TRANSFER_TYPE,
   budgetComposition,
+  budgetPeriods,
   monthlyBudgetPlan,
   walletComposition,
   walletState,
@@ -38,7 +40,7 @@ import { useAuthStore } from "./authStore";
 import { isViewingHistoricalPeriod } from "../utils/formatters";
 import { periodToken } from "../domain/periods";
 import { storedText } from "../domain/storedText";
-import { convertAmount } from "../domain/currency";
+import { convertAmount, normalizeAmount } from "../domain/currency";
 
 /** Settings fields that define which period is being viewed. */
 const PERIOD_SETTING_KEYS = [
@@ -177,6 +179,8 @@ interface BudgetStore {
     note?: string;
     source?: string;
   }) => void;
+  /** Edit a month's received allocation and carried-in claim as one ledger update. */
+  updateBudgetPeriod: (year: number, month: number, allocated: number, carriedIn: number, note?: string) => void;
   /**
    * Move leftover budget money to the personal side.
    *
@@ -1270,6 +1274,64 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
       storedText("audit.walletUpdated"),
       { id: idValue, patch },
     );
+  },
+
+  updateBudgetPeriod: (year, month, allocated, carriedIn, note) => {
+    if (!get().isCurrentPeriodMutable() || !Number.isFinite(allocated) || allocated < 0
+      || !Number.isFinite(carriedIn) || month < 1 || month > 12) return;
+    const snapshot = get().snapshot;
+    const period = budgetPeriods(snapshot).find((item) => item.year === year && item.month === month);
+    if (period && Math.abs(allocated - period.allocated) < 0.005
+      && Math.abs(carriedIn - period.carriedIn) < 0.005
+      && (note ?? period.allocationNote ?? "") === (period.allocationNote ?? "")) return;
+    const allocations = Object.values(snapshot.years).flatMap((record) => record.walletEntries)
+      .filter((entry) => entry.type === ALLOCATION_TYPE && entry.year === year && entry.month === month);
+    const carryEntries = Object.values(snapshot.years).flatMap((record) => record.walletEntries)
+      .filter((entry) => entry.type === CARRY_IN_ADJUSTMENT_TYPE && entry.year === year && entry.month === month);
+    const primaryAllocation = allocations.find((entry) => entry.id === period?.allocationEntryId) ?? allocations[0];
+    const allocationId = primaryAllocation?.id;
+    const carryId = carryEntries[0]?.id;
+    const otherAllocated = allocations.filter((entry) => entry.id !== allocationId)
+      .reduce((sum, entry) => sum + normalizeAmount(entry.amount, entry.currency, snapshot.settings), 0);
+    const carryBeforeCorrection = period?.carriedInBeforeAdjustment ?? 0;
+    const correction = carriedIn - carryBeforeCorrection;
+    const date = `${year}-${String(month).padStart(2, "0")}-01`;
+
+    commit(set, get, (draft) => {
+      for (const record of Object.values(draft.years)) {
+        record.walletEntries = record.walletEntries.filter((entry) => entry.id !== allocationId
+          && !(entry.type === CARRY_IN_ADJUSTMENT_TYPE && entry.year === year && entry.month === month));
+      }
+      if (allocationId || allocated > 0) {
+        const first = primaryAllocation;
+        const updated = movement(year, month, {
+          amount: first ? allocated - otherAllocated : allocated,
+          currency: draft.settings.baseCurrency,
+        }, {
+          id: allocationId ?? id("wallet-allocation"),
+          type: ALLOCATION_TYPE,
+          source: first?.source ?? storedText("wallet.allocationSource", { month: monthName(month), year }),
+          note: note ?? first?.note ?? "",
+          date,
+          settings: draft.settings,
+        });
+        if (first) updated.createdAt = first.createdAt;
+        ensureYearRecord(draft, year).walletEntries.push(updated);
+      }
+      if (Math.abs(correction) >= 0.005) {
+        ensureYearRecord(draft, year).walletEntries.push(movement(year, month, {
+          amount: correction,
+          currency: draft.settings.baseCurrency,
+        }, {
+          id: carryId ?? id("budget-carry"),
+          type: CARRY_IN_ADJUSTMENT_TYPE,
+          source: storedText("wallet.carryAdjustmentSource"),
+          note: "",
+          date,
+          settings: draft.settings,
+        }));
+      }
+    }, "wallet", storedText("audit.walletUpdated"), { year, month, allocated, carriedIn });
   },
 
   removeWalletEntry: (idValue) => {

@@ -25,7 +25,7 @@ import {
   walletState,
 } from "../src/domain/wallet";
 import { calculateSuggestedMonthlyBudget, calculateYear } from "../src/domain/calculations";
-import { budgetForMonth } from "../src/domain/analytics";
+import { budgetForMonth, monthlyBudgetTrendBars } from "../src/domain/analytics";
 import { useBudgetStore } from "../src/store/budgetStore";
 import { createEmptyBudgetSnapshot } from "../src/data/seedBudget";
 import { findSeedCategory } from "../src/domain/seedCategories";
@@ -389,6 +389,47 @@ describe("crossing a month boundary", () => {
     expect(periods.find((period) => period.month === 7)?.carriedIn).toBe(450);
     expect(budgetForMonth(useBudgetStore.getState().snapshot, 2026, 6, NOW)).toBe(450);
     expect(budgetForMonth(useBudgetStore.getState().snapshot, 2026, 7, NOW)).toBe(700);
+  });
+
+  it("adds a missing historical allocation so the spending month can be compared", () => {
+    const snapshot = budget();
+    spend(snapshot, 260, "2026-03-20");
+    snapshot.settings.selectedMonth = 3;
+    useBudgetStore.setState({ snapshot, hydrated: true, historicalEditUnlocked: true, undoStack: [], redoStack: [] });
+    expect(budgetForMonth(snapshot, 2026, 3, NOW)).toBe(0);
+    expect(budgetPeriods(snapshot).find((period) => period.month === 3)).toMatchObject({ tracked: false, allocated: 0, spent: 260 });
+
+    useBudgetStore.getState().updateBudgetPeriod(2026, 3, 500, 0);
+    const updated = useBudgetStore.getState().snapshot;
+    expect(budgetForMonth(updated, 2026, 3, NOW)).toBe(500);
+    expect(budgetPeriods(updated).find((period) => period.month === 3)).toMatchObject({ tracked: true, allocated: 500, spent: 260, remaining: 240 });
+    expect(monthlyBudgetTrendBars(updated, [{ label: "Mar", value: 260, highlight: false, year: 2026, month: 3 }], 2026, NOW)[0].color)
+      .toBe("var(--success)");
+  });
+
+  it("edits a month's carried-in budget without changing cash and recalculates later months", () => {
+    const snapshot = budget();
+    allocation(snapshot, 600, "2026-08-01");
+    spend(snapshot, 425, "2026-08-14");
+    allocation(snapshot, 600, "2026-09-01");
+    spend(snapshot, 200, "2026-09-14");
+    allocation(snapshot, 100, "2026-10-01");
+    snapshot.settings.selectedMonth = 9;
+    useBudgetStore.setState({ snapshot, hydrated: true, historicalEditUnlocked: true, undoStack: [], redoStack: [] });
+
+    const cashBefore = walletState(useBudgetStore.getState().snapshot).walletBalance;
+    useBudgetStore.getState().updateBudgetPeriod(2026, 9, 600, 250);
+
+    const updated = useBudgetStore.getState().snapshot;
+    const periods = budgetPeriods(updated);
+    expect(periods.find((period) => period.month === 9)?.carriedIn).toBe(250);
+    expect(periods.find((period) => period.month === 9)?.remaining).toBe(650);
+    expect(periods.find((period) => period.month === 10)?.carriedIn).toBe(650);
+    expect(walletState(updated).walletBalance).toBe(cashBefore);
+    expect(walletState(updated).budgetRemaining).toBeCloseTo(cashBefore + 75, 6);
+
+    useBudgetStore.getState().updateBudgetPeriod(2026, 9, 600, -50);
+    expect(budgetPeriods(useBudgetStore.getState().snapshot).find((period) => period.month === 9)?.carriedIn).toBe(-50);
   });
 
   it("resets a negative carried balance too", () => {

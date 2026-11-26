@@ -2,7 +2,7 @@
 
 Reviewed from Git history and current behavior at `5.4.1` plus the unversioned
 2026-11-25 loan/accounting commit. Follow-up verification and fixes are now at
-`5.4.7`. No semantic release tags exist; changelog and
+`5.5.0`. No semantic release tags exist; changelog and
 package metadata were the version records. Existing claims were treated as
 unverified until checked in code or tests.
 
@@ -15,21 +15,28 @@ unverified until checked in code or tests.
 | 4 Historical monthly allocations in Analytics | Correct and verified | Historical allocation selector and pacing regression; missing historical allocation stays unavailable. |
 | 5 Smart projections | Correct and verified | Future-dated personal purchases, scheduled activity charges, elapsed days and prior-year sample feed the chart projection; `projection.test.ts` passed in the focused release run. |
 | 6 Wallet History activity categories | Correct and verified | Spending, ordinary ledger entries, linked loan movements and direct adjustments are separate groups; loan rows cannot be independently edited. |
-| 7 Edit past-month allocations in Wallet | Incomplete | Wallet has an in-place month editor and preserves other months; direct interaction could not be verified in a browser. |
+| 7 Edit past-month allocations in Wallet | Implemented; browser check pending | 5.5.0 month editor can add or change an allocation and set carried-in funds; focused store regression confirms downstream carry recomputes without changing cash. |
 | 8 Remaining amount percentage and tones | Correct and verified | Percentage uses selected allocation; zero/unavailable budget suppresses division and negative values are red. |
 | 9 Carry-over and reset behavior | Correct and verified | Ledger derives carry-in and reset close status; wallet treasury and reset suites passed in the focused release run. |
-| 10 Monthly Analytics bar and graph colors | Correct and verified | In 5.4.7, explicit bar year/month metadata selects each ledger allocation, independent of order; converted currencies, missing allocations and current fallback are covered by tests and browser fixtures. |
+| 10 Monthly Analytics bar and graph colors | Correct and verified | In 5.5.0, explicit bar year/month metadata selects each ledger allocation, independent of order; missing historical allocations can be added in Wallet instead of being compared against a guessed budget. |
 | 11 Combined date and time control | Incomplete | Shared editor has local date and clock controls and stores one timestamp; user interaction was not browser-tested. |
 | 12 Transaction form density and responsive layout | Incomplete | Shared editor structure reviewed and production build passed; responsive interaction lacks browser verification. |
 | 13 Report redesign and opening | Incomplete | Responsive report HTML and panel/tab actions are covered by report tests; report opening was not part of the 5.4.6 browser inspection. |
 | 14 Local website/browser bug hunt | Partially verified | Home and Analytics/Stats were inspected in local desktop/mobile Chromium with deterministic API fixtures; persisted database workflows remain unverified because `.env` and `TEST_DATABASE_URL` are absent. |
-| 15 Tests and regression prevention | Verified for chart release | 5.4.7 focused chart, selector, projection and i18n suites: 133 passed; frontend production and backend TypeScript builds passed. The full suite was not run. |
-| 16 Documentation and changelog | Correct and verified | README, architecture, database notes, testing guide, recovery checklist and 5.4.7 changelog reviewed and reread. |
+| 15 Tests and regression prevention | Verified for focused release checks | 175 focused wallet, chart, selector, projection and i18n tests passed; after the final carry-in/reset adjustment, the 99-test wallet/chart subset passed again. Frontend and backend builds passed. Full suite and browser interaction were not verified. |
+| 16 Documentation and changelog | Correct and verified | README, architecture, database notes, testing guide, recovery checklist and 5.5.0 changelog reviewed and reread. |
 | 17 Token-efficient execution and persistent checklist | Correct and verified | Targeted audit, concise progress updates and this persistent recovery checklist. |
 | 18 Re-audit existing implementation | Correct and verified | Current implementation and history were inspected; found and fixed historical budget, future transaction and loan-history defects. |
-| 19 Semantic versioning | Correct and verified | Patch release `5.4.7`, following Git HEAD `5.4.6`; package and lockfile aligned. |
-| 20 Final completion requirements | Incomplete | Chart requirements are verified in 5.4.7; intermediary accounts and database-backed browser verification remain incomplete. |
+| 19 Semantic versioning | Correct and verified | Minor release `5.5.0`, following Git HEAD `5.4.7`; package and lockfile aligned. |
+| 20 Final completion requirements | Incomplete | Chart and editor changes are in 5.5.0; intermediary accounts and database-backed browser verification remain incomplete. |
 | Database migration | Not applicable | Required loan link fields (`loan_id`, `loan_movement`, `loan_budget_effect`) already exist and round-trip in the existing schema. |
+
+## 5.5.0 historical month editing checklist
+
+- [x] A spending month without an allocation remains neutral and can now be opened in Wallet to set its actual allocation and carry-in.
+- [x] Carry-in is stored as a signed budget-only entry; updating it leaves wallet cash unchanged and recalculates later monthly balances.
+- [x] Focused wallet, analytics chart, selector, projection and i18n tests: 175 passed; final wallet/chart subset: 99 passed. Frontend and backend builds passed; browser interaction is pending.
+- [x] README, changelog, architecture, database and testing notes updated; no schema migration.
 
 ## 5.4.7 monthly chart alignment and forecast checklist
 

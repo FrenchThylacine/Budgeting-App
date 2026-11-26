@@ -9,6 +9,7 @@ with one small fix gets a patch rather than a new minor.
 
 | Version | What it was |
 | --- | --- |
+| **5.5.0** | Lets Wallet record missing historical allocations and correct monthly carry-in without changing cash |
 | **5.4.7** | Binds every monthly status to its calendar allocation and separates actual from projected chart lines |
 | **5.4.6** | Aligns chart data to transaction dates and funding; standardizes budget status and missing-data rendering |
 | **5.4.5** | Applies shared budget-status colors to Stats and Home charts, with exact-match indicators and orange current-month hatching |
@@ -31,6 +32,17 @@ with one small fix gets a patch rather than a new minor.
 | **2.0.0**–**2.1.0** | Accounts, Excel import, dedicated editors, scenarios, swipe, the first identity |
 | **1.0.0**–**1.1.0** | The first working budget: activities, spending, wishlist, reports |
 | **0.1.0**–**0.2.0** | Before it was an application |
+
+## 5.5.0 — 2026-11-26 — Historical allocation and carry-in editing
+
+- Wallet month history can now add an allocation to a spending month that has
+  none recorded, so its charts can compare spending against that month's real
+  budget instead of leaving it unscored.
+- The same editor can set the month's carried-in balance. A budget-only ledger
+  correction leaves wallet cash unchanged and recalculates remaining balances
+  and carry-in for later months.
+- Missing monthly allocations are explained in chart tooltips. No schema
+  migration is needed; wallet entry types are stored as text.
 
 ## 5.4.7 — 2026-11-26 — Monthly chart alignment and forecast readability
 

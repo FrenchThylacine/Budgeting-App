@@ -1,6 +1,6 @@
 {
   "name": "premium-budget-app",
-  "version": "5.4.7",
+  "version": "5.5.0",
   "private": true,
   "type": "module",
   "scripts": {

@@ -95,9 +95,9 @@ It was written against the *broken* code first and confirmed to fail. A regressi
 - two devices reading the same base: the first write wins, the second gets 409 with the current snapshot;
 - after adopting the server revision, the loser's retry succeeds.
 
-### Monthly chart alignment and forecast release check (5.4.7)
+### Historical allocation and carry-in editor check (5.5.0)
 
-Run `npm.cmd test -- --configLoader runner --reporter=dot --silent=true tests/analytics-charts.test.ts tests/analytics-budget-bars.test.ts tests/analytics-selectors.test.ts tests/projection.test.ts tests/i18n.test.ts`. Confirm reordered monthly bars retain their own year/month allocation, foreign-currency allocations compare in base currency, absent historical allocations are unscored, and below/above/exact statuses stay distinct. Confirm actual cumulative points equal transaction totals, actual future days remain null, and projection begins at the last actual point. Then run `npm.cmd run build -- --configLoader runner` and `npm.cmd run server:build`; inspect Home and Analytics/Stats in desktop and mobile browsers with different historical allocations and below/exact/above current-month fixtures. No migration is required for this release.
+Run `npm.cmd test -- --configLoader runner --reporter=dot --silent=true tests/wallet-treasury.test.ts tests/analytics-charts.test.ts tests/analytics-budget-bars.test.ts tests/analytics-selectors.test.ts tests/projection.test.ts tests/i18n.test.ts`. Confirm an unallocated historical month can be added an actual allocation, carry-in corrections change the budget claim but not wallet cash, and downstream month carry recalculates. Check charts use the new allocation for that month and keep missing months neutral. Then run `npm.cmd run build -- --configLoader runner` and `npm.cmd run server:build`; inspect the Wallet editor and Home/Stats/Analytics in the browser. No migration is required for this release.
 
 ## Test layers
 

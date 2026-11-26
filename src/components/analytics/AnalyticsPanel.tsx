@@ -256,7 +256,7 @@ export const AnalyticsPanel: React.FC = () => {
       ...bar,
       detail: bar.budget != null && bar.budget > 0
         ? `${money(bar.budget)} budget${bar.exact ? ` · ${t("stats.exactBudget")}` : ""}`
-        : undefined,
+        : t("stats.noBudgetRecorded"),
     })), [snapshot, monthlyBars, settings.selectedYear, money, t]);
   const weeklyBars = useMemo(
     () => weeklyTrendBars(calc.weeklyTrend, settings.selectedWeek, weekAxis, 12),
@@ -959,7 +959,7 @@ export const AnalyticsPanel: React.FC = () => {
                 overlayPattern: bar.overlayPattern,
                 detail: bar.budget != null && bar.budget > 0
                   ? `${money(bar.budget)} budget${bar.exact ? ` · ${t("stats.exactBudget")}` : ""}`
-                  : undefined,
+                  : t("stats.noBudgetRecorded"),
               }))}
               formatValue={money}
               formatTick={tick}
