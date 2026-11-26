@@ -200,8 +200,8 @@ export const AnalyticsPanel: React.FC = () => {
     () => cumulativeForecast(includedEntries, snapshot, settings),
     [includedEntries, snapshot, settings],
   );
-  const categoryEvolution = useMemo(() => categoryMonthlySeries(snapshot, settings, monthNames("short"), 4), [snapshot, settings]);
-  const recurringSplit = useMemo(() => recurringMonthlySplit(snapshot, settings, monthNames("short")), [snapshot, settings]);
+  const categoryEvolution = useMemo(() => categoryMonthlySeries(snapshot, settings, monthNames("short"), 4), [snapshot, settings, monthNames]);
+  const recurringSplit = useMemo(() => recurringMonthlySplit(snapshot, settings, monthNames("short")), [snapshot, settings, monthNames]);
   /**
    * Activity costs, from the same module the Activities tab and the reports
    * read. The statistics page does no costing of its own.
@@ -213,7 +213,7 @@ export const AnalyticsPanel: React.FC = () => {
 
   const recentBars = useMemo(
     () => recentPeriodTotals(snapshot, settings, monthNames("short"), weekAxis, mode === "year" ? 5 : 8),
-    [snapshot, settings, mode],
+    [snapshot, settings, mode, monthNames, weekAxis],
   );
 
   // Same period last year (month mode only)
@@ -230,8 +230,13 @@ export const AnalyticsPanel: React.FC = () => {
 
   const monthlyBars = useMemo(
     () => monthlyTrendBars(calc.monthlyTrend, mode === "year" ? -1 : settings.selectedMonth, monthNames("short")),
-    [calc.monthlyTrend, mode, settings.selectedMonth],
+    [calc.monthlyTrend, mode, settings.selectedMonth, monthNames],
   );
+  // These formatters are also used by memoized chart-data builders below.
+  // Declare them before those builders run during the initial render.
+  const money = (value: number | null | undefined) => formatDualMoney(value, settings);
+  const tick = (value: number) => compactNumber(value);
+
   const monthlyBudgets = useMemo(() => {
     const budgets = new Map<number, number>();
     for (const period of budgetPeriods(snapshot).filter((item) => item.year === settings.selectedYear)) {
@@ -254,19 +259,16 @@ export const AnalyticsPanel: React.FC = () => {
       overlayColor: current ? (over ? "var(--danger)" : "var(--success)") : exact ? "var(--success)" : undefined,
       detail: `${money(budget)} budget`,
     };
-  }), [monthlyBars, monthlyBudgets, settings.selectedMonth]);
+  }), [monthlyBars, monthlyBudgets, settings, settings.selectedMonth]);
   const weeklyBars = useMemo(
     () => weeklyTrendBars(calc.weeklyTrend, settings.selectedWeek, weekAxis, 12),
-    [calc.weeklyTrend, settings.selectedWeek],
+    [calc.weeklyTrend, settings.selectedWeek, weekAxis],
   );
 
   const dayFormatter = useMemo(
     () => new Intl.DateTimeFormat(undefined, { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" }),
     [],
   );
-
-  const money = (value: number | null | undefined) => formatDualMoney(value, settings);
-  const tick = (value: number) => compactNumber(value);
 
   const total = stats.total;
   const utilisation = pacing?.utilisation ?? null;
