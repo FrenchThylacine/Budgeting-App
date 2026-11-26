@@ -14,6 +14,7 @@ import {
   entriesForSelectedPeriod,
   financialHealth,
   monthlyTrendBars,
+  monthlyBudgetBarStyle,
   periodComparison,
   recentPeriodTotals,
   recurringMonthlySplit,
@@ -248,18 +249,16 @@ export const AnalyticsPanel: React.FC = () => {
   }, [snapshot, settings.selectedYear, settings.selectedMonth]);
   const colouredMonthlyBars = useMemo(() => monthlyBars.map((bar, index) => {
     const budget = monthlyBudgets.get(index + 1);
-    const actual = bar.value;
-    if (actual == null || budget == null || budget <= 0) return { ...bar, color: undefined, overlayColor: undefined, detail: undefined };
-    const over = actual > budget;
-    const exact = Math.abs(actual - budget) < 0.005;
     const current = index + 1 === settings.selectedMonth;
+    const style = monthlyBudgetBarStyle(bar.value, budget ?? null, current);
+    if (!style.color) return { ...bar, color: undefined, overlayColor: undefined, detail: undefined };
     return {
       ...bar,
-      color: current ? "var(--warning)" : over ? "var(--danger)" : "var(--success)",
-      overlayColor: current ? (over ? "var(--danger)" : "var(--success)") : exact ? "var(--success)" : undefined,
-      detail: `${money(budget)} budget`,
+      color: style.color,
+      overlayColor: style.overlayColor,
+      detail: `${money(budget)} budget${style.exact ? ` · ${t("stats.exactBudget")}` : ""}`,
     };
-  }), [monthlyBars, monthlyBudgets, settings, settings.selectedMonth]);
+  }), [monthlyBars, monthlyBudgets, settings, settings.selectedMonth, t]);
   const weeklyBars = useMemo(
     () => weeklyTrendBars(calc.weeklyTrend, settings.selectedWeek, weekAxis, 12),
     [calc.weeklyTrend, settings.selectedWeek, weekAxis],

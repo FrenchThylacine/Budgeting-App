@@ -9,6 +9,7 @@ with one small fix gets a patch rather than a new minor.
 
 | Version | What it was |
 | --- | --- |
+| **5.4.4** | Fixes reset-month carry-over gaps, shows period-matched remaining percentages, and distinguishes exact current-month budget in Analytics |
 | **5.4.3** | Reconciles active loan receivables/payables into the Wallet total and its personal/budget split; aligns transaction date/time controls |
 | **5.4.2** | Fixes historical budget comparisons and loan-linked Wallet History; keeps loan edits and repayments consistent across years and displays cash plus net outstanding loans |
 | **5.4.1** | Bug-fix pass: projection breakdown, duplicate loan-history removal, denser transaction editor, and report layout polish |
@@ -27,6 +28,19 @@ with one small fix gets a patch rather than a new minor.
 | **2.0.0**–**2.1.0** | Accounts, Excel import, dedicated editors, scenarios, swipe, the first identity |
 | **1.0.0**–**1.1.0** | The first working budget: activities, spending, wishlist, reports |
 | **0.1.0**–**0.2.0** | Before it was an application |
+
+## 5.4.4 — 2026-11-26 — Historical budget and Analytics corrections
+
+- Empty months with a recorded reset now stop carry-over; reset months report a
+  zero remaining balance. Normal positive and negative carry-over remain intact.
+- Wallet month history shows remaining percentage against that month's
+  allocation plus carry-in; zero denominators are handled without `NaN`, and
+  zero remaining is neutral.
+- Current-month Analytics bars keep orange as their base and distinguish exact
+  budget with a separate green overlay and translated tooltip label. Historical
+  bars continue to use each month's recorded allocation.
+- No database schema or migration change; allocations and closes remain in the
+  existing wallet ledger and `closed_months` records.
 
 ## 5.4.3 — 2026-11-26 — Loan-adjusted Wallet totals
 

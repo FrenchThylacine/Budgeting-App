@@ -24,6 +24,19 @@ export function budgetForMonth(snapshot: BudgetSnapshot, year: number, month: nu
   return 0;
 }
 
+/** Visual comparison for a monthly budget bar; zero/missing budgets are unscored. */
+export function monthlyBudgetBarStyle(actual: number | null, budget: number | null, current: boolean) {
+  if (actual == null || budget == null || budget <= 0) return { color: undefined, overlayColor: undefined, exact: false, over: false };
+  const exact = Math.abs(actual - budget) < 0.005;
+  const over = actual > budget && !exact;
+  return {
+    color: current ? "var(--warning)" : over ? "var(--danger)" : "var(--success)",
+    overlayColor: current ? (exact ? "var(--success-text)" : over ? "var(--danger)" : "var(--success)") : exact ? "var(--success-text)" : undefined,
+    exact,
+    over,
+  };
+}
+
 /**
  * Shared, period-aware analytics selectors.
  *

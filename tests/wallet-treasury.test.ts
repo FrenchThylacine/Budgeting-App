@@ -17,6 +17,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import {
   budgetPeriods,
+  budgetRemainingPercent,
   ledgerEpoch,
   leftoverBudget,
   monthlyBudgetPlan,
@@ -24,6 +25,7 @@ import {
   walletState,
 } from "../src/domain/wallet";
 import { calculateSuggestedMonthlyBudget, calculateYear } from "../src/domain/calculations";
+import { budgetForMonth } from "../src/domain/analytics";
 import { useBudgetStore } from "../src/store/budgetStore";
 import { createEmptyBudgetSnapshot } from "../src/data/seedBudget";
 import { findSeedCategory } from "../src/domain/seedCategories";
@@ -348,6 +350,70 @@ describe("crossing a month boundary", () => {
     expect(september.carriedIn).toBeCloseTo(175, 6);
     expect(september.allocated).toBeCloseTo(600, 6);
     expect(september.remaining).toBeCloseTo(775, 6);
+  });
+
+  it("applies a reset recorded in an otherwise empty month", () => {
+    const snapshot = budget();
+    allocation(snapshot, 600, "2026-08-01");
+    spend(snapshot, 450, "2026-08-14");
+    snapshot.years["2026"].closedMonths.push({
+      id: "close-empty-september", year: 2026, month: 9, status: "closed-without-rollover",
+      spendTotal: 0, delta: 150, confirmedAt: "2026-10-01T00:00:00Z", note: "reset",
+    });
+    allocation(snapshot, 500, "2026-10-01");
+
+    const periods = budgetPeriods(snapshot);
+    expect(periods.find((period) => period.month === 9)?.remaining).toBe(0);
+    expect(periods.find((period) => period.month === 10)?.carriedIn).toBe(0);
+  });
+
+  it("calculates remaining percentages against allocation plus carry-in safely", () => {
+    expect(budgetRemainingPercent({ carriedIn: 50, allocated: 150, remaining: 100 })).toBe(50);
+    expect(budgetRemainingPercent({ carriedIn: 0, allocated: 100, remaining: -25 })).toBe(-25);
+    expect(budgetRemainingPercent({ carriedIn: 0, allocated: 100, remaining: 0 })).toBe(0);
+    expect(budgetRemainingPercent({ carriedIn: 0, allocated: 0, remaining: 0 })).toBe(0);
+    expect(budgetRemainingPercent({ carriedIn: 0, allocated: 0, remaining: 5 })).toBeNull();
+  });
+
+  it("edits one unlocked historical allocation without overwriting other months", () => {
+    const snapshot = budget();
+    allocation(snapshot, 300, "2026-06-01");
+    allocation(snapshot, 700, "2026-07-01");
+    snapshot.settings.selectedMonth = 6;
+    useBudgetStore.setState({ snapshot, hydrated: true, historicalEditUnlocked: true, undoStack: [], redoStack: [] });
+
+    useBudgetStore.getState().updateWalletEntry("alloc-2026-06-01-300", { amount: 450 });
+    const periods = budgetPeriods(useBudgetStore.getState().snapshot);
+    expect(periods.find((period) => period.month === 6)?.allocated).toBe(450);
+    expect(periods.find((period) => period.month === 7)?.allocated).toBe(700);
+    expect(periods.find((period) => period.month === 7)?.carriedIn).toBe(450);
+    expect(budgetForMonth(useBudgetStore.getState().snapshot, 2026, 6, NOW)).toBe(450);
+    expect(budgetForMonth(useBudgetStore.getState().snapshot, 2026, 7, NOW)).toBe(700);
+  });
+
+  it("resets a negative carried balance too", () => {
+    const snapshot = budget();
+    allocation(snapshot, 100, "2026-08-01");
+    spend(snapshot, 150, "2026-08-14");
+    snapshot.years["2026"].closedMonths.push({
+      id: "close-empty-september-negative", year: 2026, month: 9, status: "closed-without-rollover",
+      spendTotal: 0, delta: -50, confirmedAt: "2026-10-01T00:00:00Z", note: "reset",
+    });
+    allocation(snapshot, 200, "2026-10-01");
+    const periods = budgetPeriods(snapshot);
+    expect(periods.find((period) => period.month === 8)?.remaining).toBe(-50);
+    expect(periods.find((period) => period.month === 9)?.remaining).toBe(0);
+    expect(periods.find((period) => period.month === 10)?.carriedIn).toBe(0);
+  });
+
+  it("carries a negative balance normally when the month is not reset", () => {
+    const snapshot = budget();
+    allocation(snapshot, 100, "2026-08-01");
+    spend(snapshot, 150, "2026-08-14");
+    allocation(snapshot, 200, "2026-09-01");
+    const september = budgetPeriods(snapshot).find((period) => period.month === 9)!;
+    expect(september.carriedIn).toBe(-50);
+    expect(september.remaining).toBe(150);
   });
 });
 

@@ -5,6 +5,7 @@ import { monthName, todayDateInput, isLastDayOfMonth, monthKey } from "../../dom
 import { useBudgetStore } from "../../store/budgetStore";
 import {
   budgetPeriods,
+  budgetRemainingPercent,
   leftoverBudget,
   monthlyBudgetPlan,
   walletState,
@@ -94,10 +95,6 @@ export const WalletPanel: React.FC = () => {
 
   const wallet = useMemo(() => walletState(snapshot), [snapshot]);
   const periods = useMemo(() => budgetPeriods(snapshot), [snapshot]);
-  const selectedBudgetPeriod = periods.find((item) => item.year === snapshot.settings.selectedYear && item.month === snapshot.settings.selectedMonth);
-  const remainingPercent = selectedBudgetPeriod && selectedBudgetPeriod.allocated !== 0
-    ? (selectedBudgetPeriod.remaining / selectedBudgetPeriod.allocated) * 100
-    : null;
   const plan = useMemo(() => monthlyBudgetPlan(snapshot), [snapshot]);
   const leftover = useMemo(() => leftoverBudget(snapshot), [snapshot]);
 
@@ -244,7 +241,6 @@ export const WalletPanel: React.FC = () => {
             <div className="text-footnote">{t("wallet.budgetRemaining")}</div>
             <div className="money wallet-balance-value"><Total amount={wallet.budgetRemainingWithLoans} currency={walletCurrency} /></div>
             <div className="text-caption">{t("wallet.budgetRemainingHint")}</div>
-            {remainingPercent != null && <div className="text-footnote" style={{ color: remainingPercent >= 0 ? "var(--success)" : "var(--danger)" }}>{remainingPercent.toFixed(0)}%</div>}
           </div>
 
           <div className="wallet-balance" data-tone="personal">
@@ -348,7 +344,10 @@ export const WalletPanel: React.FC = () => {
                     <td className="num">{periodMoney(period.allocated)}</td>
                     <td className="num">{periodMoney(period.spent)}</td>
                     <td className="num">{period.transferred > 0 ? periodMoney(period.transferred) : "—"}</td>
-                    <td className="num wallet-period-remaining">{periodMoney(period.remaining)}</td>
+                    <td className="num wallet-period-remaining">
+                      {periodMoney(period.remaining)}
+                      {budgetRemainingPercent(period) != null && <span className="text-footnote" style={{ marginInlineStart: 6, color: period.remaining > 0 ? "var(--success)" : period.remaining < 0 ? "var(--danger)" : "var(--text-tertiary)" }}>{budgetRemainingPercent(period)!.toFixed(0)}%</span>}
+                    </td>
                   </tr>
                 ))}
               </tbody>

@@ -759,6 +759,7 @@ export const fr: Dictionary = {
   "categories.bucketAndCapAreLocked": "Le plafond mensuel est verrouillé tant qu'une période close est sélectionnée.",
   "categories.categoriesOrganiseYourActivitiesAnd": "Les catégories organisent vos activités et vos dépenses.",
   "stats.budgetVsActual": "Budget vs réel",
+  "stats.exactBudget": "Budget exact",
   "stats.noSpendingForThisPeriod": "Aucune dépense sur cette période",
   "stats.categoryEvolution": "Évolution par catégorie",
   "stats.committedVsDiscretionary": "Engagé vs discrétionnaire",

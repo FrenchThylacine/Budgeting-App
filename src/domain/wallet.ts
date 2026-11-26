@@ -481,6 +481,13 @@ export interface BudgetPeriod {
   allocationEntryId?: string;
 }
 
+/** Percentage of the month's available budget (allocation plus carry-in). */
+export function budgetRemainingPercent(period: Pick<BudgetPeriod, "carriedIn" | "allocated" | "remaining">): number | null {
+  const available = period.carriedIn + period.allocated;
+  if (available === 0) return period.remaining === 0 ? 0 : null;
+  return (period.remaining / Math.abs(available)) * 100;
+}
+
 /**
  * The allocation history, one row per month that saw any budget activity.
  *
@@ -523,13 +530,19 @@ export function budgetPeriods(snapshot: BudgetSnapshot): BudgetPeriod[] {
   const closes = new Map(
     Object.values(snapshot.years).flatMap((record) => record.closedMonths.map((close) => [`${close.year}-${close.month}`, close] as const)),
   );
+  // A close is a ledger event even when the month had no allocations, spending
+  // or transfers. Include it so a skipped month-end reset still stops carry.
+  for (const close of closes.values()) {
+    bucket(`${close.year}-${String(close.month).padStart(2, "0")}-01`);
+  }
   let running = 0;
   return [...buckets.entries()]
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([, value]) => {
       const carriedIn = running;
-      const remaining = carriedIn + value.allocated - value.spent - value.transferred;
       const close = closes.get(`${value.year}-${value.month}`);
+      const calculatedRemaining = carriedIn + value.allocated - value.spent - value.transferred;
+      const remaining = close?.status === "closed-without-rollover" ? 0 : calculatedRemaining;
       running = close?.status === "closed-without-rollover" ? 0 : remaining;
       return {
         year: value.year,

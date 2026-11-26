@@ -783,6 +783,7 @@ export const ar: Dictionary = {
   "categories.bucketAndCapAreLocked": "السقف الشهري مقفل ما دامت فترة مُغلقة محدّدة.",
   "categories.categoriesOrganiseYourActivitiesAnd": "الفئات تنظّم أنشطتك وإنفاقك.",
   "stats.budgetVsActual": "الميزانية مقابل الفعلي",
+  "stats.exactBudget": "مطابقة الميزانية تمامًا",
   "stats.noSpendingForThisPeriod": "لا إنفاق في هذه الفترة",
   "stats.categoryEvolution": "تطوّر الفئات",
   "stats.committedVsDiscretionary": "ملتزَم مقابل اختياري",

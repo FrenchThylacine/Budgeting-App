@@ -31,8 +31,6 @@ Run this checklist before every release.
 
 The focused Wallet, Analytics, and Report suites cover carryover/reset derivation, monthly allocation history, loan-linked movement accounting, projections, and report generation. Database integration additionally round-trips `wallet_entries.loan_id`, `loan_movement`, and `loan_budget_effect`; this catches the failure mode where a client-only loan feature disappears after a server reload.
 
-New this pass:
-
 | Suite | Covers |
 | --- | --- |
 | `tests/payment-cycles.test.ts` | The two new cost models, on the specification's own examples. That €20 × 2/week paid every 10 sessions is **one €200 payment every 35 days**; that €60/year anchored to 14 September produces 2026, 2027, 2028; that a full year of the timeline yields **exactly one** occurrence for an annual charge; that neither model invents a date when there is no baseline; leap-day clamping; and that `paymentsBetween` returns `null` for every model it does not own |
@@ -96,6 +94,10 @@ It was written against the *broken* code first and confirmed to fail. A regressi
 - a write built on a stale base is rejected **even when its own revision is higher** — the offline-device case that could previously overwrite another device;
 - two devices reading the same base: the first write wins, the second gets 409 with the current snapshot;
 - after adopting the server revision, the loser's retry succeeds.
+
+### Historical budget and Analytics release check (5.4.4)
+
+Run `npm.cmd test -- --reporter=dot --silent=true tests/wallet-treasury.test.ts tests/wallet-reset.test.ts tests/analytics-selectors.test.ts tests/analytics-charts.test.ts tests/analytics-budget-bars.test.ts tests/i18n.test.ts`. Confirm two months with distinct allocations retain separate Analytics comparisons; edit a historical allocation while History is unlocked and verify both that month's comparison and later carry-in recompute. Cover positive/negative/zero remaining percentages, reset and normal carry-over, and below/above/exact budget states for past and current months. Then run `npm.cmd run build` and inspect Wallet and Analytics in the browser when a local database and browser are configured. No migration is required for this release.
 
 ## Test layers
 

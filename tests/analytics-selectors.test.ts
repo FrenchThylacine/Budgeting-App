@@ -175,7 +175,12 @@ describe("budgetPacing", () => {
       id: "july-allocation", year: 2026, month: 7, date: "2026-07-01", amount: 450,
       currency: "EUR", source: "Budget", type: "budget", note: "", createdAt: "2026-07-01T00:00:00Z",
     });
+    snap.years["2026"].walletEntries.push({
+      id: "august-allocation", year: 2026, month: 8, date: "2026-08-01", amount: 700,
+      currency: "EUR", source: "Budget", type: "budget", note: "", createdAt: "2026-08-01T00:00:00Z",
+    });
     expect(budgetForMonth(snap, 2026, 7, new Date("2026-11-15T12:00:00Z"))).toBe(450);
+    expect(budgetForMonth(snap, 2026, 8, new Date("2026-11-15T12:00:00Z"))).toBe(700);
     const pacing = budgetPacing(snap, snap.years["2026"].spendingEntries, new Date("2026-07-15T12:00:00Z"));
     expect(pacing?.budget).toBe(450);
     expect(pacing?.remaining).toBe(150);

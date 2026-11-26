@@ -816,6 +816,7 @@ export const en = {
   "categories.bucketAndCapAreLocked": "The monthly cap is locked while a closed period is selected.",
   "categories.categoriesOrganiseYourActivitiesAnd": "Categories organise your activities and spending.",
   "stats.budgetVsActual": "Budget vs actual",
+  "stats.exactBudget": "Exact budget",
   "stats.noSpendingForThisPeriod": "No spending for this period",
   "stats.categoryEvolution": "Category evolution",
   "stats.committedVsDiscretionary": "Committed vs discretionary",

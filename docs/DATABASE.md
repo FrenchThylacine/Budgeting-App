@@ -79,6 +79,10 @@ These could not be observed with a mocked driver and were all failing in real Po
 | `017-spending-transaction-timestamp` | `spending_entries.transaction_at` |
 | `018-wallet-loan-links` | `wallet_entries.loan_id`, `loan_movement`, `loan_budget_effect` |
 
+Wallet historical allocations and month-close decisions use the existing
+`wallet_entries` and `closed_months` records. Release 5.4.4 changes only their
+derived timeline and presentation; it requires no schema migration.
+
 ### `schema.ts` runs before the migrations, and that constrains what may go in it
 
 This is not a style point. Migration 006 shipped with `CREATE INDEX ... ON budget_approvals(snapshot_id)` placed next to the table definition in `schema.ts`. On a **fresh** database that works, because the `CREATE TABLE` really does create the column. On an **existing** one, `CREATE TABLE IF NOT EXISTS` is a no-op, the column does not exist yet, and the index fails with SQLSTATE `42703` — aborting initialization and answering every request with 503.

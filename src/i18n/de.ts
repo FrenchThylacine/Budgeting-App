@@ -751,6 +751,7 @@ export const de: Dictionary = {
   "categories.bucketAndCapAreLocked": "Das Monatslimit ist gesperrt, solange eine abgeschlossene Periode gewählt ist.",
   "categories.categoriesOrganiseYourActivitiesAnd": "Kategorien ordnen Ihre Aktivitäten und Ausgaben.",
   "stats.budgetVsActual": "Budget vs. Ist",
+  "stats.exactBudget": "Budget genau erreicht",
   "stats.noSpendingForThisPeriod": "Keine Ausgaben in dieser Periode",
   "stats.categoryEvolution": "Entwicklung nach Kategorie",
   "stats.committedVsDiscretionary": "Gebunden vs. frei verfügbar",

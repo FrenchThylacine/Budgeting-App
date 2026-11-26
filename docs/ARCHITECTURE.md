@@ -126,7 +126,9 @@ src/components/charts/      dependency-free SVG chart library
 
 Loan links and Budget-side effects are persisted on `wallet_entries`, not inferred from labels, so edit/delete/reload remain safe. The store moves a wallet row between year records when an edit changes its date across a year boundary. `budgetPeriods()` derives allocations, spending, transfers, and carry-in from the ledger. A `closed-without-rollover` record resets the next period's carry-in to zero; all other periods carry their actual remaining amount once.
 
-Analytics reads those period allocations for historical comparison. It does not apply the current month's setting to months that have their own recorded allocation.
+Analytics reads those period allocations for historical comparison. It does not apply the current month's setting to months that have their own recorded allocation. Wallet month history is ledger-derived and editable while the selected historical period is explicitly unlocked; editing an allocation preserves other months and recomputes downstream carry-in. Month-close records are timeline events even when their month has no wallet rows, so a no-rollover close zeros the next period's carry. Remaining percentages use allocation plus carry-in and guard a zero denominator.
+
+These rules require no additional database columns: allocations and reset-aware closes use the existing `wallet_entries` and `closed_months` persistence paths.
 
 ### Leaf modules for rules that must not be expressible twice
 
