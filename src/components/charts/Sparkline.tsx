@@ -8,6 +8,10 @@ interface SparklineProps {
   width?: number;
   height?: number;
   color?: string;
+  /** Colors each incoming monthly segment using that period's budget status. */
+  pointColors?: (string | undefined)[];
+  /** Marker colors distinguish exact/current status at each known period. */
+  pointMarkerColors?: (string | undefined)[];
   /** Wash under the line. */
   area?: boolean;
   /** Dot on the most recent known value. */
@@ -26,6 +30,8 @@ export const Sparkline: React.FC<SparklineProps> = ({
   width = 104,
   height = 30,
   color = "var(--accent)",
+  pointColors,
+  pointMarkerColors,
   area = true,
   showLast = true,
   fluid = false,
@@ -75,7 +81,11 @@ export const Sparkline: React.FC<SparklineProps> = ({
     <svg {...svgProps} aria-label={ariaLabel}>
       <title>{ariaLabel}</title>
       {area && <path d={areaPath(points, height)} fill={color} opacity={0.12} stroke="none" />}
-      <path
+      {pointColors ? points.slice(1).map((point, segmentIndex) => {
+        const previous = points[segmentIndex];
+        if (!previous || !point) return null;
+        return <path key={`segment-${segmentIndex}`} d={linePath([previous, point])} fill="none" stroke={pointColors[segmentIndex + 1] ?? color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />;
+      }) : <path
         d={linePath(points)}
         fill="none"
         stroke={color}
@@ -83,8 +93,13 @@ export const Sparkline: React.FC<SparklineProps> = ({
         strokeLinecap="round"
         strokeLinejoin="round"
         vectorEffect="non-scaling-stroke"
-      />
-      {showLast && !fluid && last && <circle cx={last.x} cy={last.y} r={2.5} fill={color} />}
+      />}
+      {!fluid && pointMarkerColors?.map((markerColor, index) => {
+        const point = points[index];
+        if (!point || !markerColor) return null;
+        return <circle key={`marker-${index}`} cx={point.x} cy={point.y} r={index === lastIndex ? 2.8 : 2} fill={markerColor} />;
+      })}
+      {showLast && !fluid && last && !pointMarkerColors?.[lastIndex] && <circle cx={last.x} cy={last.y} r={2.5} fill={pointColors?.[lastIndex] ?? color} />}
     </svg>
   );
 };

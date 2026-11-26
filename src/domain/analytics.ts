@@ -9,7 +9,7 @@ import { normalizeAmount } from "./currency";
 import { normalizeEntry } from "./calculations";
 import { externalEntries, otherFundedEntries, outsideBudgetEntries, personalEntries } from "./funding";
 import { movePeriod, periodLabel, selectedIsoWeekYear } from "./periods";
-import { dateInputValue, weekYear, weeksInIsoYear, startOfIsoWeek } from "./dates";
+import { dateInputValue, weeksInIsoYear, startOfIsoWeek } from "./dates";
 import { activityBudgetSummary } from "./activityBudget";
 import { budgetPeriods } from "./wallet";
 
@@ -29,10 +29,12 @@ export function monthlyBudgetBarStyle(actual: number | null, budget: number | nu
   if (actual == null || budget == null || budget <= 0) return { color: undefined, overlayColor: undefined, overlayPattern: false, exact: false, over: false };
   const exact = Math.abs(actual - budget) < 0.005;
   const over = actual > budget && !exact;
-  const color = exact ? "var(--budget-exact)" : over ? "var(--danger)" : "var(--success)";
+  const color = current ? "var(--warning)" : over ? "var(--danger)" : "var(--success)";
   return {
     color,
-    overlayColor: undefined,
+    overlayColor: current
+      ? (exact ? "var(--budget-exact)" : over ? "var(--danger)" : "var(--success)")
+      : exact ? "var(--budget-exact)" : undefined,
     overlayPattern: current,
     exact,
     over,
@@ -57,16 +59,17 @@ export function entriesForSelectedPeriod(snapshot: BudgetSnapshot, settings: Set
   const allEntries = Object.values(snapshot.years).flatMap((yr) => yr.spendingEntries);
   if (mode === "week") {
     const isoYear = selectedIsoWeekYear(settings);
-    return allEntries.filter(
-      (e) => e.week === settings.selectedWeek && weekYear(new Date(`${e.date}T12:00:00`)) === isoYear,
-    );
+    const start = startOfIsoWeek(isoYear, settings.selectedWeek);
+    const first = dateInputValue(start);
+    start.setUTCDate(start.getUTCDate() + 6);
+    const last = dateInputValue(start);
+    return allEntries.filter((entry) => entry.date.slice(0, 10) >= first && entry.date.slice(0, 10) <= last);
   }
   if (mode === "year") {
-    return allEntries.filter((e) => e.year === settings.selectedYear);
+    return allEntries.filter((entry) => entry.date.slice(0, 4) === String(settings.selectedYear));
   }
-  return allEntries.filter(
-    (e) => e.year === settings.selectedYear && e.month === settings.selectedMonth,
-  );
+  const month = `${settings.selectedYear}-${String(settings.selectedMonth).padStart(2, "0")}`;
+  return allEntries.filter((entry) => entry.date.slice(0, 7) === month);
 }
 
 /**
@@ -307,8 +310,9 @@ interface MonthlySpendingEstimate {
 function estimateMonthlySpending(snapshot: BudgetSnapshot, entries: SpendingEntry[], now: Date): MonthlySpendingEstimate {
   const settings = snapshot.settings;
   const todayKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-  const elapsedEntries = entries.filter((entry) => entry.date.slice(0, 10) <= todayKey);
-  const futureEntries = personalEntries(entries).filter((entry) => entry.date.slice(0, 10) > todayKey);
+  const budgetEntries = personalEntries(entries);
+  const elapsedEntries = budgetEntries.filter((entry) => entry.date.slice(0, 10) <= todayKey);
+  const futureEntries = budgetEntries.filter((entry) => entry.date.slice(0, 10) > todayKey);
   const spent = elapsedEntries.reduce((sum, entry) => sum + normalizeEntry(entry, snapshot), 0);
   const { totalDays, elapsedDays } = selectedPeriodWindow(settings, now);
   const daysLeft = Math.max(totalDays - elapsedDays, 0);
@@ -316,8 +320,9 @@ function estimateMonthlySpending(snapshot: BudgetSnapshot, entries: SpendingEntr
     .filter((entry) => !entry.activityId && (!entry.recurrenceType || entry.recurrenceType === "none"))
     .reduce((sum, entry) => sum + normalizeEntry(entry, snapshot), 0);
   const discretionaryRate = elapsedDays > 0 ? discretionarySpent / elapsedDays : 0;
-  const previous = snapshot.years[String(settings.selectedYear - 1)]?.spendingEntries
-    .filter((entry) => entry.month === settings.selectedMonth && entry.source !== "external" && entry.source !== "shared") ?? [];
+  const previousMonth = `${settings.selectedYear - 1}-${String(settings.selectedMonth).padStart(2, "0")}`;
+  const previous = personalEntries(snapshot.years[String(settings.selectedYear - 1)]?.spendingEntries
+    .filter((entry) => entry.date.slice(0, 7) === previousMonth) ?? []);
   const historicalComparable = previous.length >= 3
     ? previous.reduce((sum, entry) => sum + normalizeEntry(entry, snapshot), 0)
     : null;
@@ -522,6 +527,9 @@ export interface TrendBar {
   label: string;
   value: number | null;
   highlight: boolean;
+  /** Calendar coordinates are present for monthly bars, including across years. */
+  year?: number;
+  month?: number;
 }
 
 /**
@@ -557,6 +565,8 @@ export function monthlyTrendBars(
     label: shortMonths[i] ?? String(i + 1),
     value: summaryValue(summary),
     highlight: i + 1 === selectedMonth,
+    year: summary.year,
+    month: summary.month ?? i + 1,
   }));
 }
 
@@ -659,10 +669,13 @@ export function dailySpendingCalendar(
 
   // A period with no records at all stays unknown end to end — a wall of
   // zeroes would claim the user spent nothing, which is not what we know.
-  const hasRecords = entries.length > 0;
+  const firstDate = dateInputValue(days[0]);
+  const lastDate = dateInputValue(days[days.length - 1]);
+  const budgetEntries = personalEntries(entries).filter((entry) => entry.date.slice(0, 10) >= firstDate && entry.date.slice(0, 10) <= lastDate);
+  const hasRecords = budgetEntries.length > 0;
 
   const totals = new Map<string, number>();
-  for (const entry of entries) {
+  for (const entry of budgetEntries) {
     const key = (entry.date ?? "").slice(0, 10);
     if (key.length !== 10) continue;
     totals.set(key, (totals.get(key) ?? 0) + normalizeEntry(entry, snapshot));
@@ -803,8 +816,9 @@ export function recurringMonthlySplit(
 
 /**
  * Totals for the last `count` periods of the current mode, ending on the
- * selected one. Periods without records stay `null` so the chart shows a "?"
- * instead of a zero-height bar.
+ * selected one. Periods without records stay `null` so the chart uses a neutral
+ * unknown marker instead of a zero-height bar. The gap is explained in the
+ * chart footer; it never fabricates a zero.
  */
 export function recentPeriodTotals(
   snapshot: BudgetSnapshot,
@@ -828,6 +842,9 @@ export function recentPeriodTotals(
       label: compactAxisLabel(periodSettings, shortMonths, weekLabel),
       value: entries.length > 0 ? entries.reduce((sum, e) => sum + normalizeEntry(e, snapshot), 0) : null,
       highlight: index === walk.length - 1,
+      ...(periodSettings.selectedPeriodMode === "month"
+        ? { year: periodSettings.selectedYear, month: periodSettings.selectedMonth }
+        : {}),
     };
   });
 }

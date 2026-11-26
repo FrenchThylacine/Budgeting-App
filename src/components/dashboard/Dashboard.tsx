@@ -27,7 +27,6 @@ import {
   LineChart,
   ProgressRing,
   compactNumber,
-  type ChartReferenceLine,
   type HorizontalBarRow,
 } from "../charts";
 import { Badge } from "../ui/Badge";
@@ -182,6 +181,11 @@ export const Dashboard: React.FC<{ onNavigate?: (tab: "spending" | "activities" 
   );
 
   const isCurrent = isViewingCurrentMonth(settings);
+  const forecastStatus = monthlyBudgetBarStyle(stats.total, forecast?.budget ?? null, isCurrent);
+  const forecastLastActual = forecast?.actual.reduce((last, value, index) => value != null ? index : last, -1) ?? -1;
+  const forecastMarkerColors = forecast?.actual.map((value, index) =>
+    value != null && index === forecastLastActual ? forecastStatus.overlayColor ?? forecastStatus.color : undefined,
+  );
   const money = (value: number | null | undefined) => formatDualMoney(value, settings);
   /*
    * What the wallet actually holds, currency by currency. The same selector
@@ -214,19 +218,20 @@ export const Dashboard: React.FC<{ onNavigate?: (tab: "spending" | "activities" 
     return values;
   }, [snapshot, settings.selectedYear]);
   const coloredTrendBars = trendBars.map((bar, index) => {
-    if (mode === "week") return { ...bar, color: undefined as string | undefined, overlayPattern: false };
+    if (mode === "week") return { ...bar, color: undefined as string | undefined, overlayColor: undefined as string | undefined, overlayPattern: false, statusColor: false };
     const month = index + 1;
     const budget = budgetByMonth.get(month);
     const status = monthlyBudgetBarStyle(bar.value, budget ?? null, settings.selectedYear === new Date().getFullYear() && month === new Date().getMonth() + 1);
-    return { ...bar, color: status.color, overlayPattern: status.overlayPattern };
+    return {
+      ...bar,
+      color: status.color,
+      overlayColor: status.overlayColor,
+      overlayPattern: status.overlayPattern,
+      statusColor: Boolean(status.color),
+    };
   });
   /** Two months is the floor for a trend; below it there is nothing to draw. */
   const hasTrend = trendBars.filter((bar) => bar.value != null).length >= 2;
-
-  const budgetReference: ChartReferenceLine[] =
-    mode !== "week" && calculation.monthlyBudgetBase > 0
-      ? [{ value: calculation.monthlyBudgetBase, label: t("chart.budgetLine", { amount: money(calculation.monthlyBudgetBase) }) }]
-      : [];
 
   const categoryRows: HorizontalBarRow[] = categories.slice(0, 6).map((stat) => ({
     id: stat.categoryId,
@@ -559,9 +564,16 @@ export const Dashboard: React.FC<{ onNavigate?: (tab: "spending" | "activities" 
               <CardBody>
                 <BarChart
                   title={t(mode === "week" ? "dashboard.trendWeekly" : "dashboard.trendMonthly")}
-                  bars={coloredTrendBars.map((bar) => ({ label: bar.label, value: bar.value, highlight: bar.highlight, color: bar.color, overlayPattern: bar.overlayPattern }))}
+                  bars={coloredTrendBars.map((bar) => ({
+                    label: bar.label,
+                    value: bar.value,
+                    highlight: bar.highlight,
+                    color: bar.color,
+                    overlayColor: bar.overlayColor,
+                    overlayPattern: bar.overlayPattern,
+                    statusColor: bar.statusColor,
+                  }))}
                   height={190}
-                  referenceLines={budgetReference}
                   formatValue={(v) => money(v)}
                   formatTick={compactNumber}
                 />
@@ -579,8 +591,8 @@ export const Dashboard: React.FC<{ onNavigate?: (tab: "spending" | "activities" 
                     title={t("dashboard.forecast")}
                     labels={forecast.labels}
                     series={[
-                      { id: "actual", name: t("chart.actual"), color: monthlyBudgetBarStyle(stats.total, forecast.budget, isCurrent).color ?? "var(--series-1)", values: forecast.actual, area: true },
-                      { id: "projected", name: t("chart.projected"), color: "var(--warning)", values: forecast.projected, dashed: true },
+                      { id: "actual", name: t("chart.actual"), color: forecastStatus.color ?? "var(--series-1)", pointMarkerColors: forecastMarkerColors, values: forecast.actual, area: true },
+                      { id: "projected", name: t("chart.projected"), color: "var(--warning-text)", values: forecast.projected, dashed: true },
                     ]}
                     referenceLines={
                       forecast.budget != null

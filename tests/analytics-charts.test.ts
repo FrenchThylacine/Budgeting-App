@@ -36,6 +36,7 @@ import { createSeedBudgetSnapshot } from "../src/data/seedBudget";
 import { catId } from "./helpers/seedIds";
 import type { BudgetSnapshot, SpendingEntry } from "../src/domain/types";
 import { monthNames } from "../src/domain/i18n";
+import { summarizeMonth } from "../src/domain/calculations";
 
 /**
  * The twelve short month names, as `Intl` writes them in English.
@@ -313,6 +314,17 @@ describe("dailySpendingCalendar", () => {
     expect(cells[2].value).toBe(100);
   });
 
+  it("uses only personal spend dated in the selected month", () => {
+    const snap = snapshotWith([
+      entry({ amount: 40, date: "2026-07-03", year: 2025, month: 1 }),
+      entry({ amount: 100, date: "2026-07-03", source: "external" }),
+      entry({ amount: 60, date: "2026-08-03" }),
+    ]);
+    const cells = dailySpendingCalendar(snap.years["2026"].spendingEntries, snap, snap.settings, now)!;
+    expect(cells[2].value).toBe(40);
+    expect(cells[3].value).toBe(0);
+  });
+
   it("covers exactly the seven days of the selected ISO week", () => {
     const snap = snapshotWith([entry({ amount: 25, date: "2026-07-08", week: 28 })]);
     snap.settings.selectedPeriodMode = "week";
@@ -402,6 +414,8 @@ describe("recentPeriodTotals", () => {
     expect(bars.filter((bar) => bar.highlight)).toHaveLength(1);
     expect(bars[3].value).toBe(100);
     expect(bars[2].value).toBe(60);
+    expect(bars[3]).toMatchObject({ year: 2026, month: 7 });
+    expect(bars[2]).toMatchObject({ year: 2026, month: 6 });
   });
 
   it("leaves periods without records null rather than zero", () => {
@@ -487,6 +501,11 @@ describe("cumulativeForecast", () => {
     expect(forecast.projected[30]).toBeCloseTo(620);
     expect(forecast.projectedTotal).toBeCloseTo(620);
     expect(forecast.budget).toBe(1000);
+  });
+
+  it("matches actual totals by transaction date even if cached month fields are stale", () => {
+    const snap = snapshotWith([entry({ amount: 100, date: "2026-07-03", year: 2025, month: 1 })]);
+    expect(summarizeMonth(snap.years["2026"].spendingEntries, snap, 2026, 7, now).total).toBe(100);
   });
 
   it("stops projecting once the period is complete", () => {

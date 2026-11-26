@@ -95,9 +95,9 @@ It was written against the *broken* code first and confirmed to fail. A regressi
 - two devices reading the same base: the first write wins, the second gets 409 with the current snapshot;
 - after adopting the server revision, the loser's retry succeeds.
 
-### Historical budget and chart-color release check (5.4.5)
+### Historical budget and chart-data release check (5.4.6)
 
-Run `npm.cmd test -- --reporter=dot --silent=true tests/wallet-treasury.test.ts tests/wallet-reset.test.ts tests/analytics-selectors.test.ts tests/analytics-charts.test.ts tests/analytics-budget-bars.test.ts tests/i18n.test.ts`. Confirm two months with distinct allocations retain separate Analytics comparisons; edit a historical allocation while History is unlocked and verify both that month's comparison and later carry-in recompute. Cover positive/negative/zero remaining percentages, reset and normal carry-over, and below/above/exact budget states for past and current months. Then run `npm.cmd run build` and inspect Wallet and Analytics in the browser when a local database and browser are configured. No migration is required for this release.
+Run `npm.cmd test -- --reporter=dot --silent=true tests/wallet-treasury.test.ts tests/wallet-reset.test.ts tests/analytics-selectors.test.ts tests/analytics-charts.test.ts tests/analytics-budget-bars.test.ts tests/projection.test.ts tests/i18n.test.ts`. Confirm two months with distinct allocations retain separate Analytics comparisons; edit a historical allocation while History is unlocked and verify both that month's comparison and later carry-in recompute. Cover positive/negative/zero remaining percentages, reset and normal carry-over, and below/above/exact budget states for past and current months. Then run `npm.cmd run build` and `npm.cmd run server:build`; inspect Home and Analytics/Stats in desktop and mobile browsers with deterministic snapshot data. No migration is required for this release.
 
 ## Test layers
 

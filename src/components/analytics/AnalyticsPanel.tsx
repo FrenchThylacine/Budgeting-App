@@ -42,7 +42,6 @@ import {
   Sparkline,
   StackedBarChart,
   compactNumber,
-  type ChartReferenceLine,
   type HeatmapCell,
   type HorizontalBarRow,
 } from "../charts";
@@ -216,6 +215,30 @@ export const AnalyticsPanel: React.FC = () => {
     () => recentPeriodTotals(snapshot, settings, monthNames("short"), weekAxis, mode === "year" ? 5 : 8),
     [snapshot, settings, mode, monthNames, weekAxis],
   );
+  const colouredRecentBars = useMemo(() => recentBars.map((bar) => {
+    const base = {
+      ...bar,
+      color: undefined as string | undefined,
+      overlayColor: undefined as string | undefined,
+      overlayPattern: false,
+      markerColor: undefined as string | undefined,
+      statusColor: false,
+      detail: undefined as string | undefined,
+    };
+    if (mode !== "month" || bar.year == null || bar.month == null) return base;
+    const budget = budgetForMonth(snapshot, bar.year, bar.month);
+    const current = bar.year === new Date().getFullYear() && bar.month === new Date().getMonth() + 1;
+    const style = monthlyBudgetBarStyle(bar.value, budget > 0 ? budget : null, current);
+    return {
+      ...base,
+      color: style.color,
+      overlayColor: style.overlayColor,
+      overlayPattern: style.overlayPattern,
+      markerColor: style.overlayColor ?? style.color,
+      statusColor: Boolean(style.color),
+      detail: style.color ? `${formatDualMoney(budget, settings)} budget${style.exact ? ` · ${t("stats.exactBudget")}` : ""}` : undefined,
+    };
+  }), [recentBars, mode, snapshot, settings, t]);
 
   // Same period last year (month mode only)
   const lastYearComparison = useMemo(() => {
@@ -251,11 +274,12 @@ export const AnalyticsPanel: React.FC = () => {
     const budget = monthlyBudgets.get(index + 1);
     const current = settings.selectedYear === new Date().getFullYear() && index + 1 === new Date().getMonth() + 1;
     const style = monthlyBudgetBarStyle(bar.value, budget ?? null, current);
-    if (!style.color) return { ...bar, color: undefined, overlayColor: undefined, overlayPattern: undefined, detail: undefined };
+    if (!style.color) return { ...bar, color: undefined, overlayColor: undefined, markerColor: undefined, overlayPattern: undefined, detail: undefined };
     return {
       ...bar,
       color: style.color,
       overlayColor: style.overlayColor,
+      markerColor: style.overlayColor ?? style.color,
       overlayPattern: style.overlayPattern,
       detail: `${money(budget)} budget${style.exact ? ` · ${t("stats.exactBudget")}` : ""}`,
     };
@@ -271,6 +295,12 @@ export const AnalyticsPanel: React.FC = () => {
   );
 
   const total = stats.total;
+  const isCurrentCalendarMonth = settings.selectedYear === new Date().getFullYear() && settings.selectedMonth === new Date().getMonth() + 1;
+  const forecastStatus = monthlyBudgetBarStyle(total, forecast?.budget ?? null, isCurrentCalendarMonth);
+  const forecastLastActual = forecast?.actual.reduce((last, value, index) => value != null ? index : last, -1) ?? -1;
+  const forecastMarkerColors = forecast?.actual.map((value, index) =>
+    value != null && index === forecastLastActual ? forecastStatus.overlayColor ?? forecastStatus.color : undefined,
+  );
   const utilisation = pacing?.utilisation ?? null;
   const currentPeriodLabel = periodLabel(settings, language);
   const dailyAvg = total != null && window.elapsedDays > 0 ? total / window.elapsedDays : null;
@@ -278,12 +308,6 @@ export const AnalyticsPanel: React.FC = () => {
   // ── Chart inputs ──
   const trendBars = mode === "week" ? weeklyBars : monthlyBars;
   const trendEmphasis = trendBars.findIndex((bar) => bar.highlight);
-  const budgetBase = mode === "month" ? budgetForMonth(snapshot, settings.selectedYear, settings.selectedMonth) : 0;
-  const budgetReference: ChartReferenceLine[] =
-    mode !== "week" && budgetBase > 0
-      ? [{ value: budgetBase, label: t("chart.budgetLine", { amount: money(budgetBase) }) }]
-      : [];
-
   const heatmapCells: HeatmapCell[] = (calendar ?? []).map((cell) => ({
     key: cell.date,
     day: cell.day,
@@ -396,6 +420,8 @@ export const AnalyticsPanel: React.FC = () => {
               {recentBars.length > 1 && (
                 <Sparkline
                   values={recentBars.map((bar) => bar.value)}
+                  pointColors={mode === "month" ? colouredRecentBars.map((bar) => bar.color) : undefined}
+                  pointMarkerColors={mode === "month" ? colouredRecentBars.map((bar) => bar.markerColor) : undefined}
                   ariaLabel={t("stats.ariaRecent", { count: recentBars.length, period: t(`period.${mode}`) })}
                   fluid
                   height={38}
@@ -479,16 +505,16 @@ export const AnalyticsPanel: React.FC = () => {
                     id: "spend",
                     name: t("chart.spend"),
                     color: "var(--accent)",
+                    pointColors: mode === "week" ? undefined : colouredMonthlyBars.map((bar) => bar.color),
+                    pointMarkerColors: mode === "week" ? undefined : colouredMonthlyBars.map((bar) => bar.markerColor),
                     values: trendBars.map((bar) => bar.value),
-                    area: true,
+                    area: mode === "week",
                   },
                 ]}
-                referenceLines={budgetReference}
                 emphasisIndex={trendEmphasis >= 0 ? trendEmphasis : undefined}
                 formatValue={money}
                 formatTick={tick}
                 height={220}
-                showLegend={budgetReference.length > 0}
               />
             )}
           </ChartCard>
@@ -525,11 +551,7 @@ export const AnalyticsPanel: React.FC = () => {
         <div style={{ display: "grid", gap: 16, minWidth: 0 }}>
           <ChartCard
             title={t("stats.budgetVsActual")}
-            subtitle={
-              budgetBase > 0
-                ? t("stats.budgetReference", { amount: money(budgetBase) })
-                : t("stats.noBudgetReference")
-            }
+            subtitle={t("stats.monthlyBudgetComparisonHint")}
           >
             {monthlyBars.every((bar) => bar.value == null) ? (
               <ChartPlaceholder height={180} message={t("stats.noMonthlySpendingRecordedFor")} />
@@ -541,11 +563,11 @@ export const AnalyticsPanel: React.FC = () => {
                   value: bar.value,
                   highlight: bar.highlight,
                   color: bar.color,
+                  statusColor: Boolean(bar.color),
                   overlayColor: bar.overlayColor,
                   overlayPattern: bar.overlayPattern,
                   detail: bar.detail,
                 }))}
-                referenceLines={budgetBase > 0 ? [{ value: budgetBase, label: t("chart.budgetLine", { amount: money(budgetBase) }) }] : []}
                 formatValue={money}
                 formatTick={tick}
                 height={200}
@@ -564,7 +586,8 @@ export const AnalyticsPanel: React.FC = () => {
                   {
                     id: "actual",
                     name: t("stats.actualSoFar"),
-                    color: "var(--accent)",
+                    color: forecastStatus.color ?? "var(--accent)",
+                    pointMarkerColors: forecastMarkerColors,
                     values: forecast.actual,
                     area: true,
                   },
@@ -755,7 +778,6 @@ export const AnalyticsPanel: React.FC = () => {
                   { id: "oneoff", name: t("common.oneOff"), color: oneOffTone, values: recurringSplit.oneOff },
                 ]}
                 emphasisIndex={mode === "year" ? undefined : settings.selectedMonth - 1}
-                referenceLines={budgetBase > 0 ? [{ value: budgetBase, label: t("chart.budgetLine", { amount: money(budgetBase) }) }] : []}
                 formatValue={money}
                 formatTick={tick}
                 height={220}
@@ -954,7 +976,16 @@ export const AnalyticsPanel: React.FC = () => {
           >
             <BarChart
               title={t("stats.ariaRecentCurrency", { count: recentBars.length, period: t(`period.${mode}`), currency: settings.baseCurrency })}
-              bars={recentBars.map((bar) => ({ label: bar.label, value: bar.value, highlight: bar.highlight }))}
+              bars={colouredRecentBars.map((bar) => ({
+                label: bar.label,
+                value: bar.value,
+                highlight: bar.highlight,
+                color: bar.color,
+                statusColor: bar.statusColor,
+                overlayColor: bar.overlayColor,
+                overlayPattern: bar.overlayPattern,
+                detail: bar.detail,
+              }))}
               formatValue={money}
               formatTick={tick}
               height={200}

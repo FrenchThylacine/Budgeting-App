@@ -80,8 +80,9 @@ These could not be observed with a mocked driver and were all failing in real Po
 | `018-wallet-loan-links` | `wallet_entries.loan_id`, `loan_movement`, `loan_budget_effect` |
 
 Wallet historical allocations and month-close decisions use the existing
-`wallet_entries` and `closed_months` records. Release 5.4.5 changes only their
-derived timeline and presentation; it requires no schema migration.
+`wallet_entries` and `closed_months` records. Release 5.4.6 reads spending by
+canonical transaction dates and uses those allocation records for chart
+comparisons; it changes no stored rows and requires no schema migration.
 
 ### `schema.ts` runs before the migrations, and that constrains what may go in it
 

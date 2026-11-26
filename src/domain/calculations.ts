@@ -1,4 +1,4 @@
-import { monthName, weeksInIsoYear, isMonthClosed, isWeekClosed } from "./dates";
+import { dateInputValue, monthName, startOfIsoWeek, weeksInIsoYear, isMonthClosed, isWeekClosed } from "./dates";
 import { normalizeAmount, roundAmount } from "./currency";
 import { monthlyEstimateFromSchedule, yearlyEstimateFromSchedule } from "./schedule";
 import { fixedYearlyAmount, sessionsInMonth, sessionsInYear, installmentTotal, installmentPlanMonths } from "./payments";
@@ -302,7 +302,8 @@ export function summarizeMonth(
   month: number,
   now = new Date(),
 ): PeriodSummary {
-  const monthEntries = entries.filter((entry) => entry.year === year && entry.month === month);
+  const monthKey = `${year}-${String(month).padStart(2, "0")}`;
+  const monthEntries = entries.filter((entry) => entry.date.slice(0, 7) === monthKey);
   return summarizePeriod({
     entries: monthEntries,
     snapshot,
@@ -320,7 +321,11 @@ export function summarizeWeek(
   week: number,
   now = new Date(),
 ): PeriodSummary {
-  const weekEntries = entries.filter((entry) => entry.year === year && entry.week === week);
+  const start = startOfIsoWeek(year, week);
+  const first = dateInputValue(start);
+  start.setUTCDate(start.getUTCDate() + 6);
+  const last = dateInputValue(start);
+  const weekEntries = entries.filter((entry) => entry.date.slice(0, 10) >= first && entry.date.slice(0, 10) <= last);
   return summarizePeriod({
     entries: weekEntries,
     snapshot,

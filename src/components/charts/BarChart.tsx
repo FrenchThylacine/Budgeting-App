@@ -15,11 +15,13 @@ import { SURFACE_GAP, barPath, finiteValues, linearScale, niceDomain } from "./s
 
 export interface ChartBar {
   label: string;
-  /** `null` renders as "?" — an unrecorded period is unknown, not zero. */
+  /** `null` renders as a neutral unknown marker, not a fabricated zero. */
   value: number | null;
   highlight?: boolean;
   /** Overrides the default emphasis colouring (e.g. a category's own colour). */
   color?: string;
+  /** Preserve full status-color contrast when selection is elsewhere. */
+  statusColor?: boolean;
   /** Optional variance wash drawn over the bar, useful for the active month. */
   overlayColor?: string;
   /** Orange diagonal hatch marks an active, still-progressing period. */
@@ -59,6 +61,8 @@ export const BarChart: React.FC<BarChartProps> = ({
   const { t } = useTranslation();
   const { tooltip, show, hide } = useChartTooltip();
   const hatchId = `bar-hatch-${React.useId().replace(/:/g, "")}`;
+  const hasMissing = bars.some((bar) => bar.value == null);
+  const chartFooter = hasMissing ? <>{footer}<span className="text-caption" style={{ display: "block", marginTop: 4, color: "var(--text-tertiary)" }}>{t("chart.noRecordedData")}</span></> : footer;
   const tickFormat = formatTick ?? formatValue;
   const emphasisIndex = bars.findIndex((bar) => bar.highlight);
 
@@ -83,7 +87,7 @@ export const BarChart: React.FC<BarChartProps> = ({
             }))
           : undefined
       }
-      footer={footer}
+      footer={chartFooter}
       tooltip={tooltip}
     >
       {({ width }) => {
@@ -104,8 +108,8 @@ export const BarChart: React.FC<BarChartProps> = ({
         return (
           <>
             {bars.some((bar) => bar.overlayPattern) && <defs>
-              <pattern id={hatchId} width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
-                <line x1="0" y1="0" x2="0" y2="8" stroke="var(--warning)" strokeWidth="3" />
+              <pattern id={hatchId} width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+                <line x1="0" y1="0" x2="0" y2="7" stroke="var(--warning-stripe)" strokeWidth="4" />
               </pattern>
             </defs>}
             <GridLines ticks={domain.ticks} yOf={yOf} left={left} right={right} format={tickFormat} />
@@ -144,7 +148,7 @@ export const BarChart: React.FC<BarChartProps> = ({
               const barHeight = Math.max(bottom - y, bar.value > 0 ? 2 : 1);
               const fill = bar.color ?? "var(--accent)";
               const isActive = tooltip?.title === bar.label;
-              const opacity = bar.color ? (bar.highlight === false ? 0.55 : 1) : bar.highlight ? 1 : 0.32;
+              const opacity = bar.statusColor ? 1 : bar.color ? (bar.highlight === false ? 0.55 : 1) : bar.highlight ? 1 : 0.32;
 
               return (
                 <g key={`${bar.label}-${index}`}>
@@ -166,7 +170,7 @@ export const BarChart: React.FC<BarChartProps> = ({
                   }
                     onPointerLeave={hide}
                   />
-                  {bar.overlayColor && <path d={barPath(cx - barWidth / 2 + barWidth * 0.2, bottom - barHeight, barWidth * 0.6, barHeight, 4)} fill={bar.overlayColor} opacity={0.55} pointerEvents="none" />}
+                  {bar.overlayColor && <path d={barPath(cx - barWidth / 2 + barWidth * 0.14, bottom - barHeight, barWidth * 0.72, barHeight, 4)} fill={bar.overlayColor} opacity={0.68} pointerEvents="none" />}
                   {bar.overlayPattern && <path d={barPath(cx - barWidth / 2, bottom - barHeight, barWidth, barHeight, 4)} fill={`url(#${hatchId})`} pointerEvents="none" />}
                 </g>
               );

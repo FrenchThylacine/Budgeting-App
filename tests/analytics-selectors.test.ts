@@ -323,6 +323,17 @@ describe("trend bar windows", () => {
 });
 
 describe("budgetRelevantEntries", () => {
+  it("selects periods from transaction dates, not stale cached date fields", () => {
+    const snap = snapshotWith([
+      entry({ id: "date-authoritative", date: "2026-07-08", year: 2025, month: 1, week: 1 }),
+      entry({ id: "outside-week", date: "2026-07-13", year: 2026, month: 7, week: 28 }),
+    ]);
+    snap.settings.selectedPeriodMode = "week";
+    snap.settings.selectedWeek = 28;
+    snap.settings.selectedWeekYear = 2026;
+    expect(entriesForSelectedPeriod(snap, snap.settings).map((item) => item.id)).toEqual(["date-authoritative"]);
+  });
+
   it("excludes externally funded spend unconditionally", () => {
     const snap = snapshotWith([
       entry({ amount: 100, source: "personal" }),

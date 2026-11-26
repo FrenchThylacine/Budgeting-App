@@ -42,8 +42,8 @@ const MAX_BAR = 28;
  * Part-to-whole over time. Segments are separated by a gap in the surface
  * colour rather than a stroke, so no ink is added that isn't data.
  *
- * A column where every series is missing renders as "?", never as an empty
- * (and therefore zero-looking) column.
+ * A column where every series is missing renders a neutral gap, never a
+ * zero-looking column.
  */
 export const StackedBarChart: React.FC<StackedBarChartProps> = ({
   labels,
@@ -67,6 +67,9 @@ export const StackedBarChart: React.FC<StackedBarChartProps> = ({
     if (parts.every((value) => value == null)) return null;
     return parts.reduce<number>((sum, value) => sum + (value ?? 0), 0);
   });
+  const chartFooter = totals.some((value) => value == null)
+    ? <>{footer}<span className="text-caption" style={{ display: "block", marginTop: 4, color: "var(--text-tertiary)" }}>{t("chart.noRecordedData")}</span></>
+    : footer;
 
   const legend: LegendItem[] = series
     .map((item) => ({ id: item.id, label: item.name, color: item.color }))
@@ -91,7 +94,7 @@ export const StackedBarChart: React.FC<StackedBarChartProps> = ({
       height={height}
       minWidth={minWidth}
       legend={legend}
-      footer={footer}
+      footer={chartFooter}
       tooltip={tooltip}
     >
       {({ width }) => {

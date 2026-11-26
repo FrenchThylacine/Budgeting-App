@@ -352,20 +352,9 @@ export const ReferenceLineMark: React.FC<{
   );
 };
 
-/** The "?" placeholder: an unrecorded period is unknown, never a zero. */
-export const MissingMark: React.FC<{ x: number; y: number; size?: number }> = ({ x, y, size = 11 }) => (
-  <text
-    x={x}
-    y={y}
-    textAnchor="middle"
-    dominantBaseline="middle"
-    fill="var(--text-tertiary)"
-    fontSize={size}
-    fontWeight={600}
-    aria-hidden="true"
-  >
-    ?
-  </text>
+/** A neutral gap marker: missing is unknown, never a zero. */
+export const MissingMark: React.FC<{ x: number; y: number; size?: number }> = ({ x, y, size = 8 }) => (
+  <circle cx={x} cy={y} r={size / 2} fill="var(--bg-elevated)" stroke="var(--text-tertiary)" strokeWidth={1.5} strokeDasharray="2 1.5" aria-hidden="true" />
 );
 
 /** X-axis category labels, thinned so they never collide. */

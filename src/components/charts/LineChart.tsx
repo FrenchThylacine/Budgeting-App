@@ -1,4 +1,5 @@
 import React from "react";
+import { useTranslation } from "../../i18n/useTranslation";
 import {
   CategoryAxis,
   ChartFrame,
@@ -17,6 +18,10 @@ export interface LineSeries {
   name?: string;
   label?: string;
   color: string;
+  /** Per-point colors for period comparisons with different budgets. */
+  pointColors?: (string | undefined)[];
+  /** Optional per-point marker colors for status overlays, such as exact budget. */
+  pointMarkerColors?: (string | undefined)[];
   /**
    * One value per label; `points` is accepted as an alias. `null` is a gap:
    * an unknown period is never drawn as 0.
@@ -33,6 +38,8 @@ interface ResolvedSeries {
   id: string;
   name: string;
   color: string;
+  pointColors?: (string | undefined)[];
+  pointMarkerColors?: (string | undefined)[];
   values: (number | null)[];
   area?: boolean;
   dashed?: boolean;
@@ -43,6 +50,8 @@ function resolveSeries(series: LineSeries[]): ResolvedSeries[] {
     id: item.id,
     name: item.name ?? item.label ?? item.id,
     color: item.color,
+    pointColors: item.pointColors,
+    pointMarkerColors: item.pointMarkerColors,
     values: item.values ?? item.points ?? [],
     area: item.area,
     dashed: item.dashed,
@@ -93,6 +102,7 @@ export const LineChart: React.FC<LineChartProps> = ({
   footer,
   ...naming
 }) => {
+  const { t } = useTranslation();
   const { tooltip, show, hide } = useChartTooltip();
   const tickFormat = formatTick ?? formatValue;
   const series = resolveSeries(seriesInput);
@@ -115,6 +125,10 @@ export const LineChart: React.FC<LineChartProps> = ({
         dashed: true,
       })),
     );
+  const hasMissing = labels.some((_, index) => series.every((item) => item.values[index] == null));
+  const chartFooter = hasMissing
+    ? <>{footer}<span className="text-caption" style={{ display: "block", marginTop: 4, color: "var(--text-tertiary)" }}>{t("chart.noRecordedData")}</span></>
+    : footer;
 
   return (
     <ChartFrame
@@ -123,7 +137,7 @@ export const LineChart: React.FC<LineChartProps> = ({
       height={height}
       minWidth={minWidth}
       legend={showLegend && legend.length > 1 ? legend : undefined}
-      footer={footer}
+      footer={chartFooter}
       tooltip={tooltip}
     >
       {({ width }) => {
@@ -158,8 +172,8 @@ export const LineChart: React.FC<LineChartProps> = ({
 
           const rows = series.map((item) => ({
             label: item.name,
-            value: item.values[index] == null ? "No data" : formatValue(item.values[index] as number),
-            color: item.color,
+            value: item.values[index] == null ? t("chart.noRecordedData") : formatValue(item.values[index] as number),
+            color: item.pointMarkerColors?.[index] ?? item.pointColors?.[index] ?? item.color,
           }));
           const highest = Math.min(
             ...series.map((item) => (item.values[index] == null ? bottom : yOf(item.values[index] as number))),
@@ -191,7 +205,11 @@ export const LineChart: React.FC<LineChartProps> = ({
                   {item.area && (
                     <path d={areaPath(points, bottom)} fill={item.color} opacity={0.1} stroke="none" />
                   )}
-                  <path
+                  {item.pointColors ? points.slice(1).map((point, segmentIndex) => {
+                    const previous = points[segmentIndex];
+                    if (!previous || !point) return null;
+                    return <path key={`${item.id}-segment-${segmentIndex}`} d={linePath([previous, point])} fill="none" stroke={item.pointColors?.[segmentIndex + 1] ?? item.color} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" />;
+                  }) : <path
                     d={linePath(points)}
                     fill="none"
                     stroke={item.color}
@@ -199,7 +217,7 @@ export const LineChart: React.FC<LineChartProps> = ({
                     strokeLinecap="round"
                     strokeLinejoin="round"
                     strokeDasharray={item.dashed ? "5 5" : undefined}
-                  />
+                  />}
                 </g>
               );
             })}
@@ -221,14 +239,15 @@ export const LineChart: React.FC<LineChartProps> = ({
                 const isHover = index === hoverIndex;
                 const isEmphasis = index === emphasisIndex;
                 const isLast = index === lastKnownIndex(item.values);
-                if (!isHover && !isEmphasis && !isLast) return null;
+                const hasStatusMarker = Boolean(item.pointMarkerColors?.[index]);
+                if (!isHover && !isEmphasis && !isLast && !hasStatusMarker) return null;
                 return (
                   <circle
                     key={`${item.id}-${index}`}
                     cx={xOf(index)}
                     cy={yOf(value)}
                     r={isHover ? 5 : 4}
-                    fill={item.color}
+                    fill={item.pointMarkerColors?.[index] ?? item.pointColors?.[index] ?? item.color}
                     stroke="var(--bg-elevated)"
                     strokeWidth={2}
                   />

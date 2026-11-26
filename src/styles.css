@@ -95,6 +95,7 @@
   --success-soft: rgba(29, 164, 90, 0.12);
   --warning: #E8850C;
   --budget-exact: #B7791F;
+  --warning-stripe: #9A4A08;
   --warning-text: #9A4A08;
   --warning-soft: rgba(232, 133, 12, 0.12);
   --danger: #E5342A;
@@ -275,6 +276,7 @@ optgroup {
   --success-soft: rgba(52, 208, 115, 0.18);
   --warning: #FFA726;
   --budget-exact: #F2C14E;
+  --warning-stripe: #B45309;
   --warning-text: #FFA726;
   --warning-soft: rgba(255, 167, 38, 0.18);
   --danger: #FF5B52;

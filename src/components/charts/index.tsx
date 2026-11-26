@@ -4,7 +4,7 @@
  * Every chart here is: responsive (viewBox sized from the measured container),
  * theme-aware (colours come from CSS custom properties, never hard-coded hex),
  * accessible (role="img" + aria-label + <title>/<desc>), and honest about
- * missing data (a gap or "?", never a fabricated zero).
+ * missing data (a neutral gap, never a fabricated zero).
  */
 
 export { BarChart } from "./BarChart";

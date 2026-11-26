@@ -9,7 +9,8 @@ with one small fix gets a patch rather than a new minor.
 
 | Version | What it was |
 | --- | --- |
-| **5.4.5** | Applies shared budget-status colors to Stats and Home charts, with gold exact matches and orange current-month hatching |
+| **5.4.6** | Aligns chart data to transaction dates and funding; standardizes budget status and missing-data rendering |
+| **5.4.5** | Applies shared budget-status colors to Stats and Home charts, with exact-match indicators and orange current-month hatching |
 | **5.4.4** | Fixes reset-month carry-over gaps, shows period-matched remaining percentages, and distinguishes exact current-month budget in Analytics |
 | **5.4.3** | Reconciles active loan receivables/payables into the Wallet total and its personal/budget split; aligns transaction date/time controls |
 | **5.4.2** | Fixes historical budget comparisons and loan-linked Wallet History; keeps loan edits and repayments consistent across years and displays cash plus net outstanding loans |
@@ -29,6 +30,21 @@ with one small fix gets a patch rather than a new minor.
 | **2.0.0**–**2.1.0** | Accounts, Excel import, dedicated editors, scenarios, swipe, the first identity |
 | **1.0.0**–**1.1.0** | The first working budget: activities, spending, wishlist, reports |
 | **0.1.0**–**0.2.0** | Before it was an application |
+
+## 5.4.6 — 2026-11-26 — Chart data and status consistency
+
+- Monthly, weekly and daily selectors now use canonical transaction dates;
+  same-day entries sum once, outside dates do not bleed into a period, and
+  budget forecasts use personal-funded transactions only. Transfers and loan
+  movements remain outside spending charts.
+- Historical bars are green below budget, red above, and green with a gold
+  indicator at exact budget. Current bars are orange with green/red/gold status
+  overlays and high-contrast orange hatching. Home and Analytics share this
+  calculation across monthly bars, trend lines, recent-period bars and sparklines;
+  exact months receive gold markers, and cumulative actual and dashed projected
+  lines remain distinct.
+- Unknown periods remain unknown; question marks are replaced by a neutral gap
+  marker and an explanation. No schema migration.
 
 ## 5.4.5 — 2026-11-26 — Budget status colors across charts
 

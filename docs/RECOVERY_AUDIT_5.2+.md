@@ -2,7 +2,7 @@
 
 Reviewed from Git history and current behavior at `5.4.1` plus the unversioned
 2026-11-25 loan/accounting commit. Follow-up verification and fixes are now at
-`5.4.5`. No semantic release tags exist; changelog and
+`5.4.6`. No semantic release tags exist; changelog and
 package metadata were the version records. Existing claims were treated as
 unverified until checked in code or tests.
 
@@ -13,43 +13,40 @@ unverified until checked in code or tests.
 | 3.2 Cash balance plus net loan position | Correct and verified | Wallet retains cash balance, shows net receivable/payable and cash-plus-loans figure. |
 | 3.3 Loan source/destination and intermediary movements | Incomplete | Budget, Personal and Person endpoints are recorded; no separate account ledger exists in the current model. |
 | 4 Historical monthly allocations in Analytics | Correct and verified | Historical allocation selector and pacing regression; missing historical allocation stays unavailable. |
-| 5 Smart projections | Correct and verified | Future-dated personal purchases, scheduled activity charges, elapsed days and prior-year sample feed the chart projection; 3 focused suites pass. |
+| 5 Smart projections | Correct and verified | Future-dated personal purchases, scheduled activity charges, elapsed days and prior-year sample feed the chart projection; `projection.test.ts` passed in the focused release run. |
 | 6 Wallet History activity categories | Correct and verified | Spending, ordinary ledger entries, linked loan movements and direct adjustments are separate groups; loan rows cannot be independently edited. |
 | 7 Edit past-month allocations in Wallet | Incomplete | Wallet has an in-place month editor and preserves other months; direct interaction could not be verified in a browser. |
 | 8 Remaining amount percentage and tones | Correct and verified | Percentage uses selected allocation; zero/unavailable budget suppresses division and negative values are red. |
-| 9 Carry-over and reset behavior | Correct and verified | Ledger derives carry-in and reset close status; wallet reset regression suite passed in full run. |
-| 10 Monthly Analytics bar colors | Incomplete | Source uses per-month allocations and applies current/historical tints; visual states lack a rendered-browser check. |
+| 9 Carry-over and reset behavior | Correct and verified | Ledger derives carry-in and reset close status; wallet treasury and reset suites passed in the focused release run. |
+| 10 Monthly Analytics bar and graph colors | Correct and verified | Per-month allocations drive historical/current status across bars, trend lines and recent-period charts; deterministic browser fixture shows below/exact/above months and exact gold markers. |
 | 11 Combined date and time control | Incomplete | Shared editor has local date and clock controls and stores one timestamp; user interaction was not browser-tested. |
 | 12 Transaction form density and responsive layout | Incomplete | Shared editor structure reviewed and production build passed; responsive interaction lacks browser verification. |
-| 13 Report redesign and opening | Incomplete | Responsive report HTML and panel/tab actions are covered by report tests; live opening was not verified because no database configuration or browser executable is available. |
-| 14 Local website/browser bug hunt | Incomplete | `.env` and `TEST_DATABASE_URL` are absent; the installed CDP harness has no supported Chrome executable path on this Windows host, so no browser session was run. |
-| 15 Tests and regression prevention | Incomplete | Build passes. Full test run: 1,042 passed, 4 unrelated baseline copy/vocabulary checks failed, 84 skipped. Targeted finance/report/i18n suites: 176 passed. |
-| 16 Documentation and changelog | Correct and verified | README, testing guide, recovery checklist and 5.4.2 changelog updated. |
+| 13 Report redesign and opening | Incomplete | Responsive report HTML and panel/tab actions are covered by report tests; report opening was not part of the 5.4.6 browser inspection. |
+| 14 Local website/browser bug hunt | Partially verified | Home and Analytics/Stats were inspected in local desktop/mobile Chromium with deterministic API fixtures; persisted database workflows remain unverified because `.env` and `TEST_DATABASE_URL` are absent. |
+| 15 Tests and regression prevention | Verified for chart release | Focused wallet, chart, projection and i18n suites: 180 passed; frontend production and backend TypeScript builds passed. The full suite was not run for 5.4.6. |
+| 16 Documentation and changelog | Correct and verified | README, architecture, database notes, testing guide, recovery checklist and 5.4.6 changelog reviewed and reread. |
 | 17 Token-efficient execution and persistent checklist | Correct and verified | Targeted audit, concise progress updates and this persistent recovery checklist. |
 | 18 Re-audit existing implementation | Correct and verified | Current implementation and history were inspected; found and fixed historical budget, future transaction and loan-history defects. |
-| 19 Semantic versioning | Correct and verified | Patch release `5.4.2`; package and lockfile aligned. |
-| 20 Final completion requirements | Incomplete | Most finance requirements are implemented; intermediary accounts and browser-only verification remain incomplete. |
+| 19 Semantic versioning | Correct and verified | Patch release `5.4.6`, following Git HEAD `5.4.5`; package and lockfile aligned. |
+| 20 Final completion requirements | Incomplete | Chart requirements are verified in 5.4.6; intermediary accounts and database-backed browser verification remain incomplete. |
 | Database migration | Not applicable | Required loan link fields (`loan_id`, `loan_movement`, `loan_budget_effect`) already exist and round-trip in the existing schema. |
 
-## Verified commands
+## 5.4.6 verification
 
-- `npm.cmd run build` — passed.
-- Focused Analytics, projection, activity-budget, loan, report and translation
-  suites — 212 tests passed.
-- Full `npm.cmd test` — 1,046 passed, 4 failed, 84 skipped. Remaining failures:
-  the broad English-prose scanner and three visual-vocabulary tests; none
-  concern the changed finance paths.
-- Browser/localhost workflow — not run; prerequisites above were unavailable.
+- `npm.cmd test -- --reporter=dot --silent=true tests/wallet-treasury.test.ts tests/wallet-reset.test.ts tests/analytics-selectors.test.ts tests/analytics-charts.test.ts tests/analytics-budget-bars.test.ts tests/projection.test.ts tests/i18n.test.ts` — 180 tests passed.
+- `npm.cmd run build` and `npm.cmd run server:build` — passed.
+- Local desktop and mobile Chromium — Home and Stats/Analytics checked with deterministic snapshot fixtures. Historical below/exact/above and current below/exact/above states rendered with the expected colors, markers and hatching; no page errors or mobile horizontal overflow.
+- Database-backed browser and integration runs were unavailable because `.env`, `DATABASE_URL` and `TEST_DATABASE_URL` are absent.
 
-## 5.4.5 Historical budget and chart-color checklist
+## 5.4.6 Historical budget and chart consistency checklist
 
 - [x] Separate historical allocations; unlocked edit preserves other months and Analytics reads the edited amount.
 - [x] Carry positive/negative values normally; reset after positive or negative balance, including an empty month.
 - [x] Remaining percentages handle positive, negative, exact-zero and zero-allocation states.
-- [x] Historical exact bars are gold; current bars use status colors with orange hatching; Home bars and forecast line share the status logic.
+- [x] Historical exact bars are green with gold markers; current bars are orange with status overlays and stronger hatching; Home and Analytics share status logic.
 - [x] README, architecture, database, testing guide and changelog reviewed and updated; no schema change.
-- [x] Focused suites: 170 passed; production build passed.
-- [ ] Live Wallet/Analytics browser inspection remains; `.env` and database URL are absent, so the authenticated app cannot be run against persisted data here.
+- [x] Focused suites: 180 passed; frontend production build and backend TypeScript build passed.
+- [x] Home and Analytics/Stats inspected in local desktop and mobile browsers with deterministic mocked authentication and snapshot data. No `.env` or database URL is present, so persisted database integration was not exercised.
 
 ## 5.4.3 Wallet hotfix
 
