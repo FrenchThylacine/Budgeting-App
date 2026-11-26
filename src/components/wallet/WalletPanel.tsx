@@ -9,6 +9,7 @@ import {
   leftoverBudget,
   monthlyBudgetPlan,
   walletState,
+  walletMovementsForMonth,
   type BudgetPeriod,
   type WalletMovement,
 } from "../../domain/wallet";
@@ -172,17 +173,23 @@ export const WalletPanel: React.FC = () => {
   // is an English word in a French sentence.
   const localMonth = (month: number) => monthNames()[month - 1] ?? monthName(month);
   const monthLabel = localMonth(snapshot.settings.selectedMonth);
+  const currentMovements = useMemo(
+    () => walletMovementsForMonth(wallet.movements, snapshot.settings.selectedYear, snapshot.settings.selectedMonth, snapshot.settings.walletHistoryHiddenBefore),
+    [wallet.movements, snapshot.settings.selectedYear, snapshot.settings.selectedMonth, snapshot.settings.walletHistoryHiddenBefore],
+  );
   const movementGroups = useMemo(() => [
-    { key: "spending", label: t("nav.spending"), items: wallet.movements.filter((item) => item.kind === "spending") },
-    { key: "general", label: t("wallet.ledger"), items: wallet.movements.filter((item) => item.kind !== "spending" && !item.loanId && !["personal", "adjustment", "opening", "rollover"].includes(item.kind)) },
-    { key: "loans", label: t("wallet.loans"), items: wallet.movements.filter((item) => Boolean(item.loanId)) },
-    { key: "adjustments", label: t("wallet.typeAdjustment"), items: wallet.movements.filter((item) => !item.loanId && ["personal", "adjustment", "opening", "rollover", "budget-carry"].includes(item.kind)) },
-  ].filter((group) => group.items.length > 0), [wallet.movements, t]);
+    { key: "spending", label: t("nav.spending"), tone: "warning" as const, items: currentMovements.filter((item) => item.kind === "spending") },
+    { key: "general", label: t("wallet.ledger"), tone: "info" as const, items: currentMovements.filter((item) => item.kind !== "spending" && !item.loanId && !["personal", "adjustment", "opening", "rollover"].includes(item.kind)) },
+    { key: "loans", label: t("wallet.loans"), tone: "success" as const, items: currentMovements.filter((item) => Boolean(item.loanId)) },
+    { key: "adjustments", label: t("wallet.typeAdjustment"), tone: "neutral" as const, items: currentMovements.filter((item) => !item.loanId && ["personal", "adjustment", "opening", "rollover", "budget-carry"].includes(item.kind)) },
+  ].filter((group) => group.items.length > 0), [currentMovements, t]);
 
   return (
     <div className="page-enter wallet-page" style={{ display: "grid", gap: 20 }}>
       <Section
         title={t("wallet.title")}
+        collapsible
+        defaultOpen
         action={
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <Button
@@ -326,7 +333,7 @@ export const WalletPanel: React.FC = () => {
           ending does not consume money, so September starts with whatever
           August did not spend. */}
       {periods.length > 0 && (
-        <Section title={t("wallet.allocationHistory")}>
+        <Section title={t("wallet.allocationHistory")} collapsible defaultOpen>
           <div className="card card-body wallet-periods-wrap">
             <table className="wallet-periods">
               <thead>
@@ -359,13 +366,13 @@ export const WalletPanel: React.FC = () => {
         </Section>
       )}
 
-      <Section title={t("wallet.ledger")}>
-        {wallet.movements.length === 0 ? (
-          <EmptyState title={t("wallet.ledgerEmpty")} description={t("wallet.ledgerEmptyBody")} />
+      <Section title={t("wallet.ledger")} collapsible defaultOpen>
+        {currentMovements.length === 0 ? (
+          <EmptyState title={t("wallet.emptyMonthHistory")} description={t("wallet.emptyMonthHistoryBody")} />
         ) : (
           <div style={{ display: "grid", gap: 18 }}>
-            {movementGroups.map((group) => <div key={group.key}>
-              <div className="text-footnote" style={{ margin: "0 0 6px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em" }}>{group.label}</div>
+            {movementGroups.map((group) => <details key={group.key} className="wallet-movement-group" data-tone={group.tone} open>
+              <summary className="wallet-movement-group-title"><span>{group.label}</span><span className="wallet-movement-count">{group.items.length}</span></summary>
               <div className="item-list">
             {group.items.map((movement) => {
               /*
@@ -398,6 +405,7 @@ export const WalletPanel: React.FC = () => {
                     money={money}
                     formatDate={formatDate}
                     t={t}
+                    showYear={movement.date.slice(0, 4) !== todayDateInput().slice(0, 4)}
                     onEdit={onEdit}
                     onDelete={onDelete}
                   />
@@ -405,19 +413,19 @@ export const WalletPanel: React.FC = () => {
               );
             })}
               </div>
-            </div>)}
+            </details>)}
           </div>
         )}
       </Section>
 
-      <Section title={t("wallet.loans")} action={<Button size="sm" variant="secondary" onClick={() => setLoanOpen(true)} disabled={!mutable}><Plus size={14} /> {t("wallet.addLoan")}</Button>}>
+      <Section title={t("wallet.loans")} collapsible defaultOpen={false} action={<Button size="sm" variant="secondary" onClick={() => setLoanOpen(true)} disabled={!mutable}><Plus size={14} /> {t("wallet.addLoan")}</Button>}>
         {loans.length === 0 ? <EmptyState title={t("wallet.loans")} description={t("wallet.ledgerEmptyBody")} /> : loans.map((loan) => (
           <div className="item-row" key={loan.id} style={{ flexWrap: "wrap" }}>
             <div style={{ flex: 1 }}><strong>{loan.person}</strong><div className="text-footnote">{formatDate(loan.date)} · {formatMoney(loan.amount, loan.currency, snapshot.settings.currencyDisplayMode)}</div></div>
             {!loan.returnedAt && !loan.convertedAt && <div className="row-actions"><Button size="sm" variant="ghost" onClick={() => { const value = window.prompt(t("wallet.repaymentAmount"), String(Math.max(0, loan.amount - (loan.repaidAmount ?? 0)))); if (value != null) repayLoan(loan.id, Number(value)); }}>{t("wallet.loanReturned")}</Button></div>}
             {mutable && <div className="row-actions"><Button size="sm" variant="ghost" icon onClick={() => setEditingLoan(loan)} aria-label={t("common.edit")}><Pencil size={15} /></Button><Button size="sm" variant="ghost" icon onClick={() => window.confirm(t("common.delete") + "?") && deleteLoan(loan.id)} aria-label={t("common.delete")}><Trash2 size={15} /></Button></div>}
             {(loan.returnedAt || loan.convertedAt) && <span className="text-footnote">{loan.convertedAt ? t("wallet.loanConverted") : t("wallet.loanReturned")}</span>}
-            {wallet.movements.filter((movement) => movement.loanId === loan.id && movement.loanMovement === "repayment").map((movement) => (
+            {currentMovements.filter((movement) => movement.loanId === loan.id && movement.loanMovement === "repayment").map((movement) => (
               <div key={movement.id} className="text-footnote" style={{ flexBasis: "100%", paddingLeft: 24 }}>
                 {formatDate(movement.date)} · {formatMoney(movement.amountNative, movement.currency, snapshot.settings.currencyDisplayMode)} {t("wallet.loanReturned")}
               </div>
@@ -456,6 +464,8 @@ export const WalletPanel: React.FC = () => {
           editing={editingEntry}
           onClose={() => setEditingEntry(null)}
           onSubmit={(input) => {
+            const treatAsReset = input.type === "adjustment"
+              && window.confirm(t("wallet.archiveBeforeFixConfirm", { date: input.date }));
             /*
              * Written back exactly as typed: the amount in the currency chosen
              * here, the sign from the direction, the date as given. Nothing is
@@ -470,7 +480,7 @@ export const WalletPanel: React.FC = () => {
               source: input.source,
               note: input.note,
               type: input.type,
-            });
+            }, treatAsReset);
             setEditingEntry(null);
           }}
         />
@@ -480,6 +490,8 @@ export const WalletPanel: React.FC = () => {
         <MovementSheet
           onClose={() => setMovementOpen(false)}
           onSubmit={(input) => {
+            const treatAsReset = input.type === "adjustment"
+              && window.confirm(t("wallet.archiveBeforeFixConfirm", { date: input.date }));
             add({
               year: Number(input.date.slice(0, 4)),
               month: Number(input.date.slice(5, 7)),
@@ -490,7 +502,7 @@ export const WalletPanel: React.FC = () => {
               source: input.source,
               type: input.type,
               note: input.note,
-            });
+            }, treatAsReset);
             setMovementOpen(false);
           }}
         />
@@ -585,14 +597,15 @@ const MovementRow: React.FC<{
   money: (value: number) => string;
   formatDate: (value: string, options?: Intl.DateTimeFormatOptions) => string;
   t: (key: string, params?: Record<string, string | number | null | undefined>) => string;
+  showYear: boolean;
   onEdit: () => void;
   onDelete: () => void;
-}> = ({ movement, mutable, displayCurrency, displayMode, money, formatDate, t, onEdit, onDelete }) => {
+}> = ({ movement, mutable, displayCurrency, displayMode, money, formatDate, t, showYear, onEdit, onDelete }) => {
   const out = movement.direction === "out";
   const isTransfer = movement.kind === "transfer" || movement.kind === "transfer-in";
 
   return (
-    <div className="item-row wallet-row" data-direction={movement.direction}>
+    <div className="item-row wallet-row" data-direction={movement.direction} data-tone={TYPE_TONE[movement.kind]}>
       <span className={`wallet-row-arrow${out ? " wallet-row-arrow-out" : ""}`} aria-hidden="true">
         {out ? <ArrowUpRight size={15} /> : <ArrowDownLeft size={15} />}
       </span>
@@ -609,7 +622,7 @@ const MovementRow: React.FC<{
           )}
         </div>
         <div className="text-footnote">
-          {formatDate(movement.date, { day: "numeric", month: "short", year: "numeric" })}
+          {formatDate(movement.date, { day: "numeric", month: "short", ...(showYear ? { year: "numeric" } : {}) })}
           {movement.note ? <span className="user-text"> · {resolveStoredText(movement.note, t)}</span> : ""}
         </div>
       </div>

@@ -165,6 +165,10 @@ export interface Settings {
   walletCurrency?: CurrencyCode;
   /** Round newly captured wallet conversions upward once. */
   walletRoundUp?: boolean;
+  /** Wallet entries older than this ISO date are hidden from the regular history view. */
+  walletHistoryHiddenBefore?: string;
+  /** Temporary wallet history copies; kept in settings JSON so the API round-trips them. */
+  walletHistoryArchive?: WalletHistoryArchiveBatch[];
   loans?: Loan[];
   /**
    * The currencies offered in the app's dropdowns.
@@ -863,6 +867,34 @@ export interface BudgetSnapshot {
   scenarioPresets: ScenarioPreset[];
   budgetApprovals: BudgetApproval[];
   auditLog: AuditLog[];
+}
+
+export interface WalletHistoryArchiveEntry {
+  id: string;
+  date: string;
+  label: string;
+  note: string;
+  direction: "in" | "out";
+  amountBase: number;
+  /** Currency used by `amountBase` when the archive copy was made. */
+  displayCurrency?: CurrencyCode;
+  amountNative: number;
+  currency: CurrencyCode;
+  kind: WalletEntryType | "spending";
+  walletDelta: number;
+  budgetDelta: number;
+  spendingId?: string;
+  loanId?: string;
+  loanMovement?: "principal" | "repayment";
+}
+
+export interface WalletHistoryArchiveBatch {
+  id: string;
+  cutoffDate: string;
+  archivedAt: string;
+  expiresAt: string;
+  reason: "reset" | "fix";
+  entries: WalletHistoryArchiveEntry[];
 }
 
 export interface PeriodSummary {

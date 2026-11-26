@@ -10,7 +10,7 @@ import {
   walletComposition,
   walletState,
 } from "../domain/wallet";
-import type { CanonicalMoney } from "../domain/wallet";
+import type { CanonicalMoney, WalletMovement } from "../domain/wallet";
 import { monthFromDateInput, monthName, todayDateInput, weekFromDateInput } from "../domain/dates";
 import { isUsableAmount } from "../domain/wishlist";
 import type { WishlistLinkResult, WishlistPurchaseOverrides } from "../domain/wishlist";
@@ -27,6 +27,7 @@ import type {
   Settings,
   SpendingEntry,
   WalletEntry,
+  WalletHistoryArchiveBatch,
   Loan,
   WishlistItem,
   YearRecord,
@@ -151,17 +152,19 @@ interface BudgetStore {
   setWishlistItemBought: (itemId: string, bought: boolean) => WishlistLinkResult;
   /** The live transaction an item points at, or null when there is none. */
   findLinkedSpendingEntry: (itemId: string) => SpendingEntry | null;
-  addWalletEntry: (entry: WalletInput) => void;
+  addWalletEntry: (entry: WalletInput, treatAdjustmentAsReset?: boolean) => void;
+  pruneWalletHistoryArchive: () => void;
   /**
    * Bring the wallet balance to exactly zero.
    *
    * Deliberately **not** a deletion. Wallet entries are a record of money that
    * moved — an opening balance, a month-end rollover, a cash adjustment — and
    * erasing them to make a figure read zero destroys history to fix a display.
-   * One balancing adjustment in the display currency does the job, is visible
-   * in the list, lands on the undo stack, and touches nothing else in the
-   * budget. Returns the amount that was written, or null when the balance was
-   * already zero and nothing needed doing.
+   * Currency-matched balancing entries do the job, remain in the list, land
+   * on the undo stack, and touch nothing else in the budget. Older history is
+   * archived for seven days. Returns the balancing
+   * amount (zero if only history needed hiding), or null if there was nothing
+   * to balance or archive.
    */
   resetWallet: () => number | null;
   /**
@@ -197,7 +200,7 @@ interface BudgetStore {
   convertLoan: (id: string) => void;
   /** Move the whole leftover budget claim across, one entry per currency. */
   sweepBudgetToPersonal: (note?: string) => void;
-  updateWalletEntry: (id: string, patch: Partial<WalletEntry>) => void;
+  updateWalletEntry: (id: string, patch: Partial<WalletEntry>, treatAdjustmentAsReset?: boolean) => void;
   removeWalletEntry: (id: string) => void;
   closeMonth: (year: number, month: number, applyRollover: boolean) => void;
   recordBudgetApproval: (approval: Omit<BudgetApproval, "id" | "createdAt" | "decidedAt">) => void;
@@ -875,12 +878,15 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
     return findSpendingEntryById(snapshot, item?.linkedSpendingId);
   },
 
-  addWalletEntry: (entry) => {
+  addWalletEntry: (entry, treatAdjustmentAsReset = false) => {
     if (!get().isCurrentPeriodMutable()) return;
     commit(
       set,
       get,
       (snapshot) => {
+        if (treatAdjustmentAsReset && entry.type === "adjustment") {
+          archiveWalletHistoryBefore(snapshot, entry.date ?? todayDateInput(), "fix");
+        }
         const walletCurrency = snapshot.settings.walletCurrency ?? snapshot.settings.baseCurrency;
         const converted = convertAmount(entry.amount, entry.currency, walletCurrency, snapshot.settings.exchangeRates);
         const walletAmount = converted == null ? null : snapshot.settings.walletRoundUp ? Math.ceil(converted) : converted;
@@ -902,6 +908,19 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
       storedText("audit.walletAdded"),
       entry,
     );
+  },
+
+  pruneWalletHistoryArchive: () => {
+    const current = get().snapshot;
+    const batches = current.settings.walletHistoryArchive ?? [];
+    const active = batches.filter((batch) => Date.parse(batch.expiresAt) > Date.now());
+    if (active.length === batches.length) return;
+    const before = clone(current);
+    const next = clone(current);
+    next.settings.walletHistoryArchive = active;
+    next.revision = (before.revision ?? 0) + 1;
+    set({ snapshot: next });
+    persistSnapshot(next, set, get);
   },
 
   allocateBudget: ({ amount, currency, date, note, source }) => {
@@ -1170,9 +1189,13 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
     // wallet is continuous, and zeroing a slice of it would leave a figure
     // that is zero on one screen and not on another.
     const balance = walletState(snapshot).walletBalance;
+    const resetDate = todayDateInput();
+    const hasHistoryToArchive = walletState(snapshot).movements.some(
+      (item) => item.date < resetDate && (!snapshot.settings.walletHistoryHiddenBefore || item.date >= snapshot.settings.walletHistoryHiddenBefore),
+    );
     // Below a hundredth of a unit is below anything the app displays, and
     // writing a €0.000001 adjustment would be noise in the ledger forever.
-    if (Math.abs(balance) < 0.005) return null;
+    if (Math.abs(balance) < 0.005 && !hasHistoryToArchive) return null;
 
     const adjustment = -balance;
     // Held currency by currency, so each can be zeroed in its own.
@@ -1200,14 +1223,19 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
       set,
       get,
       (draft) => {
-        const record = ensureYearRecord(draft, year);
+        archiveWalletHistoryBefore(draft, resetDate, "reset");
+        const resetYear = Number(resetDate.slice(0, 4));
+        const resetMonth = Number(resetDate.slice(5, 7));
+        const record = ensureYearRecord(draft, resetYear);
+        if (Math.abs(balance) < 0.005) return;
         for (const slice of claimed) {
           record.walletEntries.push(
-            movement(year, draft.settings.selectedMonth, { amount: slice.amount, currency: slice.currency }, {
+            movement(resetYear, resetMonth, { amount: slice.amount, currency: slice.currency }, {
               id: id("wallet-reset-claim"),
               type: TRANSFER_TYPE,
               source: storedText("wallet.resetSource"),
               note: storedText("wallet.resetClaimNote"),
+              date: resetDate,
               settings: draft.settings,
             }),
           );
@@ -1229,11 +1257,12 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
          */
         for (const slice of composition) {
           record.walletEntries.push(
-            movement(year, draft.settings.selectedMonth, { amount: -slice.amount, currency: slice.currency }, {
+            movement(resetYear, resetMonth, { amount: -slice.amount, currency: slice.currency }, {
               id: id("wallet-reset"),
               type: "adjustment",
               source: storedText("wallet.resetSource"),
               note: storedText("wallet.resetLedgerNote"),
+              date: resetDate,
               settings: draft.settings,
             }),
           );
@@ -1246,7 +1275,7 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
     return adjustment;
   },
 
-  updateWalletEntry: (idValue, patch) => {
+  updateWalletEntry: (idValue, patch, treatAdjustmentAsReset = false) => {
     if (!get().isCurrentPeriodMutable()) return;
     commit(
       set,
@@ -1255,6 +1284,9 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
         const owner = Object.values(snapshot.years).find((record) => record.walletEntries.some((item) => item.id === idValue));
         const entry = owner?.walletEntries.find((item) => item.id === idValue);
         if (entry) {
+          if (treatAdjustmentAsReset && patch.type === "adjustment") {
+            archiveWalletHistoryBefore(snapshot, patch.date ?? entry.date ?? todayDateInput(), "fix");
+          }
           Object.assign(entry, patch);
           if (patch.amount !== undefined || patch.currency !== undefined) {
             const walletCurrency = snapshot.settings.walletCurrency ?? snapshot.settings.baseCurrency;
@@ -1965,6 +1997,39 @@ function movement(
     note: rest.note,
     createdAt: new Date().toISOString(),
   };
+}
+
+/** Hide ledger entries before a reset/fix date while retaining a seven-day copy. */
+function archiveWalletHistoryBefore(
+  snapshot: BudgetSnapshot,
+  cutoffDate: string,
+  reason: WalletHistoryArchiveBatch["reason"],
+): number {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(cutoffDate)) return 0;
+  const oldCutoff = snapshot.settings.walletHistoryHiddenBefore;
+  const entries = walletState(snapshot).movements.filter(
+    (item) => item.date < cutoffDate && (!oldCutoff || item.date >= oldCutoff),
+  );
+  if (entries.length > 0) {
+    const archivedAt = new Date().toISOString();
+    const batch: WalletHistoryArchiveBatch = {
+      id: id("wallet-history"),
+      cutoffDate,
+      archivedAt,
+      expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+      reason,
+      entries: entries.map((item: WalletMovement) => ({
+        ...item,
+        displayCurrency: snapshot.settings.walletCurrency ?? snapshot.settings.baseCurrency,
+      })),
+    };
+    snapshot.settings.walletHistoryArchive = [
+      ...(snapshot.settings.walletHistoryArchive ?? []).filter((item) => Date.parse(item.expiresAt) > Date.now()),
+      batch,
+    ];
+  }
+  snapshot.settings.walletHistoryHiddenBefore = oldCutoff && oldCutoff > cutoffDate ? oldCutoff : cutoffDate;
+  return entries.length;
 }
 
 function currentYear(snapshot: BudgetSnapshot): YearRecord {

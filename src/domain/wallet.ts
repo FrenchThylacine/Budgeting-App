@@ -180,6 +180,17 @@ export interface WalletMovement {
   loanMovement?: "principal" | "repayment";
 }
 
+/** The Wallet tab shows one month; older movements live in Settings history. */
+export function walletMovementsForMonth(
+  movements: WalletMovement[],
+  year: number,
+  month: number,
+  hiddenBefore?: string,
+): WalletMovement[] {
+  const key = `${year}-${String(month).padStart(2, "0")}`;
+  return movements.filter((item) => item.date.slice(0, 7) === key && (!hiddenBefore || item.date >= hiddenBefore));
+}
+
 export interface WalletState {
   /** Actual money held. The headline figure. */
   walletBalance: number;

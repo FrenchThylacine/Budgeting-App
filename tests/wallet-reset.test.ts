@@ -17,7 +17,7 @@ import { resolveStoredText } from "../src/domain/storedText";
 import { createTranslator } from "../src/domain/i18n";
 import { createSeedBudgetSnapshot } from "../src/data/seedBudget";
 import { calculateYear } from "../src/domain/calculations";
-import { walletState } from "../src/domain/wallet";
+import { walletMovementsForMonth, walletState } from "../src/domain/wallet";
 import type { BudgetSnapshot } from "../src/domain/types";
 import { freezeClockAt } from "./lib/clock";
 
@@ -52,6 +52,82 @@ describe("resetting the wallet", () => {
 
     expect(walletTotal()).toBe(0);
     expect(calculateYear(useBudgetStore.getState().snapshot, NOW).wallet.walletTotal).toBe(0);
+  });
+
+  it("archives pre-reset movements and leaves source transactions intact", () => {
+    const snapshot = load();
+    const allMovements = walletState(snapshot).movements;
+    const earlier = allMovements.filter((item) => item.date < "2026-08-15");
+    const mixedMonths = [...allMovements, { ...allMovements[0], id: "previous-month", date: "2026-07-15" }];
+    const augustMovements = walletMovementsForMonth(mixedMonths, 2026, 8);
+    const spendingCount = snapshot.years["2026"].spendingEntries.length;
+    expect(earlier.length).toBeGreaterThan(0);
+    expect(augustMovements.length).toBeLessThan(mixedMonths.length);
+    expect(augustMovements.every((item) => item.date.startsWith("2026-08"))).toBe(true);
+
+    useBudgetStore.getState().resetWallet();
+
+    const after = useBudgetStore.getState().snapshot;
+    expect(after.settings.walletHistoryHiddenBefore).toBe("2026-08-15");
+    expect(after.settings.walletHistoryArchive?.[0].reason).toBe("reset");
+    expect(after.settings.walletHistoryArchive?.[0].entries).toHaveLength(earlier.length);
+    expect(after.years["2026"].spendingEntries).toHaveLength(spendingCount);
+    const visible = walletMovementsForMonth(walletState(after).movements, 2026, 8, after.settings.walletHistoryHiddenBefore);
+    expect(visible.every((item) => item.date >= "2026-08-15")).toBe(true);
+  });
+
+  it("offers a fix-as-reset archive without deleting wallet records", () => {
+    const snapshot = load();
+    const entryCount = snapshot.years["2026"].walletEntries.length;
+    useBudgetStore.getState().addWalletEntry({
+      year: 2026,
+      month: 8,
+      date: "2026-08-15",
+      amount: 1,
+      currency: snapshot.settings.baseCurrency,
+      source: "Fix",
+      type: "adjustment",
+      note: "Correction",
+    }, true);
+
+    const after = useBudgetStore.getState().snapshot;
+    expect(after.settings.walletHistoryHiddenBefore).toBe("2026-08-15");
+    expect(after.settings.walletHistoryArchive?.[0].reason).toBe("fix");
+    expect(after.years["2026"].walletEntries).toHaveLength(entryCount + 1);
+  });
+
+  it("does not hide history when an adjustment is not marked as a reset", () => {
+    const snapshot = load();
+    useBudgetStore.getState().addWalletEntry({
+      year: 2026,
+      month: 8,
+      date: "2026-08-15",
+      amount: 1,
+      currency: snapshot.settings.baseCurrency,
+      source: "Fix",
+      type: "adjustment",
+      note: "Correction",
+    });
+
+    expect(useBudgetStore.getState().snapshot.settings.walletHistoryHiddenBefore).toBeUndefined();
+    expect(useBudgetStore.getState().snapshot.settings.walletHistoryArchive).toBeUndefined();
+  });
+
+  it("removes expired archive copies from the persisted settings", () => {
+    const snapshot = load();
+    snapshot.settings.walletHistoryArchive = [{
+      id: "expired-archive",
+      cutoffDate: "2026-08-01",
+      archivedAt: "2026-07-01T00:00:00.000Z",
+      expiresAt: "2026-07-08T00:00:00.000Z",
+      reason: "reset",
+      entries: [],
+    }];
+    load(snapshot);
+
+    useBudgetStore.getState().pruneWalletHistoryArchive();
+
+    expect(useBudgetStore.getState().snapshot.settings.walletHistoryArchive).toEqual([]);
   });
 
   it("writes one balancing adjustment rather than deleting the history", () => {

@@ -22,6 +22,14 @@ Testing is part of development.
 
 Run this checklist before every release.
 
+### Wallet history cleanup (5.6.0)
+
+`tests/wallet-reset.test.ts` covers reset archiving, confirmed-fix archive data,
+month-scoped Wallet movements, source-record retention, and reset accounting.
+For a rendered check, run the app, review Wallet → its selected month, then
+Settings → History → Wallet history; confirm the archive entries disappear
+after seven days and that the source transactions still affect totals.
+
 ## Last recorded automated run — 2026-08-22
 
 - `npm test` with `TEST_DATABASE_URL` set: passed — **542 tests across 30 files** (467 unit, 75 integration against local PostgreSQL 17).

@@ -46,6 +46,8 @@ Migrations 011, 012 and 013 were additionally run against a database that **alre
 
 The snapshot save flow performs targeted `ON CONFLICT (id) DO UPDATE SET ...` upserts for all top-level and nested child records (`activities`, `spending_entries`, `wishlist_items`, `wallet_entries`, `closed_months`, `categories`, `seasonal_presets`, `scenario_presets`). Only records removed from memory are deleted using targeted `NOT IN` queries. Whole-table deletions for year records have been eliminated.
 
+Wallet history display cutoffs and temporary seven-day archive copies are stored as optional fields inside `snapshots.settings` JSON. They do not alter `wallet_entries` or the PostgreSQL schema. The archive is a display record only; its expiry never deletes the source transactions used by wallet calculations or analytics.
+
 ### Defects found and fixed during live verification
 
 These could not be observed with a mocked driver and were all failing in real PostgreSQL:

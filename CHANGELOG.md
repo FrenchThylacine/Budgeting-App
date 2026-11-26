@@ -9,6 +9,7 @@ with one small fix gets a patch rather than a new minor.
 
 | Version | What it was |
 | --- | --- |
+| **5.6.0** | Keeps Wallet focused on the selected month and moves older entries into collapsible, color-coded Settings history with seven-day reset/fix archives |
 | **5.5.0** | Lets Wallet record missing historical allocations and correct monthly carry-in without changing cash |
 | **5.4.7** | Binds every monthly status to its calendar allocation and separates actual from projected chart lines |
 | **5.4.6** | Aligns chart data to transaction dates and funding; standardizes budget status and missing-data rendering |
@@ -32,6 +33,21 @@ with one small fix gets a patch rather than a new minor.
 | **2.0.0**–**2.1.0** | Accounts, Excel import, dedicated editors, scenarios, swipe, the first identity |
 | **1.0.0**–**1.1.0** | The first working budget: activities, spending, wishlist, reports |
 | **0.1.0**–**0.2.0** | Before it was an application |
+
+## 5.6.0 — 2026-11-26 — Wallet history cleanup
+
+- Wallet History now shows only movements from the selected month. Entries in
+  the current calendar year omit the repeated year; other years keep it.
+- Settings → History contains older movements grouped by month. Wallet sections
+  and movement groups can collapse, and movement types have distinct color
+  tints that match their status.
+- Reset records a balance adjustment as before and hides entries dated before
+  the reset day. Adding an Adjustment asks whether to treat it as a reset; if
+  confirmed, entries before its date are hidden the same way.
+- Hidden entries are retained as temporary copies in Settings for seven days.
+  The copies then expire; original wallet and spending records remain stored
+  and continue to drive balances and analytics. The cutoff and archive live in
+  the existing settings JSON, so no database migration is required.
 
 ## 5.5.0 — 2026-11-26 — Historical allocation and carry-in editing
 

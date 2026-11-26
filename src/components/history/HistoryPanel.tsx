@@ -1,9 +1,11 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { calculateYear } from "../../domain/calculations";
+import { formatMoney } from "../../domain/currency";
+import { walletState } from "../../domain/wallet";
 import { formatDualMoney, statusLabelKey } from "../../utils/formatters";
 import { formatDateTime } from "../../domain/dates";
 import { useBudgetStore } from "../../store/budgetStore";
-import type { AuditLog, AuditType } from "../../domain/types";
+import type { AuditLog, AuditType, Settings, WalletHistoryArchiveEntry } from "../../domain/types";
 import { Badge } from "../ui/Badge";
 import { EmptyState } from "../ui/EmptyState";
 import { Section } from "../ui/Section";
@@ -12,7 +14,7 @@ import { useTranslation } from "../../i18n/useTranslation";
 import { resolveStoredText } from "../../domain/storedText";
 import { formatPeriodToken } from "../../domain/periods";
 
-type Tab = "periods" | "closures" | "approvals" | "audit";
+type Tab = "periods" | "closures" | "approvals" | "wallet" | "audit";
 
 /** Keys, not words: this table is module-level and has no translator. */
 const AUDIT_FILTERS: { value: AuditType | "all" | "historical"; labelKey: string }[] = [
@@ -28,8 +30,9 @@ const AUDIT_FILTERS: { value: AuditType | "all" | "historical"; labelKey: string
 ];
 
 export const HistoryPanel: React.FC = () => {
-  const { t, monthNames } = useTranslation();
+  const { t, monthNames, formatDate } = useTranslation();
   const snapshot = useBudgetStore((s) => s.snapshot);
+  const pruneWalletHistoryArchive = useBudgetStore((s) => s.pruneWalletHistoryArchive);
   const calculation = useMemo(() => calculateYear(snapshot), [snapshot]);
   const setMonthlyNote = useBudgetStore((s) => s.setMonthlyNote);
   const [tab, setTab] = useState<Tab>("periods");
@@ -37,6 +40,14 @@ export const HistoryPanel: React.FC = () => {
   /** Which month's note is being edited, and the text as it is being typed. */
   const [noteMonth, setNoteMonth] = useState<number | null>(null);
   const [noteDraft, setNoteDraft] = useState("");
+
+  useEffect(() => {
+    pruneWalletHistoryArchive();
+    const expiry = Math.min(...(snapshot.settings.walletHistoryArchive ?? []).map((batch) => Date.parse(batch.expiresAt)).filter((time) => time > Date.now()));
+    if (!Number.isFinite(expiry)) return;
+    const timer = window.setTimeout(pruneWalletHistoryArchive, Math.max(0, expiry - Date.now()));
+    return () => window.clearTimeout(timer);
+  }, [snapshot.settings.walletHistoryArchive, pruneWalletHistoryArchive]);
 
   const monthlyNotes = snapshot.years[String(snapshot.settings.selectedYear)]?.monthlyNotes ?? {};
 
@@ -64,10 +75,28 @@ export const HistoryPanel: React.FC = () => {
     [snapshot.auditLog],
   );
 
+  const selectedMonthKey = `${snapshot.settings.selectedYear}-${String(snapshot.settings.selectedMonth).padStart(2, "0")}`;
+  const olderWallet = useMemo(() => walletState(snapshot).movements.filter((movement) =>
+    movement.date.slice(0, 7) !== selectedMonthKey
+    && (!snapshot.settings.walletHistoryHiddenBefore || movement.date >= snapshot.settings.walletHistoryHiddenBefore),
+  ), [snapshot, selectedMonthKey]);
+  const archiveBatches = useMemo(() => (snapshot.settings.walletHistoryArchive ?? [])
+    .filter((batch) => Date.parse(batch.expiresAt) > Date.now())
+    .sort((a, b) => b.archivedAt.localeCompare(a.archivedAt)), [snapshot.settings.walletHistoryArchive]);
+  const olderWalletGroups = useMemo(() => {
+    const groups = new Map<string, typeof olderWallet>();
+    for (const item of olderWallet) {
+      const key = item.date.slice(0, 7);
+      groups.set(key, [...(groups.get(key) ?? []), item]);
+    }
+    return [...groups.entries()];
+  }, [olderWallet]);
+
   const tabs: { value: Tab; labelKey: string; count?: number }[] = [
     { value: "periods", labelKey: "history.periods" },
     { value: "closures", labelKey: "history.monthCloses", count: closedMonths.length },
     { value: "approvals", labelKey: "history.budgetApprovals", count: approvals.length },
+    { value: "wallet", labelKey: "wallet.ledger", count: olderWallet.length + archiveBatches.reduce((sum, batch) => sum + batch.entries.length, 0) },
     { value: "audit", labelKey: "history.auditTrail", count: snapshot.auditLog.length },
   ];
 
@@ -314,6 +343,48 @@ export const HistoryPanel: React.FC = () => {
         )
       )}
 
+      {tab === "wallet" && (
+        <div style={{ display: "grid", gap: 14 }}>
+          {archiveBatches.length > 0 && (
+            <Section title={t("wallet.historyArchive")} collapsible defaultOpen>
+              <div className="item-list">
+                {archiveBatches.map((batch) => (
+                  <details className="wallet-history-archive" key={batch.id}>
+                    <summary className="wallet-history-archive-title">
+                      <span>{t(batch.reason === "reset" ? "wallet.historyArchiveReset" : "wallet.historyArchiveFix", { date: batch.cutoffDate })}</span>
+                      <span className="text-footnote">{t("wallet.historyExpires", { date: formatDate(batch.expiresAt, { month: "short", day: "numeric", year: "numeric" }) })}</span>
+                    </summary>
+                    <div className="item-list">
+                      {batch.entries.map((item) => <WalletHistoryRow key={item.id} movement={item} settings={snapshot.settings} t={t} formatDate={formatDate} />)}
+                    </div>
+                  </details>
+                ))}
+              </div>
+            </Section>
+          )}
+          {olderWalletGroups.length > 0 && (
+            <Section title={t("wallet.historyOlder")} collapsible defaultOpen>
+              <div className="item-list">
+                {olderWalletGroups.map(([key, entries]) => (
+                  <details className="wallet-history-month" key={key} open>
+                    <summary className="wallet-history-archive-title">
+                      <span>{formatDate(`${key}-01`, { month: "long", year: "numeric" })}</span>
+                      <span className="wallet-movement-count">{entries.length}</span>
+                    </summary>
+                    <div className="item-list">
+                      {entries.map((item) => <WalletHistoryRow key={item.id} movement={item} settings={snapshot.settings} t={t} formatDate={formatDate} />)}
+                    </div>
+                  </details>
+                ))}
+              </div>
+            </Section>
+          )}
+          {archiveBatches.length === 0 && olderWalletGroups.length === 0 && (
+            <EmptyState title={t("wallet.historyEmpty")} description={t("history.changesRecordedHere")} />
+          )}
+        </div>
+      )}
+
       {/* ── Audit trail ── */}
       {tab === "audit" && (
         <>
@@ -387,5 +458,35 @@ const AuditRow: React.FC<{ entry: AuditLog }> = ({ entry }) => {
     </div>
     {entry.historicalEdit && <Badge tone="warning">{t("history.historical")}</Badge>}
   </div>
+  );
+};
+
+const WalletHistoryRow: React.FC<{
+  movement: WalletHistoryArchiveEntry;
+  settings: Settings;
+  t: (key: string, params?: Record<string, string | number | null | undefined>) => string;
+  formatDate: (value: Date | string | number, options?: Intl.DateTimeFormatOptions) => string;
+}> = ({ movement, settings, t, formatDate }) => {
+  const out = movement.direction === "out";
+  const displayCurrency = movement.displayCurrency ?? settings.walletCurrency ?? settings.baseCurrency;
+  const showYear = movement.date.slice(0, 4) !== new Date().getFullYear().toString();
+  return (
+    <div className="item-row wallet-row" data-direction={movement.direction} data-tone={out ? "warning" : "success"}>
+      <div style={{ minWidth: 0, flex: "1 1 auto" }}>
+        <div className="text-callout wallet-row-title">{resolveStoredText(movement.label, t)}</div>
+        <div className="text-footnote">
+          {formatDate(movement.date, { day: "numeric", month: "short", ...(showYear ? { year: "numeric" } : {}) })}
+          {movement.note ? <span className="user-text"> · {resolveStoredText(movement.note, t)}</span> : ""}
+        </div>
+      </div>
+      <div className="row-trailing">
+        <strong className={out ? "wallet-amount-out" : "wallet-amount-in"}>
+          {out ? "−" : "+"}{formatMoney(movement.amountNative, movement.currency, settings.currencyDisplayMode)}
+        </strong>
+        {movement.currency !== displayCurrency && (
+          <div className="text-footnote">≈ {formatMoney(movement.amountBase, displayCurrency, settings.currencyDisplayMode)}</div>
+        )}
+      </div>
+    </div>
   );
 };
