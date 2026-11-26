@@ -2,7 +2,7 @@
 
 Reviewed from Git history and current behavior at `5.4.1` plus the unversioned
 2026-11-25 loan/accounting commit. Follow-up verification and fixes are now at
-`5.4.4`. No semantic release tags exist; changelog and
+`5.4.5`. No semantic release tags exist; changelog and
 package metadata were the version records. Existing claims were treated as
 unverified until checked in code or tests.
 
@@ -41,12 +41,12 @@ unverified until checked in code or tests.
   concern the changed finance paths.
 - Browser/localhost workflow — not run; prerequisites above were unavailable.
 
-## 5.4.4 Historical budget and Analytics completion checklist
+## 5.4.5 Historical budget and chart-color checklist
 
 - [x] Separate historical allocations; unlocked edit preserves other months and Analytics reads the edited amount.
 - [x] Carry positive/negative values normally; reset after positive or negative balance, including an empty month.
 - [x] Remaining percentages handle positive, negative, exact-zero and zero-allocation states.
-- [x] Historical bar colors and all current-month status overlays covered by focused style tests.
+- [x] Historical exact bars are gold; current bars use status colors with orange hatching; Home bars and forecast line share the status logic.
 - [x] README, architecture, database, testing guide and changelog reviewed and updated; no schema change.
 - [x] Focused suites: 170 passed; production build passed.
 - [ ] Live Wallet/Analytics browser inspection remains; `.env` and database URL are absent, so the authenticated app cannot be run against persisted data here.

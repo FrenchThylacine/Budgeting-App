@@ -249,13 +249,14 @@ export const AnalyticsPanel: React.FC = () => {
   }, [snapshot, settings.selectedYear, settings.selectedMonth]);
   const colouredMonthlyBars = useMemo(() => monthlyBars.map((bar, index) => {
     const budget = monthlyBudgets.get(index + 1);
-    const current = index + 1 === settings.selectedMonth;
+    const current = settings.selectedYear === new Date().getFullYear() && index + 1 === new Date().getMonth() + 1;
     const style = monthlyBudgetBarStyle(bar.value, budget ?? null, current);
-    if (!style.color) return { ...bar, color: undefined, overlayColor: undefined, detail: undefined };
+    if (!style.color) return { ...bar, color: undefined, overlayColor: undefined, overlayPattern: undefined, detail: undefined };
     return {
       ...bar,
       color: style.color,
       overlayColor: style.overlayColor,
+      overlayPattern: style.overlayPattern,
       detail: `${money(budget)} budget${style.exact ? ` · ${t("stats.exactBudget")}` : ""}`,
     };
   }), [monthlyBars, monthlyBudgets, settings, settings.selectedMonth, t]);
@@ -541,6 +542,7 @@ export const AnalyticsPanel: React.FC = () => {
                   highlight: bar.highlight,
                   color: bar.color,
                   overlayColor: bar.overlayColor,
+                  overlayPattern: bar.overlayPattern,
                   detail: bar.detail,
                 }))}
                 referenceLines={budgetBase > 0 ? [{ value: budgetBase, label: t("chart.budgetLine", { amount: money(budgetBase) }) }] : []}

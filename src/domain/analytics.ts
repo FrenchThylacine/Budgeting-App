@@ -26,12 +26,14 @@ export function budgetForMonth(snapshot: BudgetSnapshot, year: number, month: nu
 
 /** Visual comparison for a monthly budget bar; zero/missing budgets are unscored. */
 export function monthlyBudgetBarStyle(actual: number | null, budget: number | null, current: boolean) {
-  if (actual == null || budget == null || budget <= 0) return { color: undefined, overlayColor: undefined, exact: false, over: false };
+  if (actual == null || budget == null || budget <= 0) return { color: undefined, overlayColor: undefined, overlayPattern: false, exact: false, over: false };
   const exact = Math.abs(actual - budget) < 0.005;
   const over = actual > budget && !exact;
+  const color = exact ? "var(--budget-exact)" : over ? "var(--danger)" : "var(--success)";
   return {
-    color: current ? "var(--warning)" : over ? "var(--danger)" : "var(--success)",
-    overlayColor: current ? (exact ? "var(--success-text)" : over ? "var(--danger)" : "var(--success)") : exact ? "var(--success-text)" : undefined,
+    color,
+    overlayColor: undefined,
+    overlayPattern: current,
     exact,
     over,
   };

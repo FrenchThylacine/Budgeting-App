@@ -22,6 +22,8 @@ export interface ChartBar {
   color?: string;
   /** Optional variance wash drawn over the bar, useful for the active month. */
   overlayColor?: string;
+  /** Orange diagonal hatch marks an active, still-progressing period. */
+  overlayPattern?: boolean;
   detail?: string;
 }
 
@@ -56,6 +58,7 @@ export const BarChart: React.FC<BarChartProps> = ({
 }) => {
   const { t } = useTranslation();
   const { tooltip, show, hide } = useChartTooltip();
+  const hatchId = `bar-hatch-${React.useId().replace(/:/g, "")}`;
   const tickFormat = formatTick ?? formatValue;
   const emphasisIndex = bars.findIndex((bar) => bar.highlight);
 
@@ -100,6 +103,11 @@ export const BarChart: React.FC<BarChartProps> = ({
 
         return (
           <>
+            {bars.some((bar) => bar.overlayPattern) && <defs>
+              <pattern id={hatchId} width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+                <line x1="0" y1="0" x2="0" y2="8" stroke="var(--warning)" strokeWidth="3" />
+              </pattern>
+            </defs>}
             <GridLines ticks={domain.ticks} yOf={yOf} left={left} right={right} format={tickFormat} />
 
             {referenceLines.map((line, index) => (
@@ -159,6 +167,7 @@ export const BarChart: React.FC<BarChartProps> = ({
                     onPointerLeave={hide}
                   />
                   {bar.overlayColor && <path d={barPath(cx - barWidth / 2 + barWidth * 0.2, bottom - barHeight, barWidth * 0.6, barHeight, 4)} fill={bar.overlayColor} opacity={0.55} pointerEvents="none" />}
+                  {bar.overlayPattern && <path d={barPath(cx - barWidth / 2, bottom - barHeight, barWidth, barHeight, 4)} fill={`url(#${hatchId})`} pointerEvents="none" />}
                 </g>
               );
             })}

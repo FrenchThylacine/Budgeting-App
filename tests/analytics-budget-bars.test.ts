@@ -7,14 +7,14 @@ describe("monthly budget bar status", () => {
     expect(monthlyBudgetBarStyle(120, 100, false).color).toBe("var(--danger)");
   });
 
-  it("marks an exact past month with a green overlay", () => {
-    expect(monthlyBudgetBarStyle(100, 100, false)).toMatchObject({ color: "var(--success)", overlayColor: "var(--success-text)", exact: true });
+  it("marks an exact past month gold", () => {
+    expect(monthlyBudgetBarStyle(100, 100, false)).toMatchObject({ color: "var(--budget-exact)", exact: true, overlayPattern: false });
   });
 
-  it("keeps the current month orange with distinct below, above and exact overlays", () => {
-    expect(monthlyBudgetBarStyle(80, 100, true)).toMatchObject({ color: "var(--warning)", overlayColor: "var(--success)" });
-    expect(monthlyBudgetBarStyle(120, 100, true)).toMatchObject({ color: "var(--warning)", overlayColor: "var(--danger)" });
-    expect(monthlyBudgetBarStyle(100, 100, true)).toMatchObject({ color: "var(--warning)", overlayColor: "var(--success-text)", exact: true });
+  it("keeps current status color with orange progress hatching", () => {
+    expect(monthlyBudgetBarStyle(80, 100, true)).toMatchObject({ color: "var(--success)", overlayPattern: true });
+    expect(monthlyBudgetBarStyle(120, 100, true)).toMatchObject({ color: "var(--danger)", overlayPattern: true });
+    expect(monthlyBudgetBarStyle(100, 100, true)).toMatchObject({ color: "var(--budget-exact)", overlayPattern: true, exact: true });
   });
 
   it("does not score missing, zero or negative budgets", () => {
