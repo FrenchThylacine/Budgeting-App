@@ -92,6 +92,30 @@ beforeEach(() => {
 });
 
 describe("the stored principal", () => {
+  it("keeps loan-linked wallet entries consistent when the loan changes direction and year", () => {
+    const store = useBudgetStore.getState();
+    store.addLoan({
+      direction: "lent", amount: 100, currency: "USD", person: "Sam",
+      date: "2026-08-15", source: "Personal", destination: "Person",
+    });
+    const loan = useBudgetStore.getState().snapshot.settings.loans?.[0];
+    expect(loan).toBeDefined();
+    useBudgetStore.getState().repayLoan(loan!.id, 25);
+    useBudgetStore.getState().updateLoan(loan!.id, {
+      direction: "borrowed", amount: 120, currency: "EUR", date: "2027-01-10",
+    });
+    const snapshot = useBudgetStore.getState().snapshot;
+    const principal = snapshot.years["2027"].walletEntries.find((entry) => entry.loanId === loan!.id && entry.loanMovement === "principal");
+    const repayment = snapshot.years["2026"].walletEntries.find((entry) => entry.loanId === loan!.id && entry.loanMovement === "repayment");
+    expect(principal).toMatchObject({ amount: 120, currency: "EUR", date: "2027-01-10" });
+    expect(repayment).toMatchObject({ amount: -25, currency: "EUR" });
+    expect(walletState(snapshot).movements.filter((movement) => movement.loanId === loan!.id)).toHaveLength(2);
+
+    useBudgetStore.getState().deleteLoan(loan!.id);
+    expect(useBudgetStore.getState().snapshot.settings.loans?.some((item) => item.id === loan!.id)).toBe(false);
+    expect(walletState(useBudgetStore.getState().snapshot).movements.some((movement) => movement.loanId === loan!.id)).toBe(false);
+  });
+
   it("is 200 USD the moment it is written", () => {
     expect(stored()).toEqual({ amount: 200, currency: "USD" });
   });

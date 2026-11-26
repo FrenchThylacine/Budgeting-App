@@ -67,6 +67,10 @@ function worked(): BudgetSnapshot {
     entry({ amount: 200, categoryId: category, source: "shared", note: "A friend paid" }),
     entry({ amount: 150, categoryId: category, source: "external", note: "Other account" }),
   ];
+  snapshot.years["2026"].walletEntries.push({
+    id: "august-budget", year: 2026, month: 8, date: "2026-08-01", amount: 1000,
+    currency: "EUR", source: "Budget", type: "budget", note: "", createdAt: "2026-08-01T00:00:00Z",
+  });
   return snapshot;
 }
 

@@ -455,11 +455,15 @@ describe("the store cannot write a display currency onto money", () => {
     // several of these calls and their argument.
     const source = raw.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/[^\n]*/g, "");
 
-    // Wherever the ledger is appended to, the value must come from `movement(`.
+    // New movements use the canonical constructor. Moving an existing entry
+    // between year records preserves that exact entry instead.
     const pushes = [...source.matchAll(/walletEntries\.push\(\s*([\s\S]{0,16})/g)].map((match) => match[1]);
     expect(pushes.length).toBeGreaterThan(3);
     for (const push of pushes) {
-      expect(push.trimStart().startsWith("movement("), `walletEntries.push(${push.slice(0, 16)}…)`).toBe(true);
+      expect(
+        push.trimStart().startsWith("movement(") || push.trimStart().startsWith("entry)"),
+        `walletEntries.push(${push.slice(0, 16)}…)`,
+      ).toBe(true);
     }
 
     /*

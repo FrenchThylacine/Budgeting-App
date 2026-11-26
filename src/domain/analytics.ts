@@ -11,6 +11,18 @@ import { externalEntries, otherFundedEntries, outsideBudgetEntries, personalEntr
 import { movePeriod, periodLabel, selectedIsoWeekYear } from "./periods";
 import { dateInputValue, weekYear, weeksInIsoYear, startOfIsoWeek } from "./dates";
 import { activityBudgetSummary } from "./activityBudget";
+import { budgetPeriods } from "./wallet";
+
+/** The allocation ledger is authoritative for months it records. The global
+ * setting is only a fallback for the active month; it must never rewrite history. */
+export function budgetForMonth(snapshot: BudgetSnapshot, year: number, month: number, now = new Date()): number {
+  const recorded = budgetPeriods(snapshot).find((period) => period.year === year && period.month === month);
+  if (recorded?.allocationEntryId) return recorded.allocated;
+  if (year === now.getFullYear() && month === now.getMonth() + 1) {
+    return normalizeAmount(snapshot.settings.monthlyBudget, snapshot.settings.monthlyBudgetCurrency, snapshot.settings);
+  }
+  return 0;
+}
 
 /**
  * Shared, period-aware analytics selectors.
@@ -250,7 +262,7 @@ export interface BudgetPacing {
  * no known payment date contribute nothing: the application does not invent a
  * date for them anywhere else and a projection is a poor place to start.
  */
-function upcomingPersonalCharges(snapshot: BudgetSnapshot, now: Date): number {
+function upcomingPersonalCharges(snapshot: BudgetSnapshot, now: Date, reservedByActivity: Map<string, number>): number {
   const settings = snapshot.settings;
   const summary = activityBudgetSummary(snapshot, settings.selectedYear, settings.selectedMonth);
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
@@ -262,9 +274,55 @@ function upcomingPersonalCharges(snapshot: BudgetSnapshot, now: Date): number {
     const later = item.dueDates.filter((date) => date.getTime() > today).length;
     // The month's requirement is spread across the dates it names, so a pack
     // paid twice this month contributes half per remaining date.
-    total += (item.dueBase / item.dueDates.length) * later;
+    total += Math.max(0, (item.dueBase / item.dueDates.length) * later - (reservedByActivity.get(item.activity.id) ?? 0));
   }
   return total;
+}
+
+interface MonthlySpendingEstimate {
+  spent: number;
+  daysLeft: number;
+  upcomingScheduled: number;
+  estimatedAdditional: number;
+  historicalComparable: number | null;
+  projectedTotal: number | null;
+}
+
+/** Spending estimate shared by pacing cards and the cumulative chart. */
+function estimateMonthlySpending(snapshot: BudgetSnapshot, entries: SpendingEntry[], now: Date): MonthlySpendingEstimate {
+  const settings = snapshot.settings;
+  const todayKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  const elapsedEntries = entries.filter((entry) => entry.date.slice(0, 10) <= todayKey);
+  const futureEntries = personalEntries(entries).filter((entry) => entry.date.slice(0, 10) > todayKey);
+  const spent = elapsedEntries.reduce((sum, entry) => sum + normalizeEntry(entry, snapshot), 0);
+  const { totalDays, elapsedDays } = selectedPeriodWindow(settings, now);
+  const daysLeft = Math.max(totalDays - elapsedDays, 0);
+  const discretionarySpent = elapsedEntries
+    .filter((entry) => !entry.activityId && (!entry.recurrenceType || entry.recurrenceType === "none"))
+    .reduce((sum, entry) => sum + normalizeEntry(entry, snapshot), 0);
+  const discretionaryRate = elapsedDays > 0 ? discretionarySpent / elapsedDays : 0;
+  const previous = snapshot.years[String(settings.selectedYear - 1)]?.spendingEntries
+    .filter((entry) => entry.month === settings.selectedMonth && entry.source !== "external" && entry.source !== "shared") ?? [];
+  const historicalComparable = previous.length >= 3
+    ? previous.reduce((sum, entry) => sum + normalizeEntry(entry, snapshot), 0)
+    : null;
+  const historicalRate = historicalComparable != null ? historicalComparable / totalDays : null;
+  const estimatedRate = historicalRate != null ? discretionaryRate * 0.6 + historicalRate * 0.4 : discretionaryRate;
+  const reservedByActivity = new Map<string, number>();
+  for (const entry of futureEntries) {
+    if (entry.activityId) reservedByActivity.set(entry.activityId, (reservedByActivity.get(entry.activityId) ?? 0) + normalizeEntry(entry, snapshot));
+  }
+  const plannedTransactions = futureEntries.reduce((sum, entry) => sum + normalizeEntry(entry, snapshot), 0);
+  const upcomingScheduled = plannedTransactions + upcomingPersonalCharges(snapshot, now, reservedByActivity);
+  const estimatedAdditional = estimatedRate * daysLeft;
+  return {
+    spent,
+    daysLeft,
+    upcomingScheduled,
+    estimatedAdditional,
+    historicalComparable,
+    projectedTotal: elapsedDays > 0 ? spent + estimatedAdditional + upcomingScheduled : null,
+  };
 }
 
 /**
@@ -280,60 +338,15 @@ export function budgetPacing(
   const settings = snapshot.settings;
   if ((settings.selectedPeriodMode ?? "month") !== "month") return null;
 
-  const budget = normalizeAmount(settings.monthlyBudget, settings.monthlyBudgetCurrency, settings);
+  const budget = budgetForMonth(snapshot, settings.selectedYear, settings.selectedMonth, now);
   if (!(budget > 0)) return null;
 
-  const spent = entries.reduce((s, e) => s + normalizeEntry(e, snapshot), 0);
+  const estimate = estimateMonthlySpending(snapshot, entries, now);
+  const { spent, daysLeft, upcomingScheduled, estimatedAdditional, historicalComparable, projectedTotal } = estimate;
   const remaining = budget - spent;
-  const { totalDays, elapsedDays } = selectedPeriodWindow(settings, now);
-  const daysLeft = Math.max(totalDays - elapsedDays, 0);
+  const { elapsedDays } = selectedPeriodWindow(settings, now);
 
   const dailyAverage = elapsedDays > 0 ? spent / elapsedDays : null;
-
-  /*
-   * Where the month is heading, from what is actually known about it
-   * -----------------------------------------------------------------
-   *
-   * This used to be `spent ÷ elapsed × total`, which treats a budget as a tap
-   * running at a steady rate. Two things make that wrong in opposite
-   * directions on the same screen:
-   *
-   *  - **A recurring charge is an event, not a rate.** A €200 gym block paid
-   *    on the 3rd is a fifth of the month's spending by the 4th, and
-   *    extrapolating it says the reader is on course to pay it fifteen times.
-   *    So recurring and activity-linked transactions are taken *out* of the
-   *    rate: they have already happened, they are in `spent`, and they will
-   *    not happen again this month at that cadence.
-   *  - **A charge the application already knows is coming is not a guess.**
-   *    An annual subscription renewing on the 28th is in the schedule, in the
-   *    reader's own data, with a date on it. Straight-line pacing ignores it
-   *    entirely and then reports a surprise on the 28th.
-   *
-   * So: what has been spent, plus the discretionary rate over the days that
-   * remain, plus the payments the schedule says fall in those days. Only
-   * *personal* charges are added — an activity somebody else pays for will not
-   * touch this budget when it falls due — and only ones dated after today, so
-   * a payment already recorded is counted once, in `spent`.
-   */
-  const discretionarySpent = entries
-    .filter((entry) => !entry.activityId && (!entry.recurrenceType || entry.recurrenceType === "none"))
-    .reduce((total, entry) => total + normalizeEntry(entry, snapshot), 0);
-  const discretionaryRate = elapsedDays > 0 ? discretionarySpent / elapsedDays : 0;
-
-  const previous = snapshot.years[String(settings.selectedYear - 1)]?.spendingEntries
-    .filter((entry) => entry.month === settings.selectedMonth && entry.source !== "external" && entry.source !== "shared") ?? [];
-  const historicalComparable = previous.length >= 3
-    ? previous.reduce((sum, entry) => sum + normalizeEntry(entry, snapshot), 0)
-    : null;
-  const historicalRate = historicalComparable != null ? historicalComparable / totalDays : null;
-  const estimatedRate = historicalRate != null
-    ? discretionaryRate * 0.6 + historicalRate * 0.4
-    : discretionaryRate;
-
-  const upcoming = upcomingPersonalCharges(snapshot, now);
-  const estimatedAdditional = estimatedRate * daysLeft;
-  const projectedTotal =
-    elapsedDays > 0 ? spent + estimatedAdditional + upcoming : null;
 
   return {
     budget,
@@ -345,7 +358,7 @@ export function budgetPacing(
     projectedRemaining: projectedTotal != null ? budget - projectedTotal : null,
     requiredDailyPace: daysLeft > 0 ? Math.max(remaining, 0) / daysLeft : null,
     daysLeft,
-    upcomingScheduled: upcoming,
+    upcomingScheduled,
     estimatedAdditional,
     historicalComparable,
   };
@@ -651,7 +664,7 @@ export function dailySpendingCalendar(
       day: date.getUTCDate(),
       // getUTCDay() is 0 = Sunday; ISO weekdays run 1 = Monday … 7 = Sunday.
       weekday: ((date.getUTCDay() + 6) % 7) + 1,
-      value: recorded != null ? recorded : hasRecords && elapsed ? 0 : null,
+      value: elapsed ? recorded ?? (hasRecords ? 0 : null) : null,
     };
   });
 }
@@ -854,16 +867,19 @@ export function cumulativeForecast(
   let projectedTotal: number | null = null;
 
   if (lastKnown >= 0 && elapsed < total) {
-    const perDay = running / elapsed;
-    projectedTotal = perDay * total;
+    const mode = settings.selectedPeriodMode ?? "month";
+    const estimate = mode === "month" ? estimateMonthlySpending(snapshot, entries, now) : null;
+    const simplePace = (running / elapsed) * total;
+    projectedTotal = estimate?.projectedTotal ?? simplePace;
+    const remainingSteps = total - 1 - lastKnown;
     for (let index = lastKnown; index < total; index += 1) {
-      projected[index] = running + perDay * (index - lastKnown);
+      const progress = remainingSteps > 0 ? (index - lastKnown) / remainingSteps : 1;
+      projected[index] = running + (projectedTotal - running) * progress;
     }
   }
 
   const mode = settings.selectedPeriodMode ?? "month";
-  const budgetBase =
-    mode === "month" ? normalizeAmount(settings.monthlyBudget, settings.monthlyBudgetCurrency, settings) : 0;
+  const budgetBase = mode === "month" ? budgetForMonth(snapshot, settings.selectedYear, settings.selectedMonth, now) : 0;
 
   return {
     labels: calendar.map((cell) => String(cell.day)),

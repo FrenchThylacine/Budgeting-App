@@ -7,6 +7,8 @@
 import { describe, expect, it } from "vitest";
 import {
   budgetPacing,
+  budgetForMonth,
+  cumulativeForecast,
   budgetRelevantEntries,
   categoriesOverCap,
   categoryBreakdown,
@@ -19,7 +21,7 @@ import {
 } from "../src/domain/analytics";
 import { calculateYear } from "../src/domain/calculations";
 import { createSeedBudgetSnapshot } from "../src/data/seedBudget";
-import type { BudgetSnapshot, SpendingEntry } from "../src/domain/types";
+import type { Activity, BudgetSnapshot, SpendingEntry } from "../src/domain/types";
 import { monthNames } from "../src/domain/i18n";
 
 /**
@@ -165,9 +167,56 @@ describe("budgetPacing", () => {
     expect(pacing.requiredDailyPace).toBeCloseTo(700 / 16);
   });
 
+  it("uses the selected month's recorded allocation instead of the current setting", () => {
+    const snap = snapshotWith([entry({ amount: 300 })]);
+    snap.settings.monthlyBudget = 1000;
+    snap.settings.monthlyBudgetCurrency = "EUR";
+    snap.years["2026"].walletEntries.push({
+      id: "july-allocation", year: 2026, month: 7, date: "2026-07-01", amount: 450,
+      currency: "EUR", source: "Budget", type: "budget", note: "", createdAt: "2026-07-01T00:00:00Z",
+    });
+    expect(budgetForMonth(snap, 2026, 7, new Date("2026-11-15T12:00:00Z"))).toBe(450);
+    const pacing = budgetPacing(snap, snap.years["2026"].spendingEntries, new Date("2026-07-15T12:00:00Z"));
+    expect(pacing?.budget).toBe(450);
+    expect(pacing?.remaining).toBe(150);
+  });
+
+  it("adds known future activity charges to the month forecast", () => {
+    const snap = snapshotWith([entry({ amount: 300 })]);
+    snap.settings.monthlyBudget = 1000;
+    snap.years["2026"].activities = [{
+      id: "annual-renewal", name: "Annual renewal", categoryId: "cat-spending", currency: "EUR",
+      recurrenceType: "yearly", recurrenceInterval: 1, costModel: "fixedYearly", yearlyEstimate: 360,
+      nextRenewalDate: "2026-07-25", pricePerSession: null, pricePerPurchase: null, pricePerMonth: null,
+      estimatedCost: null, active: true, visible: true, seasonalTag: "normal", order: 0, notes: "",
+    } satisfies Activity];
+    const pacing = budgetPacing(snap, snap.years["2026"].spendingEntries, new Date("2026-07-15T12:00:00Z"))!;
+    expect(pacing.upcomingScheduled).toBe(360);
+    expect(pacing.projectedTotal).toBe(980);
+  });
+
+  it("keeps future-dated purchase entries out of actual spend and includes them once in the forecast", () => {
+    const snap = snapshotWith([
+      entry({ id: "spent", amount: 300, date: "2026-07-01" }),
+      entry({ id: "planned", amount: 200, date: "2026-07-25" }),
+    ]);
+    snap.settings.monthlyBudget = 1000;
+    const now = new Date("2026-07-15T12:00:00Z");
+    const pacing = budgetPacing(snap, snap.years["2026"].spendingEntries, now)!;
+    expect(pacing.spent).toBe(300);
+    expect(pacing.upcomingScheduled).toBe(200);
+    expect(pacing.projectedTotal).toBe(820);
+    snap.settings.monthlyBudget = 0;
+    expect(cumulativeForecast(snap.years["2026"].spendingEntries, snap, snap.settings, now)?.projectedTotal).toBe(820);
+  });
+
   it("treats an already-finished month as fully elapsed", () => {
     const snap = snapshotWith([entry({ amount: 310, month: 7 })]);
     snap.settings.monthlyBudget = 1000;
+    snap.years["2026"].walletEntries.push({
+      id: "july-closed-allocation", year: 2026, month: 7, date: "2026-07-01", amount: 1000,
+      currency: "EUR", source: "Budget", type: "budget", note: "", createdAt: "2026-07-01T00:00:00Z",
+    });
     const now = new Date("2026-09-10T12:00:00Z");
     const pacing = budgetPacing(snap, snap.years["2026"].spendingEntries, now)!;
     expect(pacing.dailyAverage).toBeCloseTo(10);

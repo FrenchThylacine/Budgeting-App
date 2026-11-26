@@ -3,6 +3,7 @@ import { calculateYear } from "../../domain/calculations";
 import { isHistoricalPeriod, periodLabel } from "../../domain/periods";
 import {
   budgetPacing,
+  budgetForMonth,
   budgetRelevantEntries,
   categoriesOverCap,
   categoryBreakdown,
@@ -231,22 +232,26 @@ export const AnalyticsPanel: React.FC = () => {
     () => monthlyTrendBars(calc.monthlyTrend, mode === "year" ? -1 : settings.selectedMonth, monthNames("short")),
     [calc.monthlyTrend, mode, settings.selectedMonth],
   );
-  const monthlyBudgets = useMemo(() => new Map(
-    budgetPeriods(snapshot)
-      .filter((period) => period.year === settings.selectedYear)
-      .map((period) => [period.month, period.allocated] as const),
-  ), [snapshot, settings.selectedYear]);
+  const monthlyBudgets = useMemo(() => {
+    const budgets = new Map<number, number>();
+    for (const period of budgetPeriods(snapshot).filter((item) => item.year === settings.selectedYear)) {
+      if (period.allocated > 0) budgets.set(period.month, period.allocated);
+    }
+    const selectedBudget = budgetForMonth(snapshot, settings.selectedYear, settings.selectedMonth);
+    if (selectedBudget > 0) budgets.set(settings.selectedMonth, selectedBudget);
+    return budgets;
+  }, [snapshot, settings.selectedYear, settings.selectedMonth]);
   const colouredMonthlyBars = useMemo(() => monthlyBars.map((bar, index) => {
     const budget = monthlyBudgets.get(index + 1);
     const actual = bar.value;
-    if (actual == null || budget == null) return { ...bar, color: undefined, overlayColor: undefined, detail: undefined };
+    if (actual == null || budget == null || budget <= 0) return { ...bar, color: undefined, overlayColor: undefined, detail: undefined };
     const over = actual > budget;
     const exact = Math.abs(actual - budget) < 0.005;
     const current = index + 1 === settings.selectedMonth;
     return {
       ...bar,
       color: current ? "var(--warning)" : over ? "var(--danger)" : "var(--success)",
-      overlayColor: current ? (exact ? "var(--success)" : over ? "var(--danger)" : "var(--success)") : exact ? "var(--accent)" : undefined,
+      overlayColor: current ? (over ? "var(--danger)" : "var(--success)") : exact ? "var(--success)" : undefined,
       detail: `${money(budget)} budget`,
     };
   }), [monthlyBars, monthlyBudgets, settings.selectedMonth]);
@@ -271,7 +276,7 @@ export const AnalyticsPanel: React.FC = () => {
   // ── Chart inputs ──
   const trendBars = mode === "week" ? weeklyBars : monthlyBars;
   const trendEmphasis = trendBars.findIndex((bar) => bar.highlight);
-  const budgetBase = calc.monthlyBudgetBase;
+  const budgetBase = mode === "month" ? budgetForMonth(snapshot, settings.selectedYear, settings.selectedMonth) : 0;
   const budgetReference: ChartReferenceLine[] =
     mode !== "week" && budgetBase > 0
       ? [{ value: budgetBase, label: t("chart.budgetLine", { amount: money(budgetBase) }) }]

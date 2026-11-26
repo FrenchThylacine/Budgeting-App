@@ -168,6 +168,11 @@ export const WalletPanel: React.FC = () => {
 
   const walletCurrency = snapshot.settings.walletCurrency ?? snapshot.settings.baseCurrency;
   const money = (value: number | null | undefined) => formatMoney(value, walletCurrency, snapshot.settings.currencyDisplayMode);
+  const periodMoney = (value: number) => formatMoney(
+    normalizeAmount(value, snapshot.settings.baseCurrency, { ...snapshot.settings, baseCurrency: walletCurrency }),
+    walletCurrency,
+    snapshot.settings.currencyDisplayMode,
+  );
   // Through `Intl`, not the English-only `monthName()`: "Prévu pour August"
   // is an English word in a French sentence.
   const localMonth = (month: number) => monthNames()[month - 1] ?? monthName(month);
@@ -175,6 +180,7 @@ export const WalletPanel: React.FC = () => {
   const movementGroups = useMemo(() => [
     { key: "spending", label: t("nav.spending"), items: wallet.movements.filter((item) => item.kind === "spending") },
     { key: "general", label: t("wallet.ledger"), items: wallet.movements.filter((item) => item.kind !== "spending" && !item.loanId && !["personal", "adjustment", "opening", "rollover"].includes(item.kind)) },
+    { key: "loans", label: t("wallet.loans"), items: wallet.movements.filter((item) => Boolean(item.loanId)) },
     { key: "adjustments", label: t("wallet.typeAdjustment"), items: wallet.movements.filter((item) => !item.loanId && ["personal", "adjustment", "opening", "rollover"].includes(item.kind)) },
   ].filter((group) => group.items.length > 0), [wallet.movements, t]);
 
@@ -232,12 +238,13 @@ export const WalletPanel: React.FC = () => {
             </div>
             <div className="money wallet-balance-value"><Total amount={wallet.walletBalance} currency={walletCurrency} /></div>
             <div className="text-caption">{t("wallet.walletBalanceHint")}</div>
+            <div className="text-footnote">{t("wallet.trueAmount")}: {money(wallet.walletBalance + loanBalance)}</div>
           </div>
 
           <div className="wallet-balance" data-tone={loanBalance >= 0 ? "success" : "warning"}>
             <div className="text-footnote">{t("wallet.loans")}</div>
             <div className="money wallet-balance-value">{money(loanBalance)}</div>
-            <div className="text-caption">{loanBalance >= 0 ? "Receivable" : "Payable"}</div>
+            <div className="text-caption">{loanBalance >= 0 ? t("wallet.loanReceivable") : t("wallet.loanPayable")}</div>
           </div>
 
           <div className="wallet-balance" data-tone="budget">
@@ -344,11 +351,11 @@ export const WalletPanel: React.FC = () => {
                 {periods.map((period) => (
                   <tr key={`${period.year}-${period.month}`}>
                     <td>{`${localMonth(period.month)} ${period.year}`} {period.allocationEntryId && mutable && <Button size="sm" variant="ghost" icon onClick={() => setEditingAllocation(period)} aria-label={t("common.edit")}><Pencil size={13} /></Button>}</td>
-                    <td className="num">{money(period.carriedIn)}</td>
-                    <td className="num">{money(period.allocated)}</td>
-                    <td className="num">{money(period.spent)}</td>
-                    <td className="num">{period.transferred > 0 ? money(period.transferred) : "—"}</td>
-                    <td className="num wallet-period-remaining">{money(period.remaining)}</td>
+                    <td className="num">{periodMoney(period.carriedIn)}</td>
+                    <td className="num">{periodMoney(period.allocated)}</td>
+                    <td className="num">{periodMoney(period.spent)}</td>
+                    <td className="num">{period.transferred > 0 ? periodMoney(period.transferred) : "—"}</td>
+                    <td className="num wallet-period-remaining">{periodMoney(period.remaining)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -371,7 +378,7 @@ export const WalletPanel: React.FC = () => {
                * written — in Spending — so the ledger never offers two places
                * to change one fact.
                */
-              const editable = mutable && !movement.spendingId;
+              const editable = mutable && !movement.spendingId && !movement.loanId;
               const onDelete = () => {
                 if (!editable) return;
                 if (window.confirm(t("spending.confirmDelete"))) remove(movement.id);
@@ -412,7 +419,7 @@ export const WalletPanel: React.FC = () => {
         {loans.length === 0 ? <EmptyState title={t("wallet.loans")} description={t("wallet.ledgerEmptyBody")} /> : loans.map((loan) => (
           <div className="item-row" key={loan.id} style={{ flexWrap: "wrap" }}>
             <div style={{ flex: 1 }}><strong>{loan.person}</strong><div className="text-footnote">{formatDate(loan.date)} · {formatMoney(loan.amount, loan.currency, snapshot.settings.currencyDisplayMode)}</div></div>
-            {!loan.returnedAt && !loan.convertedAt && <div className="row-actions"><Button size="sm" variant="ghost" onClick={() => { const value = window.prompt("Repayment amount", String(Math.max(0, loan.amount - (loan.repaidAmount ?? 0)))); if (value != null) repayLoan(loan.id, Number(value)); }}>{t("wallet.loanReturned")}</Button></div>}
+            {!loan.returnedAt && !loan.convertedAt && <div className="row-actions"><Button size="sm" variant="ghost" onClick={() => { const value = window.prompt(t("wallet.repaymentAmount"), String(Math.max(0, loan.amount - (loan.repaidAmount ?? 0)))); if (value != null) repayLoan(loan.id, Number(value)); }}>{t("wallet.loanReturned")}</Button></div>}
             {mutable && <div className="row-actions"><Button size="sm" variant="ghost" icon onClick={() => setEditingLoan(loan)} aria-label={t("common.edit")}><Pencil size={15} /></Button><Button size="sm" variant="ghost" icon onClick={() => window.confirm(t("common.delete") + "?") && deleteLoan(loan.id)} aria-label={t("common.delete")}><Trash2 size={15} /></Button></div>}
             {(loan.returnedAt || loan.convertedAt) && <span className="text-footnote">{loan.convertedAt ? t("wallet.loanConverted") : t("wallet.loanReturned")}</span>}
             {wallet.movements.filter((movement) => movement.loanId === loan.id && movement.loanMovement === "repayment").map((movement) => (
@@ -432,12 +439,20 @@ export const WalletPanel: React.FC = () => {
         monthLabel={`${localMonth(editingAllocation.month)} ${editingAllocation.year}`}
         onClose={() => setEditingAllocation(null)}
         onSubmit={(input) => {
-          updateWalletEntry(editingAllocation.allocationEntryId!, {
-            amount: input.amount,
-            currency: input.currency,
-            date: input.date,
-            year: Number(input.date.slice(0, 4)),
-            month: Number(input.date.slice(5, 7)),
+          const allocationId = editingAllocation.allocationEntryId!;
+          const otherAllocations = Object.values(snapshot.years)
+            .flatMap((record) => record.walletEntries)
+            .filter((entry) => entry.type === "budget" && entry.id !== allocationId
+              && entry.year === editingAllocation.year && entry.month === editingAllocation.month)
+            .reduce((sum, entry) => sum + normalizeAmount(entry.amount, entry.currency, snapshot.settings), 0);
+          updateWalletEntry(allocationId, {
+            // The editor changes the month's total while retaining the other
+            // original ledger rows; this row carries the signed difference.
+            amount: input.amount - otherAllocations,
+            currency: snapshot.settings.baseCurrency,
+            date: `${editingAllocation.year}-${String(editingAllocation.month).padStart(2, "0")}-01`,
+            year: editingAllocation.year,
+            month: editingAllocation.month,
             note: input.note,
           });
           setEditingAllocation(null);
@@ -663,14 +678,14 @@ const LoanSheet: React.FC<{ editing?: Loan; onClose: () => void; onSubmit: (loan
   const [currency, setCurrency] = useState<CurrencyCode>(editing?.currency ?? settings.walletCurrency ?? settings.baseCurrency);
   const [person, setPerson] = useState(editing?.person ?? "");
   const [date, setDate] = useState(editing?.date ?? todayDateInput());
-  const [source, setSource] = useState(editing?.source ?? "Personal");
+  const [source, setSource] = useState(editing?.source ?? t("wallet.personal"));
   const [destination, setDestination] = useState(editing?.destination ?? "");
   const valid = Number(amount) > 0 && person.trim() !== "" && date !== "";
   return <EditorSheet title={editing ? t("common.edit") : t("wallet.addLoan")} onClose={onClose} footer={<><Button variant="ghost" onClick={onClose}>{t("common.cancel")}</Button><Button variant="primary" type="submit" form="loan-form" disabled={!valid}>{editing ? t("common.saveChanges") : t("common.add")}</Button></>}>
     <form id="loan-form" onSubmit={(event) => { event.preventDefault(); if (valid) onSubmit({ direction, amount: Number(amount), currency, person, date, source, destination }); }} style={{ display: "grid", gap: 12 }}>
       <Field label={t("wallet.loanPerson")}><input className="input" value={person} onChange={(e) => setPerson(e.target.value)} required autoFocus /></Field>
-      <Field label="Source"><select className="select" value={source} onChange={(e) => setSource(e.target.value)}><option>Personal</option><option>Budget</option><option>Person</option></select></Field>
-      <Field label="Destination"><select className="select" value={destination} onChange={(e) => setDestination(e.target.value)}><option>Person</option><option>Personal</option><option>Budget</option></select></Field>
+      <Field label={t("wallet.source")}><select className="select" value={source} onChange={(e) => setSource(e.target.value)}><option value="Personal">{t("wallet.personal")}</option><option value="Budget">{t("wallet.budget")}</option><option value="Person">{t("wallet.person")}</option></select></Field>
+      <Field label={t("wallet.destination")}><select className="select" value={destination} onChange={(e) => setDestination(e.target.value)}><option value="Person">{t("wallet.person")}</option><option value="Personal">{t("wallet.personal")}</option><option value="Budget">{t("wallet.budget")}</option></select></Field>
       <Field label={t("spending.amount")}><input className="input" type="number" min="0" step="any" value={amount} onChange={(e) => setAmount(e.target.value)} required /></Field>
       <Field label={t("spending.currency")}><select className="select" value={currency} onChange={(e) => setCurrency(e.target.value as CurrencyCode)}>{currencyOptionsFor(settings, currency).map((code) => <option key={code}>{code}</option>)}</select></Field>
       <Field label={t("wallet.loanLent")}><select className="select" value={direction} onChange={(e) => setDirection(e.target.value as Loan["direction"])}><option value="lent">{t("wallet.loanLent")}</option><option value="borrowed">{t("wallet.loanBorrowed")}</option></select></Field>
@@ -689,7 +704,7 @@ const AllocationSheet: React.FC<{
   const { t } = useTranslation();
   const settings = useBudgetStore((s) => s.snapshot.settings);
   const [amount, setAmount] = useState(suggested > 0 ? String(suggested) : "");
-  const [currency, setCurrency] = useState<CurrencyCode>(settings.monthlyBudgetCurrency ?? settings.baseCurrency);
+  const [currency, setCurrency] = useState<CurrencyCode>(editing ? settings.baseCurrency : settings.monthlyBudgetCurrency ?? settings.baseCurrency);
   const [date, setDate] = useState(editing ? `${editing.year}-${String(editing.month).padStart(2, "0")}-01` : todayDateInput());
   const [note, setNote] = useState("");
 
@@ -737,6 +752,7 @@ const AllocationSheet: React.FC<{
             <select
               className="select"
               value={currency}
+              disabled={Boolean(editing)}
               onChange={(event) => setCurrency(event.target.value as CurrencyCode)}
             >
               {currencyOptionsFor(settings, currency).map((code) => (
@@ -749,6 +765,7 @@ const AllocationSheet: React.FC<{
               className="input"
               type="date"
               required
+              disabled={Boolean(editing)}
               value={date}
               onChange={(event) => setDate(event.target.value)}
             />
@@ -768,7 +785,7 @@ const AllocationSheet: React.FC<{
               group
               hint={t("wallet.plannedBudgetHint")}
             >
-              <Button type="button" variant="ghost" size="sm" onClick={() => setAmount(String(suggested))}>
+              <Button type="button" variant="ghost" size="sm" onClick={() => setAmount(String(normalizeAmount(suggested, settings.baseCurrency, { ...settings, baseCurrency: currency })))}>
                 {t("wallet.allocationSuggested", {
                   amount: formatMoney(suggested, settings.baseCurrency, settings.currencyDisplayMode),
                 })}

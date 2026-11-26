@@ -14,6 +14,8 @@ Each account holds its own budget, and one account can be used from as many devi
 
 **Spending.** Transactions with amount, currency, date, category, recurrence, notes, an optional link to a wishlist item, and **who paid**. A transaction somebody else paid for is recorded at full value and stays visible, but never counts against your budget — see the funding rule below.
 
+**Wallet and loans.** Wallet History separates spending and ordinary activity, loan principal and repayments, and direct balance adjustments. Loan edits update their linked wallet movements (including repayments across year records); deleting a loan removes those linked movements. The Wallet shows cash on hand and the net position after receivables and payables. Historical Analytics uses the month's recorded allocation; if a past month has no allocation record, it does not reuse the current budget.
+
 **Recurring activities.** Commitments with six cost models:
 
 | Model | For |
@@ -37,7 +39,7 @@ A next-renewal date states what no rule can derive — the day an annual subscri
 
 **Periods.** Month, ISO week, and year. Historical periods are read-only by default and can be unlocked deliberately, with every change recorded in the audit trail.
 
-**Analytics.** Chart-led: spending trend, budget vs actual with a labelled budget line, cumulative forecast against the budget ceiling, category bars with cap markers, category evolution, a recurring/one-off split, a daily spending heatmap, and period comparisons.
+**Analytics.** Chart-led: spending trend, budget vs actual with the selected month's allocation, cumulative forecast against that month's ceiling, category bars with cap markers, category evolution, a recurring/one-off split, a daily spending heatmap, and period comparisons. Current-month projections separate future-dated personal purchases from actual spend, include scheduled activity charges, and estimate remaining discretionary spend from current pace and comparable prior-year data when enough transactions exist.
 
 **Reports.** Printable monthly, annual and **custom-range** reports, generated from the same calculations as the screen. A custom range deliberately carries no budget or remaining figure: the budget is set per month, and prorating one across six weeks would be a number nobody chose.
 

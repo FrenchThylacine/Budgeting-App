@@ -1013,9 +1013,11 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
   },
 
   updateLoan: (loanId, patch) => {
+    if (!get().isCurrentPeriodMutable()) return;
     commit(set, get, (snapshot) => {
       const loan = snapshot.settings.loans?.find((item) => item.id === loanId);
       if (!loan) return;
+      if (patch.amount != null && (!Number.isFinite(patch.amount) || patch.amount < (loan.repaidAmount ?? 0))) return;
       Object.assign(loan, patch);
       const owner = Object.values(snapshot.years).find((record) => record.walletEntries.some((item) => item.loanId === loanId && item.loanMovement === "principal"));
       const entry = owner?.walletEntries.find((item) => item.loanId === loanId && item.loanMovement === "principal");
@@ -1037,6 +1039,23 @@ export const useBudgetStore = create<BudgetStore>((set, get) => ({
         if (owner && owner !== destination) {
           owner.walletEntries = owner.walletEntries.filter((item) => item.id !== entry.id);
           destination.walletEntries.push(entry);
+        }
+      }
+      for (const record of Object.values(snapshot.years)) {
+        for (const repayment of record.walletEntries) {
+          if (repayment.loanId !== loanId || repayment.loanMovement !== "repayment") continue;
+          repayment.amount = (loan.direction === "lent" ? 1 : -1) * Math.abs(repayment.amount);
+          repayment.currency = loan.currency;
+          repayment.loanBudgetEffect = repayment.amount
+            * ((loan.direction === "lent" ? loan.source : loan.destination) === "Budget" ? 1 : 0);
+          repayment.walletAmount = undefined; repayment.walletCurrency = undefined; repayment.walletRate = undefined;
+          const walletCurrency = snapshot.settings.walletCurrency ?? snapshot.settings.baseCurrency;
+          const converted = convertAmount(repayment.amount, repayment.currency, walletCurrency, snapshot.settings.exchangeRates);
+          if (converted != null) {
+            repayment.walletAmount = snapshot.settings.walletRoundUp ? Math.ceil(converted) : converted;
+            repayment.walletCurrency = walletCurrency;
+            repayment.walletRate = repayment.amount ? repayment.walletAmount / repayment.amount : undefined;
+          }
         }
       }
     }, "wallet", storedText("audit.walletUpdated"), { loanId, patch });

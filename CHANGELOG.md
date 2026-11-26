@@ -9,6 +9,7 @@ with one small fix gets a patch rather than a new minor.
 
 | Version | What it was |
 | --- | --- |
+| **5.4.2** | Fixes historical budget comparisons and loan-linked Wallet History; keeps loan edits and repayments consistent across years and displays cash plus net outstanding loans |
 | **5.4.1** | Bug-fix pass: projection breakdown, duplicate loan-history removal, denser transaction editor, and report layout polish |
 | **5.4.0** | Wallet accounting and history improvements, editable monthly allocations with reset-aware carryover, per-month Analytics budget variance colors, and a repaired report opener |
 | **5.3.0** | Unified local transaction date/time control with independent calendar and clock editing |
@@ -25,6 +26,26 @@ with one small fix gets a patch rather than a new minor.
 | **2.0.0**–**2.1.0** | Accounts, Excel import, dedicated editors, scenarios, swipe, the first identity |
 | **1.0.0**–**1.1.0** | The first working budget: activities, spending, wishlist, reports |
 | **0.1.0**–**0.2.0** | Before it was an application |
+
+## 5.4.2 — 2026-11-25 — Historical budgets and linked loan activity
+
+- Analytics pacing, projections and the budget reference use the selected
+  month's recorded allocation. The current setting is used only for the active
+  month when it has no allocation ledger entry; historical months without a
+  recorded allocation are shown as unavailable rather than borrowing today's
+  value.
+- Future-dated personal purchases are separated from actual spend and counted
+  once as upcoming costs. Scheduled activity charges, remaining days and
+  comparable prior-year spending feed the same projection shown in the chart.
+- Loan principal and repayments appear in their own Wallet History group and
+  cannot be edited or deleted separately from the loan. Editing a loan moves
+  its principal between year records when needed and updates linked repayment
+  amounts, currencies and budget effects. A principal cannot be reduced below
+  amounts already repaid.
+- The Wallet keeps its cash balance visible and shows its net value including
+  receivables and payables beside it.
+- Added regression coverage for historical allocations and editing, repaying,
+  moving and deleting a loan.
 
 ## 5.1.0 — 2026-09-01 — Guards that look where the defects actually are
 
