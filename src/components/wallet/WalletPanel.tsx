@@ -93,11 +93,6 @@ export const WalletPanel: React.FC = () => {
   const mutable = useBudgetStore((s) => s.isCurrentPeriodMutable)();
 
   const wallet = useMemo(() => walletState(snapshot), [snapshot]);
-  const loanBalance = useMemo(() => loans.reduce((total, loan) => {
-    const outstanding = Math.max(0, loan.amount - (loan.repaidAmount ?? 0));
-    const sign = loan.direction === "lent" ? 1 : -1;
-    return total + sign * normalizeAmount(outstanding, loan.currency, { ...snapshot.settings, baseCurrency: snapshot.settings.walletCurrency ?? snapshot.settings.baseCurrency });
-  }, 0), [loans, snapshot.settings]);
   const periods = useMemo(() => budgetPeriods(snapshot), [snapshot]);
   const selectedBudgetPeriod = periods.find((item) => item.year === snapshot.settings.selectedYear && item.month === snapshot.settings.selectedMonth);
   const remainingPercent = selectedBudgetPeriod && selectedBudgetPeriod.allocated !== 0
@@ -228,9 +223,8 @@ export const WalletPanel: React.FC = () => {
           </div>
         )}
 
-        {/* The three balances. Three cards, never two and never one: the wallet
-            holds one pile of money, and the other two say how much of it is
-            already spoken for. */}
+        {/* Cash and the loan-adjusted total lead together; the latter is the
+            amount the user's assets and liabilities say they should have. */}
         <div className="wallet-balances">
           <div className="wallet-balance wallet-balance-primary">
             <div className="text-footnote">
@@ -238,25 +232,24 @@ export const WalletPanel: React.FC = () => {
             </div>
             <div className="money wallet-balance-value"><Total amount={wallet.walletBalance} currency={walletCurrency} /></div>
             <div className="text-caption">{t("wallet.walletBalanceHint")}</div>
-            <div className="text-footnote">{t("wallet.trueAmount")}: {money(wallet.walletBalance + loanBalance)}</div>
           </div>
 
-          <div className="wallet-balance" data-tone={loanBalance >= 0 ? "success" : "warning"}>
-            <div className="text-footnote">{t("wallet.loans")}</div>
-            <div className="money wallet-balance-value">{money(loanBalance)}</div>
-            <div className="text-caption">{loanBalance >= 0 ? t("wallet.loanReceivable") : t("wallet.loanPayable")}</div>
+          <div className="wallet-balance wallet-balance-primary wallet-balance-true" data-tone={wallet.loanBalance >= 0 ? "success" : "warning"}>
+            <div className="text-footnote">{t("wallet.trueAmount")}</div>
+            <div className="money wallet-balance-value"><Total amount={wallet.totalWithLoans} currency={walletCurrency} /></div>
+            <div className="text-caption">{t("wallet.trueAmountHint")}</div>
           </div>
 
           <div className="wallet-balance" data-tone="budget">
             <div className="text-footnote">{t("wallet.budgetRemaining")}</div>
-            <div className="money wallet-balance-value"><Total amount={wallet.budgetRemaining} currency={walletCurrency} /></div>
+            <div className="money wallet-balance-value"><Total amount={wallet.budgetRemainingWithLoans} currency={walletCurrency} /></div>
             <div className="text-caption">{t("wallet.budgetRemainingHint")}</div>
             {remainingPercent != null && <div className="text-footnote" style={{ color: remainingPercent >= 0 ? "var(--success)" : "var(--danger)" }}>{remainingPercent.toFixed(0)}%</div>}
           </div>
 
           <div className="wallet-balance" data-tone="personal">
             <div className="text-footnote">{t("wallet.personalBalance")}</div>
-            <div className="money wallet-balance-value"><Total amount={wallet.personalBalance} currency={walletCurrency} /></div>
+            <div className="money wallet-balance-value"><Total amount={wallet.personalBalanceWithLoans} currency={walletCurrency} /></div>
             <div className="text-caption">{t("wallet.personalBalanceHint")}</div>
           </div>
         </div>

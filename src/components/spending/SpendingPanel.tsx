@@ -467,43 +467,43 @@ export const SpendingPanel: React.FC = () => {
                 ))}
               </select>
             </Field>
-            <Field label={t("spending.timestamp")} name="transactionAt">
-              <label className="settings-check transaction-timestamp-toggle">
-                <input
-                  type="checkbox"
-                  checked={draft.recordTimestamp}
-                  onChange={(e) => setDraft({ ...draft, recordTimestamp: e.target.checked })}
-                />
-                <span>{t("spending.recordTimestamp")}</span>
-              </label>
+            <Field label={t("spending.timestamp")} name="transactionAt" span group>
               <div className="transaction-datetime">
-                  <label className="transaction-datetime-part">
-                    <Calendar size={14} aria-hidden="true" />
-                    <span className="sr-only">{t("spending.date")}</span>
-                    <input
-                      className="input"
-                      type="date"
-                      required
-                      value={draft.date}
-                      onChange={(e) => {
-                        const date = e.target.value;
-                        const time = draft.transactionAt.includes("T") ? draft.transactionAt.slice(11, 16) : localDateTimeInput().slice(11, 16);
-                        setDraft({ ...draft, date, transactionAt: draft.recordTimestamp ? `${date}T${time}` : draft.transactionAt });
-                      }}
-                    />
-                  </label>
-                  {draft.recordTimestamp && <label className="transaction-datetime-part">
-                    <Clock size={14} aria-hidden="true" />
-                    <span className="sr-only">{t("spending.timestamp")}</span>
-                    <input
-                      className="input"
-                      type="time"
-                      required
-                      value={draft.transactionAt.slice(11, 16)}
-                      onChange={(e) => setDraft({ ...draft, transactionAt: `${draft.date}T${e.target.value}` })}
-                    />
-                  </label>}
-                </div>
+                <label className="transaction-datetime-part">
+                  <Calendar size={14} aria-hidden="true" />
+                  <span className="sr-only">{t("spending.date")}</span>
+                  <input
+                    className="input"
+                    type="date"
+                    required
+                    value={draft.date}
+                    onChange={(e) => {
+                      const date = e.target.value;
+                      const time = draft.transactionAt.includes("T") ? draft.transactionAt.slice(11, 16) : localDateTimeInput().slice(11, 16);
+                      setDraft({ ...draft, date, transactionAt: draft.recordTimestamp ? `${date}T${time}` : draft.transactionAt });
+                    }}
+                  />
+                </label>
+                {draft.recordTimestamp && <label className="transaction-datetime-part">
+                  <Clock size={14} aria-hidden="true" />
+                  <span className="sr-only">{t("spending.timestamp")}</span>
+                  <input
+                    className="input"
+                    type="time"
+                    required
+                    value={draft.transactionAt.slice(11, 16)}
+                    onChange={(e) => setDraft({ ...draft, transactionAt: `${draft.date}T${e.target.value}` })}
+                  />
+                </label>}
+                <label className="settings-check transaction-timestamp-toggle">
+                  <input
+                    type="checkbox"
+                    checked={draft.recordTimestamp}
+                    onChange={(e) => setDraft({ ...draft, recordTimestamp: e.target.checked })}
+                  />
+                  <span>{t("spending.recordTimestamp")}</span>
+                </label>
+              </div>
             </Field>
             <Field label={t("spending.category")} name="category">
               <select

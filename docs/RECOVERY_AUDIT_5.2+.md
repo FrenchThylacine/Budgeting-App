@@ -1,7 +1,8 @@
 # v5.2+ recovery audit
 
 Reviewed from Git history and current behavior at `5.4.1` plus the unversioned
-2026-11-25 loan/accounting commit. No semantic release tags exist; changelog and
+2026-11-25 loan/accounting commit. Follow-up verification and fixes are now at
+`5.4.3`. No semantic release tags exist; changelog and
 package metadata were the version records. Existing claims were treated as
 unverified until checked in code or tests.
 
@@ -35,7 +36,20 @@ unverified until checked in code or tests.
 - `npm.cmd run build` — passed.
 - Focused Analytics, projection, activity-budget, loan, report and translation
   suites — 212 tests passed.
-- Full `npm.cmd test` — 1,044 passed, 4 failed, 84 skipped. Remaining failures:
+- Full `npm.cmd test` — 1,046 passed, 4 failed, 84 skipped. Remaining failures:
   the broad English-prose scanner and three visual-vocabulary tests; none
   concern the changed finance paths.
 - Browser/localhost workflow — not run; prerequisites above were unavailable.
+
+## 5.4.3 Wallet hotfix
+
+Active loan receivables/payables now appear beside actual Wallet cash in a
+same-sized total. Repaid cash is not counted a second time as an active loan;
+converted loans no longer affect the active tally. Budget-side loans feed the
+budget figure, and personal is derived as the remainder, so both reconcile to
+the loan-adjusted total. Both headline totals use the configured secondary
+currency equivalent. The transaction date, time and timestamp toggle now share
+one full-width row. Focused suites passed 97/97 after these changes; the full
+suite passed 1,046 tests, with 4 existing copy/vocabulary failures and 84
+skipped. Production build passed. Browser interaction could not be checked
+because this environment has no configured database or installed browser.

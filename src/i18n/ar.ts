@@ -1573,6 +1573,7 @@ export const ar: Dictionary = {
   "report.colYourShare": "حصتك",
   "currencies.liveRates": "الأسعار المباشرة",
   "wallet.trueAmount": "يشمل القروض المستحقة",
+  "wallet.trueAmountHint": "رصيد المحفظة مع المبالغ المستحقة لك مطروحاً منها ديونك.",
   "wallet.loanReceivable": "مستحق لك",
   "wallet.loanPayable": "مستحق عليك",
   "wallet.repaymentAmount": "مبلغ السداد",

@@ -92,6 +92,36 @@ beforeEach(() => {
 });
 
 describe("the stored principal", () => {
+  it("keeps the total stable as a personal loan is lent and fully repaid", () => {
+    const before = walletState(useBudgetStore.getState().snapshot);
+    useBudgetStore.getState().addLoan({
+      direction: "lent", amount: 100, currency: "USD", person: "Sam",
+      date: "2026-08-15", source: "Personal", destination: "Person",
+    });
+    const lent = walletState(useBudgetStore.getState().snapshot);
+    expect(lent.loanBalance).toBeCloseTo(100 / 1.16);
+    expect(lent.totalWithLoans).toBeCloseTo(before.walletBalance);
+    expect(lent.budgetRemainingWithLoans + lent.personalBalanceWithLoans).toBeCloseTo(lent.totalWithLoans);
+
+    const loanId = useBudgetStore.getState().snapshot.settings.loans![0].id;
+    useBudgetStore.getState().repayLoan(loanId, 100);
+    const returned = walletState(useBudgetStore.getState().snapshot);
+    expect(returned.loanBalance).toBe(0);
+    expect(returned.totalWithLoans).toBeCloseTo(before.walletBalance);
+    expect(returned.budgetRemainingWithLoans + returned.personalBalanceWithLoans).toBeCloseTo(returned.totalWithLoans);
+  });
+
+  it("classifies budget-side loans into the reconciled budget balance", () => {
+    useBudgetStore.getState().addLoan({
+      direction: "lent", amount: 100, currency: "USD", person: "Sam",
+      date: "2026-08-15", source: "Budget", destination: "Person",
+    });
+    const state = walletState(useBudgetStore.getState().snapshot);
+    expect(state.loanBalance).toBeCloseTo(100 / 1.16);
+    expect(state.budgetRemainingWithLoans).toBeCloseTo(0);
+    expect(state.budgetRemainingWithLoans + state.personalBalanceWithLoans).toBeCloseTo(state.totalWithLoans);
+  });
+
   it("keeps loan-linked wallet entries consistent when the loan changes direction and year", () => {
     const store = useBudgetStore.getState();
     store.addLoan({

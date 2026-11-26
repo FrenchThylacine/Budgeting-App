@@ -2812,7 +2812,7 @@ label:has(> input[type="radio"]) {
    of it is already spoken for. */
 .wallet-balances {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 190px), 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--space-4);
   margin-bottom: var(--space-4);
 }
@@ -2837,7 +2837,7 @@ label:has(> input[type="radio"]) {
   border-left: 3px solid var(--accent);
 }
 
-.wallet-balance-primary .wallet-balance-value { font-size: 1.75rem; }
+.wallet-balance-primary .wallet-balance-value { font-size: clamp(1.15rem, 3.5vw, 1.75rem); }
 .wallet-balance[data-tone="budget"] .wallet-balance-value { color: var(--accent); }
 .wallet-balance[data-tone="personal"] .wallet-balance-value { color: var(--teal-text); }
 

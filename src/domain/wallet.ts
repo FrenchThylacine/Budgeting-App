@@ -181,10 +181,18 @@ export interface WalletMovement {
 export interface WalletState {
   /** Actual money held. The headline figure. */
   walletBalance: number;
+  /** Net outstanding receivables less payables, excluding settled loans. */
+  loanBalance: number;
+  /** Cash plus active loan receivables less payables. */
+  totalWithLoans: number;
   /** Allocated budget money still available, carried across months. */
   budgetRemaining: number;
+  /** Budget position including active loans sourced from or owed to Budget. */
+  budgetRemainingWithLoans: number;
   /** Money outside the current budget: `walletBalance − budgetRemaining`. */
   personalBalance: number;
+  /** Personal position that reconciles with `totalWithLoans`. */
+  personalBalanceWithLoans: number;
   /** Everything ever allocated, since the epoch. */
   allocatedTotal: number;
   /** Budget spending charged against it. */
@@ -419,13 +427,30 @@ export function walletState(snapshot: BudgetSnapshot): WalletState {
 
   movements.sort((a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id));
 
+  const activeLoans = (snapshot.settings.loans ?? []).filter((loan) => !loan.returnedAt && !loan.convertedAt);
+  const activeLoanIds = new Set(activeLoans.map((loan) => loan.id));
+  const loanBalance = activeLoans.reduce((total, loan) => {
+    const outstanding = Math.max(0, loan.amount - (loan.repaidAmount ?? 0));
+    const value = normalizeAmount(outstanding, loan.currency, { ...snapshot.settings, baseCurrency: walletCurrency });
+    return total + (loan.direction === "lent" ? value : -value);
+  }, 0);
+  const loanBudgetEffect = entries
+    .filter((entry) => entry.loanId && activeLoanIds.has(entry.loanId))
+    .reduce((total, entry) => total + base(entry.loanBudgetEffect ?? 0, entry.currency, entry), 0);
+  const totalWithLoans = walletBalance + loanBalance;
+  const budgetRemainingWithLoans = budgetRemaining - loanBudgetEffect;
+
   return {
     walletBalance,
+    loanBalance,
+    totalWithLoans,
     budgetRemaining,
+    budgetRemainingWithLoans,
     // Derived, so the three figures can never disagree about the same pile of
     // money. It can be negative, and that is a real state: it means budget
     // money has been spent on things this ledger never received cash for.
     personalBalance: walletBalance - budgetRemaining,
+    personalBalanceWithLoans: totalWithLoans - budgetRemainingWithLoans,
     allocatedTotal,
     budgetSpent: spending.reduce((total, entry) => total + base(entry.amount, entry.currency, entry), 0),
     transferredToPersonal,

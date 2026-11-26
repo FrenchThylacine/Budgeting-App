@@ -1489,6 +1489,7 @@ export const es: Dictionary = {
   "report.colYourShare": "Tu parte",
   "currencies.liveRates": "Tipos en directo",
   "wallet.trueAmount": "Incluidos los préstamos pendientes",
+  "wallet.trueAmountHint": "Saldo de cartera más lo que te deben, menos lo que debes.",
   "wallet.loanReceivable": "Por cobrar",
   "wallet.loanPayable": "Por pagar",
   "wallet.repaymentAmount": "Importe del reembolso",

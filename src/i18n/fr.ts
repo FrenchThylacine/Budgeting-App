@@ -1497,6 +1497,7 @@ export const fr: Dictionary = {
   "report.colYourShare": "Votre part",
   "currencies.liveRates": "Taux en direct",
   "wallet.trueAmount": "Avec les prêts en cours",
+  "wallet.trueAmountHint": "Solde du portefeuille, plus les sommes dues, moins vos dettes.",
   "wallet.loanReceivable": "À recevoir",
   "wallet.loanPayable": "À payer",
   "wallet.repaymentAmount": "Montant du remboursement",

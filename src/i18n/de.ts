@@ -1489,6 +1489,7 @@ export const de: Dictionary = {
   "report.colYourShare": "Ihr Anteil",
   "currencies.liveRates": "Aktuelle Kurse",
   "wallet.trueAmount": "Einschließlich offener Darlehen",
+  "wallet.trueAmountHint": "Wallet-Guthaben plus Forderungen abzüglich eigener Schulden.",
   "wallet.loanReceivable": "Forderung",
   "wallet.loanPayable": "Verbindlichkeit",
   "wallet.repaymentAmount": "Rückzahlungsbetrag",

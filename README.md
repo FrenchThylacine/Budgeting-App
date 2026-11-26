@@ -14,7 +14,7 @@ Each account holds its own budget, and one account can be used from as many devi
 
 **Spending.** Transactions with amount, currency, date, category, recurrence, notes, an optional link to a wishlist item, and **who paid**. A transaction somebody else paid for is recorded at full value and stays visible, but never counts against your budget — see the funding rule below.
 
-**Wallet and loans.** Wallet History separates spending and ordinary activity, loan principal and repayments, and direct balance adjustments. Loan edits update their linked wallet movements (including repayments across year records); deleting a loan removes those linked movements. The Wallet shows cash on hand and the net position after receivables and payables. Historical Analytics uses the month's recorded allocation; if a past month has no allocation record, it does not reuse the current budget.
+**Wallet and loans.** Wallet History separates spending and ordinary activity, loan principal and repayments, and direct balance adjustments. Loan edits update their linked wallet movements (including repayments across year records); deleting a loan removes those linked movements. The Wallet shows actual cash beside a same-sized total including active receivables and payables, with both optionally converted to the secondary currency. Budget-side loans are assigned to the budget total; personal balance is the remainder, so personal plus budget reconciles to the loan-adjusted total. Repaid amounts remain in cash and are not counted twice as active loans. Historical Analytics uses the month's recorded allocation; if a past month has no allocation record, it does not reuse the current budget.
 
 **Recurring activities.** Commitments with six cost models:
 

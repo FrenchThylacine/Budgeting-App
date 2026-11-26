@@ -27,7 +27,7 @@ Run this checklist before every release.
 - `npm test` with `TEST_DATABASE_URL` set: passed — **542 tests across 30 files** (467 unit, 75 integration against local PostgreSQL 17).
 - `npm run build` and `npm run server:build`: passed.
 
-### Wallet/loan release check (5.4.2)
+### Wallet/loan release check (5.4.3)
 
 The focused Wallet, Analytics, and Report suites cover carryover/reset derivation, monthly allocation history, loan-linked movement accounting, projections, and report generation. Database integration additionally round-trips `wallet_entries.loan_id`, `loan_movement`, and `loan_budget_effect`; this catches the failure mode where a client-only loan feature disappears after a server reload.
 
@@ -76,6 +76,11 @@ all linked entries. These require no database migration: the existing
 The projection checks cover future-dated purchases, a known annual activity
 renewal, elapsed-day pacing and the same-month prior-year fallback; future
 transactions are excluded from actual spend and counted once in the forecast.
+Wallet principal tests also assert that lending and fully repaying leaves the
+loan-adjusted total unchanged, that returned cash is counted once, and that the
+personal and budget amounts reconcile when a loan originates from Budget. The
+shared-editor test suite is run alongside these checks for timestamp layout
+regressions.
 
 ### The first component test, and why there is only one
 

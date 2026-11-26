@@ -1184,7 +1184,8 @@ strong {
 
 .transaction-datetime {
   display: grid;
-  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+  grid-template-columns: minmax(180px, 1.4fr) minmax(115px, 0.75fr) auto;
+  align-items: center;
   gap: 8px;
 }
 
@@ -1202,11 +1203,16 @@ strong {
 }
 
 .transaction-editor-grid { gap: 8px !important; }
-.transaction-timestamp-toggle { margin: -2px 0 4px; font-size: 0.72rem; }
+.transaction-timestamp-toggle { margin: 0; font-size: 0.72rem; white-space: nowrap; }
 .transaction-timestamp-toggle input { width: 13px; height: 13px; }
 .transaction-advanced { grid-column: 1 / -1; border-top: 1px solid var(--border); padding-top: 6px; }
 .transaction-advanced summary { cursor: pointer; color: var(--text-secondary); font-size: 0.78rem; }
 .transaction-advanced-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 170px), 1fr)); gap: 8px; padding-top: 8px; }
+
+@media (max-width: 560px) {
+  .transaction-datetime { grid-template-columns: minmax(0, 1fr) minmax(100px, 0.7fr); }
+  .transaction-timestamp-toggle { grid-column: 1 / -1; }
+}
 
 /* Editing a closed period: a deliberately louder, unmistakable state.
 

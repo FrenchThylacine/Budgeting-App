@@ -9,6 +9,7 @@ with one small fix gets a patch rather than a new minor.
 
 | Version | What it was |
 | --- | --- |
+| **5.4.3** | Reconciles active loan receivables/payables into the Wallet total and its personal/budget split; aligns transaction date/time controls |
 | **5.4.2** | Fixes historical budget comparisons and loan-linked Wallet History; keeps loan edits and repayments consistent across years and displays cash plus net outstanding loans |
 | **5.4.1** | Bug-fix pass: projection breakdown, duplicate loan-history removal, denser transaction editor, and report layout polish |
 | **5.4.0** | Wallet accounting and history improvements, editable monthly allocations with reset-aware carryover, per-month Analytics budget variance colors, and a repaired report opener |
@@ -26,6 +27,21 @@ with one small fix gets a patch rather than a new minor.
 | **2.0.0**–**2.1.0** | Accounts, Excel import, dedicated editors, scenarios, swipe, the first identity |
 | **1.0.0**–**1.1.0** | The first working budget: activities, spending, wishlist, reports |
 | **0.1.0**–**0.2.0** | Before it was an application |
+
+## 5.4.3 — 2026-11-26 — Loan-adjusted Wallet totals
+
+- The Wallet keeps actual cash visible beside a same-sized total that includes
+  only active receivables and payables. Both totals use the optional secondary
+  currency equivalent when configured.
+- Returned repayments already appear in wallet cash, so they leave the active
+  loan tally instead of being counted a second time. Converted loans no longer
+  affect the active-loan amount.
+- Budget-side active loans are assigned to the budget balance; the personal
+  balance is the remainder. Personal plus budget now reconciles to the
+  loan-adjusted total.
+- The transaction timestamp controls share one full-width row, with the time
+  recording toggle beside the date and time inputs.
+- No database migration was needed.
 
 ## 5.4.2 — 2026-11-25 — Historical budgets and linked loan activity
 
